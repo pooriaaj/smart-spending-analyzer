@@ -35,3 +35,12 @@ class TransactionResponse(TransactionBase):
 
     class Config:
         from_attributes = True
+
+class AnalyticsSummary(BaseModel):
+    total_income: float
+    total_expenses: float
+    balance: float
+
+class CategoryBreakdownItem(BaseModel):
+    category: str
+    total: float
