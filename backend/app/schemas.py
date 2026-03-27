@@ -44,3 +44,24 @@ class AnalyticsSummary(BaseModel):
 class CategoryBreakdownItem(BaseModel):
     category: str
     total: float
+
+class MonthlySummaryItem(BaseModel):
+    month: str
+    income: float
+    expenses: float
+    balance: float
+
+class RecentTransactionItem(BaseModel):
+    id: int
+    amount: float
+    category: str
+    description: str
+    date: date
+    type: str
+
+    class Config:
+        from_attributes = True
+
+class TopExpenseCategory(BaseModel):
+    category: str
+    total: float
