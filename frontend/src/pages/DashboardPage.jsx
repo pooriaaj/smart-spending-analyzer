@@ -1,6 +1,7 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import api from "../services/api";
+import TransactionForm from "../components/TransactionForm";
 import {
   BarChart,
   Bar,
@@ -25,39 +26,39 @@ function DashboardPage() {
 
   const pieColors = ["#2563eb", "#16a34a", "#dc2626", "#f59e0b", "#7c3aed", "#0891b2"];
 
-  useEffect(() => {
-    const fetchDashboardData = async () => {
-      try {
-        const [
-          summaryRes,
-          recentRes,
-          topCategoryRes,
-          categoryBreakdownRes,
-          monthlySummaryRes,
-        ] = await Promise.all([
-          api.get("/analytics/summary"),
-          api.get("/analytics/recent-transactions"),
-          api.get("/analytics/top-expense-category"),
-          api.get("/analytics/category-breakdown"),
-          api.get("/analytics/monthly-summary"),
-        ]);
+  const fetchDashboardData = useCallback(async () => {
+    try {
+      const [
+        summaryRes,
+        recentRes,
+        topCategoryRes,
+        categoryBreakdownRes,
+        monthlySummaryRes,
+      ] = await Promise.all([
+        api.get("/analytics/summary"),
+        api.get("/analytics/recent-transactions"),
+        api.get("/analytics/top-expense-category"),
+        api.get("/analytics/category-breakdown"),
+        api.get("/analytics/monthly-summary"),
+      ]);
 
-        setSummary(summaryRes.data);
-        setRecentTransactions(recentRes.data);
-        setTopCategory(topCategoryRes.data);
-        setCategoryBreakdown(categoryBreakdownRes.data);
-        setMonthlySummary(monthlySummaryRes.data);
-      } catch (error) {
-        console.error("Failed to load dashboard data:", error);
-        localStorage.removeItem("token");
-        navigate("/");
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchDashboardData();
+      setSummary(summaryRes.data);
+      setRecentTransactions(recentRes.data);
+      setTopCategory(topCategoryRes.data);
+      setCategoryBreakdown(categoryBreakdownRes.data);
+      setMonthlySummary(monthlySummaryRes.data);
+    } catch (error) {
+      console.error("Failed to load dashboard data:", error);
+      localStorage.removeItem("token");
+      navigate("/");
+    } finally {
+      setLoading(false);
+    }
   }, [navigate]);
+
+  useEffect(() => {
+    fetchDashboardData();
+  }, [fetchDashboardData]);
 
   const handleLogout = () => {
     localStorage.removeItem("token");
@@ -209,6 +210,10 @@ function DashboardPage() {
               </div>
             )}
           </div>
+        </div>
+
+        <div className="form-section">
+          <TransactionForm onTransactionCreated={fetchDashboardData} />
         </div>
       </div>
     </div>
