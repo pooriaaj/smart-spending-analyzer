@@ -21,6 +21,10 @@ function DashboardPage() {
   const [topCategory, setTopCategory] = useState(null);
   const [categoryBreakdown, setCategoryBreakdown] = useState([]);
   const [monthlySummary, setMonthlySummary] = useState([]);
+  const [editingTransaction, setEditingTransaction] = useState(null);
+  const [selectedMonth, setSelectedMonth] = useState("");
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
 
@@ -28,6 +32,14 @@ function DashboardPage() {
 
   const fetchDashboardData = useCallback(async () => {
     try {
+      const queryParams = {
+        params: {
+          month: selectedMonth || undefined,
+          start_date: startDate || undefined,
+          end_date: endDate || undefined,
+        },
+      };
+
       const [
         summaryRes,
         recentRes,
@@ -35,10 +47,10 @@ function DashboardPage() {
         categoryBreakdownRes,
         monthlySummaryRes,
       ] = await Promise.all([
-        api.get("/analytics/summary"),
-        api.get("/analytics/recent-transactions"),
-        api.get("/analytics/top-expense-category"),
-        api.get("/analytics/category-breakdown"),
+        api.get("/analytics/summary", queryParams),
+        api.get("/analytics/recent-transactions", queryParams),
+        api.get("/analytics/top-expense-category", queryParams),
+        api.get("/analytics/category-breakdown", queryParams),
         api.get("/analytics/monthly-summary"),
       ]);
 
@@ -54,7 +66,7 @@ function DashboardPage() {
     } finally {
       setLoading(false);
     }
-  }, [navigate]);
+  }, [navigate, selectedMonth, startDate, endDate]);
 
   useEffect(() => {
     fetchDashboardData();
@@ -83,9 +95,50 @@ function DashboardPage() {
             <h1>Financial Dashboard</h1>
             <p>Your money overview</p>
           </div>
-          <button className="logout-button" onClick={handleLogout}>
-            Logout
-          </button>
+
+          <div className="header-actions">
+            <button className="secondary-button" onClick={() => navigate("/transactions")}>
+              View All Transactions
+            </button>
+            <button className="logout-button" onClick={handleLogout}>
+              Logout
+            </button>
+          </div>
+        </div>
+
+        <div className="filter-bar">
+          <div>
+            <label>Month:</label>
+            <select
+              value={selectedMonth}
+              onChange={(e) => setSelectedMonth(e.target.value)}
+            >
+              <option value="">All</option>
+              {monthlySummary.map((item) => (
+                <option key={item.month} value={item.month}>
+                  {item.month}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label>From:</label>
+            <input
+              type="date"
+              value={startDate}
+              onChange={(e) => setStartDate(e.target.value)}
+            />
+          </div>
+
+          <div>
+            <label>To:</label>
+            <input
+              type="date"
+              value={endDate}
+              onChange={(e) => setEndDate(e.target.value)}
+            />
+          </div>
         </div>
 
         <div className="summary-grid">
@@ -176,18 +229,45 @@ function DashboardPage() {
                       <strong>{transaction.category}</strong>
                       <p>{transaction.description}</p>
                     </div>
-                    <div className="transaction-right">
-                      <span
-                        className={
-                          transaction.type === "income"
-                            ? "income-text"
-                            : "expense-text"
-                        }
+
+                    <div className="transaction-actions">
+                      <div className="transaction-right">
+                        <span
+                          className={
+                            transaction.type === "income"
+                              ? "income-text"
+                              : "expense-text"
+                          }
+                        >
+                          {transaction.type === "income" ? "+" : "-"}$
+                          {transaction.amount.toFixed(2)}
+                        </span>
+                        <small>{transaction.date}</small>
+                      </div>
+
+                      <button
+                        className="edit-button"
+                        onClick={() => setEditingTransaction(transaction)}
                       >
-                        {transaction.type === "income" ? "+" : "-"}$
-                        {transaction.amount.toFixed(2)}
-                      </span>
-                      <small>{transaction.date}</small>
+                        Edit
+                      </button>
+
+                      <button
+                        className="delete-button"
+                        onClick={async () => {
+                          try {
+                            await api.delete(`/transactions/${transaction.id}`);
+                            fetchDashboardData();
+                            if (editingTransaction?.id === transaction.id) {
+                              setEditingTransaction(null);
+                            }
+                          } catch (error) {
+                            console.error("Failed to delete transaction:", error);
+                          }
+                        }}
+                      >
+                        Delete
+                      </button>
                     </div>
                   </div>
                 ))}
@@ -213,7 +293,11 @@ function DashboardPage() {
         </div>
 
         <div className="form-section">
-          <TransactionForm onTransactionCreated={fetchDashboardData} />
+          <TransactionForm
+            onTransactionCreated={fetchDashboardData}
+            editingTransaction={editingTransaction}
+            onCancelEdit={() => setEditingTransaction(null)}
+          />
         </div>
       </div>
     </div>

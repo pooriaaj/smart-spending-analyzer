@@ -1,7 +1,7 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import api from "../services/api";
 
-function TransactionForm({ onTransactionCreated }) {
+function TransactionForm({ onTransactionCreated, editingTransaction, onCancelEdit }) {
   const [amount, setAmount] = useState("");
   const [category, setCategory] = useState("");
   const [description, setDescription] = useState("");
@@ -9,36 +9,71 @@ function TransactionForm({ onTransactionCreated }) {
   const [type, setType] = useState("expense");
   const [error, setError] = useState("");
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setError("");
-
-    try {
-      await api.post("/transactions/", {
-        amount: parseFloat(amount),
-        category,
-        description,
-        date,
-        type,
-      });
-
+  useEffect(() => {
+    if (editingTransaction) {
+      setAmount(editingTransaction.amount);
+      setCategory(editingTransaction.category);
+      setDescription(editingTransaction.description);
+      setDate(editingTransaction.date);
+      setType(editingTransaction.type);
+    } else {
       setAmount("");
       setCategory("");
       setDescription("");
       setDate("");
       setType("expense");
+    }
+  }, [editingTransaction]);
+
+  const resetForm = () => {
+    setAmount("");
+    setCategory("");
+    setDescription("");
+    setDate("");
+    setType("expense");
+    setError("");
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setError("");
+
+    try {
+      const payload = {
+        amount: parseFloat(amount),
+        category,
+        description,
+        date,
+        type,
+      };
+
+      if (editingTransaction) {
+        await api.put(`/transactions/${editingTransaction.id}`, payload);
+      } else {
+        await api.post("/transactions/", payload);
+      }
+
+      resetForm();
 
       if (onTransactionCreated) {
         onTransactionCreated();
       }
+
+      if (editingTransaction && onCancelEdit) {
+        onCancelEdit();
+      }
     } catch (err) {
-      setError("Failed to create transaction.");
+      setError(
+        editingTransaction
+          ? "Failed to update transaction."
+          : "Failed to create transaction."
+      );
     }
   };
 
   return (
     <div className="dashboard-card">
-      <h2>Add Transaction</h2>
+      <h2>{editingTransaction ? "Edit Transaction" : "Add Transaction"}</h2>
 
       <form onSubmit={handleSubmit} className="transaction-form">
         <input
@@ -78,7 +113,22 @@ function TransactionForm({ onTransactionCreated }) {
           <option value="income">Income</option>
         </select>
 
-        <button type="submit">Add Transaction</button>
+        <button type="submit">
+          {editingTransaction ? "Update Transaction" : "Add Transaction"}
+        </button>
+
+        {editingTransaction && (
+          <button
+            type="button"
+            className="cancel-button"
+            onClick={() => {
+              resetForm();
+              onCancelEdit();
+            }}
+          >
+            Cancel
+          </button>
+        )}
       </form>
 
       {error && <p className="error-text">{error}</p>}

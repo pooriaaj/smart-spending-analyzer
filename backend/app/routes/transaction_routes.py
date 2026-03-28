@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from app.dependencies import get_db, get_current_user
 from app.models import Transaction, User
@@ -81,3 +81,48 @@ def seed_dummy_transactions(
     db.commit()
 
     return {"message": "Dummy transactions added successfully"}
+
+@router.delete("/{transaction_id}")
+def delete_transaction(
+    transaction_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    transaction = db.query(Transaction).filter(
+        Transaction.id == transaction_id,
+        Transaction.owner_id == current_user.id
+    ).first()
+
+    if not transaction:
+        raise HTTPException(status_code=404, detail="Transaction not found")
+
+    db.delete(transaction)
+    db.commit()
+
+    return {"message": "Transaction deleted successfully"}
+
+@router.put("/{transaction_id}", response_model=TransactionResponse)
+def update_transaction(
+    transaction_id: int,
+    transaction_data: TransactionCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    transaction = db.query(Transaction).filter(
+        Transaction.id == transaction_id,
+        Transaction.owner_id == current_user.id
+    ).first()
+
+    if not transaction:
+        raise HTTPException(status_code=404, detail="Transaction not found")
+
+    transaction.amount = transaction_data.amount
+    transaction.category = transaction_data.category
+    transaction.description = transaction_data.description
+    transaction.date = transaction_data.date
+    transaction.type = transaction_data.type
+
+    db.commit()
+    db.refresh(transaction)
+
+    return transaction

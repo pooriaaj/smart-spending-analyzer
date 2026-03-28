@@ -1,20 +1,66 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
+from datetime import datetime
 from app.dependencies import get_db, get_current_user
 from app.models import Transaction, User
-from app.schemas import AnalyticsSummary, CategoryBreakdownItem, MonthlySummaryItem, RecentTransactionItem, TopExpenseCategory
+from app.schemas import (
+    AnalyticsSummary,
+    CategoryBreakdownItem,
+    MonthlySummaryItem,
+    RecentTransactionItem,
+    TopExpenseCategory
+)
 
 router = APIRouter(prefix="/analytics", tags=["Analytics"])
 
 
+def filter_transactions(
+    transactions,
+    month: str | None,
+    start_date: str | None,
+    end_date: str | None
+):
+    result = transactions
+
+    if month:
+        result = [
+            transaction
+            for transaction in result
+            if transaction.date.strftime("%Y-%m") == month
+        ]
+
+    if start_date:
+        start = datetime.fromisoformat(start_date).date()
+        result = [
+            transaction
+            for transaction in result
+            if transaction.date >= start
+        ]
+
+    if end_date:
+        end = datetime.fromisoformat(end_date).date()
+        result = [
+            transaction
+            for transaction in result
+            if transaction.date <= end
+        ]
+
+    return result
+
+
 @router.get("/summary", response_model=AnalyticsSummary)
 def get_summary(
+    month: str | None = Query(default=None),
+    start_date: str | None = Query(default=None),
+    end_date: str | None = Query(default=None),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
     transactions = db.query(Transaction).filter(
         Transaction.owner_id == current_user.id
     ).all()
+
+    transactions = filter_transactions(transactions, month, start_date, end_date)
 
     total_income = sum(t.amount for t in transactions if t.type == "income")
     total_expenses = sum(t.amount for t in transactions if t.type == "expense")
@@ -26,8 +72,12 @@ def get_summary(
         balance=balance
     )
 
+
 @router.get("/category-breakdown", response_model=list[CategoryBreakdownItem])
 def get_category_breakdown(
+    month: str | None = Query(default=None),
+    start_date: str | None = Query(default=None),
+    end_date: str | None = Query(default=None),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
@@ -35,6 +85,8 @@ def get_category_breakdown(
         Transaction.owner_id == current_user.id,
         Transaction.type == "expense"
     ).all()
+
+    transactions = filter_transactions(transactions, month, start_date, end_date)
 
     category_totals = {}
 
@@ -51,6 +103,7 @@ def get_category_breakdown(
     result.sort(key=lambda item: item.total, reverse=True)
 
     return result
+
 
 @router.get("/monthly-summary", response_model=list[MonthlySummaryItem])
 def get_monthly_summary(
@@ -97,19 +150,30 @@ def get_monthly_summary(
 
     return result
 
+
 @router.get("/recent-transactions", response_model=list[RecentTransactionItem])
 def get_recent_transactions(
+    month: str | None = Query(default=None),
+    start_date: str | None = Query(default=None),
+    end_date: str | None = Query(default=None),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
     transactions = db.query(Transaction).filter(
         Transaction.owner_id == current_user.id
-    ).order_by(Transaction.date.desc()).limit(5).all()
+    ).all()
 
-    return transactions
+    transactions = filter_transactions(transactions, month, start_date, end_date)
+    transactions.sort(key=lambda t: t.date, reverse=True)
+
+    return transactions[:5]
+
 
 @router.get("/top-expense-category", response_model=TopExpenseCategory | None)
 def get_top_expense_category(
+    month: str | None = Query(default=None),
+    start_date: str | None = Query(default=None),
+    end_date: str | None = Query(default=None),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
@@ -117,6 +181,8 @@ def get_top_expense_category(
         Transaction.owner_id == current_user.id,
         Transaction.type == "expense"
     ).all()
+
+    transactions = filter_transactions(transactions, month, start_date, end_date)
 
     if not transactions:
         return None
