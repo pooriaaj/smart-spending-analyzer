@@ -83,8 +83,11 @@ function DashboardPage() {
       setAllTransactions(allTransactionsRes.data);
     } catch (error) {
       console.error("Failed to load dashboard data:", error);
-      localStorage.removeItem("token");
-      navigate("/");
+
+      if (error.response?.status === 401) {
+        localStorage.removeItem("token");
+        navigate("/", { replace: true });
+      }
     } finally {
       setLoading(false);
     }
@@ -96,7 +99,7 @@ function DashboardPage() {
 
   const handleLogout = () => {
     localStorage.removeItem("token");
-    navigate("/");
+    navigate("/", { replace: true });
   };
 
   const clearFilters = () => {

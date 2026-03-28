@@ -4,30 +4,36 @@ import RegisterPage from "./pages/RegisterPage";
 import DashboardPage from "./pages/DashboardPage";
 import TransactionsPage from "./pages/TransactionsPage";
 
+function ProtectedRoute({ children }) {
+  const token = localStorage.getItem("token");
+  return token ? children : <Navigate to="/" replace />;
+}
+
+function PublicHomeRoute() {
+  const token = localStorage.getItem("token");
+  return token ? <Navigate to="/dashboard" replace /> : <LoginPage />;
+}
+
 function App() {
   return (
     <BrowserRouter>
       <Routes>
-        <Route path="/" element={<LoginPage />} />
+        <Route path="/" element={<PublicHomeRoute />} />
         <Route path="/register" element={<RegisterPage />} />
         <Route
           path="/dashboard"
           element={
-            localStorage.getItem("token") ? (
+            <ProtectedRoute>
               <DashboardPage />
-            ) : (
-              <Navigate to="/" />
-            )
+            </ProtectedRoute>
           }
         />
         <Route
           path="/transactions"
           element={
-            localStorage.getItem("token") ? (
+            <ProtectedRoute>
               <TransactionsPage />
-            ) : (
-              <Navigate to="/" />
-            )
+            </ProtectedRoute>
           }
         />
       </Routes>

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import api from "../services/api";
 
@@ -7,6 +7,13 @@ function LoginPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const navigate = useNavigate();
+
+  useEffect(() => {
+    const token = localStorage.getItem("token");
+    if (token) {
+      navigate("/dashboard", { replace: true });
+    }
+  }, [navigate]);
 
   const handleLogin = async (e) => {
     e.preventDefault();
@@ -24,7 +31,14 @@ function LoginPage() {
       });
 
       localStorage.setItem("token", response.data.access_token);
-      navigate("/dashboard");
+
+      navigate("/dashboard", { replace: true });
+
+      setTimeout(() => {
+        if (window.location.pathname !== "/dashboard") {
+          window.location.href = "/dashboard";
+        }
+      }, 300);
     } catch (err) {
       setError("Login failed. Please check your email and password.");
     }
