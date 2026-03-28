@@ -107,6 +107,41 @@ function DashboardPage() {
     setSelectedCategory("");
   };
 
+  const handleExportCsv = async () => {
+    try {
+      const token = localStorage.getItem("token");
+
+      const queryParams = new URLSearchParams({
+        ...(selectedMonth && { month: selectedMonth }),
+        ...(startDate && { start_date: startDate }),
+        ...(endDate && { end_date: endDate }),
+        ...(selectedType && { transaction_type: selectedType }),
+        ...(selectedCategory && { category: selectedCategory }),
+      });
+
+      const response = await fetch(
+        `http://127.0.0.1:8000/transactions/export/csv?${queryParams.toString()}`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
+
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = "transactions_export.csv";
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error("Failed to export CSV:", error);
+    }
+  };
+
   if (loading) {
     return (
       <div className="page-container">
@@ -129,6 +164,9 @@ function DashboardPage() {
           <div className="header-actions">
             <button className="secondary-button" onClick={() => navigate("/transactions")}>
               View All Transactions
+            </button>
+            <button className="export-button" onClick={handleExportCsv}>
+              Export CSV
             </button>
             <button className="logout-button" onClick={handleLogout}>
               Logout

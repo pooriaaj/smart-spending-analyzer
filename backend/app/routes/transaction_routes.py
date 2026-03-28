@@ -1,10 +1,64 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from app.dependencies import get_db, get_current_user
 from app.models import Transaction, User
 from app.schemas import TransactionCreate, TransactionResponse
+import csv
+import io
+from datetime import datetime
 
 router = APIRouter(prefix="/transactions", tags=["Transactions"])
+
+
+def filter_transactions(
+    transactions,
+    month: str | None,
+    start_date: str | None,
+    end_date: str | None,
+    transaction_type: str | None,
+    category: str | None
+):
+    result = transactions
+
+    if month:
+        result = [
+            transaction
+            for transaction in result
+            if transaction.date.strftime("%Y-%m") == month
+        ]
+
+    if start_date:
+        start = datetime.fromisoformat(start_date).date()
+        result = [
+            transaction
+            for transaction in result
+            if transaction.date >= start
+        ]
+
+    if end_date:
+        end = datetime.fromisoformat(end_date).date()
+        result = [
+            transaction
+            for transaction in result
+            if transaction.date <= end
+        ]
+
+    if transaction_type:
+        result = [
+            transaction
+            for transaction in result
+            if transaction.type == transaction_type
+        ]
+
+    if category:
+        result = [
+            transaction
+            for transaction in result
+            if transaction.category == category
+        ]
+
+    return result
 
 
 @router.post("/", response_model=TransactionResponse)
@@ -82,6 +136,7 @@ def seed_dummy_transactions(
 
     return {"message": "Dummy transactions added successfully"}
 
+
 @router.delete("/{transaction_id}")
 def delete_transaction(
     transaction_id: int,
@@ -100,6 +155,7 @@ def delete_transaction(
     db.commit()
 
     return {"message": "Transaction deleted successfully"}
+
 
 @router.put("/{transaction_id}", response_model=TransactionResponse)
 def update_transaction(
@@ -126,3 +182,52 @@ def update_transaction(
     db.refresh(transaction)
 
     return transaction
+
+
+@router.get("/export/csv")
+def export_transactions_csv(
+    month: str | None = Query(default=None),
+    start_date: str | None = Query(default=None),
+    end_date: str | None = Query(default=None),
+    transaction_type: str | None = Query(default=None),
+    category: str | None = Query(default=None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    transactions = db.query(Transaction).filter(
+        Transaction.owner_id == current_user.id
+    ).all()
+
+    transactions = filter_transactions(
+        transactions,
+        month,
+        start_date,
+        end_date,
+        transaction_type,
+        category
+    )
+
+    output = io.StringIO()
+    writer = csv.writer(output)
+
+    writer.writerow(["ID", "Date", "Type", "Category", "Description", "Amount"])
+
+    for transaction in sorted(transactions, key=lambda t: t.date, reverse=True):
+        writer.writerow([
+            transaction.id,
+            transaction.date,
+            transaction.type,
+            transaction.category,
+            transaction.description,
+            transaction.amount
+        ])
+
+    output.seek(0)
+
+    return StreamingResponse(
+        output,
+        media_type="text/csv",
+        headers={
+            "Content-Disposition": "attachment; filename=transactions_export.csv"
+        }
+    )
