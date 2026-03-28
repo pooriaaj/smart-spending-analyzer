@@ -69,9 +69,12 @@ function TransactionsPage() {
 
   if (loading) {
     return (
-      <div className="page-container">
+      <div className="page-container dashboard-page">
         <div className="dashboard-wrapper">
-          <p>Loading transactions...</p>
+          <div className="status-card">
+            <h2>Loading transactions...</h2>
+            <p>Please wait while your transaction history is being prepared.</p>
+          </div>
         </div>
       </div>
     );
@@ -80,45 +83,68 @@ function TransactionsPage() {
   return (
     <div className="page-container dashboard-page">
       <div className="dashboard-wrapper">
-        <div className="dashboard-header">
+        <div className="dashboard-hero">
           <div>
+            <p className="eyebrow-text">Smart Spending Analyzer</p>
             <h1>All Transactions</h1>
-            <p>View and filter your full transaction history</p>
+            <p className="hero-subtitle">
+              Browse, filter, and manage your full transaction history.
+            </p>
           </div>
 
-          <button className="logout-button" onClick={() => navigate("/dashboard")}>
-            Back to Dashboard
-          </button>
+          <div className="header-actions">
+            <button className="secondary-button" onClick={() => navigate("/dashboard")}>
+              Back to Dashboard
+            </button>
+          </div>
         </div>
 
-        <div className="filter-bar">
-          <label>Type:</label>
-          <select
-            value={typeFilter}
-            onChange={(e) => setTypeFilter(e.target.value)}
-          >
-            <option value="">All</option>
-            <option value="income">Income</option>
-            <option value="expense">Expense</option>
-          </select>
+        <div className="filter-card">
+          <div className="section-header">
+            <h2>Transaction Filters</h2>
+            <p>Filter the full transaction table by type and month.</p>
+          </div>
 
-          <label>Month:</label>
-          <select
-            value={monthFilter}
-            onChange={(e) => setMonthFilter(e.target.value)}
-          >
-            <option value="">All</option>
-            {availableMonths.map((month) => (
-              <option key={month} value={month}>
-                {month}
-              </option>
-            ))}
-          </select>
+          <div className="filter-bar">
+            <div>
+              <label>Type</label>
+              <select
+                value={typeFilter}
+                onChange={(e) => setTypeFilter(e.target.value)}
+              >
+                <option value="">All</option>
+                <option value="income">Income</option>
+                <option value="expense">Expense</option>
+              </select>
+            </div>
+
+            <div>
+              <label>Month</label>
+              <select
+                value={monthFilter}
+                onChange={(e) => setMonthFilter(e.target.value)}
+              >
+                <option value="">All</option>
+                {availableMonths.map((month) => (
+                  <option key={month} value={month}>
+                    {month}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
         </div>
 
         <div className="dashboard-card">
+          <div className="section-header">
+            <h2>Transaction Table</h2>
+            <p>Detailed records of your income and expense entries.</p>
+          </div>
+
           {filteredTransactions.length === 0 ? (
-            <p>No transactions found.</p>
+            <div className="empty-state">
+              <p>No transactions found.</p>
+            </div>
           ) : (
             <div className="transactions-table-wrapper">
               <table className="transactions-table">
