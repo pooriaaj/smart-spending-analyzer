@@ -127,6 +127,7 @@ body {
   flex-wrap: wrap;
   gap: 16px;
   margin-bottom: 24px;
+  align-items: flex-end;
 }
 
 .filter-bar div {
@@ -141,6 +142,23 @@ body {
   border-radius: 8px;
   border: 1px solid #ccc;
   background: white;
+}
+
+.filter-actions {
+  justify-content: flex-end;
+}
+
+.clear-filter-button {
+  border: none;
+  background-color: #6b7280;
+  color: white;
+  padding: 10px 14px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.clear-filter-button:hover {
+  background-color: #4b5563;
 }
 
 .summary-grid {

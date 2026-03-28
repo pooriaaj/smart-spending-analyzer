@@ -18,7 +18,9 @@ def filter_transactions(
     transactions,
     month: str | None,
     start_date: str | None,
-    end_date: str | None
+    end_date: str | None,
+    transaction_type: str | None,
+    category: str | None
 ):
     result = transactions
 
@@ -45,6 +47,20 @@ def filter_transactions(
             if transaction.date <= end
         ]
 
+    if transaction_type:
+        result = [
+            transaction
+            for transaction in result
+            if transaction.type == transaction_type
+        ]
+
+    if category:
+        result = [
+            transaction
+            for transaction in result
+            if transaction.category == category
+        ]
+
     return result
 
 
@@ -53,6 +69,8 @@ def get_summary(
     month: str | None = Query(default=None),
     start_date: str | None = Query(default=None),
     end_date: str | None = Query(default=None),
+    transaction_type: str | None = Query(default=None),
+    category: str | None = Query(default=None),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
@@ -60,7 +78,14 @@ def get_summary(
         Transaction.owner_id == current_user.id
     ).all()
 
-    transactions = filter_transactions(transactions, month, start_date, end_date)
+    transactions = filter_transactions(
+        transactions,
+        month,
+        start_date,
+        end_date,
+        transaction_type,
+        category
+    )
 
     total_income = sum(t.amount for t in transactions if t.type == "income")
     total_expenses = sum(t.amount for t in transactions if t.type == "expense")
@@ -78,15 +103,26 @@ def get_category_breakdown(
     month: str | None = Query(default=None),
     start_date: str | None = Query(default=None),
     end_date: str | None = Query(default=None),
+    transaction_type: str | None = Query(default=None),
+    category: str | None = Query(default=None),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
     transactions = db.query(Transaction).filter(
-        Transaction.owner_id == current_user.id,
-        Transaction.type == "expense"
+        Transaction.owner_id == current_user.id
     ).all()
 
-    transactions = filter_transactions(transactions, month, start_date, end_date)
+    transactions = filter_transactions(
+        transactions,
+        month,
+        start_date,
+        end_date,
+        transaction_type,
+        category
+    )
+
+    # For category breakdown, only expense data is usually most useful.
+    transactions = [t for t in transactions if t.type == "expense"]
 
     category_totals = {}
 
@@ -96,8 +132,8 @@ def get_category_breakdown(
         category_totals[transaction.category] += transaction.amount
 
     result = [
-        CategoryBreakdownItem(category=category, total=total)
-        for category, total in category_totals.items()
+        CategoryBreakdownItem(category=category_name, total=total)
+        for category_name, total in category_totals.items()
     ]
 
     result.sort(key=lambda item: item.total, reverse=True)
@@ -107,12 +143,25 @@ def get_category_breakdown(
 
 @router.get("/monthly-summary", response_model=list[MonthlySummaryItem])
 def get_monthly_summary(
+    start_date: str | None = Query(default=None),
+    end_date: str | None = Query(default=None),
+    transaction_type: str | None = Query(default=None),
+    category: str | None = Query(default=None),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
     transactions = db.query(Transaction).filter(
         Transaction.owner_id == current_user.id
     ).all()
+
+    transactions = filter_transactions(
+        transactions,
+        None,
+        start_date,
+        end_date,
+        transaction_type,
+        category
+    )
 
     monthly_data = {}
 
@@ -132,14 +181,14 @@ def get_monthly_summary(
 
     result = []
 
-    for month, values in monthly_data.items():
+    for month_value, values in monthly_data.items():
         income = values["income"]
         expenses = values["expenses"]
         balance = income - expenses
 
         result.append(
             MonthlySummaryItem(
-                month=month,
+                month=month_value,
                 income=income,
                 expenses=expenses,
                 balance=balance
@@ -156,6 +205,8 @@ def get_recent_transactions(
     month: str | None = Query(default=None),
     start_date: str | None = Query(default=None),
     end_date: str | None = Query(default=None),
+    transaction_type: str | None = Query(default=None),
+    category: str | None = Query(default=None),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
@@ -163,7 +214,14 @@ def get_recent_transactions(
         Transaction.owner_id == current_user.id
     ).all()
 
-    transactions = filter_transactions(transactions, month, start_date, end_date)
+    transactions = filter_transactions(
+        transactions,
+        month,
+        start_date,
+        end_date,
+        transaction_type,
+        category
+    )
     transactions.sort(key=lambda t: t.date, reverse=True)
 
     return transactions[:5]
@@ -174,15 +232,25 @@ def get_top_expense_category(
     month: str | None = Query(default=None),
     start_date: str | None = Query(default=None),
     end_date: str | None = Query(default=None),
+    transaction_type: str | None = Query(default=None),
+    category: str | None = Query(default=None),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
     transactions = db.query(Transaction).filter(
-        Transaction.owner_id == current_user.id,
-        Transaction.type == "expense"
+        Transaction.owner_id == current_user.id
     ).all()
 
-    transactions = filter_transactions(transactions, month, start_date, end_date)
+    transactions = filter_transactions(
+        transactions,
+        month,
+        start_date,
+        end_date,
+        transaction_type,
+        category
+    )
+
+    transactions = [t for t in transactions if t.type == "expense"]
 
     if not transactions:
         return None
