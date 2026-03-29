@@ -244,7 +244,21 @@ async def import_transactions_csv(
 
     try:
         content = await file.read()
-        decoded_content = content.decode("utf-8")
+
+        decoded_content = None
+        for encoding in ["utf-8-sig", "utf-8", "cp1252", "latin-1"]:
+            try:
+                decoded_content = content.decode(encoding)
+                break
+            except UnicodeDecodeError:
+                continue
+
+        if decoded_content is None:
+            raise HTTPException(
+                status_code=400,
+                detail="Could not read CSV file encoding"
+            )
+
         reader = csv.DictReader(io.StringIO(decoded_content))
 
         required_columns = {"date", "description", "amount", "type", "category"}
