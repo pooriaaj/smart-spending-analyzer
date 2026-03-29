@@ -285,6 +285,8 @@ async def import_transactions_csv(
             )
 
         imported_count = 0
+        duplicate_count = 0
+        invalid_count = 0
 
         for row in reader:
             try:
@@ -295,26 +297,52 @@ async def import_transactions_csv(
 
                 transaction_type = normalized_row["type"].lower()
                 if transaction_type not in ["income", "expense"]:
+                    invalid_count += 1
+                    continue
+
+                amount = float(normalized_row["amount"])
+                category = normalized_row["category"]
+                description = normalized_row["description"]
+                date_value = datetime.strptime(
+                    normalized_row["date"], "%Y-%m-%d"
+                ).date()
+
+                existing_transaction = db.query(Transaction).filter(
+                    Transaction.owner_id == current_user.id,
+                    Transaction.amount == amount,
+                    Transaction.category == category,
+                    Transaction.description == description,
+                    Transaction.date == date_value,
+                    Transaction.type == transaction_type
+                ).first()
+
+                if existing_transaction:
+                    duplicate_count += 1
                     continue
 
                 transaction = Transaction(
-                    amount=float(normalized_row["amount"]),
-                    category=normalized_row["category"],
-                    description=normalized_row["description"],
-                    date=datetime.strptime(normalized_row["date"], "%Y-%m-%d").date(),
+                    amount=amount,
+                    category=category,
+                    description=description,
+                    date=date_value,
                     type=transaction_type,
                     owner_id=current_user.id
                 )
 
                 db.add(transaction)
                 imported_count += 1
+
             except Exception:
+                invalid_count += 1
                 continue
 
         db.commit()
 
         return {
-            "message": f"{imported_count} transactions imported successfully"
+            "message": "CSV import completed",
+            "imported": imported_count,
+            "duplicates_skipped": duplicate_count,
+            "invalid_rows_skipped": invalid_count
         }
 
     except HTTPException:
