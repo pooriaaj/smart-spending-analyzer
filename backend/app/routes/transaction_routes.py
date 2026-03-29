@@ -239,7 +239,7 @@ async def import_transactions_csv(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    if not file.filename or not file.filename.endswith(".csv"):
+    if not file.filename or not file.filename.lower().endswith(".csv"):
         raise HTTPException(status_code=400, detail="Please upload a CSV file")
 
     try:
@@ -259,25 +259,50 @@ async def import_transactions_csv(
                 detail="Could not read CSV file encoding"
             )
 
-        reader = csv.DictReader(io.StringIO(decoded_content))
+        sample = decoded_content[:2048]
 
-        required_columns = {"date", "description", "amount", "type", "category"}
-        if not reader.fieldnames or not required_columns.issubset(set(reader.fieldnames)):
+        try:
+            dialect = csv.Sniffer().sniff(sample, delimiters=",;\t")
+        except Exception:
+            dialect = csv.excel
+
+        reader = csv.DictReader(io.StringIO(decoded_content), dialect=dialect)
+
+        if not reader.fieldnames:
             raise HTTPException(
                 status_code=400,
-                detail="CSV must contain: date, description, amount, type, category"
+                detail="CSV file is missing headers"
+            )
+
+        normalized_fieldnames = [field.strip().lower() for field in reader.fieldnames]
+        reader.fieldnames = normalized_fieldnames
+
+        required_columns = {"date", "description", "amount", "type", "category"}
+        if not required_columns.issubset(set(reader.fieldnames)):
+            raise HTTPException(
+                status_code=400,
+                detail=f"CSV headers found: {reader.fieldnames}. Required: date, description, amount, type, category"
             )
 
         imported_count = 0
 
         for row in reader:
             try:
+                normalized_row = {
+                    key.strip().lower(): (value.strip() if value else "")
+                    for key, value in row.items()
+                }
+
+                transaction_type = normalized_row["type"].lower()
+                if transaction_type not in ["income", "expense"]:
+                    continue
+
                 transaction = Transaction(
-                    amount=float(row["amount"]),
-                    category=row["category"].strip(),
-                    description=row["description"].strip(),
-                    date=datetime.strptime(row["date"].strip(), "%Y-%m-%d").date(),
-                    type=row["type"].strip().lower(),
+                    amount=float(normalized_row["amount"]),
+                    category=normalized_row["category"],
+                    description=normalized_row["description"],
+                    date=datetime.strptime(normalized_row["date"], "%Y-%m-%d").date(),
+                    type=transaction_type,
                     owner_id=current_user.id
                 )
 
