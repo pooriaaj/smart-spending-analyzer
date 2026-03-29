@@ -482,3 +482,19 @@ body {
     width: 100%;
   }
 }
+
+.import-success {
+  margin-top: 10px;
+  padding: 10px;
+  background: #e6fffa;
+  border: 1px solid #38b2ac;
+  border-radius: 6px;
+}
+
+.import-error {
+  margin-top: 10px;
+  padding: 10px;
+  background: #ffe6e6;
+  border: 1px solid #e53e3e;
+  border-radius: 6px;
+}

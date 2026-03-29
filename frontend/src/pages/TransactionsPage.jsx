@@ -67,30 +67,53 @@ function TransactionsPage() {
     }
   };
 
+  const [importResult, setImportResult] = useState(null);
+  const [importError, setImportError] = useState("");
+
   const handleCsvUpload = async (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
+  const file = e.target.files[0];
+  if (!file) return;
 
-    const formData = new FormData();
-    formData.append("file", file);
+  setImportResult(null);
+  setImportError("");
 
-    try {
-      await api.post("/transactions/import/csv", formData, {
-        headers: {
-          "Content-Type": "multipart/form-data",
-        },
-      });
+  const formData = new FormData();
+  formData.append("file", file);
 
-      alert("CSV imported successfully!");
-      fetchTransactions();
-      navigate("/dashboard");
-    } catch (error) {
-      console.error("CSV upload failed:", error);
-      alert(
-        error?.response?.data?.detail || "CSV import failed."
-      );
-    }
-  };
+  try {
+    const response = await api.post("/transactions/import/csv", formData, {
+      headers: {
+        "Content-Type": "multipart/form-data",
+      },
+    });
+
+    setImportResult(response.data);
+
+  } catch (err) {
+    setImportError(
+      err.response?.data?.detail || "CSV import failed"
+    );
+  }
+};
+
+<div className="import-section">
+  <input type="file" accept=".csv" onChange={handleCsvUpload} />
+
+  {importResult && (
+    <div className="import-success">
+      <p>✅ Import completed</p>
+      <p>Imported: {importResult.imported}</p>
+      <p>Duplicates skipped: {importResult.duplicates_skipped}</p>
+      <p>Invalid rows: {importResult.invalid_rows_skipped}</p>
+    </div>
+  )}
+
+  {importError && (
+    <div className="import-error">
+      ❌ {importError}
+    </div>
+  )}
+</div>
 
   if (loading) {
     return (
