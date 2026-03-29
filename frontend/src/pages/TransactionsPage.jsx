@@ -9,6 +9,27 @@ function TransactionsPage() {
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
 
+  const handleCsvUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    const formData = new FormData();
+    formData.append("file", file);
+
+    try {
+      await api.post("/transactions/import/csv", formData, {
+        headers: {
+          "Content-Type": "multipart/form-data",
+        },
+      });
+
+      alert("CSV imported successfully!");
+      window.location.reload();
+    } catch (error) {
+      console.error("CSV upload failed:", error);
+      alert("CSV import failed.");
+    }
+  };
   const fetchTransactions = async () => {
     try {
       const response = await api.get("/transactions/");
@@ -67,6 +88,10 @@ function TransactionsPage() {
     }
   };
 
+  <div style={{ marginBottom: "20px" }}>
+  <label><strong>Import CSV:</strong></label><br />
+  <input type="file" accept=".csv" onChange={handleCsvUpload} />
+  </div>
   if (loading) {
     return (
       <div className="page-container dashboard-page">
