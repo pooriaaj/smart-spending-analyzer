@@ -12,6 +12,8 @@ from app.schemas import (
     SpendingInsights,
     OverspendingAlertItem,
     OverspendingAlertsResponse,
+    CategoryTrendItem,
+    CategoryTrendsResponse,
 )
 
 router = APIRouter(prefix="/analytics", tags=["Analytics"])
@@ -485,4 +487,114 @@ def get_overspending_alerts(
     return OverspendingAlertsResponse(
         current_month=current_month,
         alerts=alerts
+    )
+
+
+@router.get("/category-trends", response_model=CategoryTrendsResponse)
+def get_category_trends(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    transactions = db.query(Transaction).filter(
+        Transaction.owner_id == current_user.id
+    ).all()
+
+    expense_transactions = [t for t in transactions if t.type == "expense"]
+
+    if not expense_transactions:
+        return CategoryTrendsResponse(
+            current_month=None,
+            previous_month=None,
+            top_increases=[],
+            top_decreases=[],
+            summary=["No expense trend data available yet."]
+        )
+
+    monthly_category_totals = {}
+
+    for transaction in expense_transactions:
+        month_key = transaction.date.strftime("%Y-%m")
+
+        if month_key not in monthly_category_totals:
+            monthly_category_totals[month_key] = {}
+
+        monthly_category_totals[month_key][transaction.category] = (
+            monthly_category_totals[month_key].get(transaction.category, 0.0) + transaction.amount
+        )
+
+    sorted_months = sorted(monthly_category_totals.keys())
+
+    if len(sorted_months) < 2:
+        return CategoryTrendsResponse(
+            current_month=sorted_months[-1],
+            previous_month=None,
+            top_increases=[],
+            top_decreases=[],
+            summary=["At least two months of expense data are needed for category trend comparison."]
+        )
+
+    previous_month = sorted_months[-2]
+    current_month = sorted_months[-1]
+
+    previous_categories = monthly_category_totals.get(previous_month, {})
+    current_categories = monthly_category_totals.get(current_month, {})
+
+    all_categories = sorted(set(previous_categories.keys()) | set(current_categories.keys()))
+    trend_items = []
+
+    for category in all_categories:
+        previous_amount = previous_categories.get(category, 0.0)
+        current_amount = current_categories.get(category, 0.0)
+        change_amount = current_amount - previous_amount
+
+        change_percent = None
+        if previous_amount > 0:
+            change_percent = (change_amount / previous_amount) * 100
+
+        trend_items.append(
+            CategoryTrendItem(
+                category=category,
+                current_amount=current_amount,
+                previous_amount=previous_amount,
+                change_amount=change_amount,
+                change_percent=change_percent
+            )
+        )
+
+    increases = sorted(
+        [item for item in trend_items if item.change_amount > 0],
+        key=lambda item: item.change_amount,
+        reverse=True
+    )[:5]
+
+    decreases = sorted(
+        [item for item in trend_items if item.change_amount < 0],
+        key=lambda item: item.change_amount
+    )[:5]
+
+    summary = []
+
+    if increases:
+        top_up = increases[0]
+        summary.append(
+            f"The biggest increase from {previous_month} to {current_month} was {top_up.category}, up ${top_up.change_amount:.2f}."
+        )
+
+    if decreases:
+        top_down = decreases[0]
+        summary.append(
+            f"The biggest decrease from {previous_month} to {current_month} was {top_down.category}, down ${abs(top_down.change_amount):.2f}."
+        )
+
+    if not summary:
+        summary.append(
+            f"No category-level increase or decrease was detected between {previous_month} and {current_month}."
+        )
+
+    return CategoryTrendsResponse(
+        current_month=current_month,
+        previous_month=previous_month,
+        top_increases=increases,
+        top_decreases=decreases,
+        summary=summary
     )

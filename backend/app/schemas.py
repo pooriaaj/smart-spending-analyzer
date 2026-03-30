@@ -129,3 +129,19 @@ class OverspendingAlertItem(BaseModel):
 class OverspendingAlertsResponse(BaseModel):
     current_month: str | None = None
     alerts: list[OverspendingAlertItem]
+
+
+class CategoryTrendItem(BaseModel):
+    category: str
+    current_amount: float
+    previous_amount: float
+    change_amount: float
+    change_percent: float | None = None
+
+
+class CategoryTrendsResponse(BaseModel):
+    current_month: str | None = None
+    previous_month: str | None = None
+    top_increases: list[CategoryTrendItem]
+    top_decreases: list[CategoryTrendItem]
+    summary: list[str]

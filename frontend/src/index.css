@@ -1176,3 +1176,93 @@ body {
   border-color: #bfdbfe;
   color: #1d4ed8;
 }
+
+.trends-card {
+  margin-bottom: 24px;
+}
+
+.trend-summary-box {
+  background: #f8fbff;
+  border: 1px solid rgba(37, 99, 235, 0.1);
+  border-radius: 16px;
+  padding: 16px;
+  margin-bottom: 18px;
+}
+
+.trend-summary-box p {
+  margin: 0;
+  color: #374151;
+  line-height: 1.6;
+}
+
+.trend-summary-box p + p {
+  margin-top: 8px;
+}
+
+.trend-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 18px;
+}
+
+.trend-block {
+  background: #ffffff;
+  border: 1px solid rgba(37, 99, 235, 0.08);
+  border-radius: 18px;
+  padding: 18px;
+}
+
+.trend-block h3 {
+  margin-top: 0;
+  margin-bottom: 14px;
+  font-size: 18px;
+}
+
+.trend-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.trend-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 14px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.trend-item:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.trend-item p {
+  margin: 4px 0 0 0;
+  color: #6b7280;
+  line-height: 1.5;
+}
+
+.trend-positive {
+  color: #dc2626;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.trend-negative {
+  color: #16a34a;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.trend-empty-text {
+  margin: 0;
+  color: #6b7280;
+}
+
+@media (max-width: 900px) {
+  .trend-grid {
+    grid-template-columns: 1fr;
+  }
+}

@@ -22,6 +22,7 @@ function AnalyticsPage() {
   const [allTransactions, setAllTransactions] = useState([]);
   const [spendingInsights, setSpendingInsights] = useState(null);
   const [overspendingAlerts, setOverspendingAlerts] = useState(null);
+  const [categoryTrends, setCategoryTrends] = useState(null);
   const [selectedMonth, setSelectedMonth] = useState("");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
@@ -60,6 +61,7 @@ function AnalyticsPage() {
         allTransactionsRes,
         insightsRes,
         alertsRes,
+        trendsRes,
       ] = await Promise.all([
         api.get("/analytics/summary", queryParams),
         api.get("/analytics/top-expense-category", queryParams),
@@ -75,6 +77,7 @@ function AnalyticsPage() {
         api.get("/transactions/"),
         api.get("/analytics/spending-insights"),
         api.get("/analytics/overspending-alerts"),
+        api.get("/analytics/category-trends"),
       ]);
 
       setSummary(summaryRes.data);
@@ -84,6 +87,7 @@ function AnalyticsPage() {
       setAllTransactions(allTransactionsRes.data);
       setSpendingInsights(insightsRes.data);
       setOverspendingAlerts(alertsRes.data);
+      setCategoryTrends(trendsRes.data);
     } catch (error) {
       console.error("Failed to load analytics data:", error);
 
@@ -106,6 +110,11 @@ function AnalyticsPage() {
     setEndDate("");
     setSelectedType("");
     setSelectedCategory("");
+  };
+
+  const renderTrendAmount = (value) => {
+    const prefix = value > 0 ? "+" : "";
+    return `${prefix}$${value.toFixed(2)}`;
   };
 
   if (loading) {
@@ -273,6 +282,75 @@ function AnalyticsPage() {
                 </div>
               ))}
             </div>
+          )}
+        </div>
+
+        <div className="dashboard-card trends-card">
+          <div className="section-header">
+            <h2>Category Trend Comparison</h2>
+            <p>See which categories increased or decreased the most month over month.</p>
+          </div>
+
+          {!categoryTrends ? (
+            <div className="empty-state">
+              <p>No trend data available.</p>
+            </div>
+          ) : (
+            <>
+              <div className="trend-summary-box">
+                {categoryTrends.summary.map((item, index) => (
+                  <p key={`trend-summary-${index}`}>{item}</p>
+                ))}
+              </div>
+
+              <div className="trend-grid">
+                <div className="trend-block">
+                  <h3>Top Increases</h3>
+                  {categoryTrends.top_increases.length === 0 ? (
+                    <p className="trend-empty-text">No increases detected.</p>
+                  ) : (
+                    <div className="trend-list">
+                      {categoryTrends.top_increases.map((item) => (
+                        <div key={`increase-${item.category}`} className="trend-item">
+                          <div>
+                            <strong>{item.category}</strong>
+                            <p>
+                              {categoryTrends.previous_month}: ${item.previous_amount.toFixed(2)} → {categoryTrends.current_month}: ${item.current_amount.toFixed(2)}
+                            </p>
+                          </div>
+                          <span className="trend-positive">
+                            {renderTrendAmount(item.change_amount)}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                <div className="trend-block">
+                  <h3>Top Decreases</h3>
+                  {categoryTrends.top_decreases.length === 0 ? (
+                    <p className="trend-empty-text">No decreases detected.</p>
+                  ) : (
+                    <div className="trend-list">
+                      {categoryTrends.top_decreases.map((item) => (
+                        <div key={`decrease-${item.category}`} className="trend-item">
+                          <div>
+                            <strong>{item.category}</strong>
+                            <p>
+                              {categoryTrends.previous_month}: ${item.previous_amount.toFixed(2)} → {categoryTrends.current_month}: ${item.current_amount.toFixed(2)}
+                            </p>
+                          </div>
+                          <span className="trend-negative">
+                            {renderTrendAmount(item.change_amount)}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </>
           )}
         </div>
 
