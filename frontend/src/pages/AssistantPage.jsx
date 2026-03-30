@@ -7,7 +7,8 @@ function AssistantPage() {
   const [messages, setMessages] = useState([
     {
       role: "assistant",
-      content: "Hi — I’m your financial assistant. Ask me about your balance, spending, categories, or savings.",
+      content:
+        "Hi — I’m your financial assistant. Ask me about your balance, spending, categories, or savings.",
       data: null,
     },
   ]);
@@ -45,7 +46,9 @@ function AssistantPage() {
 
   const buildHistoryPayload = (existingMessages, newQuestion) => {
     const historyMessages = [...existingMessages]
-      .filter((message) => message.role === "user" || message.role === "assistant")
+      .filter(
+        (message) => message.role === "user" || message.role === "assistant"
+      )
       .map((message) => ({
         role: message.role,
         content: message.content,
@@ -57,6 +60,64 @@ function AssistantPage() {
     });
 
     return historyMessages.slice(-8);
+  };
+
+  const getAnalyticsSectionFromText = (text) => {
+    const normalized = (text || "").toLowerCase();
+
+    if (
+      normalized.includes("driving this") ||
+      normalized.includes("which category") ||
+      normalized.includes("trend")
+    ) {
+      return "trends";
+    }
+
+    if (
+      normalized.includes("increase") ||
+      normalized.includes("overspend") ||
+      normalized.includes("spending increase") ||
+      normalized.includes("spending spike")
+    ) {
+      return "alerts";
+    }
+
+    if (
+      normalized.includes("top expense") ||
+      normalized.includes("top category") ||
+      normalized.includes("biggest category")
+    ) {
+      return "categories";
+    }
+
+    if (
+      normalized.includes("saving advice") ||
+      normalized.includes("reduce") ||
+      normalized.includes("save")
+    ) {
+      return "insights";
+    }
+
+    if (
+      normalized.includes("summary") ||
+      normalized.includes("summarize") ||
+      normalized.includes("overview")
+    ) {
+      return "monthly";
+    }
+
+    return null;
+  };
+
+  const handleAssistantFollowup = (followupText) => {
+    const section = getAnalyticsSectionFromText(followupText);
+
+    if (section) {
+      navigate(`/analytics?section=${section}`);
+      return;
+    }
+
+    handleAsk(followupText);
   };
 
   const handleAsk = async (customQuestion) => {
@@ -112,7 +173,8 @@ function AssistantPage() {
             <p className="eyebrow-text">Smart Spending Analyzer</p>
             <h1>Financial Assistant</h1>
             <p className="hero-subtitle">
-              Ask questions about your balance, spending, categories, and savings.
+              Ask questions about your balance, spending, categories, and
+              savings.
             </p>
           </div>
 
@@ -186,7 +248,10 @@ function AssistantPage() {
         <div className="dashboard-card assistant-chat-card">
           <div className="section-header">
             <h2>Conversation</h2>
-            <p>Your assistant keeps short conversation context for follow-up questions.</p>
+            <p>
+              Your assistant keeps short conversation context for follow-up
+              questions.
+            </p>
           </div>
 
           <div className="assistant-chat-list">
@@ -223,7 +288,7 @@ function AssistantPage() {
                               key={`followup-${index}-${idx}`}
                               type="button"
                               className="assistant-followup-button"
-                              onClick={() => handleAsk(item)}
+                              onClick={() => handleAssistantFollowup(item)}
                               disabled={loading}
                             >
                               {item}

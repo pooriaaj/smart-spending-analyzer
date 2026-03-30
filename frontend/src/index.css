@@ -1541,3 +1541,7 @@ body {
     grid-template-columns: 1fr;
   }
 }
+.analytics-section-highlight {
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.18);
+  transition: box-shadow 0.3s ease;
+}

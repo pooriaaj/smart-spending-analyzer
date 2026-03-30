@@ -1,5 +1,5 @@
-import { useEffect, useState, useCallback, useMemo } from "react";
-import { useNavigate } from "react-router-dom";
+import { useEffect, useState, useCallback, useMemo, useRef } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import api from "../services/api";
 import {
   BarChart,
@@ -30,9 +30,23 @@ function AnalyticsPage() {
   const [selectedCategory, setSelectedCategory] = useState("");
   const [loading, setLoading] = useState(true);
 
-  const navigate = useNavigate();
+  const alertsRef = useRef(null);
+  const trendsRef = useRef(null);
+  const insightsRef = useRef(null);
+  const monthlyRef = useRef(null);
+  const categoriesRef = useRef(null);
 
-  const pieColors = ["#2563eb", "#16a34a", "#dc2626", "#f59e0b", "#7c3aed", "#0891b2"];
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+
+  const pieColors = [
+    "#2563eb",
+    "#16a34a",
+    "#dc2626",
+    "#f59e0b",
+    "#7c3aed",
+    "#0891b2",
+  ];
 
   const availableCategories = useMemo(() => {
     const categories = new Set(
@@ -104,6 +118,29 @@ function AnalyticsPage() {
     fetchAnalyticsData();
   }, [fetchAnalyticsData]);
 
+  useEffect(() => {
+    const section = searchParams.get("section");
+    if (!section || loading) return;
+
+    const sectionMap = {
+      alerts: alertsRef,
+      trends: trendsRef,
+      insights: insightsRef,
+      monthly: monthlyRef,
+      categories: categoriesRef,
+    };
+
+    const targetRef = sectionMap[section];
+    if (targetRef?.current) {
+      setTimeout(() => {
+        targetRef.current.scrollIntoView({
+          behavior: "smooth",
+          block: "start",
+        });
+      }, 150);
+    }
+  }, [searchParams, loading]);
+
   const clearFilters = () => {
     setSelectedMonth("");
     setStartDate("");
@@ -115,6 +152,12 @@ function AnalyticsPage() {
   const renderTrendAmount = (value) => {
     const prefix = value > 0 ? "+" : "";
     return `${prefix}$${value.toFixed(2)}`;
+  };
+
+  const getSectionHighlightClass = (sectionName) => {
+    return searchParams.get("section") === sectionName
+      ? "analytics-section-highlight"
+      : "";
   };
 
   if (loading) {
@@ -267,7 +310,10 @@ function AnalyticsPage() {
           </div>
         </div>
 
-        <div className="dashboard-card alerts-card">
+        <div
+          ref={alertsRef}
+          className={`dashboard-card alerts-card ${getSectionHighlightClass("alerts")}`}
+        >
           <div className="section-header">
             <h2>Overspending Alerts</h2>
             <p>Warnings based on unusual monthly or category-level spending increases.</p>
@@ -292,7 +338,10 @@ function AnalyticsPage() {
           )}
         </div>
 
-        <div className="dashboard-card trends-card">
+        <div
+          ref={trendsRef}
+          className={`dashboard-card trends-card ${getSectionHighlightClass("trends")}`}
+        >
           <div className="section-header">
             <h2>Category Trend Comparison</h2>
             <p>See which categories increased or decreased the most month over month.</p>
@@ -361,7 +410,10 @@ function AnalyticsPage() {
           )}
         </div>
 
-        <div className="dashboard-card insights-card">
+        <div
+          ref={insightsRef}
+          className={`dashboard-card insights-card ${getSectionHighlightClass("insights")}`}
+        >
           <div className="section-header">
             <h2>Spending Insights</h2>
             <p>Simple observations and recommendations based on your spending data.</p>
@@ -394,7 +446,10 @@ function AnalyticsPage() {
           )}
         </div>
 
-        <div className="chart-grid">
+        <div
+          ref={monthlyRef}
+          className={`chart-grid ${getSectionHighlightClass("monthly")}`}
+        >
           <div className="dashboard-card">
             <div className="section-header">
               <h2>Monthly Summary</h2>
@@ -455,7 +510,10 @@ function AnalyticsPage() {
           </div>
         </div>
 
-        <div className="dashboard-card">
+        <div
+          ref={categoriesRef}
+          className={`dashboard-card ${getSectionHighlightClass("categories")}`}
+        >
           <div className="section-header">
             <h2>Expense Categories</h2>
             <p>Ranked from highest to lowest total expense.</p>
