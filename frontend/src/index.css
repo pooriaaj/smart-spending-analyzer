@@ -1103,3 +1103,32 @@ body {
     grid-template-columns: 1fr;
   }
 }
+
+.compact-summary-card {
+  min-height: 170px;
+}
+
+.analytics-summary-card {
+  min-height: 170px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.analytics-card-button {
+  border: none;
+  background-color: #374151;
+  color: white;
+  padding: 14px 16px;
+  border-radius: 12px;
+  cursor: pointer;
+  font-size: 15px;
+  font-weight: 600;
+  transition: 0.2s ease;
+  width: 100%;
+}
+
+.analytics-card-button:hover {
+  background-color: #1f2937;
+}

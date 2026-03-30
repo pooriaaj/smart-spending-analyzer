@@ -97,9 +97,6 @@ function DashboardPage() {
             <button className="secondary-button" onClick={() => navigate("/transactions")}>
               View All Transactions
             </button>
-            <button className="secondary-button" onClick={() => navigate("/analytics")}>
-              View Analytics
-            </button>
             <button className="export-button" onClick={handleExportCsv}>
               Export CSV
             </button>
@@ -110,24 +107,29 @@ function DashboardPage() {
         </div>
 
         <div className="summary-grid">
-          <div className="summary-card income-card">
+          <div className="summary-card income-card compact-summary-card">
             <span className="card-label">Total Income</span>
             <p>${summary?.total_income?.toFixed(2)}</p>
           </div>
 
-          <div className="summary-card expense-card">
+          <div className="summary-card expense-card compact-summary-card">
             <span className="card-label">Total Expenses</span>
             <p>${summary?.total_expenses?.toFixed(2)}</p>
           </div>
 
-          <div className="summary-card balance-card">
+          <div className="summary-card balance-card compact-summary-card">
             <span className="card-label">Balance</span>
             <p>${summary?.balance?.toFixed(2)}</p>
           </div>
 
-          <div className="summary-card top-card">
+          <div className="summary-card top-card analytics-summary-card">
             <span className="card-label">Analytics</span>
-            <p>Open the analytics page for trends, charts, and deeper insights.</p>
+            <button
+              className="analytics-card-button"
+              onClick={() => navigate("/analytics")}
+            >
+              Open Analytics
+            </button>
           </div>
         </div>
 
