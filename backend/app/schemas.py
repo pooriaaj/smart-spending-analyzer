@@ -82,3 +82,27 @@ class CategorySuggestionResponse(BaseModel):
     confidence: float
     matched_keyword: str | None = None
     reason: str
+
+
+class BulkCategorySuggestionItem(BaseModel):
+    transaction_id: int
+    current_category: str
+    description: str
+    type: str
+    suggested_category: str
+    confidence: float
+    matched_keyword: str | None = None
+    reason: str
+
+
+class BulkCategorySuggestionResponse(BaseModel):
+    total_candidates: int
+    suggestions: list[BulkCategorySuggestionItem]
+
+
+class BulkCategoryApplyRequest(BaseModel):
+    transaction_ids: list[int]
+
+
+class BulkCategoryApplyResponse(BaseModel):
+    updated_count: int

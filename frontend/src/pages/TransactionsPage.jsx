@@ -13,6 +13,11 @@ function TransactionsPage() {
   const [isUploading, setIsUploading] = useState(false);
   const [selectedFileName, setSelectedFileName] = useState("");
 
+  const [bulkSuggestions, setBulkSuggestions] = useState([]);
+  const [bulkLoading, setBulkLoading] = useState(false);
+  const [bulkApplying, setBulkApplying] = useState(false);
+  const [bulkMessage, setBulkMessage] = useState("");
+
   const fileInputRef = useRef(null);
   const navigate = useNavigate();
 
@@ -112,6 +117,44 @@ function TransactionsPage() {
     }
   };
 
+  const handleBulkAnalyze = async () => {
+    try {
+      setBulkLoading(true);
+      setBulkMessage("");
+      const response = await api.get("/transactions/categorize/bulk-preview");
+      setBulkSuggestions(response.data.suggestions || []);
+    } catch (error) {
+      console.error("Failed to analyze transactions:", error);
+      setBulkMessage("Failed to analyze transactions.");
+    } finally {
+      setBulkLoading(false);
+    }
+  };
+
+  const handleBulkApply = async () => {
+    if (bulkSuggestions.length === 0) return;
+
+    try {
+      setBulkApplying(true);
+      setBulkMessage("");
+
+      const response = await api.post("/transactions/categorize/bulk-apply", {
+        transaction_ids: bulkSuggestions.map((item) => item.transaction_id),
+      });
+
+      setBulkMessage(
+        `Applied suggested categories to ${response.data.updated_count} transaction(s).`
+      );
+      setBulkSuggestions([]);
+      await fetchTransactions();
+    } catch (error) {
+      console.error("Failed to apply suggestions:", error);
+      setBulkMessage("Failed to apply suggested categories.");
+    } finally {
+      setBulkApplying(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="page-container dashboard-page">
@@ -133,7 +176,7 @@ function TransactionsPage() {
             <p className="eyebrow-text">Smart Spending Analyzer</p>
             <h1>All Transactions</h1>
             <p className="hero-subtitle">
-              Browse, filter, manage, and import your full transaction history.
+              Browse, filter, manage, import, and improve your transaction history.
             </p>
           </div>
 
@@ -256,6 +299,77 @@ function TransactionsPage() {
               </div>
             )}
           </div>
+        </div>
+
+        <div className="filter-card">
+          <div className="section-header">
+            <h2>Smart Categorization</h2>
+            <p>
+              Analyze transactions still labeled as Other, Misc, Uncategorized, or Unknown.
+            </p>
+          </div>
+
+          <div className="smart-actions-row">
+            <button
+              type="button"
+              className="smart-action-button"
+              onClick={handleBulkAnalyze}
+              disabled={bulkLoading}
+            >
+              {bulkLoading ? "Analyzing..." : "Analyze Uncategorized Transactions"}
+            </button>
+
+            <button
+              type="button"
+              className="smart-apply-button"
+              onClick={handleBulkApply}
+              disabled={bulkApplying || bulkSuggestions.length === 0}
+            >
+              {bulkApplying ? "Applying..." : "Apply Suggested Categories"}
+            </button>
+          </div>
+
+          {bulkMessage && (
+            <div className="bulk-message-box">
+              {bulkMessage}
+            </div>
+          )}
+
+          {bulkSuggestions.length > 0 && (
+            <div className="bulk-suggestions-list">
+              {bulkSuggestions.map((item) => (
+                <div key={item.transaction_id} className="bulk-suggestion-card">
+                  <div className="bulk-suggestion-top">
+                    <div>
+                      <h3>{item.description}</h3>
+                      <p>
+                        Current: <strong>{item.current_category}</strong> → Suggested:{" "}
+                        <strong>{item.suggested_category}</strong>
+                      </p>
+                    </div>
+                    <span className="bulk-confidence-pill">
+                      {Math.round(item.confidence * 100)}%
+                    </span>
+                  </div>
+
+                  <p className="bulk-suggestion-meta">Type: {item.type}</p>
+                  <p className="bulk-suggestion-meta">{item.reason}</p>
+
+                  {item.matched_keyword && (
+                    <p className="bulk-suggestion-meta">
+                      Matched keyword: {item.matched_keyword}
+                    </p>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+
+          {!bulkLoading && bulkSuggestions.length === 0 && !bulkMessage && (
+            <div className="empty-state">
+              <p>No bulk suggestions yet. Run analysis to scan uncategorized rows.</p>
+            </div>
+          )}
         </div>
 
         <div className="filter-card">

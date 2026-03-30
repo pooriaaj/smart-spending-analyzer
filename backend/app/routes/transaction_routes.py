@@ -8,6 +8,10 @@ from app.schemas import (
     TransactionResponse,
     CategorySuggestionRequest,
     CategorySuggestionResponse,
+    BulkCategorySuggestionItem,
+    BulkCategorySuggestionResponse,
+    BulkCategoryApplyRequest,
+    BulkCategoryApplyResponse,
 )
 import csv
 import io
@@ -95,7 +99,7 @@ def suggest_category(description: str, transaction_type: str):
     if normalized_type not in CATEGORY_KEYWORDS:
         return {
             "suggested_category": "Other",
-            "confidence": 0.2,
+            "confidence": 0.20,
             "matched_keyword": None,
             "reason": "Unknown transaction type"
         }
@@ -197,6 +201,75 @@ def categorize_transaction_suggestion(
 ):
     result = suggest_category(payload.description, payload.type)
     return CategorySuggestionResponse(**result)
+
+
+@router.get("/categorize/bulk-preview", response_model=BulkCategorySuggestionResponse)
+def categorize_bulk_preview(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    candidate_categories = {"other", "misc", "uncategorized", "unknown"}
+
+    transactions = db.query(Transaction).filter(
+        Transaction.owner_id == current_user.id
+    ).all()
+
+    suggestions = []
+
+    for transaction in transactions:
+        current_category = normalize_text(transaction.category)
+
+        if current_category not in candidate_categories:
+            continue
+
+        result = suggest_category(transaction.description, transaction.type)
+
+        if result["suggested_category"].lower() == current_category:
+            continue
+
+        suggestions.append(
+            BulkCategorySuggestionItem(
+                transaction_id=transaction.id,
+                current_category=transaction.category,
+                description=transaction.description,
+                type=transaction.type,
+                suggested_category=result["suggested_category"],
+                confidence=result["confidence"],
+                matched_keyword=result["matched_keyword"],
+                reason=result["reason"],
+            )
+        )
+
+    return BulkCategorySuggestionResponse(
+        total_candidates=len(suggestions),
+        suggestions=suggestions
+    )
+
+
+@router.post("/categorize/bulk-apply", response_model=BulkCategoryApplyResponse)
+def categorize_bulk_apply(
+    payload: BulkCategoryApplyRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    updated_count = 0
+
+    for transaction_id in payload.transaction_ids:
+        transaction = db.query(Transaction).filter(
+            Transaction.id == transaction_id,
+            Transaction.owner_id == current_user.id
+        ).first()
+
+        if not transaction:
+            continue
+
+        result = suggest_category(transaction.description, transaction.type)
+        transaction.category = result["suggested_category"]
+        updated_count += 1
+
+    db.commit()
+
+    return BulkCategoryApplyResponse(updated_count=updated_count)
 
 
 @router.get("/", response_model=list[TransactionResponse])
