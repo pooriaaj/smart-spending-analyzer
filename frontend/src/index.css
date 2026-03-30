@@ -1132,3 +1132,47 @@ body {
 .analytics-card-button:hover {
   background-color: #1f2937;
 }
+
+.alerts-card {
+  margin-bottom: 24px;
+}
+
+.alerts-list {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.alert-box {
+  border-radius: 18px;
+  padding: 18px;
+  border: 1px solid transparent;
+}
+
+.alert-box h3 {
+  margin: 0 0 8px 0;
+  font-size: 18px;
+}
+
+.alert-box p {
+  margin: 0;
+  line-height: 1.6;
+}
+
+.alert-high {
+  background: #fef2f2;
+  border-color: #fecaca;
+  color: #991b1b;
+}
+
+.alert-medium {
+  background: #fff7ed;
+  border-color: #fed7aa;
+  color: #9a3412;
+}
+
+.alert-low {
+  background: #eff6ff;
+  border-color: #bfdbfe;
+  color: #1d4ed8;
+}

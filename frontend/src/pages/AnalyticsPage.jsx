@@ -21,6 +21,7 @@ function AnalyticsPage() {
   const [monthlySummary, setMonthlySummary] = useState([]);
   const [allTransactions, setAllTransactions] = useState([]);
   const [spendingInsights, setSpendingInsights] = useState(null);
+  const [overspendingAlerts, setOverspendingAlerts] = useState(null);
   const [selectedMonth, setSelectedMonth] = useState("");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
@@ -58,6 +59,7 @@ function AnalyticsPage() {
         monthlySummaryRes,
         allTransactionsRes,
         insightsRes,
+        alertsRes,
       ] = await Promise.all([
         api.get("/analytics/summary", queryParams),
         api.get("/analytics/top-expense-category", queryParams),
@@ -72,6 +74,7 @@ function AnalyticsPage() {
         }),
         api.get("/transactions/"),
         api.get("/analytics/spending-insights"),
+        api.get("/analytics/overspending-alerts"),
       ]);
 
       setSummary(summaryRes.data);
@@ -80,6 +83,7 @@ function AnalyticsPage() {
       setMonthlySummary(monthlySummaryRes.data);
       setAllTransactions(allTransactionsRes.data);
       setSpendingInsights(insightsRes.data);
+      setOverspendingAlerts(alertsRes.data);
     } catch (error) {
       console.error("Failed to load analytics data:", error);
 
@@ -245,6 +249,31 @@ function AnalyticsPage() {
                 : "No expense data"}
             </p>
           </div>
+        </div>
+
+        <div className="dashboard-card alerts-card">
+          <div className="section-header">
+            <h2>Overspending Alerts</h2>
+            <p>Warnings based on unusual monthly or category-level spending increases.</p>
+          </div>
+
+          {!overspendingAlerts || overspendingAlerts.alerts.length === 0 ? (
+            <div className="empty-state">
+              <p>No alerts available.</p>
+            </div>
+          ) : (
+            <div className="alerts-list">
+              {overspendingAlerts.alerts.map((alert, index) => (
+                <div
+                  key={`alert-${index}`}
+                  className={`alert-box alert-${alert.level}`}
+                >
+                  <h3>{alert.title}</h3>
+                  <p>{alert.message}</p>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
         <div className="dashboard-card insights-card">

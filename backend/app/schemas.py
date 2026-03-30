@@ -118,3 +118,14 @@ class SpendingInsights(BaseModel):
     top_category_share_percent: float | None = None
     insights: list[str]
     recommendations: list[str]
+
+
+class OverspendingAlertItem(BaseModel):
+    level: str
+    title: str
+    message: str
+
+
+class OverspendingAlertsResponse(BaseModel):
+    current_month: str | None = None
+    alerts: list[OverspendingAlertItem]

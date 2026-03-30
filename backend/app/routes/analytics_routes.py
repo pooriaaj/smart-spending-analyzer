@@ -10,6 +10,8 @@ from app.schemas import (
     RecentTransactionItem,
     TopExpenseCategory,
     SpendingInsights,
+    OverspendingAlertItem,
+    OverspendingAlertsResponse,
 )
 
 router = APIRouter(prefix="/analytics", tags=["Analytics"])
@@ -386,4 +388,101 @@ def get_spending_insights(
         top_category_share_percent=top_category_share_percent,
         insights=insights,
         recommendations=recommendations
+    )
+
+
+@router.get("/overspending-alerts", response_model=OverspendingAlertsResponse)
+def get_overspending_alerts(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    transactions = db.query(Transaction).filter(
+        Transaction.owner_id == current_user.id
+    ).all()
+
+    expense_transactions = [t for t in transactions if t.type == "expense"]
+
+    if not expense_transactions:
+        return OverspendingAlertsResponse(current_month=None, alerts=[])
+
+    monthly_totals = {}
+    monthly_category_totals = {}
+
+    for transaction in expense_transactions:
+        month_key = transaction.date.strftime("%Y-%m")
+        monthly_totals[month_key] = monthly_totals.get(month_key, 0.0) + transaction.amount
+
+        if month_key not in monthly_category_totals:
+            monthly_category_totals[month_key] = {}
+
+        monthly_category_totals[month_key][transaction.category] = (
+            monthly_category_totals[month_key].get(transaction.category, 0.0) + transaction.amount
+        )
+
+    sorted_months = sorted(monthly_totals.keys())
+    current_month = sorted_months[-1]
+    current_total = monthly_totals[current_month]
+
+    alerts = []
+
+    if len(sorted_months) >= 2:
+        previous_month = sorted_months[-2]
+        previous_total = monthly_totals[previous_month]
+
+        if previous_total > 0:
+            change_percent = ((current_total - previous_total) / previous_total) * 100
+
+            if change_percent >= 25:
+                alerts.append(
+                    OverspendingAlertItem(
+                        level="high",
+                        title="Monthly spending spike",
+                        message=f"Your spending in {current_month} is up {change_percent:.1f}% compared with {previous_month}."
+                    )
+                )
+            elif change_percent >= 15:
+                alerts.append(
+                    OverspendingAlertItem(
+                        level="medium",
+                        title="Monthly spending increase",
+                        message=f"Your spending in {current_month} is up {change_percent:.1f}% compared with {previous_month}."
+                    )
+                )
+
+    current_categories = monthly_category_totals.get(current_month, {})
+    current_total_expenses = sum(current_categories.values())
+
+    if current_total_expenses > 0:
+        for category, amount in current_categories.items():
+            share = (amount / current_total_expenses) * 100
+
+            if share >= 45:
+                alerts.append(
+                    OverspendingAlertItem(
+                        level="high",
+                        title=f"{category} is dominating spending",
+                        message=f"{category} makes up {share:.1f}% of your expenses in {current_month}."
+                    )
+                )
+            elif share >= 30:
+                alerts.append(
+                    OverspendingAlertItem(
+                        level="medium",
+                        title=f"{category} is a major spending category",
+                        message=f"{category} makes up {share:.1f}% of your expenses in {current_month}."
+                    )
+                )
+
+    if not alerts:
+        alerts.append(
+            OverspendingAlertItem(
+                level="low",
+                title="No major overspending alert",
+                message="Your latest spending pattern does not show a strong overspending signal right now."
+            )
+        )
+
+    return OverspendingAlertsResponse(
+        current_month=current_month,
+        alerts=alerts
     )
