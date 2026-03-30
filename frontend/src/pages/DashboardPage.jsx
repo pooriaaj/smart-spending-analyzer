@@ -22,6 +22,7 @@ function DashboardPage() {
   const [categoryBreakdown, setCategoryBreakdown] = useState([]);
   const [monthlySummary, setMonthlySummary] = useState([]);
   const [allTransactions, setAllTransactions] = useState([]);
+  const [spendingInsights, setSpendingInsights] = useState(null);
   const [editingTransaction, setEditingTransaction] = useState(null);
   const [selectedMonth, setSelectedMonth] = useState("");
   const [startDate, setStartDate] = useState("");
@@ -29,6 +30,7 @@ function DashboardPage() {
   const [selectedType, setSelectedType] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("");
   const [loading, setLoading] = useState(true);
+
   const navigate = useNavigate();
 
   const pieColors = ["#2563eb", "#16a34a", "#dc2626", "#f59e0b", "#7c3aed", "#0891b2"];
@@ -59,6 +61,7 @@ function DashboardPage() {
         categoryBreakdownRes,
         monthlySummaryRes,
         allTransactionsRes,
+        insightsRes,
       ] = await Promise.all([
         api.get("/analytics/summary", queryParams),
         api.get("/analytics/recent-transactions", queryParams),
@@ -73,6 +76,7 @@ function DashboardPage() {
           },
         }),
         api.get("/transactions/"),
+        api.get("/analytics/spending-insights"),
       ]);
 
       setSummary(summaryRes.data);
@@ -81,6 +85,7 @@ function DashboardPage() {
       setCategoryBreakdown(categoryBreakdownRes.data);
       setMonthlySummary(monthlySummaryRes.data);
       setAllTransactions(allTransactionsRes.data);
+      setSpendingInsights(insightsRes.data);
     } catch (error) {
       console.error("Failed to load dashboard data:", error);
 
@@ -166,7 +171,7 @@ function DashboardPage() {
             <p className="eyebrow-text">Smart Spending Analyzer</p>
             <h1>Financial Dashboard</h1>
             <p className="hero-subtitle">
-              Track income, expenses, trends, and categories in one place.
+              Track income, expenses, trends, categories, and actionable insights in one place.
             </p>
           </div>
 
@@ -284,6 +289,39 @@ function DashboardPage() {
           </div>
         </div>
 
+        <div className="dashboard-card insights-card">
+          <div className="section-header">
+            <h2>Spending Insights</h2>
+            <p>Simple observations and next-step recommendations based on your spending data.</p>
+          </div>
+
+          {!spendingInsights ? (
+            <div className="empty-state">
+              <p>No insights available yet.</p>
+            </div>
+          ) : (
+            <div className="insights-grid">
+              <div className="insights-block">
+                <h3>Observations</h3>
+                <ul className="insights-list">
+                  {spendingInsights.insights.map((item, index) => (
+                    <li key={`insight-${index}`}>{item}</li>
+                  ))}
+                </ul>
+              </div>
+
+              <div className="insights-block">
+                <h3>Recommendations</h3>
+                <ul className="insights-list">
+                  {spendingInsights.recommendations.map((item, index) => (
+                    <li key={`recommendation-${index}`}>{item}</li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+          )}
+        </div>
+
         <div className="chart-grid">
           <div className="dashboard-card">
             <div className="section-header">
@@ -349,7 +387,7 @@ function DashboardPage() {
           <div className="dashboard-card large-card">
             <div className="section-header">
               <h2>Recent Transactions</h2>
-              <p>Your latest activity based on the selected filters.</p>
+              <p>Your latest activity based on transaction date and the selected filters.</p>
             </div>
 
             {recentTransactions.length === 0 ? (

@@ -106,3 +106,15 @@ class BulkCategoryApplyRequest(BaseModel):
 
 class BulkCategoryApplyResponse(BaseModel):
     updated_count: int
+
+
+class SpendingInsights(BaseModel):
+    current_month: str | None = None
+    current_month_expenses: float
+    previous_month_expenses: float
+    expense_change_percent: float | None = None
+    top_category: str | None = None
+    top_category_amount: float
+    top_category_share_percent: float | None = None
+    insights: list[str]
+    recommendations: list[str]
