@@ -107,12 +107,17 @@ def build_financial_snapshot(transactions):
             (current_month_expenses - previous_month_expenses) / previous_month_expenses
         ) * 100
 
+    top_category_share_percent = None
+    if total_expenses > 0 and top_category_amount > 0:
+        top_category_share_percent = (top_category_amount / total_expenses) * 100
+
     return {
         "total_income": total_income,
         "total_expenses": total_expenses,
         "balance": balance,
         "top_category": top_category,
         "top_category_amount": top_category_amount,
+        "top_category_share_percent": top_category_share_percent,
         "current_month": current_month,
         "previous_month": previous_month,
         "current_month_expenses": current_month_expenses,
@@ -128,6 +133,10 @@ def extract_recent_context(history):
         if message.role.lower() == "user" and message.content.strip()
     ]
     return " ".join(recent_user_messages)
+
+
+def format_currency(value: float) -> str:
+    return f"${value:.2f}"
 
 
 def build_assistant_actions(snapshot: dict, intent: str) -> list[AssistantAction]:
@@ -239,23 +248,37 @@ def generate_assistant_response(question: str, snapshot: dict, history=None) -> 
     history = history or []
     q = (question or "").strip().lower()
     context_text = extract_recent_context(history)
+    combined_text = f"{context_text} {q}".strip()
 
     total_income = snapshot["total_income"]
     total_expenses = snapshot["total_expenses"]
     balance = snapshot["balance"]
     top_category = snapshot["top_category"]
     top_category_amount = snapshot["top_category_amount"]
+    top_category_share_percent = snapshot["top_category_share_percent"]
     current_month = snapshot["current_month"]
     previous_month = snapshot["previous_month"]
     current_month_expenses = snapshot["current_month_expenses"]
     previous_month_expenses = snapshot["previous_month_expenses"]
     expense_change_percent = snapshot["expense_change_percent"]
 
-    combined_text = f"{context_text} {q}".strip()
+    if total_income == 0 and total_expenses == 0:
+        return {
+            "answer": "I do not have enough financial activity yet to give a meaningful answer.",
+            "supporting_points": [
+                "No recorded income found yet.",
+                "No recorded expenses found yet.",
+            ],
+            "suggested_followups": [
+                "How do I get started?",
+                "What should I track first?",
+            ],
+            "suggested_actions": [],
+        }
 
     if not q:
         return {
-            "answer": "Please type a finance question so I can help analyze your data.",
+            "answer": "Ask me about your balance, your spending trend, your biggest expense category, or ways to save money.",
             "supporting_points": [],
             "suggested_followups": [
                 "What is my balance?",
@@ -266,11 +289,16 @@ def generate_assistant_response(question: str, snapshot: dict, history=None) -> 
         }
 
     if "balance" in combined_text:
+        if balance >= 0:
+            answer = f"Your current recorded balance is {format_currency(balance)}."
+        else:
+            answer = f"Your current recorded balance is {format_currency(balance)}, which means expenses are currently higher than income."
+
         return {
-            "answer": f"Your current recorded balance is ${balance:.2f}.",
+            "answer": answer,
             "supporting_points": [
-                f"Total income: ${total_income:.2f}",
-                f"Total expenses: ${total_expenses:.2f}",
+                f"Total income: {format_currency(total_income)}",
+                f"Total expenses: {format_currency(total_expenses)}",
             ],
             "suggested_followups": [
                 "What is my top expense category?",
@@ -281,12 +309,27 @@ def generate_assistant_response(question: str, snapshot: dict, history=None) -> 
 
     if "top expense" in combined_text or "top category" in combined_text or "biggest category" in combined_text:
         if top_category:
+            answer = (
+                f"Your top expense category is {top_category} at {format_currency(top_category_amount)}."
+            )
+
+            supporting_points = [
+                f"Total expenses recorded: {format_currency(total_expenses)}",
+            ]
+
+            if top_category_share_percent is not None:
+                supporting_points.append(
+                    f"{top_category} represents {top_category_share_percent:.1f}% of your total expenses."
+                )
+
+            if current_month:
+                supporting_points.append(
+                    f"Latest expense month: {current_month}"
+                )
+
             return {
-                "answer": f"Your top expense category is {top_category} at ${top_category_amount:.2f}.",
-                "supporting_points": [
-                    f"Total recorded expenses: ${total_expenses:.2f}",
-                    f"Latest expense month: {current_month or 'N/A'}",
-                ],
+                "answer": answer,
+                "supporting_points": supporting_points,
                 "suggested_followups": [
                     "How can I reduce it?",
                     "Did my spending increase?",
@@ -295,7 +338,7 @@ def generate_assistant_response(question: str, snapshot: dict, history=None) -> 
             }
 
         return {
-            "answer": "You do not have enough expense data yet to identify a top expense category.",
+            "answer": "I do not have enough expense data yet to identify your top expense category.",
             "supporting_points": [],
             "suggested_followups": [
                 "What is my balance?",
@@ -312,12 +355,24 @@ def generate_assistant_response(question: str, snapshot: dict, history=None) -> 
         or "this month" in combined_text
     ):
         if current_month and previous_month and expense_change_percent is not None:
-            direction = "up" if expense_change_percent > 0 else "down"
+            if expense_change_percent > 0:
+                answer = (
+                    f"Your spending increased by {expense_change_percent:.1f}% in {current_month} compared with {previous_month}."
+                )
+            elif expense_change_percent < 0:
+                answer = (
+                    f"Your spending decreased by {abs(expense_change_percent):.1f}% in {current_month} compared with {previous_month}."
+                )
+            else:
+                answer = (
+                    f"Your spending stayed flat in {current_month} compared with {previous_month}."
+                )
+
             return {
-                "answer": f"Your spending is {direction} by {abs(expense_change_percent):.1f}% in {current_month} compared with {previous_month}.",
+                "answer": answer,
                 "supporting_points": [
-                    f"{current_month}: ${current_month_expenses:.2f}",
-                    f"{previous_month}: ${previous_month_expenses:.2f}",
+                    f"{current_month}: {format_currency(current_month_expenses)}",
+                    f"{previous_month}: {format_currency(previous_month_expenses)}",
                     f"Top expense category: {top_category or 'N/A'}",
                 ],
                 "suggested_followups": [
@@ -328,9 +383,9 @@ def generate_assistant_response(question: str, snapshot: dict, history=None) -> 
             }
 
         return {
-            "answer": "I need at least two months of expense data to compare whether your spending increased or decreased.",
+            "answer": "I need at least two months of expense data to compare your spending trend properly.",
             "supporting_points": [
-                f"Current month expenses: ${current_month_expenses:.2f}",
+                f"Current recorded month expenses: {format_currency(current_month_expenses)}",
             ],
             "suggested_followups": [
                 "What is my balance?",
@@ -346,29 +401,39 @@ def generate_assistant_response(question: str, snapshot: dict, history=None) -> 
         or "reduce it" in combined_text
         or "reduce" in combined_text
     ):
-        advice_points = [
-            f"Your current balance is ${balance:.2f}.",
-            f"Your top expense category is {top_category or 'N/A'}.",
+        supporting_points = [
+            f"Current balance: {format_currency(balance)}",
         ]
 
         if top_category:
+            supporting_points.append(
+                f"Top expense category: {top_category} ({format_currency(top_category_amount)})"
+            )
+
+        if expense_change_percent is not None and expense_change_percent > 0:
+            supporting_points.append(
+                f"Recent spending change: +{expense_change_percent:.1f}%"
+            )
+
+        if top_category and top_category_share_percent is not None and top_category_share_percent >= 35:
             answer = (
-                f"The best place to start is {top_category}, because it is currently your biggest expense category."
+                f"The strongest place to start is {top_category}. It is currently absorbing a large share of your spending, so even a modest reduction there could improve your budget noticeably."
+            )
+        elif balance < 0:
+            answer = (
+                "Your first priority should be reducing non-essential spending, because your current recorded balance is negative."
             )
         else:
-            answer = "Keep tracking your transactions consistently so stronger savings advice becomes possible."
-
-        if expense_change_percent is not None and expense_change_percent >= 15:
-            advice_points.append(
-                f"Your recent monthly spending increased by {expense_change_percent:.1f}%."
+            answer = (
+                "The best next step is to review your biggest expense areas and look for one category where a small reduction would be easy to maintain."
             )
 
         return {
             "answer": answer,
-            "supporting_points": advice_points,
+            "supporting_points": supporting_points,
             "suggested_followups": [
+                "What is my top expense category?",
                 "Did my spending increase?",
-                "Summarize my finances",
             ],
             "suggested_actions": build_assistant_actions(snapshot, "saving_advice"),
         }
@@ -379,20 +444,35 @@ def generate_assistant_response(question: str, snapshot: dict, history=None) -> 
         or "overview" in combined_text
         or "my finances" in combined_text
     ):
-        summary_text = (
-            f"You have ${total_income:.2f} in total income, ${total_expenses:.2f} in total expenses, "
-            f"and a current balance of ${balance:.2f}."
+        answer = (
+            f"Here is your current financial summary: income is {format_currency(total_income)}, expenses are {format_currency(total_expenses)}, and your balance is {format_currency(balance)}."
         )
 
-        extra_points = []
-        if top_category:
-            extra_points.append(f"Top expense category: {top_category} (${top_category_amount:.2f})")
+        supporting_points = []
+
         if current_month:
-            extra_points.append(f"Latest expense month: {current_month} (${current_month_expenses:.2f})")
+            supporting_points.append(
+                f"Latest expense month: {current_month} ({format_currency(current_month_expenses)})"
+            )
+
+        if top_category:
+            supporting_points.append(
+                f"Top expense category: {top_category} ({format_currency(top_category_amount)})"
+            )
+
+        if expense_change_percent is not None:
+            if expense_change_percent > 0:
+                supporting_points.append(
+                    f"Spending trend: up {expense_change_percent:.1f}% vs previous month"
+                )
+            elif expense_change_percent < 0:
+                supporting_points.append(
+                    f"Spending trend: down {abs(expense_change_percent):.1f}% vs previous month"
+                )
 
         return {
-            "answer": summary_text,
-            "supporting_points": extra_points,
+            "answer": answer,
+            "supporting_points": supporting_points,
             "suggested_followups": [
                 "What is my top expense category?",
                 "Give me saving advice",
@@ -403,12 +483,27 @@ def generate_assistant_response(question: str, snapshot: dict, history=None) -> 
 
     if "which category" in combined_text or "driving this" in combined_text:
         if top_category:
+            answer = (
+                f"The strongest current expense driver appears to be {top_category}, with {format_currency(top_category_amount)} in recorded spending."
+            )
+
+            supporting_points = [
+                f"Total expenses: {format_currency(total_expenses)}",
+            ]
+
+            if top_category_share_percent is not None:
+                supporting_points.append(
+                    f"{top_category} share of total expenses: {top_category_share_percent:.1f}%"
+                )
+
+            if current_month:
+                supporting_points.append(
+                    f"Latest expense month: {current_month}"
+                )
+
             return {
-                "answer": f"The strongest current expense driver appears to be {top_category}, at ${top_category_amount:.2f}.",
-                "supporting_points": [
-                    f"Latest expense month: {current_month or 'N/A'}",
-                    f"Total expenses: ${total_expenses:.2f}",
-                ],
+                "answer": answer,
+                "supporting_points": supporting_points,
                 "suggested_followups": [
                     "How can I reduce it?",
                     "Summarize my finances",
@@ -417,9 +512,9 @@ def generate_assistant_response(question: str, snapshot: dict, history=None) -> 
             }
 
     return {
-        "answer": "I can help with your balance, spending changes, top expense categories, savings advice, or a financial summary.",
+        "answer": "I can help with your balance, spending trends, top expense categories, savings ideas, or a full financial summary.",
         "supporting_points": [
-            f"Current balance: ${balance:.2f}",
+            f"Current balance: {format_currency(balance)}",
             f"Top expense category: {top_category or 'N/A'}",
         ],
         "suggested_followups": [
@@ -434,8 +529,7 @@ def generate_assistant_response(question: str, snapshot: dict, history=None) -> 
 def generate_assistant_suggestions(snapshot: dict) -> list[str]:
     suggestions = []
 
-    if snapshot["balance"] is not None:
-        suggestions.append("What is my balance?")
+    suggestions.append("What is my balance?")
 
     if snapshot["top_category"]:
         suggestions.append(f"Why is {snapshot['top_category']} my top expense category?")
@@ -444,7 +538,7 @@ def generate_assistant_suggestions(snapshot: dict) -> list[str]:
     if snapshot["expense_change_percent"] is not None:
         if snapshot["expense_change_percent"] > 0:
             suggestions.append("Why did my spending increase?")
-        else:
+        elif snapshot["expense_change_percent"] < 0:
             suggestions.append("Why did my spending decrease?")
 
     if snapshot["current_month"]:
@@ -683,10 +777,7 @@ def get_spending_insights(
     current_month_expenses = snapshot["current_month_expenses"]
     previous_month_expenses = snapshot["previous_month_expenses"]
     expense_change_percent = snapshot["expense_change_percent"]
-
-    top_category_share_percent = None
-    if total_expenses > 0 and top_category_amount > 0:
-        top_category_share_percent = (top_category_amount / total_expenses) * 100
+    top_category_share_percent = snapshot["top_category_share_percent"]
 
     if total_expenses == 0:
         return SpendingInsights(
@@ -705,7 +796,7 @@ def get_spending_insights(
     recommendations = []
 
     insights.append(
-        f"Your latest expense month is {current_month} with ${current_month_expenses:.2f} in spending."
+        f"Your latest expense month is {current_month} with {format_currency(current_month_expenses)} in spending."
     )
 
     if previous_month_expenses > 0 and expense_change_percent is not None:
@@ -721,7 +812,7 @@ def get_spending_insights(
             insights.append("Spending is unchanged compared with the previous month.")
 
     insights.append(
-        f"Your top expense category is {top_category} at ${top_category_amount:.2f}."
+        f"Your top expense category is {top_category} at {format_currency(top_category_amount)}."
     )
 
     if top_category_share_percent is not None:
@@ -946,13 +1037,13 @@ def get_category_trends(
     if increases:
         top_up = increases[0]
         summary.append(
-            f"The biggest increase from {previous_month} to {current_month} was {top_up.category}, up ${top_up.change_amount:.2f}."
+            f"The biggest increase from {previous_month} to {current_month} was {top_up.category}, up {format_currency(top_up.change_amount)}."
         )
 
     if decreases:
         top_down = decreases[0]
         summary.append(
-            f"The biggest decrease from {previous_month} to {current_month} was {top_down.category}, down ${abs(top_down.change_amount):.2f}."
+            f"The biggest decrease from {previous_month} to {current_month} was {top_down.category}, down {format_currency(abs(top_down.change_amount))}."
         )
 
     if not summary:
