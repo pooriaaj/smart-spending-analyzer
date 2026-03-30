@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from app.dependencies import get_db, get_current_user
-from app.models import Transaction, User
+from app.models import Transaction, User, CategoryMemory
 from app.schemas import (
     TransactionCreate,
     TransactionResponse,
@@ -92,7 +92,15 @@ CATEGORY_KEYWORDS = {
 }
 
 
-def suggest_category(description: str, transaction_type: str):
+def extract_memory_keyword(description: str) -> str | None:
+    words = normalize_text(description).split()
+    words = [word for word in words if len(word) >= 3]
+    if not words:
+        return None
+    return words[0]
+
+
+def suggest_category(description: str, transaction_type: str, db: Session, current_user: User):
     normalized_description = normalize_text(description)
     normalized_type = normalize_text(transaction_type)
 
@@ -103,6 +111,20 @@ def suggest_category(description: str, transaction_type: str):
             "matched_keyword": None,
             "reason": "Unknown transaction type"
         }
+
+    memory_matches = db.query(CategoryMemory).filter(
+        CategoryMemory.owner_id == current_user.id,
+        CategoryMemory.transaction_type == normalized_type
+    ).all()
+
+    for memory in memory_matches:
+        if memory.keyword in normalized_description:
+            return {
+                "suggested_category": memory.category,
+                "confidence": 0.98,
+                "matched_keyword": memory.keyword,
+                "reason": f"Matched your saved preference for '{memory.keyword}'"
+            }
 
     for category, keywords in CATEGORY_KEYWORDS[normalized_type].items():
         for keyword in keywords:
@@ -122,6 +144,30 @@ def suggest_category(description: str, transaction_type: str):
         "matched_keyword": None,
         "reason": "No rule matched, used fallback category"
     }
+
+
+def save_category_memory(description: str, transaction_type: str, category: str, db: Session, current_user: User):
+    keyword = extract_memory_keyword(description)
+    if not keyword:
+        return
+
+    existing_memory = db.query(CategoryMemory).filter(
+        CategoryMemory.owner_id == current_user.id,
+        CategoryMemory.keyword == keyword,
+        CategoryMemory.transaction_type == normalize_text(transaction_type)
+    ).first()
+
+    if existing_memory:
+        existing_memory.category = category
+    else:
+        db.add(
+            CategoryMemory(
+                keyword=keyword,
+                category=category,
+                transaction_type=normalize_text(transaction_type),
+                owner_id=current_user.id
+            )
+        )
 
 
 def filter_transactions(
@@ -189,6 +235,15 @@ def create_transaction(
         owner_id=current_user.id
     )
     db.add(transaction)
+
+    save_category_memory(
+        description=transaction_data.description,
+        transaction_type=transaction_data.type,
+        category=transaction_data.category,
+        db=db,
+        current_user=current_user
+    )
+
     db.commit()
     db.refresh(transaction)
     return transaction
@@ -197,9 +252,10 @@ def create_transaction(
 @router.post("/categorize/suggest", response_model=CategorySuggestionResponse)
 def categorize_transaction_suggestion(
     payload: CategorySuggestionRequest,
+    db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    result = suggest_category(payload.description, payload.type)
+    result = suggest_category(payload.description, payload.type, db, current_user)
     return CategorySuggestionResponse(**result)
 
 
@@ -222,7 +278,7 @@ def categorize_bulk_preview(
         if current_category not in candidate_categories:
             continue
 
-        result = suggest_category(transaction.description, transaction.type)
+        result = suggest_category(transaction.description, transaction.type, db, current_user)
 
         if result["suggested_category"].lower() == current_category:
             continue
@@ -263,8 +319,17 @@ def categorize_bulk_apply(
         if not transaction:
             continue
 
-        result = suggest_category(transaction.description, transaction.type)
+        result = suggest_category(transaction.description, transaction.type, db, current_user)
         transaction.category = result["suggested_category"]
+
+        save_category_memory(
+            description=transaction.description,
+            transaction_type=transaction.type,
+            category=transaction.category,
+            db=db,
+            current_user=current_user
+        )
+
         updated_count += 1
 
     db.commit()
@@ -368,6 +433,14 @@ def update_transaction(
     transaction.description = transaction_data.description
     transaction.date = transaction_data.date
     transaction.type = transaction_data.type
+
+    save_category_memory(
+        description=transaction_data.description,
+        transaction_type=transaction_data.type,
+        category=transaction_data.category,
+        db=db,
+        current_user=current_user
+    )
 
     db.commit()
     db.refresh(transaction)

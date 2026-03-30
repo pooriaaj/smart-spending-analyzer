@@ -11,6 +11,7 @@ class User(Base):
     password_hash = Column(String, nullable=False)
 
     transactions = relationship("Transaction", back_populates="owner")
+    category_memories = relationship("CategoryMemory", back_populates="owner")
 
 
 class Transaction(Base):
@@ -25,3 +26,15 @@ class Transaction(Base):
     owner_id = Column(Integer, ForeignKey("users.id"))
 
     owner = relationship("User", back_populates="transactions")
+
+
+class CategoryMemory(Base):
+    __tablename__ = "category_memories"
+
+    id = Column(Integer, primary_key=True, index=True)
+    keyword = Column(String, nullable=False, index=True)
+    category = Column(String, nullable=False)
+    transaction_type = Column(String, nullable=False)
+    owner_id = Column(Integer, ForeignKey("users.id"))
+
+    owner = relationship("User", back_populates="category_memories")
