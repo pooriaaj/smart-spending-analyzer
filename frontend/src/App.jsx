@@ -1,10 +1,12 @@
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { useEffect, useState } from "react";
 import LoginPage from "./pages/LoginPage";
 import RegisterPage from "./pages/RegisterPage";
 import DashboardPage from "./pages/DashboardPage";
 import TransactionsPage from "./pages/TransactionsPage";
 import AnalyticsPage from "./pages/AnalyticsPage";
 import AssistantPage from "./pages/AssistantPage";
+import ThemeToggle from "./components/ThemeToggle";
 
 function ProtectedRoute({ children }) {
   const token = localStorage.getItem("token");
@@ -17,8 +19,23 @@ function PublicHomeRoute() {
 }
 
 function App() {
+  const [theme, setTheme] = useState(
+    localStorage.getItem("theme") || "light"
+  );
+
+  useEffect(() => {
+    document.documentElement.setAttribute("data-theme", theme);
+    localStorage.setItem("theme", theme);
+  }, [theme]);
+
+  const handleToggleTheme = () => {
+    setTheme((prev) => (prev === "light" ? "dark" : "light"));
+  };
+
   return (
     <BrowserRouter>
+      <ThemeToggle theme={theme} onToggle={handleToggleTheme} />
+
       <Routes>
         <Route path="/" element={<PublicHomeRoute />} />
         <Route path="/register" element={<RegisterPage />} />
