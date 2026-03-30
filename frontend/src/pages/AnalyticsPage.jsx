@@ -156,6 +156,13 @@ function AnalyticsPage() {
             >
               View All Transactions
             </button>
+
+            <button
+              className="secondary-button"
+              onClick={() => navigate("/assistant")}
+            >
+              Assistant
+            </button>
           </div>
         </div>
 

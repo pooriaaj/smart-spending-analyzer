@@ -1266,3 +1266,131 @@ body {
     grid-template-columns: 1fr;
   }
 }
+
+.assistant-card,
+.assistant-response-card {
+  margin-bottom: 24px;
+}
+
+.assistant-preset-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.assistant-preset-button,
+.assistant-followup-button {
+  border: none;
+  background: #eff6ff;
+  color: #1d4ed8;
+  padding: 10px 14px;
+  border-radius: 12px;
+  cursor: pointer;
+  font-weight: 600;
+  transition: 0.2s ease;
+}
+
+.assistant-preset-button:hover,
+.assistant-followup-button:hover {
+  background: #dbeafe;
+}
+
+.assistant-input-row {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.assistant-input {
+  flex: 1;
+  min-width: 260px;
+  padding: 14px;
+  border: 1px solid #d1d5db;
+  border-radius: 12px;
+  font-size: 16px;
+}
+
+.assistant-ask-button {
+  border: none;
+  background-color: #2563eb;
+  color: white;
+  padding: 14px 18px;
+  border-radius: 12px;
+  cursor: pointer;
+  font-weight: 600;
+  transition: 0.2s ease;
+}
+
+.assistant-ask-button:hover {
+  background-color: #1d4ed8;
+}
+
+.assistant-answer-box {
+  background: #f8fbff;
+  border: 1px solid rgba(37, 99, 235, 0.1);
+  border-radius: 18px;
+  padding: 18px;
+  margin-bottom: 18px;
+}
+
+.assistant-answer-box h3 {
+  margin-top: 0;
+  margin-bottom: 10px;
+}
+
+.assistant-answer-box p {
+  margin: 0;
+  line-height: 1.7;
+  color: #374151;
+}
+
+.assistant-response-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 18px;
+}
+
+.assistant-detail-block {
+  background: #ffffff;
+  border: 1px solid rgba(37, 99, 235, 0.08);
+  border-radius: 18px;
+  padding: 18px;
+}
+
+.assistant-detail-block h3 {
+  margin-top: 0;
+  margin-bottom: 12px;
+}
+
+.assistant-list {
+  margin: 0;
+  padding-left: 18px;
+  color: #4b5563;
+  line-height: 1.7;
+}
+
+.assistant-followup-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.assistant-empty-text {
+  margin: 0;
+  color: #6b7280;
+}
+
+@media (max-width: 900px) {
+  .assistant-response-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .assistant-input-row {
+    flex-direction: column;
+  }
+
+  .assistant-ask-button {
+    width: 100%;
+  }
+}

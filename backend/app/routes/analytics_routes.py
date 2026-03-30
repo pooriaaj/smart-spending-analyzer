@@ -14,6 +14,8 @@ from app.schemas import (
     OverspendingAlertsResponse,
     CategoryTrendItem,
     CategoryTrendsResponse,
+    AssistantQueryRequest,
+    AssistantQueryResponse,
 )
 
 router = APIRouter(prefix="/analytics", tags=["Analytics"])
@@ -67,6 +69,205 @@ def filter_transactions(
         ]
 
     return result
+
+
+def build_financial_snapshot(transactions):
+    income_transactions = [t for t in transactions if t.type == "income"]
+    expense_transactions = [t for t in transactions if t.type == "expense"]
+
+    total_income = sum(t.amount for t in income_transactions)
+    total_expenses = sum(t.amount for t in expense_transactions)
+    balance = total_income - total_expenses
+
+    monthly_expenses = {}
+    category_totals = {}
+
+    for transaction in expense_transactions:
+        month_key = transaction.date.strftime("%Y-%m")
+        monthly_expenses[month_key] = monthly_expenses.get(month_key, 0.0) + transaction.amount
+        category_totals[transaction.category] = category_totals.get(transaction.category, 0.0) + transaction.amount
+
+    top_category = None
+    top_category_amount = 0.0
+    if category_totals:
+        top_category, top_category_amount = max(category_totals.items(), key=lambda item: item[1])
+
+    sorted_months = sorted(monthly_expenses.keys())
+    current_month = sorted_months[-1] if sorted_months else None
+    previous_month = sorted_months[-2] if len(sorted_months) >= 2 else None
+
+    current_month_expenses = monthly_expenses.get(current_month, 0.0) if current_month else 0.0
+    previous_month_expenses = monthly_expenses.get(previous_month, 0.0) if previous_month else 0.0
+
+    expense_change_percent = None
+    if previous_month_expenses > 0:
+        expense_change_percent = (
+            (current_month_expenses - previous_month_expenses) / previous_month_expenses
+        ) * 100
+
+    return {
+        "total_income": total_income,
+        "total_expenses": total_expenses,
+        "balance": balance,
+        "top_category": top_category,
+        "top_category_amount": top_category_amount,
+        "current_month": current_month,
+        "previous_month": previous_month,
+        "current_month_expenses": current_month_expenses,
+        "previous_month_expenses": previous_month_expenses,
+        "expense_change_percent": expense_change_percent,
+    }
+
+
+def generate_assistant_response(question: str, snapshot: dict) -> dict:
+    q = (question or "").strip().lower()
+
+    total_income = snapshot["total_income"]
+    total_expenses = snapshot["total_expenses"]
+    balance = snapshot["balance"]
+    top_category = snapshot["top_category"]
+    top_category_amount = snapshot["top_category_amount"]
+    current_month = snapshot["current_month"]
+    previous_month = snapshot["previous_month"]
+    current_month_expenses = snapshot["current_month_expenses"]
+    previous_month_expenses = snapshot["previous_month_expenses"]
+    expense_change_percent = snapshot["expense_change_percent"]
+
+    if not q:
+        return {
+            "answer": "Please type a finance question so I can help analyze your data.",
+            "supporting_points": [],
+            "suggested_followups": [
+                "What is my balance?",
+                "What is my top expense category?",
+                "Did my spending increase?",
+            ],
+        }
+
+    if "balance" in q:
+        return {
+            "answer": f"Your current recorded balance is ${balance:.2f}.",
+            "supporting_points": [
+                f"Total income: ${total_income:.2f}",
+                f"Total expenses: ${total_expenses:.2f}",
+            ],
+            "suggested_followups": [
+                "What is my top expense category?",
+                "Give me saving advice",
+            ],
+        }
+
+    if "top expense" in q or "top category" in q or "biggest category" in q:
+        if top_category:
+            return {
+                "answer": f"Your top expense category is {top_category} at ${top_category_amount:.2f}.",
+                "supporting_points": [
+                    f"Total recorded expenses: ${total_expenses:.2f}",
+                    f"Latest expense month: {current_month or 'N/A'}",
+                ],
+                "suggested_followups": [
+                    "Did my spending increase?",
+                    "Give me saving advice",
+                ],
+            }
+
+        return {
+            "answer": "You do not have enough expense data yet to identify a top expense category.",
+            "supporting_points": [],
+            "suggested_followups": [
+                "What is my balance?",
+                "Summarize my finances",
+            ],
+        }
+
+    if "increase" in q or "overspend" in q or "spending" in q:
+        if current_month and previous_month and expense_change_percent is not None:
+            direction = "up" if expense_change_percent > 0 else "down"
+            return {
+                "answer": f"Your spending is {direction} by {abs(expense_change_percent):.1f}% in {current_month} compared with {previous_month}.",
+                "supporting_points": [
+                    f"{current_month}: ${current_month_expenses:.2f}",
+                    f"{previous_month}: ${previous_month_expenses:.2f}",
+                    f"Top expense category: {top_category or 'N/A'}",
+                ],
+                "suggested_followups": [
+                    "What is my top expense category?",
+                    "Give me saving advice",
+                ],
+            }
+
+        return {
+            "answer": "I need at least two months of expense data to compare whether your spending increased or decreased.",
+            "supporting_points": [
+                f"Current month expenses: ${current_month_expenses:.2f}",
+            ],
+            "suggested_followups": [
+                "What is my balance?",
+                "Summarize my finances",
+            ],
+        }
+
+    if "advice" in q or "save" in q or "saving" in q:
+        advice_points = [
+            f"Your current balance is ${balance:.2f}.",
+            f"Your top expense category is {top_category or 'N/A'}.",
+        ]
+
+        if top_category:
+            answer = (
+                f"The best place to start is {top_category}, because it is currently your biggest expense category."
+            )
+        else:
+            answer = "Keep tracking your transactions consistently so stronger savings advice becomes possible."
+
+        if expense_change_percent is not None and expense_change_percent >= 15:
+            advice_points.append(
+                f"Your recent monthly spending increased by {expense_change_percent:.1f}%."
+            )
+
+        return {
+            "answer": answer,
+            "supporting_points": advice_points,
+            "suggested_followups": [
+                "Did my spending increase?",
+                "Summarize my finances",
+            ],
+        }
+
+    if "summary" in q or "summarize" in q or "overview" in q:
+        summary_text = (
+            f"You have ${total_income:.2f} in total income, ${total_expenses:.2f} in total expenses, "
+            f"and a current balance of ${balance:.2f}."
+        )
+
+        extra_points = []
+        if top_category:
+            extra_points.append(f"Top expense category: {top_category} (${top_category_amount:.2f})")
+        if current_month:
+            extra_points.append(f"Latest expense month: {current_month} (${current_month_expenses:.2f})")
+
+        return {
+            "answer": summary_text,
+            "supporting_points": extra_points,
+            "suggested_followups": [
+                "What is my top expense category?",
+                "Give me saving advice",
+                "Did my spending increase?",
+            ],
+        }
+
+    return {
+        "answer": "I can help with your balance, spending changes, top expense categories, savings advice, or a financial summary.",
+        "supporting_points": [
+            f"Current balance: ${balance:.2f}",
+            f"Top expense category: {top_category or 'N/A'}",
+        ],
+        "suggested_followups": [
+            "What is my balance?",
+            "What is my top expense category?",
+            "Give me saving advice",
+        ],
+    }
 
 
 @router.get("/summary", response_model=AnalyticsSummary)
@@ -283,9 +484,21 @@ def get_spending_insights(
         Transaction.owner_id == current_user.id
     ).all()
 
-    expense_transactions = [t for t in transactions if t.type == "expense"]
+    snapshot = build_financial_snapshot(transactions)
 
-    if not expense_transactions:
+    total_expenses = snapshot["total_expenses"]
+    top_category = snapshot["top_category"]
+    top_category_amount = snapshot["top_category_amount"]
+    current_month = snapshot["current_month"]
+    current_month_expenses = snapshot["current_month_expenses"]
+    previous_month_expenses = snapshot["previous_month_expenses"]
+    expense_change_percent = snapshot["expense_change_percent"]
+
+    top_category_share_percent = None
+    if total_expenses > 0 and top_category_amount > 0:
+        top_category_share_percent = (top_category_amount / total_expenses) * 100
+
+    if total_expenses == 0:
         return SpendingInsights(
             current_month=None,
             current_month_expenses=0.0,
@@ -297,40 +510,6 @@ def get_spending_insights(
             insights=["No expense data available yet."],
             recommendations=["Add more transactions to unlock spending insights."]
         )
-
-    monthly_expenses = {}
-    category_totals = {}
-
-    for transaction in expense_transactions:
-        month_key = transaction.date.strftime("%Y-%m")
-        monthly_expenses[month_key] = monthly_expenses.get(month_key, 0.0) + transaction.amount
-        category_totals[transaction.category] = category_totals.get(transaction.category, 0.0) + transaction.amount
-
-    sorted_months = sorted(monthly_expenses.keys())
-    current_month = sorted_months[-1]
-    current_month_expenses = monthly_expenses[current_month]
-
-    previous_month_expenses = 0.0
-    expense_change_percent = None
-
-    if len(sorted_months) >= 2:
-        previous_month = sorted_months[-2]
-        previous_month_expenses = monthly_expenses[previous_month]
-
-        if previous_month_expenses > 0:
-            expense_change_percent = (
-                (current_month_expenses - previous_month_expenses) / previous_month_expenses
-            ) * 100
-
-    top_category, top_category_amount = max(
-        category_totals.items(),
-        key=lambda item: item[1]
-    )
-
-    total_expenses = sum(category_totals.values())
-    top_category_share_percent = None
-    if total_expenses > 0:
-        top_category_share_percent = (top_category_amount / total_expenses) * 100
 
     insights = []
     recommendations = []
@@ -598,3 +777,19 @@ def get_category_trends(
         top_decreases=decreases,
         summary=summary
     )
+
+
+@router.post("/assistant-response", response_model=AssistantQueryResponse)
+def get_assistant_response(
+    payload: AssistantQueryRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    transactions = db.query(Transaction).filter(
+        Transaction.owner_id == current_user.id
+    ).all()
+
+    snapshot = build_financial_snapshot(transactions)
+    result = generate_assistant_response(payload.question, snapshot)
+
+    return AssistantQueryResponse(**result)
