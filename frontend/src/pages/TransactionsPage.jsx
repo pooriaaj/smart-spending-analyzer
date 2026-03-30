@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import api from "../services/api";
 
@@ -7,10 +7,13 @@ function TransactionsPage() {
   const [typeFilter, setTypeFilter] = useState("");
   const [monthFilter, setMonthFilter] = useState("");
   const [loading, setLoading] = useState(true);
+
   const [importResult, setImportResult] = useState(null);
   const [importError, setImportError] = useState("");
   const [isUploading, setIsUploading] = useState(false);
+  const [selectedFileName, setSelectedFileName] = useState("");
 
+  const fileInputRef = useRef(null);
   const navigate = useNavigate();
 
   const fetchTransactions = async () => {
@@ -37,7 +40,7 @@ function TransactionsPage() {
       )
     );
 
-    return Array.from(months).sort();
+    return Array.from(months).sort().reverse();
   }, [transactions]);
 
   const filteredTransactions = useMemo(() => {
@@ -71,10 +74,20 @@ function TransactionsPage() {
     }
   };
 
+  const handleChooseFile = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleDismissImportMessage = () => {
+    setImportResult(null);
+    setImportError("");
+  };
+
   const handleCsvUpload = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
 
+    setSelectedFileName(file.name);
     setImportResult(null);
     setImportError("");
     setIsUploading(true);
@@ -137,79 +150,112 @@ function TransactionsPage() {
         <div className="filter-card">
           <div className="section-header">
             <h2>Import Transactions</h2>
-            <p>Upload a bank-style CSV file to import transactions automatically.</p>
+            <p>
+              Upload a bank-style CSV file to import transactions automatically.
+            </p>
           </div>
 
-          <div style={{ marginTop: "12px" }}>
+          <div className="import-upload-card">
             <input
+              ref={fileInputRef}
               type="file"
               accept=".csv"
               onChange={handleCsvUpload}
               disabled={isUploading}
+              className="hidden-file-input"
             />
+
+            <div className="import-upload-top">
+              <div>
+                <h3>CSV Import</h3>
+                <p>
+                  Required columns: <strong>date, description, amount, type, category</strong>
+                </p>
+              </div>
+
+              <button
+                type="button"
+                className="import-upload-button"
+                onClick={handleChooseFile}
+                disabled={isUploading}
+              >
+                {isUploading ? "Uploading..." : "Choose CSV File"}
+              </button>
+            </div>
+
+            <div className="import-upload-meta">
+              <span className="import-file-label">Selected file:</span>
+              <span className="import-file-name">
+                {selectedFileName || "No file selected yet"}
+              </span>
+            </div>
+
+            <p className="import-helper-text">
+              Re-uploading the same CSV will skip duplicate rows automatically.
+            </p>
+
+            {isUploading && (
+              <div className="import-info-box">
+                <strong>Processing file...</strong>
+                <p>Your CSV is being uploaded and validated.</p>
+              </div>
+            )}
+
+            {importResult && (
+              <div className="import-success">
+                <div className="import-message-header">
+                  <div>
+                    <h3>Import completed</h3>
+                    <p>{importResult.message}</p>
+                  </div>
+
+                  <button
+                    type="button"
+                    className="dismiss-message-button"
+                    onClick={handleDismissImportMessage}
+                  >
+                    Dismiss
+                  </button>
+                </div>
+
+                <div className="import-stats-grid">
+                  <div className="import-stat-card">
+                    <span className="import-stat-label">Imported</span>
+                    <strong>{importResult.imported ?? 0}</strong>
+                  </div>
+
+                  <div className="import-stat-card">
+                    <span className="import-stat-label">Duplicates skipped</span>
+                    <strong>{importResult.duplicates_skipped ?? 0}</strong>
+                  </div>
+
+                  <div className="import-stat-card">
+                    <span className="import-stat-label">Invalid rows skipped</span>
+                    <strong>{importResult.invalid_rows_skipped ?? 0}</strong>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {importError && (
+              <div className="import-error">
+                <div className="import-message-header">
+                  <div>
+                    <h3>Import failed</h3>
+                    <p>{importError}</p>
+                  </div>
+
+                  <button
+                    type="button"
+                    className="dismiss-message-button dismiss-error-button"
+                    onClick={handleDismissImportMessage}
+                  >
+                    Dismiss
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
-
-          {isUploading && (
-            <div
-              style={{
-                marginTop: "16px",
-                padding: "14px 16px",
-                borderRadius: "12px",
-                backgroundColor: "#eff6ff",
-                border: "1px solid #bfdbfe",
-                color: "#1d4ed8",
-              }}
-            >
-              Uploading and processing CSV...
-            </div>
-          )}
-
-          {importResult && (
-            <div
-              style={{
-                marginTop: "16px",
-                padding: "16px",
-                borderRadius: "14px",
-                backgroundColor: "#ecfdf5",
-                border: "1px solid #a7f3d0",
-                color: "#065f46",
-              }}
-            >
-              <h3 style={{ marginTop: 0, marginBottom: "10px" }}>
-                Import Result
-              </h3>
-              <p style={{ margin: "6px 0" }}>{importResult.message}</p>
-              <p style={{ margin: "6px 0" }}>
-                Imported: <strong>{importResult.imported ?? 0}</strong>
-              </p>
-              <p style={{ margin: "6px 0" }}>
-                Duplicates skipped:{" "}
-                <strong>{importResult.duplicates_skipped ?? 0}</strong>
-              </p>
-              <p style={{ margin: "6px 0" }}>
-                Invalid rows skipped:{" "}
-                <strong>{importResult.invalid_rows_skipped ?? 0}</strong>
-              </p>
-            </div>
-          )}
-
-          {importError && (
-            <div
-              style={{
-                marginTop: "16px",
-                padding: "16px",
-                borderRadius: "14px",
-                backgroundColor: "#fef2f2",
-                border: "1px solid #fecaca",
-                color: "#991b1b",
-              }}
-            >
-              <h3 style={{ marginTop: 0, marginBottom: "10px" }}>
-                Import Error
-              </h3>
-              <p style={{ margin: 0 }}>{importError}</p>
-            </div>
-          )}
         </div>
 
         <div className="filter-card">
