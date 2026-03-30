@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import api from "../services/api";
 
 function TransactionsPage() {
   const [transactions, setTransactions] = useState([]);
   const [typeFilter, setTypeFilter] = useState("");
   const [monthFilter, setMonthFilter] = useState("");
+  const [categoryFilter, setCategoryFilter] = useState("");
   const [loading, setLoading] = useState(true);
 
   const [importResult, setImportResult] = useState(null);
@@ -20,6 +21,17 @@ function TransactionsPage() {
 
   const fileInputRef = useRef(null);
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+
+  useEffect(() => {
+    const urlType = searchParams.get("type") || "";
+    const urlMonth = searchParams.get("month") || "";
+    const urlCategory = searchParams.get("category") || "";
+
+    setTypeFilter(urlType);
+    setMonthFilter(urlMonth);
+    setCategoryFilter(urlCategory);
+  }, [searchParams]);
 
   const fetchTransactions = async () => {
     try {
@@ -48,6 +60,11 @@ function TransactionsPage() {
     return Array.from(months).sort().reverse();
   }, [transactions]);
 
+  const availableCategories = useMemo(() => {
+    const categories = new Set(transactions.map((transaction) => transaction.category));
+    return Array.from(categories).sort();
+  }, [transactions]);
+
   const filteredTransactions = useMemo(() => {
     return transactions
       .filter((transaction) => {
@@ -65,10 +82,14 @@ function TransactionsPage() {
           }
         }
 
+        if (categoryFilter && transaction.category !== categoryFilter) {
+          return false;
+        }
+
         return true;
       })
       .sort((a, b) => new Date(b.date) - new Date(a.date));
-  }, [transactions, typeFilter, monthFilter]);
+  }, [transactions, typeFilter, monthFilter, categoryFilter]);
 
   const handleDelete = async (transactionId) => {
     try {
@@ -329,11 +350,7 @@ function TransactionsPage() {
             </button>
           </div>
 
-          {bulkMessage && (
-            <div className="bulk-message-box">
-              {bulkMessage}
-            </div>
-          )}
+          {bulkMessage && <div className="bulk-message-box">{bulkMessage}</div>}
 
           {bulkSuggestions.length > 0 && (
             <div className="bulk-suggestions-list">
@@ -375,7 +392,7 @@ function TransactionsPage() {
         <div className="filter-card">
           <div className="section-header">
             <h2>Transaction Filters</h2>
-            <p>Filter the full transaction table by type and month.</p>
+            <p>Filter the full transaction table by type, month, and category.</p>
           </div>
 
           <div className="filter-bar">
@@ -401,6 +418,21 @@ function TransactionsPage() {
                 {availableMonths.map((month) => (
                   <option key={month} value={month}>
                     {month}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label>Category</label>
+              <select
+                value={categoryFilter}
+                onChange={(e) => setCategoryFilter(e.target.value)}
+              >
+                <option value="">All</option>
+                {availableCategories.map((category) => (
+                  <option key={category} value={category}>
+                    {category}
                   </option>
                 ))}
               </select>

@@ -48,6 +48,14 @@ function AnalyticsPage() {
     "#0891b2",
   ];
 
+  useEffect(() => {
+    const urlMonth = searchParams.get("month") || "";
+    const urlCategory = searchParams.get("category") || "";
+
+    if (urlMonth) setSelectedMonth(urlMonth);
+    if (urlCategory) setSelectedCategory(urlCategory);
+  }, [searchParams]);
+
   const availableCategories = useMemo(() => {
     const categories = new Set(
       allTransactions.map((transaction) => transaction.category)

@@ -152,6 +152,15 @@ class AssistantMessage(BaseModel):
     content: str
 
 
+class AssistantAction(BaseModel):
+    label: str
+    page: str
+    section: str | None = None
+    category: str | None = None
+    transaction_type: str | None = None
+    month: str | None = None
+
+
 class AssistantQueryRequest(BaseModel):
     question: str
     history: list[AssistantMessage] = []
@@ -161,6 +170,7 @@ class AssistantQueryResponse(BaseModel):
     answer: str
     supporting_points: list[str]
     suggested_followups: list[str]
+    suggested_actions: list[AssistantAction] = []
 
 
 class AssistantSuggestionsResponse(BaseModel):

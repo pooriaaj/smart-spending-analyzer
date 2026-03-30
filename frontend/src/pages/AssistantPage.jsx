@@ -10,7 +10,6 @@ function AssistantPage() {
       content:
         "Hi — I’m your financial assistant. Ask me about your balance, spending, categories, or savings.",
       data: null,
-      analyticsSection: null,
     },
   ]);
   const [smartSuggestions, setSmartSuggestions] = useState([]);
@@ -63,51 +62,30 @@ function AssistantPage() {
     return historyMessages.slice(-8);
   };
 
-  const getAnalyticsSectionFromText = (text) => {
-    const normalized = (text || "").toLowerCase();
+  const handleActionNavigation = (action) => {
+    if (!action) return;
 
-    if (
-      normalized.includes("driving this") ||
-      normalized.includes("which category") ||
-      normalized.includes("trend")
-    ) {
-      return "trends";
+    if (action.page === "analytics") {
+      const params = new URLSearchParams();
+
+      if (action.section) params.set("section", action.section);
+      if (action.category) params.set("category", action.category);
+      if (action.month) params.set("month", action.month);
+
+      navigate(`/analytics?${params.toString()}`);
+      return;
     }
 
-    if (
-      normalized.includes("increase") ||
-      normalized.includes("overspend") ||
-      normalized.includes("spending increase") ||
-      normalized.includes("spending spike")
-    ) {
-      return "alerts";
-    }
+    if (action.page === "transactions") {
+      const params = new URLSearchParams();
 
-    if (
-      normalized.includes("top expense") ||
-      normalized.includes("top category") ||
-      normalized.includes("biggest category")
-    ) {
-      return "categories";
-    }
+      if (action.category) params.set("category", action.category);
+      if (action.transaction_type) params.set("type", action.transaction_type);
+      if (action.month) params.set("month", action.month);
 
-    if (
-      normalized.includes("saving advice") ||
-      normalized.includes("reduce") ||
-      normalized.includes("save")
-    ) {
-      return "insights";
+      const query = params.toString();
+      navigate(`/transactions${query ? `?${query}` : ""}`);
     }
-
-    if (
-      normalized.includes("summary") ||
-      normalized.includes("summarize") ||
-      normalized.includes("overview")
-    ) {
-      return "monthly";
-    }
-
-    return null;
   };
 
   const handleAsk = async (customQuestion) => {
@@ -122,7 +100,6 @@ function AssistantPage() {
       role: "user",
       content: finalQuestion,
       data: null,
-      analyticsSection: null,
     };
 
     const updatedMessages = [...messages, userMessage];
@@ -142,7 +119,6 @@ function AssistantPage() {
         role: "assistant",
         content: response.data.answer,
         data: response.data,
-        analyticsSection: getAnalyticsSectionFromText(finalQuestion),
       };
 
       setMessages([...updatedMessages, assistantMessage]);
@@ -165,8 +141,7 @@ function AssistantPage() {
             <p className="eyebrow-text">Smart Spending Analyzer</p>
             <h1>Financial Assistant</h1>
             <p className="hero-subtitle">
-              Ask questions about your balance, spending, categories, and
-              savings.
+              Ask questions about your balance, spending, categories, and savings.
             </p>
           </div>
 
@@ -240,10 +215,7 @@ function AssistantPage() {
         <div className="dashboard-card assistant-chat-card">
           <div className="section-header">
             <h2>Conversation</h2>
-            <p>
-              Your assistant keeps short conversation context for follow-up
-              questions.
-            </p>
+            <p>Your assistant keeps short conversation context for follow-up questions.</p>
           </div>
 
           <div className="assistant-chat-list">
@@ -258,23 +230,6 @@ function AssistantPage() {
 
                 <p className="assistant-chat-text">{message.content}</p>
 
-                {message.role === "assistant" &&
-                  message.analyticsSection && (
-                    <div className="assistant-inline-actions">
-                      <button
-                        type="button"
-                        className="assistant-analytics-link"
-                        onClick={() =>
-                          navigate(
-                            `/analytics?section=${message.analyticsSection}`
-                          )
-                        }
-                      >
-                        Open related analytics
-                      </button>
-                    </div>
-                  )}
-
                 {message.role === "assistant" && message.data && (
                   <div className="assistant-chat-details">
                     {message.data.supporting_points?.length > 0 && (
@@ -288,9 +243,9 @@ function AssistantPage() {
                       </div>
                     )}
 
-                    {message.data.suggested_followups?.length > 0 && (
-                      <div className="assistant-chat-detail-block">
-                        <h4>Suggested Follow-ups</h4>
+                    <div className="assistant-chat-detail-block">
+                      <h4>Suggested Follow-ups</h4>
+                      {message.data.suggested_followups?.length > 0 ? (
                         <div className="assistant-followup-list">
                           {message.data.suggested_followups.map((item, idx) => (
                             <button
@@ -301,6 +256,26 @@ function AssistantPage() {
                               disabled={loading}
                             >
                               {item}
+                            </button>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="assistant-empty-text">No follow-up suggestions available.</p>
+                      )}
+                    </div>
+
+                    {message.data.suggested_actions?.length > 0 && (
+                      <div className="assistant-chat-detail-block assistant-actions-block">
+                        <h4>Suggested Actions</h4>
+                        <div className="assistant-followup-list">
+                          {message.data.suggested_actions.map((action, idx) => (
+                            <button
+                              key={`action-${index}-${idx}`}
+                              type="button"
+                              className="assistant-action-button"
+                              onClick={() => handleActionNavigation(action)}
+                            >
+                              {action.label}
                             </button>
                           ))}
                         </div>

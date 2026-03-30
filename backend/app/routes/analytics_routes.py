@@ -17,6 +17,7 @@ from app.schemas import (
     AssistantQueryRequest,
     AssistantQueryResponse,
     AssistantSuggestionsResponse,
+    AssistantAction,
 )
 
 router = APIRouter(prefix="/analytics", tags=["Analytics"])
@@ -129,6 +130,111 @@ def extract_recent_context(history):
     return " ".join(recent_user_messages)
 
 
+def build_assistant_actions(snapshot: dict, intent: str) -> list[AssistantAction]:
+    actions = []
+
+    top_category = snapshot["top_category"]
+    current_month = snapshot["current_month"]
+
+    if intent == "balance":
+        actions.append(
+            AssistantAction(
+                label="Open monthly summary",
+                page="analytics",
+                section="monthly",
+                month=current_month,
+            )
+        )
+
+    elif intent == "top_category":
+        if top_category:
+            actions.append(
+                AssistantAction(
+                    label=f"Open {top_category} expenses",
+                    page="transactions",
+                    category=top_category,
+                    transaction_type="expense",
+                )
+            )
+            actions.append(
+                AssistantAction(
+                    label="View category ranking",
+                    page="analytics",
+                    section="categories",
+                )
+            )
+
+    elif intent == "spending_change":
+        actions.append(
+            AssistantAction(
+                label="Inspect overspending alerts",
+                page="analytics",
+                section="alerts",
+            )
+        )
+        actions.append(
+            AssistantAction(
+                label="View category trends",
+                page="analytics",
+                section="trends",
+            )
+        )
+
+    elif intent == "saving_advice":
+        actions.append(
+            AssistantAction(
+                label="Open spending insights",
+                page="analytics",
+                section="insights",
+            )
+        )
+        if top_category:
+            actions.append(
+                AssistantAction(
+                    label=f"Review {top_category} transactions",
+                    page="transactions",
+                    category=top_category,
+                    transaction_type="expense",
+                )
+            )
+
+    elif intent == "summary":
+        actions.append(
+            AssistantAction(
+                label="Open monthly summary",
+                page="analytics",
+                section="monthly",
+                month=current_month,
+            )
+        )
+        actions.append(
+            AssistantAction(
+                label="View all transactions",
+                page="transactions",
+            )
+        )
+
+    elif intent == "driver":
+        actions.append(
+            AssistantAction(
+                label="Open category trends",
+                page="analytics",
+                section="trends",
+            )
+        )
+        if top_category:
+            actions.append(
+                AssistantAction(
+                    label=f"Inspect {top_category} expenses",
+                    page="transactions",
+                    category=top_category,
+                    transaction_type="expense",
+                )
+            )
+
+    return actions[:3]
+
+
 def generate_assistant_response(question: str, snapshot: dict, history=None) -> dict:
     history = history or []
     q = (question or "").strip().lower()
@@ -156,6 +262,7 @@ def generate_assistant_response(question: str, snapshot: dict, history=None) -> 
                 "What is my top expense category?",
                 "Did my spending increase?",
             ],
+            "suggested_actions": [],
         }
 
     if "balance" in combined_text:
@@ -169,6 +276,7 @@ def generate_assistant_response(question: str, snapshot: dict, history=None) -> 
                 "What is my top expense category?",
                 "Give me saving advice",
             ],
+            "suggested_actions": build_assistant_actions(snapshot, "balance"),
         }
 
     if "top expense" in combined_text or "top category" in combined_text or "biggest category" in combined_text:
@@ -183,6 +291,7 @@ def generate_assistant_response(question: str, snapshot: dict, history=None) -> 
                     "How can I reduce it?",
                     "Did my spending increase?",
                 ],
+                "suggested_actions": build_assistant_actions(snapshot, "top_category"),
             }
 
         return {
@@ -192,6 +301,7 @@ def generate_assistant_response(question: str, snapshot: dict, history=None) -> 
                 "What is my balance?",
                 "Summarize my finances",
             ],
+            "suggested_actions": [],
         }
 
     if (
@@ -214,6 +324,7 @@ def generate_assistant_response(question: str, snapshot: dict, history=None) -> 
                     "Which category is driving this?",
                     "Give me saving advice",
                 ],
+                "suggested_actions": build_assistant_actions(snapshot, "spending_change"),
             }
 
         return {
@@ -225,6 +336,7 @@ def generate_assistant_response(question: str, snapshot: dict, history=None) -> 
                 "What is my balance?",
                 "Summarize my finances",
             ],
+            "suggested_actions": [],
         }
 
     if (
@@ -258,6 +370,7 @@ def generate_assistant_response(question: str, snapshot: dict, history=None) -> 
                 "Did my spending increase?",
                 "Summarize my finances",
             ],
+            "suggested_actions": build_assistant_actions(snapshot, "saving_advice"),
         }
 
     if (
@@ -285,6 +398,7 @@ def generate_assistant_response(question: str, snapshot: dict, history=None) -> 
                 "Give me saving advice",
                 "Did my spending increase?",
             ],
+            "suggested_actions": build_assistant_actions(snapshot, "summary"),
         }
 
     if "which category" in combined_text or "driving this" in combined_text:
@@ -299,6 +413,7 @@ def generate_assistant_response(question: str, snapshot: dict, history=None) -> 
                     "How can I reduce it?",
                     "Summarize my finances",
                 ],
+                "suggested_actions": build_assistant_actions(snapshot, "driver"),
             }
 
     return {
@@ -312,6 +427,7 @@ def generate_assistant_response(question: str, snapshot: dict, history=None) -> 
             "What is my top expense category?",
             "Give me saving advice",
         ],
+        "suggested_actions": [],
     }
 
 

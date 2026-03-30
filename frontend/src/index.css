@@ -1563,3 +1563,26 @@ body {
 .assistant-analytics-link:hover {
   background: #eff6ff;
 }
+.assistant-actions-block {
+  grid-column: 1 / -1;
+}
+
+.assistant-action-button {
+  border: 1px solid #dbeafe;
+  background: white;
+  color: #1d4ed8;
+  padding: 10px 14px;
+  border-radius: 12px;
+  cursor: pointer;
+  font-weight: 600;
+  transition: 0.2s ease;
+}
+
+.assistant-action-button:hover {
+  background: #eff6ff;
+}
+
+.analytics-section-highlight {
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.18);
+  transition: box-shadow 0.3s ease;
+}
