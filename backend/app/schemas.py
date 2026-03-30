@@ -147,8 +147,14 @@ class CategoryTrendsResponse(BaseModel):
     summary: list[str]
 
 
+class AssistantMessage(BaseModel):
+    role: str
+    content: str
+
+
 class AssistantQueryRequest(BaseModel):
     question: str
+    history: list[AssistantMessage] = []
 
 
 class AssistantQueryResponse(BaseModel):

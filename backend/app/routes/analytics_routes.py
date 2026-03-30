@@ -119,8 +119,19 @@ def build_financial_snapshot(transactions):
     }
 
 
-def generate_assistant_response(question: str, snapshot: dict) -> dict:
+def extract_recent_context(history):
+    recent_user_messages = [
+        message.content.strip().lower()
+        for message in history[-6:]
+        if message.role.lower() == "user" and message.content.strip()
+    ]
+    return " ".join(recent_user_messages)
+
+
+def generate_assistant_response(question: str, snapshot: dict, history=None) -> dict:
+    history = history or []
     q = (question or "").strip().lower()
+    context_text = extract_recent_context(history)
 
     total_income = snapshot["total_income"]
     total_expenses = snapshot["total_expenses"]
@@ -133,6 +144,8 @@ def generate_assistant_response(question: str, snapshot: dict) -> dict:
     previous_month_expenses = snapshot["previous_month_expenses"]
     expense_change_percent = snapshot["expense_change_percent"]
 
+    combined_text = f"{context_text} {q}".strip()
+
     if not q:
         return {
             "answer": "Please type a finance question so I can help analyze your data.",
@@ -144,7 +157,7 @@ def generate_assistant_response(question: str, snapshot: dict) -> dict:
             ],
         }
 
-    if "balance" in q:
+    if "balance" in combined_text:
         return {
             "answer": f"Your current recorded balance is ${balance:.2f}.",
             "supporting_points": [
@@ -157,7 +170,7 @@ def generate_assistant_response(question: str, snapshot: dict) -> dict:
             ],
         }
 
-    if "top expense" in q or "top category" in q or "biggest category" in q:
+    if "top expense" in combined_text or "top category" in combined_text or "biggest category" in combined_text:
         if top_category:
             return {
                 "answer": f"Your top expense category is {top_category} at ${top_category_amount:.2f}.",
@@ -166,8 +179,8 @@ def generate_assistant_response(question: str, snapshot: dict) -> dict:
                     f"Latest expense month: {current_month or 'N/A'}",
                 ],
                 "suggested_followups": [
+                    "How can I reduce it?",
                     "Did my spending increase?",
-                    "Give me saving advice",
                 ],
             }
 
@@ -180,7 +193,13 @@ def generate_assistant_response(question: str, snapshot: dict) -> dict:
             ],
         }
 
-    if "increase" in q or "overspend" in q or "spending" in q:
+    if (
+        "increase" in combined_text
+        or "overspend" in combined_text
+        or "spending" in combined_text
+        or "last month" in combined_text
+        or "this month" in combined_text
+    ):
         if current_month and previous_month and expense_change_percent is not None:
             direction = "up" if expense_change_percent > 0 else "down"
             return {
@@ -191,7 +210,7 @@ def generate_assistant_response(question: str, snapshot: dict) -> dict:
                     f"Top expense category: {top_category or 'N/A'}",
                 ],
                 "suggested_followups": [
-                    "What is my top expense category?",
+                    "Which category is driving this?",
                     "Give me saving advice",
                 ],
             }
@@ -207,7 +226,13 @@ def generate_assistant_response(question: str, snapshot: dict) -> dict:
             ],
         }
 
-    if "advice" in q or "save" in q or "saving" in q:
+    if (
+        "advice" in combined_text
+        or "save" in combined_text
+        or "saving" in combined_text
+        or "reduce it" in combined_text
+        or "reduce" in combined_text
+    ):
         advice_points = [
             f"Your current balance is ${balance:.2f}.",
             f"Your top expense category is {top_category or 'N/A'}.",
@@ -234,7 +259,12 @@ def generate_assistant_response(question: str, snapshot: dict) -> dict:
             ],
         }
 
-    if "summary" in q or "summarize" in q or "overview" in q:
+    if (
+        "summary" in combined_text
+        or "summarize" in combined_text
+        or "overview" in combined_text
+        or "my finances" in combined_text
+    ):
         summary_text = (
             f"You have ${total_income:.2f} in total income, ${total_expenses:.2f} in total expenses, "
             f"and a current balance of ${balance:.2f}."
@@ -255,6 +285,20 @@ def generate_assistant_response(question: str, snapshot: dict) -> dict:
                 "Did my spending increase?",
             ],
         }
+
+    if "which category" in combined_text or "driving this" in combined_text:
+        if top_category:
+            return {
+                "answer": f"The strongest current expense driver appears to be {top_category}, at ${top_category_amount:.2f}.",
+                "supporting_points": [
+                    f"Latest expense month: {current_month or 'N/A'}",
+                    f"Total expenses: ${total_expenses:.2f}",
+                ],
+                "suggested_followups": [
+                    "How can I reduce it?",
+                    "Summarize my finances",
+                ],
+            }
 
     return {
         "answer": "I can help with your balance, spending changes, top expense categories, savings advice, or a financial summary.",
@@ -790,6 +834,6 @@ def get_assistant_response(
     ).all()
 
     snapshot = build_financial_snapshot(transactions)
-    result = generate_assistant_response(payload.question, snapshot)
+    result = generate_assistant_response(payload.question, snapshot, payload.history)
 
     return AssistantQueryResponse(**result)

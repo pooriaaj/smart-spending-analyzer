@@ -1394,3 +1394,150 @@ body {
     width: 100%;
   }
 }
+
+.assistant-card,
+.assistant-response-card,
+.assistant-chat-card {
+  margin-bottom: 24px;
+}
+
+.assistant-preset-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.assistant-preset-button,
+.assistant-followup-button {
+  border: none;
+  background: #eff6ff;
+  color: #1d4ed8;
+  padding: 10px 14px;
+  border-radius: 12px;
+  cursor: pointer;
+  font-weight: 600;
+  transition: 0.2s ease;
+}
+
+.assistant-preset-button:hover,
+.assistant-followup-button:hover {
+  background: #dbeafe;
+}
+
+.assistant-input-row {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.assistant-input {
+  flex: 1;
+  min-width: 260px;
+  padding: 14px;
+  border: 1px solid #d1d5db;
+  border-radius: 12px;
+  font-size: 16px;
+}
+
+.assistant-ask-button {
+  border: none;
+  background-color: #2563eb;
+  color: white;
+  padding: 14px 18px;
+  border-radius: 12px;
+  cursor: pointer;
+  font-weight: 600;
+  transition: 0.2s ease;
+}
+
+.assistant-ask-button:hover {
+  background-color: #1d4ed8;
+}
+
+.assistant-chat-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.assistant-chat-bubble {
+  border-radius: 18px;
+  padding: 18px;
+}
+
+.assistant-chat-assistant {
+  background: #f8fbff;
+  border: 1px solid rgba(37, 99, 235, 0.1);
+}
+
+.assistant-chat-user {
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+}
+
+.assistant-chat-role {
+  font-size: 13px;
+  font-weight: 700;
+  color: #2563eb;
+  margin-bottom: 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+}
+
+.assistant-chat-text {
+  margin: 0;
+  color: #374151;
+  line-height: 1.7;
+}
+
+.assistant-chat-details {
+  margin-top: 16px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+.assistant-chat-detail-block {
+  background: white;
+  border: 1px solid rgba(37, 99, 235, 0.08);
+  border-radius: 14px;
+  padding: 14px;
+}
+
+.assistant-chat-detail-block h4 {
+  margin: 0 0 10px 0;
+  font-size: 15px;
+}
+
+.assistant-list {
+  margin: 0;
+  padding-left: 18px;
+  color: #4b5563;
+  line-height: 1.7;
+}
+
+.assistant-followup-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.assistant-empty-text {
+  margin: 0;
+  color: #6b7280;
+}
+
+@media (max-width: 900px) {
+  .assistant-input-row {
+    flex-direction: column;
+  }
+
+  .assistant-ask-button {
+    width: 100%;
+  }
+
+  .assistant-chat-details {
+    grid-template-columns: 1fr;
+  }
+}

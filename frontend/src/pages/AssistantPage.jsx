@@ -4,7 +4,13 @@ import api from "../services/api";
 
 function AssistantPage() {
   const [question, setQuestion] = useState("");
-  const [assistantResponse, setAssistantResponse] = useState(null);
+  const [messages, setMessages] = useState([
+    {
+      role: "assistant",
+      content: "Hi — I’m your financial assistant. Ask me about your balance, spending, categories, or savings.",
+      data: null,
+    },
+  ]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
@@ -18,6 +24,22 @@ function AssistantPage() {
     "Summarize my finances",
   ];
 
+  const buildHistoryPayload = (existingMessages, newQuestion) => {
+    const historyMessages = [...existingMessages]
+      .filter((message) => message.role === "user" || message.role === "assistant")
+      .map((message) => ({
+        role: message.role,
+        content: message.content,
+      }));
+
+    historyMessages.push({
+      role: "user",
+      content: newQuestion,
+    });
+
+    return historyMessages.slice(-8);
+  };
+
   const handleAsk = async (customQuestion) => {
     const finalQuestion = (customQuestion ?? question).trim();
 
@@ -26,19 +48,32 @@ function AssistantPage() {
       return;
     }
 
+    const userMessage = {
+      role: "user",
+      content: finalQuestion,
+      data: null,
+    };
+
+    const updatedMessages = [...messages, userMessage];
+    setMessages(updatedMessages);
+
     try {
       setLoading(true);
       setError("");
+      setQuestion("");
 
       const response = await api.post("/analytics/assistant-response", {
         question: finalQuestion,
+        history: buildHistoryPayload(messages, finalQuestion),
       });
 
-      setAssistantResponse(response.data);
+      const assistantMessage = {
+        role: "assistant",
+        content: response.data.answer,
+        data: response.data,
+      };
 
-      if (!customQuestion) {
-        setQuestion("");
-      }
+      setMessages([...updatedMessages, assistantMessage]);
     } catch (err) {
       console.error("Failed to get assistant response:", err);
       setError("Failed to get assistant response.");
@@ -78,8 +113,8 @@ function AssistantPage() {
 
         <div className="dashboard-card assistant-card">
           <div className="section-header">
-            <h2>Ask a question</h2>
-            <p>Try a quick prompt or write your own finance question.</p>
+            <h2>Quick prompts</h2>
+            <p>Start with a common question or type your own.</p>
           </div>
 
           <div className="assistant-preset-grid">
@@ -99,10 +134,15 @@ function AssistantPage() {
           <div className="assistant-input-row">
             <input
               type="text"
-              placeholder="Ask something like: Give me saving advice"
+              placeholder="Ask something like: How can I reduce my top expense category?"
               value={question}
               onChange={(e) => setQuestion(e.target.value)}
               className="assistant-input"
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  handleAsk();
+                }
+              }}
             />
             <button
               type="button"
@@ -117,55 +157,61 @@ function AssistantPage() {
           {error && <p className="error-text">{error}</p>}
         </div>
 
-        {assistantResponse && (
-          <div className="dashboard-card assistant-response-card">
-            <div className="section-header">
-              <h2>Assistant Response</h2>
-              <p>Here is your current finance answer based on your recorded data.</p>
-            </div>
+        <div className="dashboard-card assistant-chat-card">
+          <div className="section-header">
+            <h2>Conversation</h2>
+            <p>Your assistant now keeps short conversation context for follow-up questions.</p>
+          </div>
 
-            <div className="assistant-answer-box">
-              <h3>Main Answer</h3>
-              <p>{assistantResponse.answer}</p>
-            </div>
+          <div className="assistant-chat-list">
+            {messages.map((message, index) => (
+              <div
+                key={`message-${index}`}
+                className={`assistant-chat-bubble assistant-chat-${message.role}`}
+              >
+                <div className="assistant-chat-role">
+                  {message.role === "assistant" ? "Assistant" : "You"}
+                </div>
 
-            <div className="assistant-response-grid">
-              <div className="assistant-detail-block">
-                <h3>Supporting Points</h3>
-                {assistantResponse.supporting_points.length === 0 ? (
-                  <p className="assistant-empty-text">No supporting points available.</p>
-                ) : (
-                  <ul className="assistant-list">
-                    {assistantResponse.supporting_points.map((item, index) => (
-                      <li key={`support-${index}`}>{item}</li>
-                    ))}
-                  </ul>
-                )}
-              </div>
+                <p className="assistant-chat-text">{message.content}</p>
 
-              <div className="assistant-detail-block">
-                <h3>Suggested Follow-ups</h3>
-                {assistantResponse.suggested_followups.length === 0 ? (
-                  <p className="assistant-empty-text">No follow-up suggestions available.</p>
-                ) : (
-                  <div className="assistant-followup-list">
-                    {assistantResponse.suggested_followups.map((item, index) => (
-                      <button
-                        key={`followup-${index}`}
-                        type="button"
-                        className="assistant-followup-button"
-                        onClick={() => handleAsk(item)}
-                        disabled={loading}
-                      >
-                        {item}
-                      </button>
-                    ))}
+                {message.role === "assistant" && message.data && (
+                  <div className="assistant-chat-details">
+                    {message.data.supporting_points?.length > 0 && (
+                      <div className="assistant-chat-detail-block">
+                        <h4>Supporting Points</h4>
+                        <ul className="assistant-list">
+                          {message.data.supporting_points.map((item, idx) => (
+                            <li key={`support-${index}-${idx}`}>{item}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+
+                    {message.data.suggested_followups?.length > 0 && (
+                      <div className="assistant-chat-detail-block">
+                        <h4>Suggested Follow-ups</h4>
+                        <div className="assistant-followup-list">
+                          {message.data.suggested_followups.map((item, idx) => (
+                            <button
+                              key={`followup-${index}-${idx}`}
+                              type="button"
+                              className="assistant-followup-button"
+                              onClick={() => handleAsk(item)}
+                              disabled={loading}
+                            >
+                              {item}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
-            </div>
+            ))}
           </div>
-        )}
+        </div>
       </div>
     </div>
   );
