@@ -7,6 +7,10 @@ function TransactionsPage() {
   const [typeFilter, setTypeFilter] = useState("");
   const [monthFilter, setMonthFilter] = useState("");
   const [loading, setLoading] = useState(true);
+  const [importResult, setImportResult] = useState(null);
+  const [importError, setImportError] = useState("");
+  const [isUploading, setIsUploading] = useState(false);
+
   const navigate = useNavigate();
 
   const fetchTransactions = async () => {
@@ -16,7 +20,7 @@ function TransactionsPage() {
     } catch (error) {
       console.error("Failed to load transactions:", error);
       localStorage.removeItem("token");
-      navigate("/");
+      navigate("/", { replace: true });
     } finally {
       setLoading(false);
     }
@@ -67,53 +71,33 @@ function TransactionsPage() {
     }
   };
 
-  const [importResult, setImportResult] = useState(null);
-  const [importError, setImportError] = useState("");
-
   const handleCsvUpload = async (e) => {
-  const file = e.target.files[0];
-  if (!file) return;
+    const file = e.target.files[0];
+    if (!file) return;
 
-  setImportResult(null);
-  setImportError("");
+    setImportResult(null);
+    setImportError("");
+    setIsUploading(true);
 
-  const formData = new FormData();
-  formData.append("file", file);
+    const formData = new FormData();
+    formData.append("file", file);
 
-  try {
-    const response = await api.post("/transactions/import/csv", formData, {
-      headers: {
-        "Content-Type": "multipart/form-data",
-      },
-    });
+    try {
+      const response = await api.post("/transactions/import/csv", formData, {
+        headers: {
+          "Content-Type": "multipart/form-data",
+        },
+      });
 
-    setImportResult(response.data);
-
-  } catch (err) {
-    setImportError(
-      err.response?.data?.detail || "CSV import failed"
-    );
-  }
-};
-
-<div className="import-section">
-  <input type="file" accept=".csv" onChange={handleCsvUpload} />
-
-  {importResult && (
-    <div className="import-success">
-      <p>✅ Import completed</p>
-      <p>Imported: {importResult.imported}</p>
-      <p>Duplicates skipped: {importResult.duplicates_skipped}</p>
-      <p>Invalid rows: {importResult.invalid_rows_skipped}</p>
-    </div>
-  )}
-
-  {importError && (
-    <div className="import-error">
-      ❌ {importError}
-    </div>
-  )}
-</div>
+      setImportResult(response.data);
+      await fetchTransactions();
+    } catch (err) {
+      setImportError(err.response?.data?.detail || "CSV import failed");
+    } finally {
+      setIsUploading(false);
+      e.target.value = "";
+    }
+  };
 
   if (loading) {
     return (
@@ -157,8 +141,75 @@ function TransactionsPage() {
           </div>
 
           <div style={{ marginTop: "12px" }}>
-            <input type="file" accept=".csv" onChange={handleCsvUpload} />
+            <input
+              type="file"
+              accept=".csv"
+              onChange={handleCsvUpload}
+              disabled={isUploading}
+            />
           </div>
+
+          {isUploading && (
+            <div
+              style={{
+                marginTop: "16px",
+                padding: "14px 16px",
+                borderRadius: "12px",
+                backgroundColor: "#eff6ff",
+                border: "1px solid #bfdbfe",
+                color: "#1d4ed8",
+              }}
+            >
+              Uploading and processing CSV...
+            </div>
+          )}
+
+          {importResult && (
+            <div
+              style={{
+                marginTop: "16px",
+                padding: "16px",
+                borderRadius: "14px",
+                backgroundColor: "#ecfdf5",
+                border: "1px solid #a7f3d0",
+                color: "#065f46",
+              }}
+            >
+              <h3 style={{ marginTop: 0, marginBottom: "10px" }}>
+                Import Result
+              </h3>
+              <p style={{ margin: "6px 0" }}>{importResult.message}</p>
+              <p style={{ margin: "6px 0" }}>
+                Imported: <strong>{importResult.imported ?? 0}</strong>
+              </p>
+              <p style={{ margin: "6px 0" }}>
+                Duplicates skipped:{" "}
+                <strong>{importResult.duplicates_skipped ?? 0}</strong>
+              </p>
+              <p style={{ margin: "6px 0" }}>
+                Invalid rows skipped:{" "}
+                <strong>{importResult.invalid_rows_skipped ?? 0}</strong>
+              </p>
+            </div>
+          )}
+
+          {importError && (
+            <div
+              style={{
+                marginTop: "16px",
+                padding: "16px",
+                borderRadius: "14px",
+                backgroundColor: "#fef2f2",
+                border: "1px solid #fecaca",
+                color: "#991b1b",
+              }}
+            >
+              <h3 style={{ marginTop: 0, marginBottom: "10px" }}>
+                Import Error
+              </h3>
+              <p style={{ margin: 0 }}>{importError}</p>
+            </div>
+          )}
         </div>
 
         <div className="filter-card">
