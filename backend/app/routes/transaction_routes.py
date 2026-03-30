@@ -3,12 +3,121 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from app.dependencies import get_db, get_current_user
 from app.models import Transaction, User
-from app.schemas import TransactionCreate, TransactionResponse
+from app.schemas import (
+    TransactionCreate,
+    TransactionResponse,
+    CategorySuggestionRequest,
+    CategorySuggestionResponse,
+)
 import csv
 import io
 from datetime import datetime
 
 router = APIRouter(prefix="/transactions", tags=["Transactions"])
+
+
+def normalize_text(value: str) -> str:
+    return (value or "").strip().lower()
+
+
+CATEGORY_KEYWORDS = {
+    "expense": {
+        "Groceries": [
+            "walmart", "costco", "metro", "loblaws", "nofrills", "superstore",
+            "freshco", "grocery", "groceries", "market", "food basics"
+        ],
+        "Transport": [
+            "uber", "lyft", "ttc", "presto", "gas", "fuel", "shell", "esso",
+            "petro", "transit", "bus", "train", "subway", "taxi", "parking"
+        ],
+        "Rent": [
+            "rent", "landlord", "lease"
+        ],
+        "Utilities": [
+            "hydro", "electric", "electricity", "water", "internet", "wifi",
+            "rogers", "bell", "fido", "telus", "utility", "utilities", "phone bill"
+        ],
+        "Dining": [
+            "restaurant", "cafe", "coffee", "starbucks", "tim hortons",
+            "mcdonald", "burger", "pizza", "shawarma", "eat", "dinner", "lunch"
+        ],
+        "Entertainment": [
+            "netflix", "spotify", "youtube", "cinema", "movie", "game",
+            "steam", "playstation", "xbox", "entertainment"
+        ],
+        "Shopping": [
+            "amazon", "mall", "store", "clothes", "clothing", "shoes",
+            "zara", "h&m", "uniqlo", "shopping"
+        ],
+        "Health": [
+            "pharmacy", "shoppers", "medicine", "doctor", "clinic",
+            "hospital", "health", "dental", "dentist"
+        ],
+        "Education": [
+            "tuition", "course", "udemy", "coursera", "book", "books",
+            "university", "college", "education"
+        ],
+        "Travel": [
+            "airbnb", "hotel", "flight", "air canada", "porter", "westjet",
+            "travel", "vacation"
+        ],
+        "Subscriptions": [
+            "subscription", "monthly plan", "icloud", "google one", "prime",
+            "adobe", "notion"
+        ],
+        "Other": []
+    },
+    "income": {
+        "Salary": [
+            "salary", "payroll", "pay cheque", "paycheck", "wage", "income"
+        ],
+        "Freelance": [
+            "freelance", "contract", "client payment", "project payment"
+        ],
+        "Refund": [
+            "refund", "reversal", "returned"
+        ],
+        "Gift": [
+            "gift", "etransfer", "e-transfer", "transfer from friend"
+        ],
+        "Investment": [
+            "dividend", "interest", "investment", "capital gain"
+        ],
+        "Other Income": []
+    }
+}
+
+
+def suggest_category(description: str, transaction_type: str):
+    normalized_description = normalize_text(description)
+    normalized_type = normalize_text(transaction_type)
+
+    if normalized_type not in CATEGORY_KEYWORDS:
+        return {
+            "suggested_category": "Other",
+            "confidence": 0.2,
+            "matched_keyword": None,
+            "reason": "Unknown transaction type"
+        }
+
+    for category, keywords in CATEGORY_KEYWORDS[normalized_type].items():
+        for keyword in keywords:
+            if keyword in normalized_description:
+                return {
+                    "suggested_category": category,
+                    "confidence": 0.92,
+                    "matched_keyword": keyword,
+                    "reason": f"Matched keyword '{keyword}' in description"
+                }
+
+    fallback_category = "Other" if normalized_type == "expense" else "Other Income"
+
+    return {
+        "suggested_category": fallback_category,
+        "confidence": 0.35,
+        "matched_keyword": None,
+        "reason": "No rule matched, used fallback category"
+    }
 
 
 def filter_transactions(
@@ -79,6 +188,15 @@ def create_transaction(
     db.commit()
     db.refresh(transaction)
     return transaction
+
+
+@router.post("/categorize/suggest", response_model=CategorySuggestionResponse)
+def categorize_transaction_suggestion(
+    payload: CategorySuggestionRequest,
+    current_user: User = Depends(get_current_user)
+):
+    result = suggest_category(payload.description, payload.type)
+    return CategorySuggestionResponse(**result)
 
 
 @router.get("/", response_model=list[TransactionResponse])

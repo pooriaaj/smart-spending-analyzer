@@ -693,3 +693,38 @@ body {
     grid-template-columns: 1fr;
   }
 }
+
+.suggest-button {
+  border: none;
+  background-color: #7c3aed;
+  color: white;
+  cursor: pointer;
+  transition: 0.2s ease;
+}
+
+.suggest-button:hover {
+  background-color: #6d28d9;
+}
+
+.suggest-button:disabled {
+  background-color: #c4b5fd;
+  cursor: not-allowed;
+}
+
+.suggestion-box {
+  margin-top: 16px;
+  padding: 16px;
+  border-radius: 16px;
+  background: #f5f3ff;
+  border: 1px solid #c4b5fd;
+  color: #4c1d95;
+}
+
+.suggestion-box h3 {
+  margin: 0 0 8px 0;
+  font-size: 18px;
+}
+
+.suggestion-box p {
+  margin: 6px 0;
+}

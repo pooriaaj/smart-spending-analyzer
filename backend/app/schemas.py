@@ -36,20 +36,24 @@ class TransactionResponse(TransactionBase):
     class Config:
         from_attributes = True
 
+
 class AnalyticsSummary(BaseModel):
     total_income: float
     total_expenses: float
     balance: float
 
+
 class CategoryBreakdownItem(BaseModel):
     category: str
     total: float
+
 
 class MonthlySummaryItem(BaseModel):
     month: str
     income: float
     expenses: float
     balance: float
+
 
 class RecentTransactionItem(BaseModel):
     id: int
@@ -62,6 +66,19 @@ class RecentTransactionItem(BaseModel):
     class Config:
         from_attributes = True
 
+
 class TopExpenseCategory(BaseModel):
     category: str
     total: float
+
+
+class CategorySuggestionRequest(BaseModel):
+    description: str
+    type: str
+
+
+class CategorySuggestionResponse(BaseModel):
+    suggested_category: str
+    confidence: float
+    matched_keyword: str | None = None
+    reason: str

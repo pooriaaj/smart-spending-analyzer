@@ -8,6 +8,8 @@ function TransactionForm({ onTransactionCreated, editingTransaction, onCancelEdi
   const [date, setDate] = useState("");
   const [type, setType] = useState("expense");
   const [error, setError] = useState("");
+  const [suggestion, setSuggestion] = useState(null);
+  const [suggestionLoading, setSuggestionLoading] = useState(false);
 
   useEffect(() => {
     if (editingTransaction) {
@@ -23,6 +25,9 @@ function TransactionForm({ onTransactionCreated, editingTransaction, onCancelEdi
       setDate("");
       setType("expense");
     }
+
+    setSuggestion(null);
+    setError("");
   }, [editingTransaction]);
 
   const resetForm = () => {
@@ -32,6 +37,33 @@ function TransactionForm({ onTransactionCreated, editingTransaction, onCancelEdi
     setDate("");
     setType("expense");
     setError("");
+    setSuggestion(null);
+  };
+
+  const handleSuggestCategory = async () => {
+    setError("");
+    setSuggestion(null);
+
+    if (!description.trim()) {
+      setError("Please enter a description before requesting a category suggestion.");
+      return;
+    }
+
+    try {
+      setSuggestionLoading(true);
+
+      const response = await api.post("/transactions/categorize/suggest", {
+        description,
+        type,
+      });
+
+      setSuggestion(response.data);
+      setCategory(response.data.suggested_category);
+    } catch (err) {
+      setError("Failed to suggest a category.");
+    } finally {
+      setSuggestionLoading(false);
+    }
   };
 
   const handleSubmit = async (e) => {
@@ -113,6 +145,15 @@ function TransactionForm({ onTransactionCreated, editingTransaction, onCancelEdi
           <option value="income">Income</option>
         </select>
 
+        <button
+          type="button"
+          className="suggest-button"
+          onClick={handleSuggestCategory}
+          disabled={suggestionLoading}
+        >
+          {suggestionLoading ? "Suggesting..." : "Suggest Category"}
+        </button>
+
         <button type="submit">
           {editingTransaction ? "Update Transaction" : "Add Transaction"}
         </button>
@@ -130,6 +171,20 @@ function TransactionForm({ onTransactionCreated, editingTransaction, onCancelEdi
           </button>
         )}
       </form>
+
+      {suggestion && (
+        <div className="suggestion-box">
+          <h3>Suggested Category</h3>
+          <p>
+            <strong>{suggestion.suggested_category}</strong>
+          </p>
+          <p>Confidence: {(suggestion.confidence * 100).toFixed(0)}%</p>
+          <p>{suggestion.reason}</p>
+          {suggestion.matched_keyword && (
+            <p>Matched keyword: {suggestion.matched_keyword}</p>
+          )}
+        </div>
+      )}
 
       {error && <p className="error-text">{error}</p>}
     </div>
