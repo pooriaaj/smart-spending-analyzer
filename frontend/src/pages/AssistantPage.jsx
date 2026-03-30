@@ -10,6 +10,7 @@ function AssistantPage() {
       content:
         "Hi — I’m your financial assistant. Ask me about your balance, spending, categories, or savings.",
       data: null,
+      analyticsSection: null,
     },
   ]);
   const [smartSuggestions, setSmartSuggestions] = useState([]);
@@ -109,17 +110,6 @@ function AssistantPage() {
     return null;
   };
 
-  const handleAssistantFollowup = (followupText) => {
-    const section = getAnalyticsSectionFromText(followupText);
-
-    if (section) {
-      navigate(`/analytics?section=${section}`);
-      return;
-    }
-
-    handleAsk(followupText);
-  };
-
   const handleAsk = async (customQuestion) => {
     const finalQuestion = (customQuestion ?? question).trim();
 
@@ -132,6 +122,7 @@ function AssistantPage() {
       role: "user",
       content: finalQuestion,
       data: null,
+      analyticsSection: null,
     };
 
     const updatedMessages = [...messages, userMessage];
@@ -151,6 +142,7 @@ function AssistantPage() {
         role: "assistant",
         content: response.data.answer,
         data: response.data,
+        analyticsSection: getAnalyticsSectionFromText(finalQuestion),
       };
 
       setMessages([...updatedMessages, assistantMessage]);
@@ -266,6 +258,23 @@ function AssistantPage() {
 
                 <p className="assistant-chat-text">{message.content}</p>
 
+                {message.role === "assistant" &&
+                  message.analyticsSection && (
+                    <div className="assistant-inline-actions">
+                      <button
+                        type="button"
+                        className="assistant-analytics-link"
+                        onClick={() =>
+                          navigate(
+                            `/analytics?section=${message.analyticsSection}`
+                          )
+                        }
+                      >
+                        Open related analytics
+                      </button>
+                    </div>
+                  )}
+
                 {message.role === "assistant" && message.data && (
                   <div className="assistant-chat-details">
                     {message.data.supporting_points?.length > 0 && (
@@ -288,7 +297,7 @@ function AssistantPage() {
                               key={`followup-${index}-${idx}`}
                               type="button"
                               className="assistant-followup-button"
-                              onClick={() => handleAssistantFollowup(item)}
+                              onClick={() => handleAsk(item)}
                               disabled={loading}
                             >
                               {item}
