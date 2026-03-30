@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import api from "../services/api";
 
@@ -11,18 +11,37 @@ function AssistantPage() {
       data: null,
     },
   ]);
+  const [smartSuggestions, setSmartSuggestions] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [suggestionsLoading, setSuggestionsLoading] = useState(true);
   const [error, setError] = useState("");
 
   const navigate = useNavigate();
 
-  const presetQuestions = [
+  const fallbackQuestions = [
     "What is my balance?",
     "What is my top expense category?",
     "Did my spending increase?",
     "Give me saving advice",
     "Summarize my finances",
   ];
+
+  useEffect(() => {
+    const loadSuggestions = async () => {
+      try {
+        setSuggestionsLoading(true);
+        const response = await api.get("/analytics/assistant-suggestions");
+        setSmartSuggestions(response.data.suggestions || []);
+      } catch (err) {
+        console.error("Failed to load assistant suggestions:", err);
+        setSmartSuggestions(fallbackQuestions);
+      } finally {
+        setSuggestionsLoading(false);
+      }
+    };
+
+    loadSuggestions();
+  }, []);
 
   const buildHistoryPayload = (existingMessages, newQuestion) => {
     const historyMessages = [...existingMessages]
@@ -82,6 +101,9 @@ function AssistantPage() {
     }
   };
 
+  const displayedSuggestions =
+    smartSuggestions.length > 0 ? smartSuggestions : fallbackQuestions;
+
   return (
     <div className="page-container dashboard-page">
       <div className="dashboard-wrapper">
@@ -113,12 +135,16 @@ function AssistantPage() {
 
         <div className="dashboard-card assistant-card">
           <div className="section-header">
-            <h2>Quick prompts</h2>
-            <p>Start with a common question or type your own.</p>
+            <h2>Smart prompts</h2>
+            <p>
+              {suggestionsLoading
+                ? "Loading finance-aware prompts..."
+                : "These prompts are generated from your current financial data."}
+            </p>
           </div>
 
           <div className="assistant-preset-grid">
-            {presetQuestions.map((preset) => (
+            {displayedSuggestions.map((preset) => (
               <button
                 key={preset}
                 type="button"
@@ -160,7 +186,7 @@ function AssistantPage() {
         <div className="dashboard-card assistant-chat-card">
           <div className="section-header">
             <h2>Conversation</h2>
-            <p>Your assistant now keeps short conversation context for follow-up questions.</p>
+            <p>Your assistant keeps short conversation context for follow-up questions.</p>
           </div>
 
           <div className="assistant-chat-list">

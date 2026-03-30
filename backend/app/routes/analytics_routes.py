@@ -16,6 +16,7 @@ from app.schemas import (
     CategoryTrendsResponse,
     AssistantQueryRequest,
     AssistantQueryResponse,
+    AssistantSuggestionsResponse,
 )
 
 router = APIRouter(prefix="/analytics", tags=["Analytics"])
@@ -312,6 +313,35 @@ def generate_assistant_response(question: str, snapshot: dict, history=None) -> 
             "Give me saving advice",
         ],
     }
+
+
+def generate_assistant_suggestions(snapshot: dict) -> list[str]:
+    suggestions = []
+
+    if snapshot["balance"] is not None:
+        suggestions.append("What is my balance?")
+
+    if snapshot["top_category"]:
+        suggestions.append(f"Why is {snapshot['top_category']} my top expense category?")
+        suggestions.append(f"How can I reduce {snapshot['top_category']} spending?")
+
+    if snapshot["expense_change_percent"] is not None:
+        if snapshot["expense_change_percent"] > 0:
+            suggestions.append("Why did my spending increase?")
+        else:
+            suggestions.append("Why did my spending decrease?")
+
+    if snapshot["current_month"]:
+        suggestions.append(f"Summarize my finances for {snapshot['current_month']}")
+
+    suggestions.append("Give me saving advice")
+
+    unique_suggestions = []
+    for item in suggestions:
+        if item not in unique_suggestions:
+            unique_suggestions.append(item)
+
+    return unique_suggestions[:6]
 
 
 @router.get("/summary", response_model=AnalyticsSummary)
@@ -837,3 +867,18 @@ def get_assistant_response(
     result = generate_assistant_response(payload.question, snapshot, payload.history)
 
     return AssistantQueryResponse(**result)
+
+
+@router.get("/assistant-suggestions", response_model=AssistantSuggestionsResponse)
+def get_assistant_suggestions(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    transactions = db.query(Transaction).filter(
+        Transaction.owner_id == current_user.id
+    ).all()
+
+    snapshot = build_financial_snapshot(transactions)
+    suggestions = generate_assistant_suggestions(snapshot)
+
+    return AssistantSuggestionsResponse(suggestions=suggestions)

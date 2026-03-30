@@ -161,3 +161,7 @@ class AssistantQueryResponse(BaseModel):
     answer: str
     supporting_points: list[str]
     suggested_followups: list[str]
+
+
+class AssistantSuggestionsResponse(BaseModel):
+    suggestions: list[str]
