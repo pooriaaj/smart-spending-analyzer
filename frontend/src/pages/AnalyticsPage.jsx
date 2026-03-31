@@ -29,6 +29,9 @@ function AnalyticsPage() {
   const [selectedType, setSelectedType] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("");
   const [loading, setLoading] = useState(true);
+  const [themeMode, setThemeMode] = useState(
+    document.documentElement.getAttribute("data-theme") || "light"
+  );
 
   const alertsRef = useRef(null);
   const trendsRef = useRef(null);
@@ -39,14 +42,41 @@ function AnalyticsPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
 
-  const pieColors = [
-    "#2563eb",
-    "#16a34a",
-    "#dc2626",
-    "#f59e0b",
-    "#7c3aed",
-    "#0891b2",
-  ];
+  useEffect(() => {
+    const observer = new MutationObserver(() => {
+      setThemeMode(document.documentElement.getAttribute("data-theme") || "light");
+    });
+
+    observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ["data-theme"],
+    });
+
+    return () => observer.disconnect();
+  }, []);
+
+  const chartTheme = useMemo(() => {
+    const isDark = themeMode === "dark";
+
+    return {
+      text: isDark ? "#cbd5e1" : "#475569",
+      grid: isDark ? "rgba(148, 163, 184, 0.12)" : "rgba(15, 23, 42, 0.08)",
+      tooltipBg: isDark ? "rgba(15, 23, 42, 0.96)" : "rgba(255, 255, 255, 0.96)",
+      tooltipBorder: isDark ? "rgba(148, 163, 184, 0.16)" : "rgba(15, 23, 42, 0.08)",
+      incomeBar: isDark ? "#4ade80" : "#16a34a",
+      expenseBar: isDark ? "#f87171" : "#dc2626",
+      pieColors: isDark
+        ? ["#60a5fa", "#4ade80", "#f87171", "#fbbf24", "#a78bfa", "#22d3ee"]
+        : ["#2563eb", "#16a34a", "#dc2626", "#f59e0b", "#7c3aed", "#0891b2"],
+    };
+  }, [themeMode]);
+
+  const availableCategories = useMemo(() => {
+    const categories = new Set(
+      allTransactions.map((transaction) => transaction.category)
+    );
+    return Array.from(categories).sort();
+  }, [allTransactions]);
 
   useEffect(() => {
     const urlMonth = searchParams.get("month") || "";
@@ -55,13 +85,6 @@ function AnalyticsPage() {
     if (urlMonth) setSelectedMonth(urlMonth);
     if (urlCategory) setSelectedCategory(urlCategory);
   }, [searchParams]);
-
-  const availableCategories = useMemo(() => {
-    const categories = new Set(
-      allTransactions.map((transaction) => transaction.category)
-    );
-    return Array.from(categories).sort();
-  }, [allTransactions]);
 
   const fetchAnalyticsData = useCallback(async () => {
     try {
@@ -166,6 +189,17 @@ function AnalyticsPage() {
     return searchParams.get("section") === sectionName
       ? "analytics-section-highlight"
       : "";
+  };
+
+  const customTooltipStyle = {
+    backgroundColor: chartTheme.tooltipBg,
+    border: `1px solid ${chartTheme.tooltipBorder}`,
+    borderRadius: "14px",
+    color: chartTheme.text,
+    boxShadow:
+      themeMode === "dark"
+        ? "0 18px 40px rgba(0, 0, 0, 0.28)"
+        : "0 18px 40px rgba(15, 23, 42, 0.12)",
   };
 
   if (loading) {
@@ -471,12 +505,12 @@ function AnalyticsPage() {
             ) : (
               <ResponsiveContainer width="100%" height={300}>
                 <BarChart data={monthlySummary}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="month" />
-                  <YAxis />
-                  <Tooltip />
-                  <Bar dataKey="income" fill="#16a34a" radius={[6, 6, 0, 0]} />
-                  <Bar dataKey="expenses" fill="#dc2626" radius={[6, 6, 0, 0]} />
+                  <CartesianGrid strokeDasharray="3 3" stroke={chartTheme.grid} />
+                  <XAxis dataKey="month" tick={{ fill: chartTheme.text, fontSize: 12 }} />
+                  <YAxis tick={{ fill: chartTheme.text, fontSize: 12 }} />
+                  <Tooltip contentStyle={customTooltipStyle} />
+                  <Bar dataKey="income" fill={chartTheme.incomeBar} radius={[8, 8, 0, 0]} />
+                  <Bar dataKey="expenses" fill={chartTheme.expenseBar} radius={[8, 8, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             )}
@@ -501,17 +535,19 @@ function AnalyticsPage() {
                     nameKey="category"
                     cx="50%"
                     cy="50%"
-                    outerRadius={100}
+                    outerRadius={104}
+                    innerRadius={42}
+                    paddingAngle={3}
                     label
                   >
                     {categoryBreakdown.map((entry, index) => (
                       <Cell
                         key={`cell-${index}`}
-                        fill={pieColors[index % pieColors.length]}
+                        fill={chartTheme.pieColors[index % chartTheme.pieColors.length]}
                       />
                     ))}
                   </Pie>
-                  <Tooltip />
+                  <Tooltip contentStyle={customTooltipStyle} />
                 </PieChart>
               </ResponsiveContainer>
             )}
