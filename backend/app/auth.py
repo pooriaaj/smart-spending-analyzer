@@ -6,7 +6,7 @@ import os
 import secrets
 from datetime import datetime, timedelta, timezone
 
-import jwt
+from jose import jwt
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -56,5 +56,5 @@ def create_access_token(data: dict) -> str:
 def decode_access_token(token: str) -> dict | None:
     try:
         return jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-    except jwt.PyJWTError:
+    except Exception:
         return None
