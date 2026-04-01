@@ -13,6 +13,7 @@ from app.schemas import (
     TransactionCreate,
     TransactionResponse,
 )
+from app.services.seed_service import seed_realistic_transactions
 from app.services.transaction_service import (
     apply_bulk_categories,
     get_transactions_for_user,
@@ -30,7 +31,7 @@ CATEGORY_RULES = {
     "restaurant": ["restaurant", "pizza", "burger", "shawarma", "mcdonald", "kfc", "subway"],
     "rent": ["rent", "landlord", "lease"],
     "salary": ["salary", "payroll", "paycheque", "paycheck", "deposit"],
-    "internet": ["internet", "wifi", "rogers", "bell", "fido"],
+    "internet": ["internet", "wifi", "rogers", "bell"],
     "phone": ["phone", "mobile", "cell", "telus", "freedom"],
     "entertainment": ["netflix", "spotify", "youtube", "movie", "cinema"],
 }
@@ -144,12 +145,29 @@ async def import_csv_transactions(
 
     try:
         file_bytes = await file.read()
-        result = import_transactions_from_csv(db, current_user.id, file_bytes)
-        return result
+        return import_transactions_from_csv(db, current_user.id, file_bytes)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"CSV import failed: {str(exc)}")
+
+
+@router.post("/seed-realistic")
+def seed_realistic_data(
+    months: int = 6,
+    clear_existing: bool = False,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    if months < 1 or months > 24:
+        raise HTTPException(status_code=400, detail="Months must be between 1 and 24")
+
+    return seed_realistic_transactions(
+        db=db,
+        owner_id=current_user.id,
+        months=months,
+        clear_existing=clear_existing,
+    )
 
 
 @router.get("/categorize/bulk-preview", response_model=BulkCategorySuggestionResponse)
@@ -158,7 +176,6 @@ def get_bulk_category_preview(
     current_user: User = Depends(get_current_user),
 ):
     candidates = get_uncategorized_candidates(db, current_user.id)
-
     suggestions: list[BulkCategorySuggestionItem] = []
 
     for transaction in candidates:
