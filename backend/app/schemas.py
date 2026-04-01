@@ -1,10 +1,21 @@
-from pydantic import BaseModel, EmailStr
+from __future__ import annotations
+
 from datetime import date
+from typing import Literal
+
+from pydantic import BaseModel, ConfigDict, EmailStr, Field
+
+
+TransactionType = Literal["income", "expense"]
+
+
+class ORMBaseModel(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
 
 
 class UserCreate(BaseModel):
     email: EmailStr
-    password: str
+    password: str = Field(min_length=6, max_length=128)
 
 
 class UserLogin(BaseModel):
@@ -19,22 +30,19 @@ class Token(BaseModel):
 
 class TransactionBase(BaseModel):
     amount: float
-    category: str
-    description: str
+    category: str = Field(min_length=1, max_length=100)
+    description: str = Field(min_length=1, max_length=500)
     date: date
-    type: str
+    type: TransactionType
 
 
 class TransactionCreate(TransactionBase):
     pass
 
 
-class TransactionResponse(TransactionBase):
+class TransactionResponse(TransactionBase, ORMBaseModel):
     id: int
     owner_id: int
-
-    class Config:
-        from_attributes = True
 
 
 class AnalyticsSummary(BaseModel):
@@ -55,16 +63,13 @@ class MonthlySummaryItem(BaseModel):
     balance: float
 
 
-class RecentTransactionItem(BaseModel):
+class RecentTransactionItem(ORMBaseModel):
     id: int
     amount: float
     category: str
     description: str
     date: date
-    type: str
-
-    class Config:
-        from_attributes = True
+    type: TransactionType
 
 
 class TopExpenseCategory(BaseModel):
@@ -73,8 +78,8 @@ class TopExpenseCategory(BaseModel):
 
 
 class CategorySuggestionRequest(BaseModel):
-    description: str
-    type: str
+    description: str = Field(min_length=1, max_length=500)
+    type: TransactionType
 
 
 class CategorySuggestionResponse(BaseModel):
@@ -88,7 +93,7 @@ class BulkCategorySuggestionItem(BaseModel):
     transaction_id: int
     current_category: str
     description: str
-    type: str
+    type: TransactionType
     suggested_category: str
     confidence: float
     matched_keyword: str | None = None
@@ -101,7 +106,7 @@ class BulkCategorySuggestionResponse(BaseModel):
 
 
 class BulkCategoryApplyRequest(BaseModel):
-    transaction_ids: list[int]
+    transaction_ids: list[int] = Field(default_factory=list)
 
 
 class BulkCategoryApplyResponse(BaseModel):
@@ -162,15 +167,15 @@ class AssistantAction(BaseModel):
 
 
 class AssistantQueryRequest(BaseModel):
-    question: str
-    history: list[AssistantMessage] = []
+    question: str = Field(min_length=1)
+    history: list[AssistantMessage] = Field(default_factory=list)
 
 
 class AssistantQueryResponse(BaseModel):
     answer: str
     supporting_points: list[str]
     suggested_followups: list[str]
-    suggested_actions: list[AssistantAction] = []
+    suggested_actions: list[AssistantAction] = Field(default_factory=list)
 
 
 class AssistantSuggestionsResponse(BaseModel):

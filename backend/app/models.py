@@ -1,5 +1,8 @@
-from sqlalchemy import Column, Integer, String, Float, Date, ForeignKey
+from __future__ import annotations
+
+from sqlalchemy import Column, Date, Float, ForeignKey, Index, Integer, String, UniqueConstraint
 from sqlalchemy.orm import relationship
+
 from app.database import Base
 
 
@@ -7,11 +10,22 @@ class User(Base):
     __tablename__ = "users"
 
     id = Column(Integer, primary_key=True, index=True)
-    email = Column(String, unique=True, nullable=False, index=True)
-    password_hash = Column(String, nullable=False)
+    email = Column(String(255), unique=True, nullable=False, index=True)
+    password_hash = Column(String(255), nullable=False)
 
-    transactions = relationship("Transaction", back_populates="owner")
-    category_memories = relationship("CategoryMemory", back_populates="owner")
+    transactions = relationship(
+        "Transaction",
+        back_populates="owner",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
+
+    category_memories = relationship(
+        "CategoryMemory",
+        back_populates="owner",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
 
 
 class Transaction(Base):
@@ -19,22 +33,38 @@ class Transaction(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     amount = Column(Float, nullable=False)
-    category = Column(String, nullable=False)
-    description = Column(String, nullable=False)
-    date = Column(Date, nullable=False)
-    type = Column(String, nullable=False)
-    owner_id = Column(Integer, ForeignKey("users.id"))
+    category = Column(String(100), nullable=False, index=True)
+    description = Column(String(500), nullable=False)
+    date = Column(Date, nullable=False, index=True)
+    type = Column(String(20), nullable=False, index=True)
+    owner_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
 
     owner = relationship("User", back_populates="transactions")
+
+    __table_args__ = (
+        Index("ix_transactions_owner_date", "owner_id", "date"),
+        Index("ix_transactions_owner_type", "owner_id", "type"),
+        Index("ix_transactions_owner_category", "owner_id", "category"),
+    )
 
 
 class CategoryMemory(Base):
     __tablename__ = "category_memories"
 
     id = Column(Integer, primary_key=True, index=True)
-    keyword = Column(String, nullable=False, index=True)
-    category = Column(String, nullable=False)
-    transaction_type = Column(String, nullable=False)
-    owner_id = Column(Integer, ForeignKey("users.id"))
+    keyword = Column(String(255), nullable=False)
+    category = Column(String(100), nullable=False)
+    transaction_type = Column(String(20), nullable=False, index=True)
+    owner_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
 
     owner = relationship("User", back_populates="category_memories")
+
+    __table_args__ = (
+        UniqueConstraint(
+            "owner_id",
+            "keyword",
+            "transaction_type",
+            name="uq_category_memory_owner_keyword_type",
+        ),
+        Index("ix_category_memories_owner_keyword", "owner_id", "keyword"),
+    )
