@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import api from "../services/api";
+import api, { handleApiAuthError } from "../services/api";
 
 function AssistantPage() {
   const [question, setQuestion] = useState("");
@@ -33,33 +33,35 @@ function AssistantPage() {
         setSuggestionsLoading(true);
         const response = await api.get("/analytics/assistant-suggestions");
         setSmartSuggestions(response.data.suggestions || []);
-      } catch (err) {
-        console.error("Failed to load assistant suggestions:", err);
-        setSmartSuggestions(fallbackQuestions);
+      } catch (error) {
+        console.error("Failed to load assistant suggestions:", error);
+
+        if (!handleApiAuthError(error, navigate)) {
+          setSmartSuggestions(fallbackQuestions);
+        }
       } finally {
         setSuggestionsLoading(false);
       }
     };
 
     loadSuggestions();
-  }, []);
+  }, [navigate]);
 
   const buildHistoryPayload = (existingMessages, newQuestion) => {
-    const historyMessages = [...existingMessages]
-      .filter(
-        (message) => message.role === "user" || message.role === "assistant"
-      )
-      .map((message) => ({
-        role: message.role,
-        content: message.content,
-      }));
-
-    historyMessages.push({
-      role: "user",
-      content: newQuestion,
-    });
-
-    return historyMessages.slice(-8);
+    return [
+      ...existingMessages
+        .filter(
+          (message) => message.role === "user" || message.role === "assistant"
+        )
+        .map((message) => ({
+          role: message.role,
+          content: message.content,
+        })),
+      {
+        role: "user",
+        content: newQuestion,
+      },
+    ].slice(-8);
   };
 
   const handleActionNavigation = (action) => {
@@ -72,7 +74,7 @@ function AssistantPage() {
       if (action.category) params.set("category", action.category);
       if (action.month) params.set("month", action.month);
 
-      navigate(`/analytics?${params.toString()}`);
+      navigate(`/analytics${params.toString() ? `?${params.toString()}` : ""}`);
       return;
     }
 
@@ -83,8 +85,7 @@ function AssistantPage() {
       if (action.transaction_type) params.set("type", action.transaction_type);
       if (action.month) params.set("month", action.month);
 
-      const query = params.toString();
-      navigate(`/transactions${query ? `?${query}` : ""}`);
+      navigate(`/transactions${params.toString() ? `?${params.toString()}` : ""}`);
     }
   };
 
@@ -122,9 +123,12 @@ function AssistantPage() {
       };
 
       setMessages([...updatedMessages, assistantMessage]);
-    } catch (err) {
-      console.error("Failed to get assistant response:", err);
-      setError("Failed to get assistant response.");
+    } catch (error) {
+      console.error("Failed to get assistant response:", error);
+
+      if (!handleApiAuthError(error, navigate)) {
+        setError("Failed to get assistant response.");
+      }
     } finally {
       setLoading(false);
     }
@@ -194,9 +198,7 @@ function AssistantPage() {
               onChange={(e) => setQuestion(e.target.value)}
               className="assistant-input"
               onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  handleAsk();
-                }
+                if (e.key === "Enter") handleAsk();
               }}
             />
             <button
@@ -260,7 +262,9 @@ function AssistantPage() {
                           ))}
                         </div>
                       ) : (
-                        <p className="assistant-empty-text">No follow-up suggestions available.</p>
+                        <p className="assistant-empty-text">
+                          No follow-up suggestions available.
+                        </p>
                       )}
                     </div>
 

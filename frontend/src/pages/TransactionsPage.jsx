@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import api from "../services/api";
+import api, { handleApiAuthError } from "../services/api";
 
 function TransactionsPage() {
   const [transactions, setTransactions] = useState([]);
@@ -24,13 +24,9 @@ function TransactionsPage() {
   const [searchParams] = useSearchParams();
 
   useEffect(() => {
-    const urlType = searchParams.get("type") || "";
-    const urlMonth = searchParams.get("month") || "";
-    const urlCategory = searchParams.get("category") || "";
-
-    setTypeFilter(urlType);
-    setMonthFilter(urlMonth);
-    setCategoryFilter(urlCategory);
+    setTypeFilter(searchParams.get("type") || "");
+    setMonthFilter(searchParams.get("month") || "");
+    setCategoryFilter(searchParams.get("category") || "");
   }, [searchParams]);
 
   const fetchTransactions = async () => {
@@ -39,8 +35,7 @@ function TransactionsPage() {
       setTransactions(response.data);
     } catch (error) {
       console.error("Failed to load transactions:", error);
-      localStorage.removeItem("token");
-      navigate("/", { replace: true });
+      handleApiAuthError(error, navigate);
     } finally {
       setLoading(false);
     }
@@ -61,30 +56,21 @@ function TransactionsPage() {
   }, [transactions]);
 
   const availableCategories = useMemo(() => {
-    const categories = new Set(transactions.map((transaction) => transaction.category));
-    return Array.from(categories).sort();
+    return Array.from(
+      new Set(transactions.map((transaction) => transaction.category))
+    ).sort();
   }, [transactions]);
 
   const filteredTransactions = useMemo(() => {
     return transactions
       .filter((transaction) => {
-        if (typeFilter && transaction.type !== typeFilter) {
-          return false;
-        }
+        const transactionMonth = new Date(transaction.date)
+          .toISOString()
+          .slice(0, 7);
 
-        if (monthFilter) {
-          const transactionMonth = new Date(transaction.date)
-            .toISOString()
-            .slice(0, 7);
-
-          if (transactionMonth !== monthFilter) {
-            return false;
-          }
-        }
-
-        if (categoryFilter && transaction.category !== categoryFilter) {
-          return false;
-        }
+        if (typeFilter && transaction.type !== typeFilter) return false;
+        if (monthFilter && transactionMonth !== monthFilter) return false;
+        if (categoryFilter && transaction.category !== categoryFilter) return false;
 
         return true;
       })
@@ -94,9 +80,10 @@ function TransactionsPage() {
   const handleDelete = async (transactionId) => {
     try {
       await api.delete(`/transactions/${transactionId}`);
-      fetchTransactions();
+      await fetchTransactions();
     } catch (error) {
       console.error("Failed to delete transaction:", error);
+      handleApiAuthError(error, navigate);
     }
   };
 
@@ -104,13 +91,13 @@ function TransactionsPage() {
     fileInputRef.current?.click();
   };
 
-  const handleDismissImportMessage = () => {
+  const clearImportMessages = () => {
     setImportResult(null);
     setImportError("");
   };
 
-  const handleCsvUpload = async (e) => {
-    const file = e.target.files[0];
+  const handleCsvUpload = async (event) => {
+    const file = event.target.files?.[0];
     if (!file) return;
 
     setSelectedFileName(file.name);
@@ -130,11 +117,15 @@ function TransactionsPage() {
 
       setImportResult(response.data);
       await fetchTransactions();
-    } catch (err) {
-      setImportError(err.response?.data?.detail || "CSV import failed");
+    } catch (error) {
+      console.error("CSV import failed:", error);
+
+      if (!handleApiAuthError(error, navigate)) {
+        setImportError(error.response?.data?.detail || "CSV import failed");
+      }
     } finally {
       setIsUploading(false);
-      e.target.value = "";
+      event.target.value = "";
     }
   };
 
@@ -146,7 +137,10 @@ function TransactionsPage() {
       setBulkSuggestions(response.data.suggestions || []);
     } catch (error) {
       console.error("Failed to analyze transactions:", error);
-      setBulkMessage("Failed to analyze transactions.");
+
+      if (!handleApiAuthError(error, navigate)) {
+        setBulkMessage("Failed to analyze transactions.");
+      }
     } finally {
       setBulkLoading(false);
     }
@@ -170,7 +164,10 @@ function TransactionsPage() {
       await fetchTransactions();
     } catch (error) {
       console.error("Failed to apply suggestions:", error);
-      setBulkMessage("Failed to apply suggested categories.");
+
+      if (!handleApiAuthError(error, navigate)) {
+        setBulkMessage("Failed to apply suggested categories.");
+      }
     } finally {
       setBulkApplying(false);
     }
@@ -276,7 +273,7 @@ function TransactionsPage() {
                   <button
                     type="button"
                     className="dismiss-message-button"
-                    onClick={handleDismissImportMessage}
+                    onClick={clearImportMessages}
                   >
                     Dismiss
                   </button>
@@ -312,7 +309,7 @@ function TransactionsPage() {
                   <button
                     type="button"
                     className="dismiss-message-button dismiss-error-button"
-                    onClick={handleDismissImportMessage}
+                    onClick={clearImportMessages}
                   >
                     Dismiss
                   </button>
@@ -364,6 +361,7 @@ function TransactionsPage() {
                         <strong>{item.suggested_category}</strong>
                       </p>
                     </div>
+
                     <span className="bulk-confidence-pill">
                       {Math.round(item.confidence * 100)}%
                     </span>
