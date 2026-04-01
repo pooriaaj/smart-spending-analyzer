@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import api from "../services/api";
 import {
@@ -15,14 +15,7 @@ import {
 } from "recharts";
 
 function AnalyticsPage() {
-  const [summary, setSummary] = useState(null);
-  const [topCategory, setTopCategory] = useState(null);
-  const [categoryBreakdown, setCategoryBreakdown] = useState([]);
-  const [monthlySummary, setMonthlySummary] = useState([]);
-  const [allTransactions, setAllTransactions] = useState([]);
-  const [spendingInsights, setSpendingInsights] = useState(null);
-  const [overspendingAlerts, setOverspendingAlerts] = useState(null);
-  const [categoryTrends, setCategoryTrends] = useState(null);
+  const [dashboardData, setDashboardData] = useState(null);
   const [selectedMonth, setSelectedMonth] = useState("");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
@@ -55,29 +48,6 @@ function AnalyticsPage() {
     return () => observer.disconnect();
   }, []);
 
-  const chartTheme = useMemo(() => {
-    const isDark = themeMode === "dark";
-
-    return {
-      text: isDark ? "#cbd5e1" : "#475569",
-      grid: isDark ? "rgba(148, 163, 184, 0.12)" : "rgba(15, 23, 42, 0.08)",
-      tooltipBg: isDark ? "rgba(15, 23, 42, 0.96)" : "rgba(255, 255, 255, 0.96)",
-      tooltipBorder: isDark ? "rgba(148, 163, 184, 0.16)" : "rgba(15, 23, 42, 0.08)",
-      incomeBar: isDark ? "#4ade80" : "#16a34a",
-      expenseBar: isDark ? "#f87171" : "#dc2626",
-      pieColors: isDark
-        ? ["#60a5fa", "#4ade80", "#f87171", "#fbbf24", "#a78bfa", "#22d3ee"]
-        : ["#2563eb", "#16a34a", "#dc2626", "#f59e0b", "#7c3aed", "#0891b2"],
-    };
-  }, [themeMode]);
-
-  const availableCategories = useMemo(() => {
-    const categories = new Set(
-      allTransactions.map((transaction) => transaction.category)
-    );
-    return Array.from(categories).sort();
-  }, [allTransactions]);
-
   useEffect(() => {
     const urlMonth = searchParams.get("month") || "";
     const urlCategory = searchParams.get("category") || "";
@@ -86,68 +56,36 @@ function AnalyticsPage() {
     if (urlCategory) setSelectedCategory(urlCategory);
   }, [searchParams]);
 
-  const fetchAnalyticsData = useCallback(async () => {
-    try {
-      const queryParams = {
-        params: {
-          month: selectedMonth || undefined,
-          start_date: startDate || undefined,
-          end_date: endDate || undefined,
-          transaction_type: selectedType || undefined,
-          category: selectedCategory || undefined,
-        },
-      };
+  useEffect(() => {
+    const fetchDashboardAnalytics = async () => {
+      try {
+        setLoading(true);
 
-      const [
-        summaryRes,
-        topCategoryRes,
-        categoryBreakdownRes,
-        monthlySummaryRes,
-        allTransactionsRes,
-        insightsRes,
-        alertsRes,
-        trendsRes,
-      ] = await Promise.all([
-        api.get("/analytics/summary", queryParams),
-        api.get("/analytics/top-expense-category", queryParams),
-        api.get("/analytics/category-breakdown", queryParams),
-        api.get("/analytics/monthly-summary", {
+        const response = await api.get("/analytics/dashboard", {
           params: {
+            month: selectedMonth || undefined,
             start_date: startDate || undefined,
             end_date: endDate || undefined,
             transaction_type: selectedType || undefined,
             category: selectedCategory || undefined,
           },
-        }),
-        api.get("/transactions/"),
-        api.get("/analytics/spending-insights"),
-        api.get("/analytics/overspending-alerts"),
-        api.get("/analytics/category-trends"),
-      ]);
+        });
 
-      setSummary(summaryRes.data);
-      setTopCategory(topCategoryRes.data);
-      setCategoryBreakdown(categoryBreakdownRes.data);
-      setMonthlySummary(monthlySummaryRes.data);
-      setAllTransactions(allTransactionsRes.data);
-      setSpendingInsights(insightsRes.data);
-      setOverspendingAlerts(alertsRes.data);
-      setCategoryTrends(trendsRes.data);
-    } catch (error) {
-      console.error("Failed to load analytics data:", error);
+        setDashboardData(response.data);
+      } catch (error) {
+        console.error("Failed to load analytics data:", error);
 
-      if (error.response?.status === 401) {
-        localStorage.removeItem("token");
-        navigate("/", { replace: true });
+        if (error.response?.status === 401) {
+          localStorage.removeItem("token");
+          navigate("/", { replace: true });
+        }
+      } finally {
+        setLoading(false);
       }
-    } finally {
-      setLoading(false);
-    }
-  }, [navigate, selectedMonth, startDate, endDate, selectedType, selectedCategory]);
+    };
 
-  useEffect(() => {
-    fetchAnalyticsData();
-  }, [fetchAnalyticsData]);
+    fetchDashboardAnalytics();
+  }, [navigate, selectedMonth, startDate, endDate, selectedType, selectedCategory]);
 
   useEffect(() => {
     const section = searchParams.get("section");
@@ -171,6 +109,28 @@ function AnalyticsPage() {
       }, 150);
     }
   }, [searchParams, loading]);
+
+  const chartTheme = useMemo(() => {
+    const isDark = themeMode === "dark";
+
+    return {
+      text: isDark ? "#cbd5e1" : "#475569",
+      grid: isDark ? "rgba(148, 163, 184, 0.12)" : "rgba(15, 23, 42, 0.08)",
+      tooltipBg: isDark ? "rgba(15, 23, 42, 0.96)" : "rgba(255, 255, 255, 0.96)",
+      tooltipBorder: isDark ? "rgba(148, 163, 184, 0.16)" : "rgba(15, 23, 42, 0.08)",
+      incomeBar: isDark ? "#4ade80" : "#16a34a",
+      expenseBar: isDark ? "#f87171" : "#dc2626",
+      pieColors: isDark
+        ? ["#60a5fa", "#4ade80", "#f87171", "#fbbf24", "#a78bfa", "#22d3ee"]
+        : ["#2563eb", "#16a34a", "#dc2626", "#f59e0b", "#7c3aed", "#0891b2"],
+    };
+  }, [themeMode]);
+
+  const availableCategories = useMemo(() => {
+    const fromBreakdown =
+      dashboardData?.category_breakdown?.map((item) => item.category) || [];
+    return Array.from(new Set(fromBreakdown)).sort();
+  }, [dashboardData]);
 
   const clearFilters = () => {
     setSelectedMonth("");
@@ -214,6 +174,18 @@ function AnalyticsPage() {
       </div>
     );
   }
+
+  const summary = dashboardData?.summary || {
+    total_income: 0,
+    total_expenses: 0,
+    balance: 0,
+  };
+  const topCategory = dashboardData?.top_category;
+  const categoryBreakdown = dashboardData?.category_breakdown || [];
+  const monthlySummary = dashboardData?.monthly_summary || [];
+  const spendingInsights = dashboardData?.spending_insights;
+  const overspendingAlerts = dashboardData?.overspending_alerts;
+  const categoryTrends = dashboardData?.category_trends;
 
   return (
     <div className="page-container dashboard-page">
@@ -329,17 +301,17 @@ function AnalyticsPage() {
         <div className="summary-grid">
           <div className="summary-card income-card">
             <span className="card-label">Total Income</span>
-            <p>${summary?.total_income?.toFixed(2)}</p>
+            <p>${summary.total_income.toFixed(2)}</p>
           </div>
 
           <div className="summary-card expense-card">
             <span className="card-label">Total Expenses</span>
-            <p>${summary?.total_expenses?.toFixed(2)}</p>
+            <p>${summary.total_expenses.toFixed(2)}</p>
           </div>
 
           <div className="summary-card balance-card">
             <span className="card-label">Balance</span>
-            <p>${summary?.balance?.toFixed(2)}</p>
+            <p>${summary.balance.toFixed(2)}</p>
           </div>
 
           <div className="summary-card top-card">
