@@ -72,7 +72,6 @@ def get_summary(
     )
 
     totals = query.one()
-
     total_income = float(totals.total_income or 0.0)
     total_expenses = float(totals.total_expenses or 0.0)
 
@@ -133,9 +132,11 @@ def get_monthly_summary(
         category=category,
     )
 
+    month_expr = func.to_char(Transaction.date, "YYYY-MM")
+
     rows = (
         query.with_entities(
-            func.to_char(Transaction.date, "YYYY-MM").label("month"),
+            month_expr.label("month"),
             func.coalesce(
                 func.sum(case((Transaction.type == "income", Transaction.amount), else_=0.0)),
                 0.0,
@@ -145,8 +146,8 @@ def get_monthly_summary(
                 0.0,
             ).label("expenses"),
         )
-        .group_by(func.to_char(Transaction.date, "YYYY-MM"))
-        .order_by(func.to_char(Transaction.date, "YYYY-MM"))
+        .group_by(month_expr)
+        .order_by(month_expr)
         .all()
     )
 
@@ -538,10 +539,45 @@ def format_currency(value: float) -> str:
     return f"${value:.2f}"
 
 
-def build_assistant_actions(snapshot: dict[str, Any], intent: str) -> list[dict[str, Any]]:
+def classify_question(question: str, context_text: str) -> str:
+    text = f"{context_text} {question}".lower().strip()
+
+    if any(word in text for word in ["balance", "left over", "how much do i have"]):
+        return "balance"
+
+    if any(word in text for word in ["top expense", "top category", "biggest category", "most spent"]):
+        return "top_category"
+
+    if any(word in text for word in ["increase", "decrease", "trend", "last month", "this month", "overspend", "spending change"]):
+        return "spending_change"
+
+    if any(word in text for word in ["save", "saving", "advice", "reduce", "cut spending", "budget"]):
+        return "saving_advice"
+
+    if any(word in text for word in ["summary", "summarize", "overview", "my finances"]):
+        return "summary"
+
+    if any(word in text for word in ["driving this", "which category", "what caused", "reason for increase"]):
+        return "driver"
+
+    if any(word in text for word in ["alert", "warning", "problem", "risk"]):
+        return "alerts"
+
+    if any(word in text for word in ["recent", "latest transactions", "last transactions"]):
+        return "recent"
+
+    return "general"
+
+
+def build_assistant_actions(
+    snapshot: dict[str, Any],
+    intent: str,
+    driver_category: str | None = None,
+) -> list[dict[str, Any]]:
     actions: list[dict[str, Any]] = []
     top_category = snapshot["top_category"]
     current_month = snapshot["current_month"]
+    target_category = driver_category or top_category
 
     if intent == "balance":
         actions.append(
@@ -554,12 +590,12 @@ def build_assistant_actions(snapshot: dict[str, Any], intent: str) -> list[dict[
         )
 
     elif intent == "top_category":
-        if top_category:
+        if target_category:
             actions.append(
                 {
-                    "label": f"Open {top_category} expenses",
+                    "label": f"Open {target_category} expenses",
                     "page": "transactions",
-                    "category": top_category,
+                    "category": target_category,
                     "transaction_type": "expense",
                 }
             )
@@ -586,6 +622,16 @@ def build_assistant_actions(snapshot: dict[str, Any], intent: str) -> list[dict[
                 "section": "trends",
             }
         )
+        if target_category:
+            actions.append(
+                {
+                    "label": f"Review {target_category} expenses",
+                    "page": "transactions",
+                    "category": target_category,
+                    "transaction_type": "expense",
+                    "month": current_month,
+                }
+            )
 
     elif intent == "saving_advice":
         actions.append(
@@ -595,12 +641,12 @@ def build_assistant_actions(snapshot: dict[str, Any], intent: str) -> list[dict[
                 "section": "insights",
             }
         )
-        if top_category:
+        if target_category:
             actions.append(
                 {
-                    "label": f"Review {top_category} transactions",
+                    "label": f"Review {target_category} transactions",
                     "page": "transactions",
-                    "category": top_category,
+                    "category": target_category,
                     "transaction_type": "expense",
                 }
             )
@@ -624,15 +670,35 @@ def build_assistant_actions(snapshot: dict[str, Any], intent: str) -> list[dict[
                 "section": "trends",
             }
         )
-        if top_category:
+        if target_category:
             actions.append(
                 {
-                    "label": f"Inspect {top_category} expenses",
+                    "label": f"Inspect {target_category} expenses",
                     "page": "transactions",
-                    "category": top_category,
+                    "category": target_category,
                     "transaction_type": "expense",
+                    "month": current_month,
                 }
             )
+
+    elif intent == "alerts":
+        actions.append(
+            {
+                "label": "Open overspending alerts",
+                "page": "analytics",
+                "section": "alerts",
+            }
+        )
+        actions.append(
+            {
+                "label": "Open category trends",
+                "page": "analytics",
+                "section": "trends",
+            }
+        )
+
+    elif intent == "recent":
+        actions.append({"label": "View all transactions", "page": "transactions"})
 
     return actions[:3]
 
@@ -645,10 +711,13 @@ def generate_assistant_response(
 ) -> dict[str, Any]:
     history = history or []
     snapshot = build_financial_snapshot(db, user_id)
+    category_trends = get_category_trends(db, user_id)
+    overspending_alerts = get_overspending_alerts(db, user_id)
+    recent_transactions = get_recent_transactions(db, user_id, limit=5)
 
     q = (question or "").strip().lower()
     context_text = extract_recent_context(history)
-    combined_text = f"{context_text} {q}".strip()
+    intent = classify_question(q, context_text)
 
     total_income = snapshot["total_income"]
     total_expenses = snapshot["total_expenses"]
@@ -661,6 +730,10 @@ def generate_assistant_response(
     current_month_expenses = snapshot["current_month_expenses"]
     previous_month_expenses = snapshot["previous_month_expenses"]
     expense_change_percent = snapshot["expense_change_percent"]
+
+    primary_driver = None
+    if category_trends.get("top_increases"):
+        primary_driver = category_trends["top_increases"][0]["category"]
 
     if total_income == 0 and total_expenses == 0:
         return {
@@ -678,7 +751,7 @@ def generate_assistant_response(
 
     if not q:
         return {
-            "answer": "Ask me about your balance, your spending trend, your biggest expense category, or ways to save money.",
+            "answer": "Ask me about your balance, spending trends, biggest categories, alerts, recent transactions, or ways to save money.",
             "supporting_points": [],
             "suggested_followups": [
                 "What is my balance?",
@@ -688,7 +761,7 @@ def generate_assistant_response(
             "suggested_actions": [],
         }
 
-    if "balance" in combined_text:
+    if intent == "balance":
         answer = (
             f"Your current recorded balance is {format_currency(balance)}."
             if balance >= 0
@@ -707,7 +780,7 @@ def generate_assistant_response(
             "suggested_actions": build_assistant_actions(snapshot, "balance"),
         }
 
-    if "top expense" in combined_text or "top category" in combined_text or "biggest category" in combined_text:
+    if intent == "top_category":
         if top_category:
             supporting_points = [f"Total expenses recorded: {format_currency(total_expenses)}"]
             if top_category_share_percent is not None:
@@ -737,13 +810,7 @@ def generate_assistant_response(
             "suggested_actions": [],
         }
 
-    if (
-        "increase" in combined_text
-        or "overspend" in combined_text
-        or "spending" in combined_text
-        or "last month" in combined_text
-        or "this month" in combined_text
-    ):
+    if intent == "spending_change":
         if current_month and previous_month and expense_change_percent is not None:
             if expense_change_percent > 0:
                 answer = (
@@ -754,22 +821,37 @@ def generate_assistant_response(
                     f"Your spending decreased by {abs(expense_change_percent):.1f}% in {current_month} compared with {previous_month}."
                 )
             else:
-                answer = (
-                    f"Your spending stayed flat in {current_month} compared with {previous_month}."
-                )
+                answer = f"Your spending stayed flat in {current_month} compared with {previous_month}."
+
+            supporting_points = [
+                f"{current_month}: {format_currency(current_month_expenses)}",
+                f"{previous_month}: {format_currency(previous_month_expenses)}",
+            ]
+
+            if primary_driver:
+                supporting_points.append(f"Largest increasing category: {primary_driver}")
+
+            if overspending_alerts.get("alerts"):
+                high_or_medium = [
+                    alert["title"]
+                    for alert in overspending_alerts["alerts"]
+                    if alert["level"] in {"high", "medium"}
+                ]
+                if high_or_medium:
+                    supporting_points.append(f"Active alert: {high_or_medium[0]}")
 
             return {
                 "answer": answer,
-                "supporting_points": [
-                    f"{current_month}: {format_currency(current_month_expenses)}",
-                    f"{previous_month}: {format_currency(previous_month_expenses)}",
-                    f"Top expense category: {top_category or 'N/A'}",
-                ],
+                "supporting_points": supporting_points,
                 "suggested_followups": [
                     "Which category is driving this?",
                     "Give me saving advice",
                 ],
-                "suggested_actions": build_assistant_actions(snapshot, "spending_change"),
+                "suggested_actions": build_assistant_actions(
+                    snapshot,
+                    "spending_change",
+                    driver_category=primary_driver,
+                ),
             }
 
         return {
@@ -784,22 +866,22 @@ def generate_assistant_response(
             "suggested_actions": [],
         }
 
-    if (
-        "advice" in combined_text
-        or "save" in combined_text
-        or "saving" in combined_text
-        or "reduce it" in combined_text
-        or "reduce" in combined_text
-    ):
+    if intent == "saving_advice":
         supporting_points = [f"Current balance: {format_currency(balance)}"]
         if top_category:
             supporting_points.append(
                 f"Top expense category: {top_category} ({format_currency(top_category_amount)})"
             )
+        if primary_driver and primary_driver != top_category:
+            supporting_points.append(f"Fastest-growing category: {primary_driver}")
         if expense_change_percent is not None and expense_change_percent > 0:
             supporting_points.append(f"Recent spending change: +{expense_change_percent:.1f}%")
 
-        if top_category and top_category_share_percent is not None and top_category_share_percent >= 35:
+        if primary_driver:
+            answer = (
+                f"The strongest place to start is {primary_driver}, because it appears to be the category pushing your spending upward most recently."
+            )
+        elif top_category and top_category_share_percent is not None and top_category_share_percent >= 35:
             answer = (
                 f"The strongest place to start is {top_category}. It is currently absorbing a large share of your spending, so even a modest reduction there could improve your budget noticeably."
             )
@@ -819,15 +901,14 @@ def generate_assistant_response(
                 "What is my top expense category?",
                 "Did my spending increase?",
             ],
-            "suggested_actions": build_assistant_actions(snapshot, "saving_advice"),
+            "suggested_actions": build_assistant_actions(
+                snapshot,
+                "saving_advice",
+                driver_category=primary_driver,
+            ),
         }
 
-    if (
-        "summary" in combined_text
-        or "summarize" in combined_text
-        or "overview" in combined_text
-        or "my finances" in combined_text
-    ):
+    if intent == "summary":
         supporting_points: list[str] = []
         if current_month:
             supporting_points.append(
@@ -837,6 +918,8 @@ def generate_assistant_response(
             supporting_points.append(
                 f"Top expense category: {top_category} ({format_currency(top_category_amount)})"
             )
+        if primary_driver:
+            supporting_points.append(f"Fastest-growing category: {primary_driver}")
         if expense_change_percent is not None:
             if expense_change_percent > 0:
                 supporting_points.append(
@@ -861,22 +944,45 @@ def generate_assistant_response(
             "suggested_actions": build_assistant_actions(snapshot, "summary"),
         }
 
-    if "which category" in combined_text or "driving this" in combined_text:
-        if top_category:
-            supporting_points = [f"Total expenses: {format_currency(total_expenses)}"]
-            if top_category_share_percent is not None:
+    if intent == "driver":
+        if primary_driver:
+            driver_info = next(
+                (item for item in category_trends.get("top_increases", []) if item["category"] == primary_driver),
+                None,
+            )
+
+            supporting_points = []
+            if driver_info:
                 supporting_points.append(
-                    f"{top_category} share of total expenses: {top_category_share_percent:.1f}%"
+                    f"{primary_driver} change: {format_currency(driver_info['change_amount'])}"
                 )
-            if current_month:
-                supporting_points.append(f"Latest expense month: {current_month}")
+                supporting_points.append(
+                    f"{current_month}: {format_currency(driver_info['current_amount'])}"
+                )
+                supporting_points.append(
+                    f"{previous_month}: {format_currency(driver_info['previous_amount'])}"
+                )
 
             return {
-                "answer": (
-                    f"The strongest current expense driver appears to be {top_category}, "
-                    f"with {format_currency(top_category_amount)} in recorded spending."
-                ),
+                "answer": f"The strongest current spending driver appears to be {primary_driver}.",
                 "supporting_points": supporting_points,
+                "suggested_followups": [
+                    "How can I reduce it?",
+                    "Summarize my finances",
+                ],
+                "suggested_actions": build_assistant_actions(
+                    snapshot,
+                    "driver",
+                    driver_category=primary_driver,
+                ),
+            }
+
+        if top_category:
+            return {
+                "answer": f"The strongest current expense driver appears to be {top_category}, with {format_currency(top_category_amount)} in recorded spending.",
+                "supporting_points": [
+                    f"Total expenses: {format_currency(total_expenses)}",
+                ],
                 "suggested_followups": [
                     "How can I reduce it?",
                     "Summarize my finances",
@@ -884,8 +990,42 @@ def generate_assistant_response(
                 "suggested_actions": build_assistant_actions(snapshot, "driver"),
             }
 
+    if intent == "alerts":
+        alerts = overspending_alerts.get("alerts", [])
+        if alerts:
+            first_alert = alerts[0]
+            return {
+                "answer": f"The main current alert is: {first_alert['title']}.",
+                "supporting_points": [alert["message"] for alert in alerts[:3]],
+                "suggested_followups": [
+                    "Which category is driving this?",
+                    "Give me saving advice",
+                ],
+                "suggested_actions": build_assistant_actions(
+                    snapshot,
+                    "alerts",
+                    driver_category=primary_driver,
+                ),
+            }
+
+    if intent == "recent":
+        if recent_transactions:
+            points = [
+                f"{tx.description} — {format_currency(tx.amount)} ({tx.category})"
+                for tx in recent_transactions[:5]
+            ]
+            return {
+                "answer": "Here are your most recent recorded transactions.",
+                "supporting_points": points,
+                "suggested_followups": [
+                    "Did my spending increase?",
+                    "What is my top expense category?",
+                ],
+                "suggested_actions": build_assistant_actions(snapshot, "recent"),
+            }
+
     return {
-        "answer": "I can help with your balance, spending trends, top expense categories, savings ideas, or a full financial summary.",
+        "answer": "I can help with your balance, spending trends, top expense categories, alerts, recent transactions, savings ideas, or a full financial summary.",
         "supporting_points": [
             f"Current balance: {format_currency(balance)}",
             f"Top expense category: {top_category or 'N/A'}",
@@ -901,11 +1041,18 @@ def generate_assistant_response(
 
 def generate_assistant_suggestions(db: Session, user_id: int) -> list[str]:
     snapshot = build_financial_snapshot(db, user_id)
+    category_trends = get_category_trends(db, user_id)
+
     suggestions: list[str] = ["What is my balance?"]
 
     if snapshot["top_category"]:
         suggestions.append(f"Why is {snapshot['top_category']} my top expense category?")
         suggestions.append(f"How can I reduce {snapshot['top_category']} spending?")
+
+    if category_trends.get("top_increases"):
+        suggestions.append(
+            f"Why did my {category_trends['top_increases'][0]['category']} spending increase?"
+        )
 
     if snapshot["expense_change_percent"] is not None:
         if snapshot["expense_change_percent"] > 0:
@@ -916,6 +1063,7 @@ def generate_assistant_suggestions(db: Session, user_id: int) -> list[str]:
     if snapshot["current_month"]:
         suggestions.append(f"Summarize my finances for {snapshot['current_month']}")
 
+    suggestions.append("Show my recent transactions")
     suggestions.append("Give me saving advice")
 
     unique_suggestions: list[str] = []
@@ -923,7 +1071,7 @@ def generate_assistant_suggestions(db: Session, user_id: int) -> list[str]:
         if item not in unique_suggestions:
             unique_suggestions.append(item)
 
-    return unique_suggestions[:6]
+    return unique_suggestions[:7]
 
 
 def get_dashboard_payload(

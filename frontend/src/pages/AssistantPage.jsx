@@ -8,7 +8,7 @@ function AssistantPage() {
     {
       role: "assistant",
       content:
-        "Hi — I’m your financial assistant. Ask me about your balance, spending, categories, or savings.",
+        "Hi — I’m your financial assistant. Ask me about your balance, spending changes, alerts, recent transactions, categories, or savings.",
       data: null,
     },
   ]);
@@ -23,6 +23,7 @@ function AssistantPage() {
     "What is my balance?",
     "What is my top expense category?",
     "Did my spending increase?",
+    "Show my recent transactions",
     "Give me saving advice",
     "Summarize my finances",
   ];
@@ -145,7 +146,7 @@ function AssistantPage() {
             <p className="eyebrow-text">Smart Spending Analyzer</p>
             <h1>Financial Assistant</h1>
             <p className="hero-subtitle">
-              Ask questions about your balance, spending, categories, and savings.
+              Ask questions about your balance, trends, alerts, categories, recent activity, and savings.
             </p>
           </div>
 
@@ -193,7 +194,7 @@ function AssistantPage() {
           <div className="assistant-input-row">
             <input
               type="text"
-              placeholder="Ask something like: How can I reduce my top expense category?"
+              placeholder="Ask something like: Why did my spending increase?"
               value={question}
               onChange={(e) => setQuestion(e.target.value)}
               className="assistant-input"
@@ -217,7 +218,7 @@ function AssistantPage() {
         <div className="dashboard-card assistant-chat-card">
           <div className="section-header">
             <h2>Conversation</h2>
-            <p>Your assistant keeps short conversation context for follow-up questions.</p>
+            <p>Your assistant keeps short conversation context and uses your analytics data to answer better.</p>
           </div>
 
           <div className="assistant-chat-list">
