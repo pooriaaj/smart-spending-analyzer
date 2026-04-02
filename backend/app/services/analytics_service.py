@@ -8,6 +8,7 @@ from sqlalchemy.orm import Query, Session
 
 from app.models import Transaction
 
+from app.services.llm_service import generate_llm_assistant_response
 
 def parse_iso_date(value: str | None) -> date | None:
     if not value:
@@ -734,6 +735,79 @@ def generate_assistant_response(
     primary_driver = None
     if category_trends.get("top_increases"):
         primary_driver = category_trends["top_increases"][0]["category"]
+
+    llm_result = generate_llm_assistant_response(
+        question=question,
+        conversation_context=context_text,
+        snapshot=snapshot,
+        category_trends=category_trends,
+        overspending_alerts=overspending_alerts,
+        recent_transactions=recent_transactions,
+    )
+
+    if llm_result:
+        suggested_actions = []
+
+        action_type = llm_result.get("action_type", "none")
+        action_label = llm_result.get("action_label")
+        action_target = llm_result.get("action_target")
+
+        if action_type == "transactions":
+            suggested_actions.append(
+                {
+                    "label": action_label or "Review transactions",
+                    "page": "transactions",
+                    "category": action_target if action_target and action_target.lower() != "none" else primary_driver or top_category,
+                    "transaction_type": "expense",
+                    "month": current_month,
+                }
+            )
+
+        elif action_type == "dashboard":
+            suggested_actions.append(
+                {
+                    "label": action_label or "Open dashboard",
+                    "page": "dashboard",
+                }
+            )
+
+        elif action_type == "analytics":
+            target_section = "insights"
+            if action_target:
+                lower_target = action_target.lower()
+                if "alert" in lower_target:
+                    target_section = "alerts"
+                elif "trend" in lower_target:
+                    target_section = "trends"
+                elif "month" in lower_target or "summary" in lower_target:
+                    target_section = "monthly"
+                elif "categor" in lower_target:
+                    target_section = "categories"
+
+            suggested_actions.append(
+                {
+                    "label": action_label or "Open analytics",
+                    "page": "analytics",
+                    "section": target_section,
+                    "month": current_month,
+                }
+            )
+
+        elif action_type == "external_resource":
+            suggested_actions.append(
+                {
+                    "label": action_label or "Explore financial learning resources",
+                    "page": "external_resource",
+                    "section": action_target or "budgeting basics",
+                }
+            )
+
+        return {
+            "answer": llm_result["answer"],
+            "supporting_points": llm_result["supporting_points"],
+            "suggested_followups": llm_result["suggested_followups"],
+            "suggested_actions": suggested_actions,
+        }
 
     if total_income == 0 and total_expenses == 0:
         return {
