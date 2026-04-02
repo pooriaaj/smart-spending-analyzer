@@ -19,6 +19,15 @@ function TransactionsPage() {
   const [bulkApplying, setBulkApplying] = useState(false);
   const [bulkMessage, setBulkMessage] = useState("");
 
+  const [editingId, setEditingId] = useState(null);
+  const [editForm, setEditForm] = useState({
+    amount: "",
+    category: "",
+    description: "",
+    date: "",
+    type: "expense",
+  });
+
   const fileInputRef = useRef(null);
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -83,6 +92,46 @@ function TransactionsPage() {
       await fetchTransactions();
     } catch (error) {
       console.error("Failed to delete transaction:", error);
+      handleApiAuthError(error, navigate);
+    }
+  };
+
+  const startEdit = (transaction) => {
+    setEditingId(transaction.id);
+    setEditForm({
+      amount: transaction.amount,
+      category: transaction.category,
+      description: transaction.description,
+      date: transaction.date,
+      type: transaction.type,
+    });
+  };
+
+  const cancelEdit = () => {
+    setEditingId(null);
+    setEditForm({
+      amount: "",
+      category: "",
+      description: "",
+      date: "",
+      type: "expense",
+    });
+  };
+
+  const saveEdit = async (transactionId) => {
+    try {
+      await api.put(`/transactions/${transactionId}`, {
+        amount: Number(editForm.amount),
+        category: editForm.category,
+        description: editForm.description,
+        date: editForm.date,
+        type: editForm.type,
+      });
+
+      cancelEdit();
+      await fetchTransactions();
+    } catch (error) {
+      console.error("Failed to update transaction:", error);
       handleApiAuthError(error, navigate);
     }
   };
@@ -462,32 +511,136 @@ function TransactionsPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredTransactions.map((transaction) => (
-                    <tr key={transaction.id}>
-                      <td>{transaction.date}</td>
-                      <td>{transaction.type}</td>
-                      <td>{transaction.category}</td>
-                      <td>{transaction.description}</td>
-                      <td
-                        className={
-                          transaction.type === "income"
-                            ? "income-text"
-                            : "expense-text"
-                        }
-                      >
-                        {transaction.type === "income" ? "+" : "-"}$
-                        {transaction.amount.toFixed(2)}
-                      </td>
-                      <td>
-                        <button
-                          className="delete-button"
-                          onClick={() => handleDelete(transaction.id)}
+                  {filteredTransactions.map((transaction) => {
+                    const isEditing = editingId === transaction.id;
+
+                    return (
+                      <tr key={transaction.id}>
+                        <td>
+                          {isEditing ? (
+                            <input
+                              type="date"
+                              value={editForm.date}
+                              onChange={(e) =>
+                                setEditForm({ ...editForm, date: e.target.value })
+                              }
+                            />
+                          ) : (
+                            transaction.date
+                          )}
+                        </td>
+
+                        <td>
+                          {isEditing ? (
+                            <select
+                              value={editForm.type}
+                              onChange={(e) =>
+                                setEditForm({ ...editForm, type: e.target.value })
+                              }
+                            >
+                              <option value="income">Income</option>
+                              <option value="expense">Expense</option>
+                            </select>
+                          ) : (
+                            transaction.type
+                          )}
+                        </td>
+
+                        <td>
+                          {isEditing ? (
+                            <input
+                              type="text"
+                              value={editForm.category}
+                              onChange={(e) =>
+                                setEditForm({ ...editForm, category: e.target.value })
+                              }
+                            />
+                          ) : (
+                            transaction.category
+                          )}
+                        </td>
+
+                        <td>
+                          {isEditing ? (
+                            <input
+                              type="text"
+                              value={editForm.description}
+                              onChange={(e) =>
+                                setEditForm({
+                                  ...editForm,
+                                  description: e.target.value,
+                                })
+                              }
+                            />
+                          ) : (
+                            transaction.description
+                          )}
+                        </td>
+
+                        <td
+                          className={
+                            !isEditing
+                              ? transaction.type === "income"
+                                ? "income-text"
+                                : "expense-text"
+                              : ""
+                          }
                         >
-                          Delete
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
+                          {isEditing ? (
+                            <input
+                              type="number"
+                              step="0.01"
+                              value={editForm.amount}
+                              onChange={(e) =>
+                                setEditForm({ ...editForm, amount: e.target.value })
+                              }
+                            />
+                          ) : (
+                            <>
+                              {transaction.type === "income" ? "+" : "-"}$
+                              {transaction.amount.toFixed(2)}
+                            </>
+                          )}
+                        </td>
+
+                        <td>
+                          <div className="transaction-actions-inline">
+                            {isEditing ? (
+                              <>
+                                <button
+                                  className="edit-button"
+                                  onClick={() => saveEdit(transaction.id)}
+                                >
+                                  Save
+                                </button>
+                                <button
+                                  className="secondary-button"
+                                  onClick={cancelEdit}
+                                >
+                                  Cancel
+                                </button>
+                              </>
+                            ) : (
+                              <>
+                                <button
+                                  className="edit-button"
+                                  onClick={() => startEdit(transaction)}
+                                >
+                                  Edit
+                                </button>
+                                <button
+                                  className="delete-button"
+                                  onClick={() => handleDelete(transaction.id)}
+                                >
+                                  Delete
+                                </button>
+                              </>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>

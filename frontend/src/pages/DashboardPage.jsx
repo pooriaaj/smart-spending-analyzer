@@ -103,39 +103,47 @@ function DashboardPage() {
       );
 
       if (salaryMatch) {
-        setSuggestion({
+        const suggested = {
           category: "Salary",
           confidence: 95,
           reason: `Matched keyword '${salaryMatch}' in description.`,
-        });
+        };
+        setSuggestion(suggested);
+        setCategory(suggested.category);
         return;
       }
 
-      setSuggestion({
+      const suggested = {
         category: "Income",
         confidence: 70,
         reason: "No salary keyword matched, used generic income category.",
-      });
+      };
+      setSuggestion(suggested);
+      setCategory(suggested.category);
       return;
     }
 
     for (const [ruleCategory, keywords] of Object.entries(CATEGORY_RULES)) {
       const matchedKeyword = keywords.find((keyword) => text.includes(keyword));
       if (matchedKeyword) {
-        setSuggestion({
+        const suggested = {
           category: ruleCategory.charAt(0).toUpperCase() + ruleCategory.slice(1),
           confidence: 92,
           reason: `Matched keyword '${matchedKeyword}' in description.`,
-        });
+        };
+        setSuggestion(suggested);
+        setCategory(suggested.category);
         return;
       }
     }
 
-    setSuggestion({
+    const suggested = {
       category: "Other",
       confidence: 35,
       reason: "No rule matched, used fallback category.",
-    });
+    };
+    setSuggestion(suggested);
+    setCategory(suggested.category);
   };
 
   const handleAddTransaction = async (e) => {
@@ -231,29 +239,110 @@ function DashboardPage() {
         <div className="summary-grid">
           <div className="summary-card income-card">
             <span className="card-label">Income</span>
-            <p>${summary.total_income.toFixed(2)}</p>
+            <div className="summary-card-content">
+              <p>${summary.total_income.toFixed(2)}</p>
+              <small className="summary-card-note">Total recorded income</small>
+            </div>
           </div>
 
           <div className="summary-card expense-card">
             <span className="card-label">Expenses</span>
-            <p>${summary.total_expenses.toFixed(2)}</p>
+            <div className="summary-card-content">
+              <p>${summary.total_expenses.toFixed(2)}</p>
+              <small className="summary-card-note">Total recorded expenses</small>
+            </div>
           </div>
 
           <div className="summary-card balance-card">
             <span className="card-label">Balance</span>
-            <p>${summary.balance.toFixed(2)}</p>
+            <div className="summary-card-content">
+              <p>${summary.balance.toFixed(2)}</p>
+              <small className="summary-card-note">Income minus expenses</small>
+            </div>
           </div>
 
           <div className="summary-card analytics-summary-card compact-summary-card">
             <span className="card-label">Analytics</span>
-            <p>{dashboardData?.top_category?.category || "Insights"}</p>
-            <button
-              className="analytics-card-button"
-              onClick={() => navigate("/analytics")}
-            >
-              Open Analytics
-            </button>
+            <div className="summary-card-content analytics-card-content">
+              <small className="summary-card-note">Open trends, charts, and insights</small>
+              <button
+                className="analytics-card-button"
+                onClick={() => navigate("/analytics")}
+              >
+                Open Analytics
+              </button>
+            </div>
           </div>
+        </div>
+
+        <div className="dashboard-card large-card">
+          <div className="section-header">
+            <h2>Add Transaction</h2>
+            <p>Add a new income or expense entry and use suggestion help if needed.</p>
+          </div>
+
+          <form className="transaction-form" onSubmit={handleAddTransaction}>
+            <input
+              type="number"
+              step="0.01"
+              placeholder="Amount"
+              value={amount}
+              onChange={(e) => setAmount(e.target.value)}
+            />
+
+            <input
+              type="text"
+              placeholder="Category"
+              value={category}
+              onChange={(e) => setCategory(e.target.value)}
+            />
+
+            <input
+              type="text"
+              placeholder="Description"
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+            />
+
+            <input
+              type="date"
+              value={date}
+              onChange={(e) => setDate(e.target.value)}
+            />
+
+            <select
+              value={transactionType}
+              onChange={(e) => setTransactionType(e.target.value)}
+            >
+              <option value="expense">Expense</option>
+              <option value="income">Income</option>
+            </select>
+
+            <button
+              type="button"
+              className="suggest-button"
+              onClick={suggestCategory}
+            >
+              Suggest Category
+            </button>
+
+            <button type="submit" disabled={submitting}>
+              {submitting ? "Adding..." : "Add Transaction"}
+            </button>
+          </form>
+
+          {formError && <p className="error-text">{formError}</p>}
+
+          {suggestion && (
+            <div className="suggestion-box">
+              <h3>Suggested Category</h3>
+              <p>
+                <strong>{suggestion.category}</strong>
+              </p>
+              <p>Confidence: {suggestion.confidence}%</p>
+              <p>{suggestion.reason}</p>
+            </div>
+          )}
         </div>
 
         <div className="filter-card">
@@ -353,76 +442,6 @@ function DashboardPage() {
               </div>
             )}
           </div>
-        </div>
-
-        <div className="dashboard-card large-card">
-          <div className="section-header">
-            <h2>Add Transaction</h2>
-            <p>Add a new income or expense entry and use suggestion help if needed.</p>
-          </div>
-
-          <form className="transaction-form" onSubmit={handleAddTransaction}>
-            <input
-              type="number"
-              step="0.01"
-              placeholder="Amount"
-              value={amount}
-              onChange={(e) => setAmount(e.target.value)}
-            />
-
-            <input
-              type="text"
-              placeholder="Category"
-              value={category}
-              onChange={(e) => setCategory(e.target.value)}
-            />
-
-            <input
-              type="text"
-              placeholder="Description"
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-            />
-
-            <input
-              type="date"
-              value={date}
-              onChange={(e) => setDate(e.target.value)}
-            />
-
-            <select
-              value={transactionType}
-              onChange={(e) => setTransactionType(e.target.value)}
-            >
-              <option value="expense">Expense</option>
-              <option value="income">Income</option>
-            </select>
-
-            <button
-              type="button"
-              className="suggest-button"
-              onClick={suggestCategory}
-            >
-              Suggest Category
-            </button>
-
-            <button type="submit" disabled={submitting}>
-              {submitting ? "Adding..." : "Add Transaction"}
-            </button>
-          </form>
-
-          {formError && <p className="error-text">{formError}</p>}
-
-          {suggestion && (
-            <div className="suggestion-box">
-              <h3>Suggested Category</h3>
-              <p>
-                <strong>{suggestion.category}</strong>
-              </p>
-              <p>Confidence: {suggestion.confidence}%</p>
-              <p>{suggestion.reason}</p>
-            </div>
-          )}
         </div>
       </div>
     </div>
