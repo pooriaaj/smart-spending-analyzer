@@ -14,11 +14,32 @@ OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
 OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-5.4")
 USE_LLM_ASSISTANT = os.getenv("USE_LLM_ASSISTANT", "false").lower() == "true"
 
-_client: OpenAI | None = OpenAI(api_key=OPENAI_API_KEY) if OPENAI_API_KEY else None
+USE_LOCAL_LLM = os.getenv("USE_LOCAL_LLM", "false").lower() == "true"
+LOCAL_LLM_PROVIDER = os.getenv("LOCAL_LLM_PROVIDER", "ollama").lower()
+LOCAL_LLM_BASE_URL = os.getenv("LOCAL_LLM_BASE_URL", "http://localhost:11434/v1")
+LOCAL_LLM_MODEL = os.getenv("LOCAL_LLM_MODEL", "qwen2.5:7b")
+LOCAL_LLM_API_KEY = os.getenv("LOCAL_LLM_API_KEY", "ollama")
+
+_openai_client: OpenAI | None = OpenAI(api_key=OPENAI_API_KEY) if OPENAI_API_KEY else None
+_local_client: OpenAI | None = (
+    OpenAI(base_url=LOCAL_LLM_BASE_URL, api_key=LOCAL_LLM_API_KEY)
+    if USE_LOCAL_LLM and LOCAL_LLM_PROVIDER == "ollama"
+    else None
+)
+
+print("=== LLM SERVICE CONFIG ===")
+print("USE_LLM_ASSISTANT =", USE_LLM_ASSISTANT)
+print("USE_LOCAL_LLM =", USE_LOCAL_LLM)
+print("LOCAL_LLM_PROVIDER =", LOCAL_LLM_PROVIDER)
+print("LOCAL_LLM_BASE_URL =", LOCAL_LLM_BASE_URL)
+print("LOCAL_LLM_MODEL =", LOCAL_LLM_MODEL)
+print("LOCAL CLIENT CREATED =", _local_client is not None)
+print("OPENAI CLIENT CREATED =", _openai_client is not None)
+print("==========================")
 
 
 def llm_assistant_enabled() -> bool:
-    return USE_LLM_ASSISTANT and _client is not None
+    return USE_LLM_ASSISTANT and (_local_client is not None or _openai_client is not None)
 
 
 def _safe_text(value: Any) -> str:
@@ -35,35 +56,36 @@ def build_finance_prompt(
     return f"""
 You are a smart personal finance assistant inside a finance app.
 
-Your job is to answer like a helpful financial coach, not like a dashboard widget.
-
-You must:
-- answer naturally and conversationally
-- personalize the answer using the user's account data
-- explain the likely reason behind spending or balance patterns
-- give practical suggestions when useful
-- avoid repeating the same phrases
-- avoid always pushing the user to analytics
-- only suggest navigation if it truly helps
-- sometimes suggest no action at all
-- sometimes suggest reviewing transactions instead of charts
-- sometimes suggest educational resources outside the app when appropriate
-- never invent account data
+Your role:
+- act like a calm, practical financial coach
+- answer naturally, like a helpful human assistant
+- use the user's account data to explain what is happening
+- answer the exact question asked, not a generic overview
+- understand follow-up questions using the recent conversation context
+- avoid repeating the same phrasing in every answer
+- avoid sounding robotic or overly formal
+- do not always send the user to analytics
+- sometimes recommend transactions first
+- sometimes recommend dashboard or analytics
+- sometimes recommend no action at all
+- sometimes recommend an outside learning resource when the user wants education, not just account analysis
+- never invent data
 - if data is limited, say so honestly
 
-You may choose one action type:
-- none
-- transactions
-- dashboard
-- analytics
-- external_resource
+Reasoning policy:
+- if the user asks "why", explain the likely driver from categories, spending change, alerts, and recent transactions
+- if the user asks what to review first, prefer transactions over charts when the goal is root-cause investigation
+- if the user asks for learning or guidance, an external resource is allowed
+- if the user asks about their money going somewhere, focus on top categories and recent spending
+- if the user asks about risk, focus on alerts and spending concentration
+- if the user asks a follow-up, use the recent conversation context before changing topics
 
-External resources are allowed only when helpful for education or guidance, such as:
-- budgeting basics
-- debt reduction basics
-- beginner finance learning
-- financial literacy resources
-Do not suggest random websites. Keep it general and reputable.
+Tone:
+- practical
+- clear
+- slightly supportive
+- concise but not too short
+- not repetitive
 
 User question:
 {question}
@@ -100,10 +122,10 @@ Recent transactions:
 Category trend summary:
 {_safe_text(account_context.get("trend_summary_text"))}
 
-Your response MUST follow this exact format:
+Return this exact format:
 
 ANSWER:
-<write a helpful natural answer>
+<write a natural helpful answer in 2 to 5 sentences>
 
 SUPPORTING_POINTS:
 - point 1
@@ -111,21 +133,21 @@ SUPPORTING_POINTS:
 - point 3
 
 FOLLOWUPS:
-- followup 1
-- followup 2
-- followup 3
+- short followup 1
+- short followup 2
+- short followup 3
 
 ACTION_TYPE:
 <one of: none, transactions, dashboard, analytics, external_resource>
 
 ACTION_LABEL:
-<short label or None>
+<short action label or None>
 
 ACTION_REASON:
-<why this action helps or None>
+<brief reason or None>
 
 ACTION_TARGET:
-<for transactions/dashboard/analytics/external_resource provide a short target like category name, section name, or resource topic; otherwise None>
+<target like category, section, or topic; otherwise None>
 """.strip()
 
 
@@ -173,9 +195,13 @@ def parse_llm_response(text: str) -> dict[str, Any]:
         if section == "answer":
             result["answer"] = f'{result["answer"]} {line}'.strip()
         elif section == "points" and line.startswith("-"):
-            result["supporting_points"].append(line[1:].strip())
+            point = line[1:].strip()
+            if point and point not in result["supporting_points"]:
+                result["supporting_points"].append(point)
         elif section == "followups" and line.startswith("-"):
-            result["suggested_followups"].append(line[1:].strip())
+            followup = line[1:].strip()
+            if followup and followup not in result["suggested_followups"]:
+                result["suggested_followups"].append(followup)
         elif section == "action_type":
             result["action_type"] = line.lower()
         elif section == "action_label":
@@ -235,6 +261,14 @@ def build_account_context(
     return context
 
 
+def _call_model(client: OpenAI, model_name: str, prompt: str) -> dict[str, Any] | None:
+    response = client.responses.create(
+        model=model_name,
+        input=prompt,
+    )
+    return parse_llm_response(response.output_text)
+
+
 def generate_llm_assistant_response(
     question: str,
     conversation_context: str,
@@ -243,44 +277,41 @@ def generate_llm_assistant_response(
     overspending_alerts: dict[str, Any],
     recent_transactions: list[Any],
 ) -> dict[str, Any] | None:
-    print("===== LLM DEBUG START =====")
-    print("LLM enabled:", llm_assistant_enabled())
-    print("Model:", OPENAI_MODEL)
-    print("API key exists:", bool(OPENAI_API_KEY))
-    print("Question:", question)
+    print("=== generate_llm_assistant_response CALLED ===")
+    print("llm_assistant_enabled() =", llm_assistant_enabled())
+    print("USE_LOCAL_LLM =", USE_LOCAL_LLM)
+    print("LOCAL CLIENT EXISTS =", _local_client is not None)
+    print("OPENAI CLIENT EXISTS =", _openai_client is not None)
+    print("Question =", question)
 
     if not llm_assistant_enabled():
-        print("LLM disabled or client not initialized.")
-        print("===== LLM DEBUG END =====")
+        print("LLM disabled or no client available.")
         return None
 
+    account_context = build_account_context(
+        snapshot=snapshot,
+        category_trends=category_trends,
+        overspending_alerts=overspending_alerts,
+        recent_transactions=recent_transactions,
+    )
+
+    prompt = build_finance_prompt(
+        question=question,
+        conversation_context=conversation_context,
+        account_context=account_context,
+    )
+
     try:
-        account_context = build_account_context(
-            snapshot=snapshot,
-            category_trends=category_trends,
-            overspending_alerts=overspending_alerts,
-            recent_transactions=recent_transactions,
-        )
+        if _local_client is not None:
+            print(f"Using local LLM via Ollama: {LOCAL_LLM_MODEL}")
+            return _call_model(_local_client, LOCAL_LLM_MODEL, prompt)
 
-        prompt = build_finance_prompt(
-            question=question,
-            conversation_context=conversation_context,
-            account_context=account_context,
-        )
-
-        print("Calling OpenAI...")
-        response = _client.responses.create(
-            model=OPENAI_MODEL,
-            input=prompt,
-        )
-
-        print("OpenAI call succeeded.")
-        print("Response preview:", response.output_text[:300] if response.output_text else "EMPTY")
-        print("===== LLM DEBUG END =====")
-
-        return parse_llm_response(response.output_text)
+        if _openai_client is not None:
+            print(f"Using OpenAI model: {OPENAI_MODEL}")
+            return _call_model(_openai_client, OPENAI_MODEL, prompt)
 
     except Exception as e:
         print("LLM ERROR:", str(e))
-        print("===== LLM DEBUG END =====")
         return None
+
+    return None

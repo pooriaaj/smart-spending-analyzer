@@ -623,12 +623,21 @@ def get_category_trends(db: Session, user_id: int) -> dict[str, Any]:
 
 
 def extract_recent_context(history: list[Any]) -> str:
-    recent_user_messages = [
-        message.content.strip().lower()
-        for message in history[-6:]
-        if getattr(message, "role", "").lower() == "user" and getattr(message, "content", "").strip()
-    ]
-    return " ".join(recent_user_messages)
+    context_lines: list[str] = []
+
+    for message in history[-8:]:
+        role = getattr(message, "role", "").lower()
+        content = getattr(message, "content", "").strip()
+
+        if not content:
+            continue
+
+        if role == "user":
+            context_lines.append(f"User: {content}")
+        elif role == "assistant":
+            context_lines.append(f"Assistant: {content}")
+
+    return "\n".join(context_lines)
 
 
 def format_currency(value: float) -> str:
@@ -872,6 +881,81 @@ def generate_assistant_response(
     if category_trends.get("top_increases"):
         primary_driver = category_trends["top_increases"][0]["category"]
 
+    # Try local/OpenAI LLM first
+    llm_result = generate_llm_assistant_response(
+        question=question,
+        conversation_context=context_text,
+        snapshot=snapshot,
+        category_trends=category_trends,
+        overspending_alerts=overspending_alerts,
+        recent_transactions=recent_transactions,
+    )
+
+    if llm_result:
+        suggested_actions = []
+
+        action_type = llm_result.get("action_type", "none")
+        action_label = llm_result.get("action_label")
+        action_target = llm_result.get("action_target")
+
+        if action_type == "transactions":
+            suggested_actions.append(
+                {
+                    "label": action_label or "Review transactions",
+                    "page": "transactions",
+                    "category": action_target if action_target and action_target.lower() != "none" else primary_driver or top_category,
+                    "transaction_type": "expense",
+                    "month": current_month,
+                }
+            )
+
+        elif action_type == "dashboard":
+            suggested_actions.append(
+                {
+                    "label": action_label or "Open dashboard",
+                    "page": "dashboard",
+                }
+            )
+
+        elif action_type == "analytics":
+            target_section = "insights"
+            if action_target:
+                lower_target = action_target.lower()
+                if "alert" in lower_target:
+                    target_section = "alerts"
+                elif "trend" in lower_target:
+                    target_section = "trends"
+                elif "month" in lower_target or "summary" in lower_target:
+                    target_section = "monthly"
+                elif "categor" in lower_target:
+                    target_section = "categories"
+
+            suggested_actions.append(
+                {
+                    "label": action_label or "Open analytics",
+                    "page": "analytics",
+                    "section": target_section,
+                    "month": current_month,
+                }
+            )
+
+        elif action_type == "external_resource":
+            suggested_actions.append(
+                {
+                    "label": action_label or "Explore learning resources",
+                    "page": "external_resource",
+                    "section": action_target or "budgeting basics",
+                }
+            )
+
+        return {
+            "answer": llm_result["answer"],
+            "supporting_points": llm_result["supporting_points"],
+            "suggested_followups": llm_result["suggested_followups"],
+            "suggested_actions": suggested_actions,
+        }
+
+    # Fallback rule-based assistant below
     if total_income == 0 and total_expenses == 0:
         return {
             "answer": "I do not have enough financial activity yet to give a meaningful answer.",
@@ -888,7 +972,7 @@ def generate_assistant_response(
 
     if not q:
         return {
-            "answer": "Ask me about your balance, top categories, spending changes, recent transactions, saving ideas, or where your money is going.",
+            "answer": "Ask me about your balance, top categories, transactions, spending trends, saving ideas, alerts, and financial summaries.",
             "supporting_points": [],
             "suggested_followups": [
                 "What is my balance?",
@@ -969,411 +1053,6 @@ def generate_assistant_response(
                 "Which category is driving my spending most?",
                 "How can I reduce these expenses?",
                 "Open those transactions",
-            ],
-            "suggested_actions": [
-                {
-                    "label": "Open transactions",
-                    "page": "transactions",
-                }
-            ],
-        }
-
-    if intent == "balance":
-        answer = (
-            f"Your current recorded balance is {format_currency(balance)}."
-            if balance >= 0
-            else f"Your current recorded balance is {format_currency(balance)}, which means expenses are currently higher than income."
-        )
-        return {
-            "answer": answer,
-            "supporting_points": [
-                f"Total income: {format_currency(total_income)}",
-                f"Total expenses: {format_currency(total_expenses)}",
-            ],
-            "suggested_followups": [
-                "What is my top expense category?",
-                "Give me saving advice",
-            ],
-            "suggested_actions": build_assistant_actions(snapshot, "balance"),
-        }
-
-    if intent == "top_category":
-        if top_category:
-            supporting_points = [f"Total expenses recorded: {format_currency(total_expenses)}"]
-            if top_category_share_percent is not None:
-                supporting_points.append(
-                    f"{top_category} represents {top_category_share_percent:.1f}% of your total expenses."
-                )
-            if current_month:
-                supporting_points.append(f"Latest expense month: {current_month}")
-
-            return {
-                "answer": f"Your top expense category is {top_category} at {format_currency(top_category_amount)}.",
-                "supporting_points": supporting_points,
-                "suggested_followups": [
-                    "Show me my top 3 spending categories",
-                    "Show me their transactions",
-                    "How can I reduce it?",
-                ],
-                "suggested_actions": build_assistant_actions(snapshot, "top_category"),
-            }
-
-        return {
-            "answer": "I do not have enough expense data yet to identify your top expense category.",
-            "supporting_points": [],
-            "suggested_followups": [
-                "What is my balance?",
-                "Summarize my finances",
-            ],
-            "suggested_actions": [],
-        }
-
-    if intent == "spending_change":
-        if current_month and previous_month and expense_change_percent is not None:
-            if expense_change_percent > 0:
-                answer = (
-                    f"Your spending increased by {expense_change_percent:.1f}% in {current_month} compared with {previous_month}."
-                )
-            elif expense_change_percent < 0:
-                answer = (
-                    f"Your spending decreased by {abs(expense_change_percent):.1f}% in {current_month} compared with {previous_month}."
-                )
-            else:
-                answer = f"Your spending stayed flat in {current_month} compared with {previous_month}."
-
-            supporting_points = [
-                f"{current_month}: {format_currency(current_month_expenses)}",
-                f"{previous_month}: {format_currency(previous_month_expenses)}",
-            ]
-
-            if primary_driver:
-                supporting_points.append(f"Fastest-growing category: {primary_driver}")
-
-            if overspending_alerts.get("alerts"):
-                high_or_medium = [
-                    alert["title"]
-                    for alert in overspending_alerts["alerts"]
-                    if alert["level"] in {"high", "medium"}
-                ]
-                if high_or_medium:
-                    supporting_points.append(f"Main alert: {high_or_medium[0]}")
-
-            suggested_actions = []
-
-            if primary_driver:
-                suggested_actions.append(
-                    {
-                        "label": f"Review {primary_driver} transactions",
-                        "page": "transactions",
-                        "category": primary_driver,
-                        "transaction_type": "expense",
-                        "month": current_month,
-                    }
-                )
-            else:
-                suggested_actions.append(
-                    {
-                        "label": "Inspect overspending alerts",
-                        "page": "analytics",
-                        "section": "alerts",
-                    }
-                )
-
-            return {
-                "answer": answer,
-                "supporting_points": supporting_points,
-                "suggested_followups": [
-                    "Which category is driving this?",
-                    "Show me their transactions",
-                    "Give me saving advice",
-                ],
-                "suggested_actions": suggested_actions,
-            }
-
-        return {
-            "answer": "I need at least two months of expense data to compare your spending trend properly.",
-            "supporting_points": [
-                f"Current recorded month expenses: {format_currency(current_month_expenses)}",
-            ],
-            "suggested_followups": [
-                "What is my balance?",
-                "Summarize my finances",
-            ],
-            "suggested_actions": [],
-        }
-
-    if intent == "saving_advice":
-        supporting_points = [f"Current balance: {format_currency(balance)}"]
-        if top_category:
-            supporting_points.append(
-                f"Top expense category: {top_category} ({format_currency(top_category_amount)})"
-            )
-        if primary_driver and primary_driver != top_category:
-            supporting_points.append(f"Fastest-growing category: {primary_driver}")
-        if expense_change_percent is not None and expense_change_percent > 0:
-            supporting_points.append(f"Recent spending change: +{expense_change_percent:.1f}%")
-
-        if primary_driver:
-            answer = (
-                f"The strongest place to start is {primary_driver}, because it appears to be the category pushing your spending upward most recently."
-            )
-        elif top_category and top_category_share_percent is not None and top_category_share_percent >= 35:
-            answer = (
-                f"The strongest place to start is {top_category}. It is currently absorbing a large share of your spending, so even a modest reduction there could improve your budget noticeably."
-            )
-        elif balance < 0:
-            answer = (
-                "Your first priority should be reducing non-essential spending, because your current recorded balance is negative."
-            )
-        else:
-            answer = (
-                "The best next step is to review your biggest expense areas and look for one category where a small reduction would be easy to maintain."
-            )
-
-        external_topic = suggest_external_resource_topic(
-            question=question,
-            balance=balance,
-            expense_change_percent=expense_change_percent,
-            top_category=top_category,
-        )
-
-        suggested_actions = []
-        if primary_driver or top_category:
-            suggested_actions.append(
-                {
-                    "label": "Review relevant transactions",
-                    "page": "transactions",
-                    "category": primary_driver or top_category,
-                    "transaction_type": "expense",
-                }
-            )
-
-        if external_topic:
-            suggested_actions.append(
-                {
-                    "label": "Learn more outside the app",
-                    "page": "external_resource",
-                    "section": external_topic,
-                }
-            )
-
-        return {
-            "answer": answer,
-            "supporting_points": supporting_points,
-            "suggested_followups": [
-                "Show me their transactions",
-                "What are my top 3 categories?",
-                "Should I review charts or transactions first?",
-            ],
-            "suggested_actions": suggested_actions,
-        }
-
-    if intent == "summary":
-        supporting_points: list[str] = []
-        if current_month:
-            supporting_points.append(
-                f"Latest expense month: {current_month} ({format_currency(current_month_expenses)})"
-            )
-        if top_category:
-            supporting_points.append(
-                f"Top expense category: {top_category} ({format_currency(top_category_amount)})"
-            )
-        if primary_driver:
-            supporting_points.append(f"Fastest-growing category: {primary_driver}")
-        if expense_change_percent is not None:
-            if expense_change_percent > 0:
-                supporting_points.append(
-                    f"Spending trend: up {expense_change_percent:.1f}% vs previous month"
-                )
-            elif expense_change_percent < 0:
-                supporting_points.append(
-                    f"Spending trend: down {abs(expense_change_percent):.1f}% vs previous month"
-                )
-
-        return {
-            "answer": (
-                f"Here is your current financial summary: income is {format_currency(total_income)}, "
-                f"expenses are {format_currency(total_expenses)}, and your balance is {format_currency(balance)}."
-            ),
-            "supporting_points": supporting_points,
-            "suggested_followups": [
-                "Show me my top 3 spending categories",
-                "Show me their transactions",
-                "Give me saving advice",
-            ],
-            "suggested_actions": [
-                {
-                    "label": "Open dashboard",
-                    "page": "dashboard",
-                }
-            ],
-        }
-
-    if intent == "driver":
-        if primary_driver:
-            driver_info = next(
-                (item for item in category_trends.get("top_increases", []) if item["category"] == primary_driver),
-                None,
-            )
-
-            supporting_points = []
-            if driver_info:
-                supporting_points.append(
-                    f"{primary_driver} change: {format_currency(driver_info['change_amount'])}"
-                )
-                supporting_points.append(
-                    f"{current_month}: {format_currency(driver_info['current_amount'])}"
-                )
-                supporting_points.append(
-                    f"{previous_month}: {format_currency(driver_info['previous_amount'])}"
-                )
-
-            return {
-                "answer": f"The strongest current spending driver appears to be {primary_driver}.",
-                "supporting_points": supporting_points,
-                "suggested_followups": [
-                    "Show me their transactions",
-                    "How can I reduce it?",
-                    "Should I review charts or transactions first?",
-                ],
-                "suggested_actions": [
-                    {
-                        "label": f"Open {primary_driver} transactions",
-                        "page": "transactions",
-                        "category": primary_driver,
-                        "transaction_type": "expense",
-                        "month": current_month,
-                    }
-                ],
-            }
-
-        if top_category:
-            return {
-                "answer": f"The strongest current expense driver appears to be {top_category}, with {format_currency(top_category_amount)} in recorded spending.",
-                "supporting_points": [
-                    f"Total expenses: {format_currency(total_expenses)}",
-                ],
-                "suggested_followups": [
-                    "Show me their transactions",
-                    "How can I reduce it?",
-                    "Show me my top 3 categories",
-                ],
-                "suggested_actions": [
-                    {
-                        "label": f"Open {top_category} transactions",
-                        "page": "transactions",
-                        "category": top_category,
-                        "transaction_type": "expense",
-                    }
-                ],
-            }
-
-    if intent == "alerts":
-        alerts = overspending_alerts.get("alerts", [])
-        if alerts:
-            first_alert = alerts[0]
-            return {
-                "answer": f"The main current alert is: {first_alert['title']}.",
-                "supporting_points": [alert["message"] for alert in alerts[:3]],
-                "suggested_followups": [
-                    "Which category is driving this?",
-                    "Show me their transactions",
-                    "Give me saving advice",
-                ],
-                "suggested_actions": [
-                    {
-                        "label": "Open alerts",
-                        "page": "analytics",
-                        "section": "alerts",
-                    }
-                ],
-            }
-
-    if intent == "recent":
-        if recent_transactions:
-            points = [
-                f"{tx.description} — {format_currency(tx.amount)} ({tx.category})"
-                for tx in recent_transactions[:5]
-            ]
-            return {
-                "answer": "Here are your most recent recorded transactions.",
-                "supporting_points": points,
-                "suggested_followups": [
-                    "Which category is driving my spending?",
-                    "Did my spending increase?",
-                    "Show me my top 3 categories",
-                ],
-                "suggested_actions": [
-                    {
-                        "label": "Open all transactions",
-                        "page": "transactions",
-                    }
-                ],
-            }
-
-    if intent == "education":
-        topic = suggest_external_resource_topic(
-            question=question,
-            balance=balance,
-            expense_change_percent=expense_change_percent,
-            top_category=top_category,
-        ) or "budgeting basics"
-
-        return {
-            "answer": "It may help to review a simple financial education resource before making changes in the app.",
-            "supporting_points": [
-                f"Suggested topic: {topic}",
-                "This is useful when you want concepts, not just account data.",
-            ],
-            "suggested_followups": [
-                "What part of my account should I review first?",
-                "Show me my top 3 spending categories",
-                "Give me saving advice",
-            ],
-            "suggested_actions": [
-                {
-                    "label": "Open learning resources",
-                    "page": "external_resource",
-                    "section": topic,
-                }
-            ],
-        }
-
-    if intent == "review_path":
-        if primary_driver:
-            return {
-                "answer": f"You should start with transactions first, especially in {primary_driver}, because that is the category pushing your spending pattern the most. Charts help after that, but the transaction list will show you the actual purchases causing the issue.",
-                "supporting_points": [
-                    f"Fastest-growing category: {primary_driver}",
-                    f"Current balance: {format_currency(balance)}",
-                    f"Top expense category: {top_category or 'N/A'}",
-                ],
-                "suggested_followups": [
-                    "Show me their transactions",
-                    "How can I reduce it?",
-                    "Show me my top 3 spending categories",
-                ],
-                "suggested_actions": [
-                    {
-                        "label": f"Open {primary_driver} transactions",
-                        "page": "transactions",
-                        "category": primary_driver,
-                        "transaction_type": "expense",
-                        "month": current_month,
-                    }
-                ],
-            }
-
-        return {
-            "answer": "You should usually start with transactions first if you want to understand what actually happened. Charts are better after that, when you want a higher-level pattern view.",
-            "supporting_points": [
-                f"Current balance: {format_currency(balance)}",
-                f"Top expense category: {top_category or 'N/A'}",
-            ],
-            "suggested_followups": [
-                "Show me recent transactions",
-                "Show me my top 3 spending categories",
-                "Give me saving advice",
             ],
             "suggested_actions": [
                 {
