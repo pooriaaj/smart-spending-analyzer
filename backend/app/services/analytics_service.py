@@ -641,6 +641,18 @@ def classify_question(question: str, context_text: str) -> str:
     if any(
         phrase in text
         for phrase in [
+            "should i review charts or transactions first",
+            "charts or transactions first",
+            "review charts or transactions",
+            "what should i review first",
+            "where should i start",
+        ]
+    ):
+        return "review_path"
+
+    if any(
+        phrase in text
+        for phrase in [
             "top 3",
             "top three",
             "biggest 3",
@@ -1323,6 +1335,50 @@ def generate_assistant_response(
                     "label": "Open learning resources",
                     "page": "external_resource",
                     "section": topic,
+                }
+            ],
+        }
+
+    if intent == "review_path":
+        if primary_driver:
+            return {
+                "answer": f"You should start with transactions first, especially in {primary_driver}, because that is the category pushing your spending pattern the most. Charts help after that, but the transaction list will show you the actual purchases causing the issue.",
+                "supporting_points": [
+                    f"Fastest-growing category: {primary_driver}",
+                    f"Current balance: {format_currency(balance)}",
+                    f"Top expense category: {top_category or 'N/A'}",
+                ],
+                "suggested_followups": [
+                    "Show me their transactions",
+                    "How can I reduce it?",
+                    "Show me my top 3 spending categories",
+                ],
+                "suggested_actions": [
+                    {
+                        "label": f"Open {primary_driver} transactions",
+                        "page": "transactions",
+                        "category": primary_driver,
+                        "transaction_type": "expense",
+                        "month": current_month,
+                    }
+                ],
+            }
+
+        return {
+            "answer": "You should usually start with transactions first if you want to understand what actually happened. Charts are better after that, when you want a higher-level pattern view.",
+            "supporting_points": [
+                f"Current balance: {format_currency(balance)}",
+                f"Top expense category: {top_category or 'N/A'}",
+            ],
+            "suggested_followups": [
+                "Show me recent transactions",
+                "Show me my top 3 spending categories",
+                "Give me saving advice",
+            ],
+            "suggested_actions": [
+                {
+                    "label": "Open transactions",
+                    "page": "transactions",
                 }
             ],
         }
