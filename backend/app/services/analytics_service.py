@@ -193,6 +193,99 @@ def get_recent_transactions(
     )
 
 
+def get_top_expense_categories(
+    db: Session,
+    user_id: int,
+    limit: int = 3,
+) -> list[dict[str, Any]]:
+    rows = (
+        db.query(
+            Transaction.category.label("category"),
+            func.coalesce(func.sum(Transaction.amount), 0.0).label("total"),
+        )
+        .filter(
+            Transaction.owner_id == user_id,
+            Transaction.type == "expense",
+        )
+        .group_by(Transaction.category)
+        .order_by(func.sum(Transaction.amount).desc())
+        .limit(limit)
+        .all()
+    )
+
+    return [{"category": row.category, "total": float(row.total)} for row in rows]
+
+
+def get_transactions_for_category(
+    db: Session,
+    user_id: int,
+    category: str,
+    limit: int = 5,
+) -> list[Transaction]:
+    return (
+        db.query(Transaction)
+        .filter(
+            Transaction.owner_id == user_id,
+            Transaction.category == category,
+        )
+        .order_by(Transaction.date.desc(), Transaction.id.desc())
+        .limit(limit)
+        .all()
+    )
+
+
+def get_top_categories_with_transactions(
+    db: Session,
+    user_id: int,
+    category_limit: int = 3,
+    transaction_limit: int = 3,
+) -> list[dict[str, Any]]:
+    top_categories = get_top_expense_categories(db, user_id, limit=category_limit)
+
+    result = []
+    for item in top_categories:
+        txs = get_transactions_for_category(
+            db,
+            user_id,
+            item["category"],
+            limit=transaction_limit,
+        )
+        result.append(
+            {
+                "category": item["category"],
+                "total": item["total"],
+                "transactions": txs,
+            }
+        )
+
+    return result
+
+
+def suggest_external_resource_topic(
+    question: str,
+    balance: float,
+    expense_change_percent: float | None,
+    top_category: str | None,
+) -> str | None:
+    q = (question or "").lower()
+
+    if any(word in q for word in ["learn", "how do i start", "beginner", "budget basics"]):
+        return "budgeting basics"
+
+    if any(word in q for word in ["debt", "credit card", "loan"]):
+        return "debt reduction basics"
+
+    if balance < 0:
+        return "how to recover from overspending"
+
+    if expense_change_percent is not None and expense_change_percent > 20:
+        return "how to control monthly spending"
+
+    if top_category:
+        return f"how to reduce {top_category} spending"
+
+    return None
+
 def get_top_expense_category(
     db: Session,
     user_id: int,
@@ -225,8 +318,10 @@ def get_top_expense_category(
     if not row:
         return None
 
-    return {"category": row.category, "total": float(row.total)}
-
+    return {
+        "category": row.category,
+        "total": float(row.total),
+    }
 
 def build_financial_snapshot(db: Session, user_id: int) -> dict[str, Any]:
     summary = get_summary(db, user_id)
@@ -543,6 +638,32 @@ def format_currency(value: float) -> str:
 def classify_question(question: str, context_text: str) -> str:
     text = f"{context_text} {question}".lower().strip()
 
+    if any(
+        phrase in text
+        for phrase in [
+            "top 3",
+            "top three",
+            "biggest 3",
+            "largest 3",
+            "top categories",
+            "where is my money going",
+            "where does my money go",
+        ]
+    ):
+        return "top_categories_multi"
+
+    if any(
+        phrase in text
+        for phrase in [
+            "their transactions",
+            "show transactions",
+            "show me transactions",
+            "category transactions",
+            "transactions for category",
+        ]
+    ):
+        return "category_transactions"
+
     if any(word in text for word in ["balance", "left over", "how much do i have"]):
         return "balance"
 
@@ -566,6 +687,9 @@ def classify_question(question: str, context_text: str) -> str:
 
     if any(word in text for word in ["recent", "latest transactions", "last transactions"]):
         return "recent"
+
+    if any(word in text for word in ["youtube", "google", "resource", "article", "learn more", "guide"]):
+        return "education"
 
     return "general"
 
@@ -736,79 +860,6 @@ def generate_assistant_response(
     if category_trends.get("top_increases"):
         primary_driver = category_trends["top_increases"][0]["category"]
 
-    llm_result = generate_llm_assistant_response(
-        question=question,
-        conversation_context=context_text,
-        snapshot=snapshot,
-        category_trends=category_trends,
-        overspending_alerts=overspending_alerts,
-        recent_transactions=recent_transactions,
-    )
-
-    if llm_result:
-        suggested_actions = []
-
-        action_type = llm_result.get("action_type", "none")
-        action_label = llm_result.get("action_label")
-        action_target = llm_result.get("action_target")
-
-        if action_type == "transactions":
-            suggested_actions.append(
-                {
-                    "label": action_label or "Review transactions",
-                    "page": "transactions",
-                    "category": action_target if action_target and action_target.lower() != "none" else primary_driver or top_category,
-                    "transaction_type": "expense",
-                    "month": current_month,
-                }
-            )
-
-        elif action_type == "dashboard":
-            suggested_actions.append(
-                {
-                    "label": action_label or "Open dashboard",
-                    "page": "dashboard",
-                }
-            )
-
-        elif action_type == "analytics":
-            target_section = "insights"
-            if action_target:
-                lower_target = action_target.lower()
-                if "alert" in lower_target:
-                    target_section = "alerts"
-                elif "trend" in lower_target:
-                    target_section = "trends"
-                elif "month" in lower_target or "summary" in lower_target:
-                    target_section = "monthly"
-                elif "categor" in lower_target:
-                    target_section = "categories"
-
-            suggested_actions.append(
-                {
-                    "label": action_label or "Open analytics",
-                    "page": "analytics",
-                    "section": target_section,
-                    "month": current_month,
-                }
-            )
-
-        elif action_type == "external_resource":
-            suggested_actions.append(
-                {
-                    "label": action_label or "Explore financial learning resources",
-                    "page": "external_resource",
-                    "section": action_target or "budgeting basics",
-                }
-            )
-
-        return {
-            "answer": llm_result["answer"],
-            "supporting_points": llm_result["supporting_points"],
-            "suggested_followups": llm_result["suggested_followups"],
-            "suggested_actions": suggested_actions,
-        }
-
     if total_income == 0 and total_expenses == 0:
         return {
             "answer": "I do not have enough financial activity yet to give a meaningful answer.",
@@ -825,14 +876,94 @@ def generate_assistant_response(
 
     if not q:
         return {
-            "answer": "Ask me about your balance, spending trends, biggest categories, alerts, recent transactions, or ways to save money.",
+            "answer": "Ask me about your balance, top categories, spending changes, recent transactions, saving ideas, or where your money is going.",
             "supporting_points": [],
             "suggested_followups": [
                 "What is my balance?",
-                "What is my top expense category?",
+                "Show me my top 3 spending categories",
                 "Did my spending increase?",
             ],
             "suggested_actions": [],
+        }
+
+    if intent == "top_categories_multi":
+        top_three = get_top_expense_categories(db, user_id, limit=3)
+
+        if not top_three:
+            return {
+                "answer": "I do not have enough expense data yet to identify your top categories.",
+                "supporting_points": [],
+                "suggested_followups": [
+                    "What is my balance?",
+                    "Summarize my finances",
+                ],
+                "suggested_actions": [],
+            }
+
+        points = [
+            f"{idx + 1}. {item['category']} — {format_currency(item['total'])}"
+            for idx, item in enumerate(top_three)
+        ]
+
+        return {
+            "answer": "Your top spending categories are listed below, ranked by total expense amount.",
+            "supporting_points": points,
+            "suggested_followups": [
+                "Show me their transactions",
+                "Which one is growing fastest?",
+                "How can I reduce them?",
+            ],
+            "suggested_actions": [
+                {
+                    "label": "View all transactions",
+                    "page": "transactions",
+                }
+            ],
+        }
+
+    if intent == "category_transactions":
+        top_with_transactions = get_top_categories_with_transactions(
+            db,
+            user_id,
+            category_limit=3,
+            transaction_limit=2,
+        )
+
+        if not top_with_transactions:
+            return {
+                "answer": "I do not have enough category transaction data yet.",
+                "supporting_points": [],
+                "suggested_followups": [
+                    "Show me my top 3 spending categories",
+                    "What is my balance?",
+                ],
+                "suggested_actions": [],
+            }
+
+        points = []
+        for item in top_with_transactions:
+            tx_text = ", ".join(
+                f"{tx.description} ({format_currency(tx.amount)})"
+                for tx in item["transactions"]
+            ) or "No recent transactions"
+            points.append(
+                f"{item['category']} — {format_currency(item['total'])}. Recent items: {tx_text}"
+            )
+
+        return {
+            "answer": "Here are your biggest spending categories and a few recent transactions inside each one.",
+            "supporting_points": points,
+            "suggested_followups": [
+                "Which category is driving my spending most?",
+                "How can I reduce these expenses?",
+                "Open those transactions",
+            ],
+            "suggested_actions": [
+                {
+                    "label": "Open transactions",
+                    "page": "transactions",
+                }
+            ],
         }
 
     if intent == "balance":
@@ -868,8 +999,9 @@ def generate_assistant_response(
                 "answer": f"Your top expense category is {top_category} at {format_currency(top_category_amount)}.",
                 "supporting_points": supporting_points,
                 "suggested_followups": [
+                    "Show me my top 3 spending categories",
+                    "Show me their transactions",
                     "How can I reduce it?",
-                    "Did my spending increase?",
                 ],
                 "suggested_actions": build_assistant_actions(snapshot, "top_category"),
             }
@@ -903,7 +1035,7 @@ def generate_assistant_response(
             ]
 
             if primary_driver:
-                supporting_points.append(f"Largest increasing category: {primary_driver}")
+                supporting_points.append(f"Fastest-growing category: {primary_driver}")
 
             if overspending_alerts.get("alerts"):
                 high_or_medium = [
@@ -912,20 +1044,38 @@ def generate_assistant_response(
                     if alert["level"] in {"high", "medium"}
                 ]
                 if high_or_medium:
-                    supporting_points.append(f"Active alert: {high_or_medium[0]}")
+                    supporting_points.append(f"Main alert: {high_or_medium[0]}")
+
+            suggested_actions = []
+
+            if primary_driver:
+                suggested_actions.append(
+                    {
+                        "label": f"Review {primary_driver} transactions",
+                        "page": "transactions",
+                        "category": primary_driver,
+                        "transaction_type": "expense",
+                        "month": current_month,
+                    }
+                )
+            else:
+                suggested_actions.append(
+                    {
+                        "label": "Inspect overspending alerts",
+                        "page": "analytics",
+                        "section": "alerts",
+                    }
+                )
 
             return {
                 "answer": answer,
                 "supporting_points": supporting_points,
                 "suggested_followups": [
                     "Which category is driving this?",
+                    "Show me their transactions",
                     "Give me saving advice",
                 ],
-                "suggested_actions": build_assistant_actions(
-                    snapshot,
-                    "spending_change",
-                    driver_category=primary_driver,
-                ),
+                "suggested_actions": suggested_actions,
             }
 
         return {
@@ -968,18 +1118,42 @@ def generate_assistant_response(
                 "The best next step is to review your biggest expense areas and look for one category where a small reduction would be easy to maintain."
             )
 
+        external_topic = suggest_external_resource_topic(
+            question=question,
+            balance=balance,
+            expense_change_percent=expense_change_percent,
+            top_category=top_category,
+        )
+
+        suggested_actions = []
+        if primary_driver or top_category:
+            suggested_actions.append(
+                {
+                    "label": "Review relevant transactions",
+                    "page": "transactions",
+                    "category": primary_driver or top_category,
+                    "transaction_type": "expense",
+                }
+            )
+
+        if external_topic:
+            suggested_actions.append(
+                {
+                    "label": "Learn more outside the app",
+                    "page": "external_resource",
+                    "section": external_topic,
+                }
+            )
+
         return {
             "answer": answer,
             "supporting_points": supporting_points,
             "suggested_followups": [
-                "What is my top expense category?",
-                "Did my spending increase?",
+                "Show me their transactions",
+                "What are my top 3 categories?",
+                "Should I review charts or transactions first?",
             ],
-            "suggested_actions": build_assistant_actions(
-                snapshot,
-                "saving_advice",
-                driver_category=primary_driver,
-            ),
+            "suggested_actions": suggested_actions,
         }
 
     if intent == "summary":
@@ -1011,11 +1185,16 @@ def generate_assistant_response(
             ),
             "supporting_points": supporting_points,
             "suggested_followups": [
-                "What is my top expense category?",
+                "Show me my top 3 spending categories",
+                "Show me their transactions",
                 "Give me saving advice",
-                "Did my spending increase?",
             ],
-            "suggested_actions": build_assistant_actions(snapshot, "summary"),
+            "suggested_actions": [
+                {
+                    "label": "Open dashboard",
+                    "page": "dashboard",
+                }
+            ],
         }
 
     if intent == "driver":
@@ -1041,14 +1220,19 @@ def generate_assistant_response(
                 "answer": f"The strongest current spending driver appears to be {primary_driver}.",
                 "supporting_points": supporting_points,
                 "suggested_followups": [
+                    "Show me their transactions",
                     "How can I reduce it?",
-                    "Summarize my finances",
+                    "Should I review charts or transactions first?",
                 ],
-                "suggested_actions": build_assistant_actions(
-                    snapshot,
-                    "driver",
-                    driver_category=primary_driver,
-                ),
+                "suggested_actions": [
+                    {
+                        "label": f"Open {primary_driver} transactions",
+                        "page": "transactions",
+                        "category": primary_driver,
+                        "transaction_type": "expense",
+                        "month": current_month,
+                    }
+                ],
             }
 
         if top_category:
@@ -1058,10 +1242,18 @@ def generate_assistant_response(
                     f"Total expenses: {format_currency(total_expenses)}",
                 ],
                 "suggested_followups": [
+                    "Show me their transactions",
                     "How can I reduce it?",
-                    "Summarize my finances",
+                    "Show me my top 3 categories",
                 ],
-                "suggested_actions": build_assistant_actions(snapshot, "driver"),
+                "suggested_actions": [
+                    {
+                        "label": f"Open {top_category} transactions",
+                        "page": "transactions",
+                        "category": top_category,
+                        "transaction_type": "expense",
+                    }
+                ],
             }
 
     if intent == "alerts":
@@ -1073,13 +1265,16 @@ def generate_assistant_response(
                 "supporting_points": [alert["message"] for alert in alerts[:3]],
                 "suggested_followups": [
                     "Which category is driving this?",
+                    "Show me their transactions",
                     "Give me saving advice",
                 ],
-                "suggested_actions": build_assistant_actions(
-                    snapshot,
-                    "alerts",
-                    driver_category=primary_driver,
-                ),
+                "suggested_actions": [
+                    {
+                        "label": "Open alerts",
+                        "page": "analytics",
+                        "section": "alerts",
+                    }
+                ],
             }
 
     if intent == "recent":
@@ -1092,21 +1287,55 @@ def generate_assistant_response(
                 "answer": "Here are your most recent recorded transactions.",
                 "supporting_points": points,
                 "suggested_followups": [
+                    "Which category is driving my spending?",
                     "Did my spending increase?",
-                    "What is my top expense category?",
+                    "Show me my top 3 categories",
                 ],
-                "suggested_actions": build_assistant_actions(snapshot, "recent"),
+                "suggested_actions": [
+                    {
+                        "label": "Open all transactions",
+                        "page": "transactions",
+                    }
+                ],
             }
 
+    if intent == "education":
+        topic = suggest_external_resource_topic(
+            question=question,
+            balance=balance,
+            expense_change_percent=expense_change_percent,
+            top_category=top_category,
+        ) or "budgeting basics"
+
+        return {
+            "answer": "It may help to review a simple financial education resource before making changes in the app.",
+            "supporting_points": [
+                f"Suggested topic: {topic}",
+                "This is useful when you want concepts, not just account data.",
+            ],
+            "suggested_followups": [
+                "What part of my account should I review first?",
+                "Show me my top 3 spending categories",
+                "Give me saving advice",
+            ],
+            "suggested_actions": [
+                {
+                    "label": "Open learning resources",
+                    "page": "external_resource",
+                    "section": topic,
+                }
+            ],
+        }
+
     return {
-        "answer": "I can help with your balance, spending trends, top expense categories, alerts, recent transactions, savings ideas, or a full financial summary.",
+        "answer": "I can help with your balance, top categories, transactions, spending trends, saving ideas, alerts, and financial summaries.",
         "supporting_points": [
             f"Current balance: {format_currency(balance)}",
             f"Top expense category: {top_category or 'N/A'}",
         ],
         "suggested_followups": [
-            "What is my balance?",
-            "What is my top expense category?",
+            "Show me my top 3 spending categories",
+            "Show me their transactions",
             "Give me saving advice",
         ],
         "suggested_actions": [],

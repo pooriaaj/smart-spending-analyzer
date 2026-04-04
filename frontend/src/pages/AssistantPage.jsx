@@ -66,29 +66,40 @@ function AssistantPage() {
   };
 
   const handleActionNavigation = (action) => {
-    if (!action) return;
+  if (!action) return;
 
-    if (action.page === "analytics") {
-      const params = new URLSearchParams();
+  if (action.page === "analytics") {
+    const params = new URLSearchParams();
 
-      if (action.section) params.set("section", action.section);
-      if (action.category) params.set("category", action.category);
-      if (action.month) params.set("month", action.month);
+    if (action.section) params.set("section", action.section);
+    if (action.category) params.set("category", action.category);
+    if (action.month) params.set("month", action.month);
 
-      navigate(`/analytics${params.toString() ? `?${params.toString()}` : ""}`);
-      return;
-    }
+    navigate(`/analytics${params.toString() ? `?${params.toString()}` : ""}`);
+    return;
+  }
 
-    if (action.page === "transactions") {
-      const params = new URLSearchParams();
+  if (action.page === "transactions") {
+    const params = new URLSearchParams();
 
-      if (action.category) params.set("category", action.category);
-      if (action.transaction_type) params.set("type", action.transaction_type);
-      if (action.month) params.set("month", action.month);
+    if (action.category) params.set("category", action.category);
+    if (action.transaction_type) params.set("type", action.transaction_type);
+    if (action.month) params.set("month", action.month);
 
-      navigate(`/transactions${params.toString() ? `?${params.toString()}` : ""}`);
-    }
-  };
+    navigate(`/transactions${params.toString() ? `?${params.toString()}` : ""}`);
+    return;
+  }
+
+  if (action.page === "dashboard") {
+    navigate("/dashboard");
+    return;
+  }
+
+  if (action.page === "external_resource") {
+    const topic = encodeURIComponent(action.section || "budgeting basics");
+    window.open(`https://www.google.com/search?q=${topic}`, "_blank");
+  }
+};
 
   const handleAsk = async (customQuestion) => {
     const finalQuestion = (customQuestion ?? question).trim();
