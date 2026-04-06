@@ -11,6 +11,7 @@ from app.database import Base, engine
 from app.routes.analytics_routes import router as analytics_router
 from app.routes.auth_routes import router as auth_router
 from app.routes.transaction_routes import router as transaction_router
+from app.routes.user_routes import router as user_router
 
 load_dotenv()
 
@@ -45,6 +46,7 @@ app.add_middleware(
 )
 
 app.include_router(auth_router)
+app.include_router(user_router)
 app.include_router(transaction_router)
 app.include_router(analytics_router)
 
