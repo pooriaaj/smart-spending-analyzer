@@ -241,10 +241,13 @@ function DashboardPage() {
             <button className="secondary-button" onClick={() => navigate("/profile")}>
               Profile
             </button>
-            <button className="logout-button" onClick={() => {
-              localStorage.removeItem("token");
-              navigate("/", { replace: true });
-            }}>
+            <button
+              className="logout-button"
+              onClick={() => {
+                localStorage.removeItem("token");
+                navigate("/", { replace: true });
+              }}
+            >
               Logout
             </button>
           </div>
@@ -282,16 +285,6 @@ function DashboardPage() {
               <small className="summary-card-note">Income minus expenses</small>
             </div>
           </div>
-
-          <div className="summary-card analytics-summary-card compact-summary-card">
-            <span className="card-label">Analytics</span>
-            <div className="summary-card-content analytics-card-content">
-              <small className="summary-card-note">Open trends, charts, and insights</small>
-              <button className="analytics-card-button" onClick={() => navigate("/analytics")}>
-                Open Analytics
-              </button>
-            </div>
-          </div>
         </div>
 
         <div className="dashboard-card large-card">
@@ -301,9 +294,25 @@ function DashboardPage() {
           </div>
 
           <form className="transaction-form" onSubmit={handleAddTransaction}>
-            <input type="number" step="0.01" placeholder="Amount" value={amount} onChange={(e) => setAmount(e.target.value)} />
-            <input type="text" placeholder="Category" value={category} onChange={(e) => setCategory(e.target.value)} />
-            <input type="text" placeholder="Description" value={description} onChange={(e) => setDescription(e.target.value)} />
+            <input
+              type="number"
+              step="0.01"
+              placeholder="Amount"
+              value={amount}
+              onChange={(e) => setAmount(e.target.value)}
+            />
+            <input
+              type="text"
+              placeholder="Category"
+              value={category}
+              onChange={(e) => setCategory(e.target.value)}
+            />
+            <input
+              type="text"
+              placeholder="Description"
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+            />
             <input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
             <select value={transactionType} onChange={(e) => setTransactionType(e.target.value)}>
               <option value="expense">Expense</option>
@@ -324,7 +333,9 @@ function DashboardPage() {
           {suggestion && (
             <div className="suggestion-box">
               <h3>Suggested Category</h3>
-              <p><strong>{suggestion.category}</strong></p>
+              <p>
+                <strong>{suggestion.category}</strong>
+              </p>
               <p>Confidence: {suggestion.confidence}%</p>
               <p>{suggestion.reason}</p>
             </div>
@@ -352,7 +363,9 @@ function DashboardPage() {
               <select value={monthFilter} onChange={(e) => setMonthFilter(e.target.value)}>
                 <option value="">All</option>
                 {availableMonths.map((month) => (
-                  <option key={month} value={month}>{month}</option>
+                  <option key={month} value={month}>
+                    {month}
+                  </option>
                 ))}
               </select>
             </div>
@@ -367,18 +380,27 @@ function DashboardPage() {
             </div>
 
             {filteredRecentTransactions.length === 0 ? (
-              <div className="empty-state"><p>No recent transactions found.</p></div>
+              <div className="empty-state">
+                <p>No recent transactions found.</p>
+              </div>
             ) : (
               <div className="transaction-list">
                 {filteredRecentTransactions.map((transaction) => (
                   <div key={transaction.id} className="transaction-item">
                     <div>
                       <strong>{transaction.description}</strong>
-                      <p>{transaction.category} • {transaction.type} • {transaction.date}</p>
+                      <p>
+                        {transaction.category} • {transaction.type} • {transaction.date}
+                      </p>
                     </div>
                     <div className="transaction-right">
-                      <strong className={transaction.type === "income" ? "income-text" : "expense-text"}>
-                        {transaction.type === "income" ? "+" : "-"}${transaction.amount.toFixed(2)}
+                      <strong
+                        className={
+                          transaction.type === "income" ? "income-text" : "expense-text"
+                        }
+                      >
+                        {transaction.type === "income" ? "+" : "-"}$
+                        {transaction.amount.toFixed(2)}
                       </strong>
                     </div>
                   </div>
@@ -394,7 +416,9 @@ function DashboardPage() {
             </div>
 
             {topCategories.length === 0 ? (
-              <div className="empty-state"><p>No expense categories found.</p></div>
+              <div className="empty-state">
+                <p>No expense categories found.</p>
+              </div>
             ) : (
               <div className="category-list">
                 {topCategories.map((item) => (
