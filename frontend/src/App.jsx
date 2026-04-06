@@ -6,6 +6,7 @@ import DashboardPage from "./pages/DashboardPage";
 import TransactionsPage from "./pages/TransactionsPage";
 import AnalyticsPage from "./pages/AnalyticsPage";
 import AssistantPage from "./pages/AssistantPage";
+import ProfilePage from "./pages/ProfilePage";
 import ThemeToggle from "./components/ThemeToggle";
 
 function ProtectedRoute({ children }) {
@@ -72,6 +73,15 @@ function App() {
           element={
             <ProtectedRoute>
               <AssistantPage />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/profile"
+          element={
+            <ProtectedRoute>
+              <ProfilePage />
             </ProtectedRoute>
           }
         />

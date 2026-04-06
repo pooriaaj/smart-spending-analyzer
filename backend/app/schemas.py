@@ -28,6 +28,28 @@ class Token(BaseModel):
     token_type: str
 
 
+class UserProfileResponse(ORMBaseModel):
+    id: int
+    email: EmailStr
+
+
+class UserProfileUpdate(BaseModel):
+    email: EmailStr
+
+
+class ChangePasswordRequest(BaseModel):
+    current_password: str = Field(min_length=6, max_length=128)
+    new_password: str = Field(min_length=6, max_length=128)
+
+
+class DeleteAccountRequest(BaseModel):
+    password: str = Field(min_length=6, max_length=128)
+
+
+class MessageResponse(BaseModel):
+    message: str
+
+
 class TransactionBase(BaseModel):
     amount: float
     category: str = Field(min_length=1, max_length=100)

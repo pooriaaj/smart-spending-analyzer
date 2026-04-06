@@ -2479,3 +2479,36 @@ textarea {
 .transactions-table select {
   min-width: 110px;
 }
+
+.danger-zone-card {
+  border: 1px solid rgba(220, 38, 38, 0.18);
+}
+
+.delete-account-button {
+  margin-top: 6px;
+  border: none;
+  border-radius: 16px;
+  background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%);
+  color: white;
+  padding: 15px 18px;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.delete-account-button:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 18px 36px rgba(220, 38, 38, 0.22);
+}
+
+.delete-account-button:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+:root[data-theme="dark"] .danger-zone-card {
+  border-color: rgba(248, 113, 113, 0.2);
+}
