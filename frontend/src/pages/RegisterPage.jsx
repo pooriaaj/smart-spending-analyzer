@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import api from "../services/api";
+import PasswordField from "../components/PasswordField";
 
 function RegisterPage() {
   const [email, setEmail] = useState("");
@@ -88,37 +89,37 @@ function RegisterPage() {
 
             <form onSubmit={handleRegister} className="auth-form">
               <div className="auth-field">
-                <label>Email</label>
+                <label htmlFor="register-email">Email</label>
                 <input
+                  id="register-email"
                   type="email"
                   placeholder="Enter your email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
+                  autoComplete="email"
                   required
                 />
               </div>
 
-              <div className="auth-field">
-                <label>Password</label>
-                <input
-                  type="password"
-                  placeholder="Create a password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  required
-                />
-              </div>
+              <PasswordField
+                label="Password"
+                name="register-password"
+                placeholder="Create a password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                autoComplete="new-password"
+                required
+              />
 
-              <div className="auth-field">
-                <label>Confirm Password</label>
-                <input
-                  type="password"
-                  placeholder="Confirm your password"
-                  value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
-                  required
-                />
-              </div>
+              <PasswordField
+                label="Confirm Password"
+                name="register-confirm-password"
+                placeholder="Confirm your password"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                autoComplete="new-password"
+                required
+              />
 
               <button type="submit" className="auth-submit-button">
                 Create Account
