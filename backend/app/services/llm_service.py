@@ -27,16 +27,6 @@ _local_client: OpenAI | None = (
     else None
 )
 
-print("=== LLM SERVICE CONFIG ===")
-print("USE_LLM_ASSISTANT =", USE_LLM_ASSISTANT)
-print("USE_LOCAL_LLM =", USE_LOCAL_LLM)
-print("LOCAL_LLM_PROVIDER =", LOCAL_LLM_PROVIDER)
-print("LOCAL_LLM_BASE_URL =", LOCAL_LLM_BASE_URL)
-print("LOCAL_LLM_MODEL =", LOCAL_LLM_MODEL)
-print("LOCAL CLIENT CREATED =", _local_client is not None)
-print("OPENAI CLIENT CREATED =", _openai_client is not None)
-print("==========================")
-
 
 def llm_assistant_enabled() -> bool:
     return USE_LLM_ASSISTANT and (_local_client is not None or _openai_client is not None)
@@ -48,22 +38,64 @@ def _safe_text(value: Any) -> str:
     return str(value)
 
 
+def get_mode_instructions(mode: str) -> str:
+    normalized = (mode or "balanced").lower()
+
+    if normalized == "strict":
+        return """
+Personality mode: STRICT
+
+Behavior:
+- be direct, disciplined, and clear
+- call out overspending plainly
+- focus on accountability and prioritization
+- do not be rude, but do not soften avoidable financial mistakes
+- keep praise limited and earned
+- emphasize consequences of poor spending patterns
+""".strip()
+
+    if normalized == "coach":
+        return """
+Personality mode: COACH
+
+Behavior:
+- be supportive, motivating, and practical
+- focus on progress, encouragement, and next steps
+- frame advice as achievable improvements
+- keep the user engaged and hopeful
+- still be honest about risks, but present them constructively
+""".strip()
+
+    return """
+Personality mode: BALANCED
+
+Behavior:
+- be neutral, practical, and helpful
+- combine clarity with calm guidance
+- explain issues honestly without being harsh
+- avoid sounding robotic or overly emotional
+""".strip()
+
+
 def build_finance_prompt(
     question: str,
     conversation_context: str,
     account_context: dict[str, Any],
+    mode: str,
 ) -> str:
+    mode_instructions = get_mode_instructions(mode)
+
     return f"""
 You are a smart personal finance assistant inside a finance app.
 
+{mode_instructions}
+
 Your role:
-- act like a calm, practical financial coach
 - answer naturally, like a helpful human assistant
 - use the user's account data to explain what is happening
 - answer the exact question asked, not a generic overview
 - understand follow-up questions using the recent conversation context
 - avoid repeating the same phrasing in every answer
-- avoid sounding robotic or overly formal
 - do not always send the user to analytics
 - sometimes recommend transactions first
 - sometimes recommend dashboard or analytics
@@ -79,13 +111,6 @@ Reasoning policy:
 - if the user asks about their money going somewhere, focus on top categories and recent spending
 - if the user asks about risk, focus on alerts and spending concentration
 - if the user asks a follow-up, use the recent conversation context before changing topics
-
-Tone:
-- practical
-- clear
-- slightly supportive
-- concise but not too short
-- not repetitive
 
 User question:
 {question}
@@ -276,16 +301,9 @@ def generate_llm_assistant_response(
     category_trends: dict[str, Any],
     overspending_alerts: dict[str, Any],
     recent_transactions: list[Any],
+    mode: str = "balanced",
 ) -> dict[str, Any] | None:
-    print("=== generate_llm_assistant_response CALLED ===")
-    print("llm_assistant_enabled() =", llm_assistant_enabled())
-    print("USE_LOCAL_LLM =", USE_LOCAL_LLM)
-    print("LOCAL CLIENT EXISTS =", _local_client is not None)
-    print("OPENAI CLIENT EXISTS =", _openai_client is not None)
-    print("Question =", question)
-
     if not llm_assistant_enabled():
-        print("LLM disabled or no client available.")
         return None
 
     account_context = build_account_context(
@@ -299,19 +317,17 @@ def generate_llm_assistant_response(
         question=question,
         conversation_context=conversation_context,
         account_context=account_context,
+        mode=mode,
     )
 
     try:
         if _local_client is not None:
-            print(f"Using local LLM via Ollama: {LOCAL_LLM_MODEL}")
             return _call_model(_local_client, LOCAL_LLM_MODEL, prompt)
 
         if _openai_client is not None:
-            print(f"Using OpenAI model: {OPENAI_MODEL}")
             return _call_model(_openai_client, OPENAI_MODEL, prompt)
 
-    except Exception as e:
-        print("LLM ERROR:", str(e))
+    except Exception:
         return None
 
     return None

@@ -7,6 +7,7 @@ from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
 
 TransactionType = Literal["income", "expense"]
+AssistantMode = Literal["balanced", "strict", "coach"]
 
 
 class ORMBaseModel(BaseModel):
@@ -205,6 +206,7 @@ class AssistantAction(BaseModel):
 class AssistantQueryRequest(BaseModel):
     question: str = Field(min_length=1)
     history: list[AssistantMessage] = Field(default_factory=list)
+    mode: AssistantMode = "balanced"
 
 
 class AssistantQueryResponse(BaseModel):

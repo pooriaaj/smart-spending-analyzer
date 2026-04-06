@@ -7,8 +7,8 @@ from sqlalchemy import case, func
 from sqlalchemy.orm import Query, Session
 
 from app.models import Transaction
-
 from app.services.llm_service import generate_llm_assistant_response
+
 
 def parse_iso_date(value: str | None) -> date | None:
     if not value:
@@ -286,6 +286,7 @@ def suggest_external_resource_topic(
 
     return None
 
+
 def get_top_expense_category(
     db: Session,
     user_id: int,
@@ -322,6 +323,7 @@ def get_top_expense_category(
         "category": row.category,
         "total": float(row.total),
     }
+
 
 def build_financial_snapshot(db: Session, user_id: int) -> dict[str, Any]:
     summary = get_summary(db, user_id)
@@ -392,6 +394,7 @@ def get_spending_insights(db: Session, user_id: int) -> dict[str, Any]:
         }
 
     insights: list[str] = []
+
     recommendations: list[str] = []
 
     insights.append(
@@ -849,11 +852,44 @@ def build_assistant_actions(
     return actions[:3]
 
 
+def style_answer(text: str, mode: str) -> str:
+    normalized = (mode or "balanced").lower()
+
+    if normalized == "strict":
+        return f"Strict view: {text}"
+
+    if normalized == "coach":
+        return f"Coach view: {text}"
+
+    return text
+
+
+def style_followups(followups: list[str], mode: str) -> list[str]:
+    normalized = (mode or "balanced").lower()
+
+    if normalized == "strict":
+        return [
+            "What should I cut first?",
+            "Which category is hurting me most?",
+            "Show me the transactions causing this.",
+        ]
+
+    if normalized == "coach":
+        return [
+            "What is one easy improvement I can make this week?",
+            "Where can I save without feeling restricted?",
+            "Show me the best place to start improving.",
+        ]
+
+    return followups
+
+
 def generate_assistant_response(
     db: Session,
     user_id: int,
     question: str,
     history: list[Any] | None = None,
+    mode: str = "balanced",
 ) -> dict[str, Any]:
     history = history or []
     snapshot = build_financial_snapshot(db, user_id)
@@ -870,18 +906,13 @@ def generate_assistant_response(
     balance = snapshot["balance"]
     top_category = snapshot["top_category"]
     top_category_amount = snapshot["top_category_amount"]
-    top_category_share_percent = snapshot["top_category_share_percent"]
     current_month = snapshot["current_month"]
-    previous_month = snapshot["previous_month"]
-    current_month_expenses = snapshot["current_month_expenses"]
-    previous_month_expenses = snapshot["previous_month_expenses"]
     expense_change_percent = snapshot["expense_change_percent"]
 
     primary_driver = None
     if category_trends.get("top_increases"):
         primary_driver = category_trends["top_increases"][0]["category"]
 
-    # Try local/OpenAI LLM first
     llm_result = generate_llm_assistant_response(
         question=question,
         conversation_context=context_text,
@@ -889,6 +920,7 @@ def generate_assistant_response(
         category_trends=category_trends,
         overspending_alerts=overspending_alerts,
         recent_transactions=recent_transactions,
+        mode=mode,
     )
 
     if llm_result:
@@ -955,30 +987,37 @@ def generate_assistant_response(
             "suggested_actions": suggested_actions,
         }
 
-    # Fallback rule-based assistant below
     if total_income == 0 and total_expenses == 0:
+        base_answer = "I do not have enough financial activity yet to give a meaningful answer."
         return {
-            "answer": "I do not have enough financial activity yet to give a meaningful answer.",
+            "answer": style_answer(base_answer, mode),
             "supporting_points": [
                 "No recorded income found yet.",
                 "No recorded expenses found yet.",
             ],
-            "suggested_followups": [
-                "How do I get started?",
-                "What should I track first?",
-            ],
+            "suggested_followups": style_followups(
+                [
+                    "How do I get started?",
+                    "What should I track first?",
+                ],
+                mode,
+            ),
             "suggested_actions": [],
         }
 
     if not q:
+        base_answer = "Ask me about your balance, top categories, transactions, spending trends, saving ideas, alerts, and financial summaries."
         return {
-            "answer": "Ask me about your balance, top categories, transactions, spending trends, saving ideas, alerts, and financial summaries.",
+            "answer": style_answer(base_answer, mode),
             "supporting_points": [],
-            "suggested_followups": [
-                "What is my balance?",
-                "Show me my top 3 spending categories",
-                "Did my spending increase?",
-            ],
+            "suggested_followups": style_followups(
+                [
+                    "What is my balance?",
+                    "Show me my top 3 spending categories",
+                    "Did my spending increase?",
+                ],
+                mode,
+            ),
             "suggested_actions": [],
         }
 
@@ -987,12 +1026,18 @@ def generate_assistant_response(
 
         if not top_three:
             return {
-                "answer": "I do not have enough expense data yet to identify your top categories.",
+                "answer": style_answer(
+                    "I do not have enough expense data yet to identify your top categories.",
+                    mode,
+                ),
                 "supporting_points": [],
-                "suggested_followups": [
-                    "What is my balance?",
-                    "Summarize my finances",
-                ],
+                "suggested_followups": style_followups(
+                    [
+                        "What is my balance?",
+                        "Summarize my finances",
+                    ],
+                    mode,
+                ),
                 "suggested_actions": [],
             }
 
@@ -1001,14 +1046,24 @@ def generate_assistant_response(
             for idx, item in enumerate(top_three)
         ]
 
+        if mode == "strict":
+            answer = "These are the categories taking the biggest share of your money. Focus on controlling them first."
+        elif mode == "coach":
+            answer = "Here are your top spending categories. These are the best places to look for meaningful savings."
+        else:
+            answer = "Your top spending categories are listed below, ranked by total expense amount."
+
         return {
-            "answer": "Your top spending categories are listed below, ranked by total expense amount.",
+            "answer": answer,
             "supporting_points": points,
-            "suggested_followups": [
-                "Show me their transactions",
-                "Which one is growing fastest?",
-                "How can I reduce them?",
-            ],
+            "suggested_followups": style_followups(
+                [
+                    "Show me their transactions",
+                    "Which one is growing fastest?",
+                    "How can I reduce them?",
+                ],
+                mode,
+            ),
             "suggested_actions": [
                 {
                     "label": "View all transactions",
@@ -1027,12 +1082,15 @@ def generate_assistant_response(
 
         if not top_with_transactions:
             return {
-                "answer": "I do not have enough category transaction data yet.",
+                "answer": style_answer("I do not have enough category transaction data yet.", mode),
                 "supporting_points": [],
-                "suggested_followups": [
-                    "Show me my top 3 spending categories",
-                    "What is my balance?",
-                ],
+                "suggested_followups": style_followups(
+                    [
+                        "Show me my top 3 spending categories",
+                        "What is my balance?",
+                    ],
+                    mode,
+                ),
                 "suggested_actions": [],
             }
 
@@ -1046,14 +1104,24 @@ def generate_assistant_response(
                 f"{item['category']} — {format_currency(item['total'])}. Recent items: {tx_text}"
             )
 
+        if mode == "strict":
+            answer = "These transactions show where your money is actually going. Review them before looking at charts."
+        elif mode == "coach":
+            answer = "Here are the transactions behind your biggest categories. This is a great place to spot easy improvements."
+        else:
+            answer = "Here are your biggest spending categories and a few recent transactions inside each one."
+
         return {
-            "answer": "Here are your biggest spending categories and a few recent transactions inside each one.",
+            "answer": answer,
             "supporting_points": points,
-            "suggested_followups": [
-                "Which category is driving my spending most?",
-                "How can I reduce these expenses?",
-                "Open those transactions",
-            ],
+            "suggested_followups": style_followups(
+                [
+                    "Which category is driving my spending most?",
+                    "How can I reduce these expenses?",
+                    "Open those transactions",
+                ],
+                mode,
+            ),
             "suggested_actions": [
                 {
                     "label": "Open transactions",
@@ -1062,17 +1130,46 @@ def generate_assistant_response(
             ],
         }
 
+    if mode == "strict":
+        fallback_answer = (
+            f"Your current balance is {format_currency(balance)}. "
+            f"Your biggest expense category is {top_category or 'N/A'}"
+            f"{f' at {format_currency(top_category_amount)}' if top_category else ''}. "
+            "If you want better control, start with the category doing the most damage."
+        )
+    elif mode == "coach":
+        fallback_answer = (
+            f"Your current balance is {format_currency(balance)}. "
+            f"Your top expense category is {top_category or 'N/A'}"
+            f"{f' at {format_currency(top_category_amount)}' if top_category else ''}. "
+            "That gives us a clear starting point for improvement."
+        )
+    else:
+        fallback_answer = (
+            "I can help with your balance, top categories, transactions, spending trends, saving ideas, alerts, and financial summaries."
+        )
+
+    supporting_points = [
+        f"Current balance: {format_currency(balance)}",
+        f"Top expense category: {top_category or 'N/A'}",
+    ]
+
+    if expense_change_percent is not None:
+        supporting_points.append(
+            f"Latest monthly expense change: {expense_change_percent:.1f}%"
+        )
+
     return {
-        "answer": "I can help with your balance, top categories, transactions, spending trends, saving ideas, alerts, and financial summaries.",
-        "supporting_points": [
-            f"Current balance: {format_currency(balance)}",
-            f"Top expense category: {top_category or 'N/A'}",
-        ],
-        "suggested_followups": [
-            "Show me my top 3 spending categories",
-            "Show me their transactions",
-            "Give me saving advice",
-        ],
+        "answer": fallback_answer,
+        "supporting_points": supporting_points,
+        "suggested_followups": style_followups(
+            [
+                "Show me my top 3 spending categories",
+                "Show me their transactions",
+                "Give me saving advice",
+            ],
+            mode,
+        ),
         "suggested_actions": [],
     }
 

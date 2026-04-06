@@ -195,6 +195,7 @@ def get_assistant_response_route(
         user_id=current_user.id,
         question=payload.question,
         history=payload.history,
+        mode=payload.mode,
     )
 
 

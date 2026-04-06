@@ -4,6 +4,7 @@ import api, { handleApiAuthError } from "../services/api";
 
 function AssistantPage() {
   const [question, setQuestion] = useState("");
+  const [assistantMode, setAssistantMode] = useState("balanced");
   const [messages, setMessages] = useState([
     {
       role: "assistant",
@@ -27,6 +28,17 @@ function AssistantPage() {
     "Give me saving advice",
     "Summarize my finances",
   ];
+
+  useEffect(() => {
+    const savedMode = localStorage.getItem("assistantMode");
+    if (savedMode) {
+      setAssistantMode(savedMode);
+    }
+  }, []);
+
+  useEffect(() => {
+    localStorage.setItem("assistantMode", assistantMode);
+  }, [assistantMode]);
 
   useEffect(() => {
     const loadSuggestions = async () => {
@@ -66,40 +78,40 @@ function AssistantPage() {
   };
 
   const handleActionNavigation = (action) => {
-  if (!action) return;
+    if (!action) return;
 
-  if (action.page === "analytics") {
-    const params = new URLSearchParams();
+    if (action.page === "analytics") {
+      const params = new URLSearchParams();
 
-    if (action.section) params.set("section", action.section);
-    if (action.category) params.set("category", action.category);
-    if (action.month) params.set("month", action.month);
+      if (action.section) params.set("section", action.section);
+      if (action.category) params.set("category", action.category);
+      if (action.month) params.set("month", action.month);
 
-    navigate(`/analytics${params.toString() ? `?${params.toString()}` : ""}`);
-    return;
-  }
+      navigate(`/analytics${params.toString() ? `?${params.toString()}` : ""}`);
+      return;
+    }
 
-  if (action.page === "transactions") {
-    const params = new URLSearchParams();
+    if (action.page === "transactions") {
+      const params = new URLSearchParams();
 
-    if (action.category) params.set("category", action.category);
-    if (action.transaction_type) params.set("type", action.transaction_type);
-    if (action.month) params.set("month", action.month);
+      if (action.category) params.set("category", action.category);
+      if (action.transaction_type) params.set("type", action.transaction_type);
+      if (action.month) params.set("month", action.month);
 
-    navigate(`/transactions${params.toString() ? `?${params.toString()}` : ""}`);
-    return;
-  }
+      navigate(`/transactions${params.toString() ? `?${params.toString()}` : ""}`);
+      return;
+    }
 
-  if (action.page === "dashboard") {
-    navigate("/dashboard");
-    return;
-  }
+    if (action.page === "dashboard") {
+      navigate("/dashboard");
+      return;
+    }
 
-  if (action.page === "external_resource") {
-    const topic = encodeURIComponent(action.section || "budgeting basics");
-    window.open(`https://www.google.com/search?q=${topic}`, "_blank");
-  }
-};
+    if (action.page === "external_resource") {
+      const topic = encodeURIComponent(action.section || "budgeting basics");
+      window.open(`https://www.google.com/search?q=${topic}`, "_blank");
+    }
+  };
 
   const handleAsk = async (customQuestion) => {
     const finalQuestion = (customQuestion ?? question).trim();
@@ -126,6 +138,7 @@ function AssistantPage() {
       const response = await api.post("/analytics/assistant-response", {
         question: finalQuestion,
         history: buildHistoryPayload(messages, finalQuestion),
+        mode: assistantMode,
       });
 
       const assistantMessage = {
@@ -148,6 +161,13 @@ function AssistantPage() {
 
   const displayedSuggestions =
     smartSuggestions.length > 0 ? smartSuggestions : fallbackQuestions;
+
+  const modeDescription =
+    assistantMode === "strict"
+      ? "Direct and accountability-focused."
+      : assistantMode === "coach"
+      ? "Supportive and motivating."
+      : "Neutral and practical.";
 
   return (
     <div className="page-container dashboard-page">
@@ -175,6 +195,32 @@ function AssistantPage() {
             >
               View Analytics
             </button>
+          </div>
+        </div>
+
+        <div className="dashboard-card assistant-card">
+          <div className="section-header">
+            <h2>Assistant mode</h2>
+            <p>Choose how you want the assistant to respond.</p>
+          </div>
+
+          <div className="assistant-mode-row">
+            <div className="assistant-mode-field">
+              <label htmlFor="assistant-mode">Personality mode</label>
+              <select
+                id="assistant-mode"
+                value={assistantMode}
+                onChange={(e) => setAssistantMode(e.target.value)}
+              >
+                <option value="balanced">Balanced</option>
+                <option value="strict">Strict</option>
+                <option value="coach">Coach</option>
+              </select>
+            </div>
+
+            <div className="assistant-mode-note">
+              <strong>Current mode:</strong> {modeDescription}
+            </div>
           </div>
         </div>
 
