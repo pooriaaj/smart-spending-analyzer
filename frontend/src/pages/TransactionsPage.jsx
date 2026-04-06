@@ -1,12 +1,15 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import api, { handleApiAuthError } from "../services/api";
+import AccountSelector from "../components/AccountSelector";
+import { ALL_ACCOUNTS_VALUE } from "../services/accountStorage";
 
 function TransactionsPage() {
   const [transactions, setTransactions] = useState([]);
   const [typeFilter, setTypeFilter] = useState("");
   const [monthFilter, setMonthFilter] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("");
+  const [selectedAccountId, setSelectedAccountId] = useState(ALL_ACCOUNTS_VALUE);
   const [loading, setLoading] = useState(true);
 
   const [importResult, setImportResult] = useState(null);
@@ -26,11 +29,15 @@ function TransactionsPage() {
     description: "",
     date: "",
     type: "expense",
+    account_id: "",
   });
 
   const fileInputRef = useRef(null);
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
+
+  const normalizedAccountId =
+    selectedAccountId === ALL_ACCOUNTS_VALUE ? undefined : Number(selectedAccountId);
 
   useEffect(() => {
     setTypeFilter(searchParams.get("type") || "");
@@ -40,10 +47,13 @@ function TransactionsPage() {
 
   const fetchTransactions = async () => {
     try {
-      const response = await api.get("/transactions/");
+      const response = await api.get("/transactions/", {
+        params: {
+          account_id: normalizedAccountId,
+        },
+      });
       setTransactions(response.data);
     } catch (error) {
-      console.error("Failed to load transactions:", error);
       handleApiAuthError(error, navigate);
     } finally {
       setLoading(false);
@@ -52,30 +62,23 @@ function TransactionsPage() {
 
   useEffect(() => {
     fetchTransactions();
-  }, []);
+  }, [selectedAccountId]);
 
   const availableMonths = useMemo(() => {
     const months = new Set(
-      transactions.map((transaction) =>
-        new Date(transaction.date).toISOString().slice(0, 7)
-      )
+      transactions.map((transaction) => new Date(transaction.date).toISOString().slice(0, 7))
     );
-
     return Array.from(months).sort().reverse();
   }, [transactions]);
 
   const availableCategories = useMemo(() => {
-    return Array.from(
-      new Set(transactions.map((transaction) => transaction.category))
-    ).sort();
+    return Array.from(new Set(transactions.map((transaction) => transaction.category))).sort();
   }, [transactions]);
 
   const filteredTransactions = useMemo(() => {
     return transactions
       .filter((transaction) => {
-        const transactionMonth = new Date(transaction.date)
-          .toISOString()
-          .slice(0, 7);
+        const transactionMonth = new Date(transaction.date).toISOString().slice(0, 7);
 
         if (typeFilter && transaction.type !== typeFilter) return false;
         if (monthFilter && transactionMonth !== monthFilter) return false;
@@ -91,7 +94,6 @@ function TransactionsPage() {
       await api.delete(`/transactions/${transactionId}`);
       await fetchTransactions();
     } catch (error) {
-      console.error("Failed to delete transaction:", error);
       handleApiAuthError(error, navigate);
     }
   };
@@ -104,6 +106,7 @@ function TransactionsPage() {
       description: transaction.description,
       date: transaction.date,
       type: transaction.type,
+      account_id: transaction.account_id,
     });
   };
 
@@ -115,6 +118,7 @@ function TransactionsPage() {
       description: "",
       date: "",
       type: "expense",
+      account_id: "",
     });
   };
 
@@ -126,12 +130,12 @@ function TransactionsPage() {
         description: editForm.description,
         date: editForm.date,
         type: editForm.type,
+        account_id: Number(editForm.account_id),
       });
 
       cancelEdit();
       await fetchTransactions();
     } catch (error) {
-      console.error("Failed to update transaction:", error);
       handleApiAuthError(error, navigate);
     }
   };
@@ -145,9 +149,14 @@ function TransactionsPage() {
     setImportError("");
   };
 
-  const handleCsvUpload = async (event) => {
+  const handleStatementUpload = async (event) => {
     const file = event.target.files?.[0];
     if (!file) return;
+
+    if (!normalizedAccountId) {
+      setImportError("Please select a specific account before importing a statement.");
+      return;
+    }
 
     setSelectedFileName(file.name);
     setImportResult(null);
@@ -156,9 +165,10 @@ function TransactionsPage() {
 
     const formData = new FormData();
     formData.append("file", file);
+    formData.append("account_id", String(normalizedAccountId));
 
     try {
-      const response = await api.post("/transactions/import/csv", formData, {
+      const response = await api.post("/transactions/import/statement", formData, {
         headers: {
           "Content-Type": "multipart/form-data",
         },
@@ -167,10 +177,8 @@ function TransactionsPage() {
       setImportResult(response.data);
       await fetchTransactions();
     } catch (error) {
-      console.error("CSV import failed:", error);
-
       if (!handleApiAuthError(error, navigate)) {
-        setImportError(error.response?.data?.detail || "CSV import failed");
+        setImportError(error.response?.data?.detail || "Statement import failed");
       }
     } finally {
       setIsUploading(false);
@@ -182,11 +190,13 @@ function TransactionsPage() {
     try {
       setBulkLoading(true);
       setBulkMessage("");
-      const response = await api.get("/transactions/categorize/bulk-preview");
+      const response = await api.get("/transactions/categorize/bulk-preview", {
+        params: {
+          account_id: normalizedAccountId,
+        },
+      });
       setBulkSuggestions(response.data.suggestions || []);
     } catch (error) {
-      console.error("Failed to analyze transactions:", error);
-
       if (!handleApiAuthError(error, navigate)) {
         setBulkMessage("Failed to analyze transactions.");
       }
@@ -206,14 +216,10 @@ function TransactionsPage() {
         transaction_ids: bulkSuggestions.map((item) => item.transaction_id),
       });
 
-      setBulkMessage(
-        `Applied suggested categories to ${response.data.updated_count} transaction(s).`
-      );
+      setBulkMessage(`Applied suggested categories to ${response.data.updated_count} transaction(s).`);
       setBulkSuggestions([]);
       await fetchTransactions();
     } catch (error) {
-      console.error("Failed to apply suggestions:", error);
-
       if (!handleApiAuthError(error, navigate)) {
         setBulkMessage("Failed to apply suggested categories.");
       }
@@ -243,15 +249,12 @@ function TransactionsPage() {
             <p className="eyebrow-text">Smart Spending Analyzer</p>
             <h1>All Transactions</h1>
             <p className="hero-subtitle">
-              Browse, filter, manage, import, and improve your transaction history.
+              Browse, filter, import monthly statements, and manage transactions by account.
             </p>
           </div>
 
           <div className="header-actions">
-            <button
-              className="secondary-button"
-              onClick={() => navigate("/dashboard")}
-            >
+            <button className="secondary-button" onClick={() => navigate("/dashboard")}>
               Back to Dashboard
             </button>
           </div>
@@ -259,9 +262,17 @@ function TransactionsPage() {
 
         <div className="filter-card">
           <div className="section-header">
-            <h2>Import Transactions</h2>
+            <h2>Account View</h2>
+            <p>Select all accounts or focus on one account.</p>
+          </div>
+          <AccountSelector onChange={setSelectedAccountId} allowAll={true} />
+        </div>
+
+        <div className="filter-card">
+          <div className="section-header">
+            <h2>Monthly Statement Import</h2>
             <p>
-              Upload a bank-style CSV file to import transactions automatically.
+              Upload a statement CSV. The importer reads date, description, amount, income/expense, and categorizes rows automatically.
             </p>
           </div>
 
@@ -270,16 +281,16 @@ function TransactionsPage() {
               ref={fileInputRef}
               type="file"
               accept=".csv"
-              onChange={handleCsvUpload}
+              onChange={handleStatementUpload}
               disabled={isUploading}
               className="hidden-file-input"
             />
 
             <div className="import-upload-top">
               <div>
-                <h3>CSV Import</h3>
+                <h3>Statement Import</h3>
                 <p>
-                  Required columns: <strong>date, description, amount, type, category</strong>
+                  Supported now: <strong>CSV bank/card statements</strong>. You must choose a specific account first.
                 </p>
               </div>
 
@@ -289,25 +300,19 @@ function TransactionsPage() {
                 onClick={handleChooseFile}
                 disabled={isUploading}
               >
-                {isUploading ? "Uploading..." : "Choose CSV File"}
+                {isUploading ? "Uploading..." : "Choose Statement CSV"}
               </button>
             </div>
 
             <div className="import-upload-meta">
               <span className="import-file-label">Selected file:</span>
-              <span className="import-file-name">
-                {selectedFileName || "No file selected yet"}
-              </span>
+              <span className="import-file-name">{selectedFileName || "No file selected yet"}</span>
             </div>
-
-            <p className="import-helper-text">
-              Re-uploading the same CSV will skip duplicate rows automatically.
-            </p>
 
             {isUploading && (
               <div className="import-info-box">
-                <strong>Processing file...</strong>
-                <p>Your CSV is being uploaded and validated.</p>
+                <strong>Processing statement...</strong>
+                <p>Your statement is being parsed, categorized, and checked for duplicates.</p>
               </div>
             )}
 
@@ -318,12 +323,7 @@ function TransactionsPage() {
                     <h3>Import completed</h3>
                     <p>{importResult.message}</p>
                   </div>
-
-                  <button
-                    type="button"
-                    className="dismiss-message-button"
-                    onClick={clearImportMessages}
-                  >
+                  <button type="button" className="dismiss-message-button" onClick={clearImportMessages}>
                     Dismiss
                   </button>
                 </div>
@@ -333,12 +333,10 @@ function TransactionsPage() {
                     <span className="import-stat-label">Imported</span>
                     <strong>{importResult.imported ?? 0}</strong>
                   </div>
-
                   <div className="import-stat-card">
                     <span className="import-stat-label">Duplicates skipped</span>
                     <strong>{importResult.duplicates_skipped ?? 0}</strong>
                   </div>
-
                   <div className="import-stat-card">
                     <span className="import-stat-label">Invalid rows skipped</span>
                     <strong>{importResult.invalid_rows_skipped ?? 0}</strong>
@@ -354,7 +352,6 @@ function TransactionsPage() {
                     <h3>Import failed</h3>
                     <p>{importError}</p>
                   </div>
-
                   <button
                     type="button"
                     className="dismiss-message-button dismiss-error-button"
@@ -371,9 +368,7 @@ function TransactionsPage() {
         <div className="filter-card">
           <div className="section-header">
             <h2>Smart Categorization</h2>
-            <p>
-              Analyze transactions still labeled as Other, Misc, Uncategorized, or Unknown.
-            </p>
+            <p>Analyze transactions still labeled as Other, Misc, Uncategorized, or Unknown.</p>
           </div>
 
           <div className="smart-actions-row">
@@ -406,8 +401,7 @@ function TransactionsPage() {
                     <div>
                       <h3>{item.description}</h3>
                       <p>
-                        Current: <strong>{item.current_category}</strong> → Suggested:{" "}
-                        <strong>{item.suggested_category}</strong>
+                        Current: <strong>{item.current_category}</strong> → Suggested: <strong>{item.suggested_category}</strong>
                       </p>
                     </div>
 
@@ -418,12 +412,6 @@ function TransactionsPage() {
 
                   <p className="bulk-suggestion-meta">Type: {item.type}</p>
                   <p className="bulk-suggestion-meta">{item.reason}</p>
-
-                  {item.matched_keyword && (
-                    <p className="bulk-suggestion-meta">
-                      Matched keyword: {item.matched_keyword}
-                    </p>
-                  )}
                 </div>
               ))}
             </div>
@@ -445,10 +433,7 @@ function TransactionsPage() {
           <div className="filter-bar">
             <div>
               <label>Type</label>
-              <select
-                value={typeFilter}
-                onChange={(e) => setTypeFilter(e.target.value)}
-              >
+              <select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)}>
                 <option value="">All</option>
                 <option value="income">Income</option>
                 <option value="expense">Expense</option>
@@ -457,30 +442,20 @@ function TransactionsPage() {
 
             <div>
               <label>Month</label>
-              <select
-                value={monthFilter}
-                onChange={(e) => setMonthFilter(e.target.value)}
-              >
+              <select value={monthFilter} onChange={(e) => setMonthFilter(e.target.value)}>
                 <option value="">All</option>
                 {availableMonths.map((month) => (
-                  <option key={month} value={month}>
-                    {month}
-                  </option>
+                  <option key={month} value={month}>{month}</option>
                 ))}
               </select>
             </div>
 
             <div>
               <label>Category</label>
-              <select
-                value={categoryFilter}
-                onChange={(e) => setCategoryFilter(e.target.value)}
-              >
+              <select value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)}>
                 <option value="">All</option>
                 {availableCategories.map((category) => (
-                  <option key={category} value={category}>
-                    {category}
-                  </option>
+                  <option key={category} value={category}>{category}</option>
                 ))}
               </select>
             </div>
@@ -494,9 +469,7 @@ function TransactionsPage() {
           </div>
 
           {filteredTransactions.length === 0 ? (
-            <div className="empty-state">
-              <p>No transactions found.</p>
-            </div>
+            <div className="empty-state"><p>No transactions found.</p></div>
           ) : (
             <div className="transactions-table-wrapper">
               <table className="transactions-table">
@@ -507,6 +480,7 @@ function TransactionsPage() {
                     <th>Category</th>
                     <th>Description</th>
                     <th>Amount</th>
+                    <th>Account ID</th>
                     <th>Action</th>
                   </tr>
                 </thead>
@@ -518,46 +492,23 @@ function TransactionsPage() {
                       <tr key={transaction.id}>
                         <td>
                           {isEditing ? (
-                            <input
-                              type="date"
-                              value={editForm.date}
-                              onChange={(e) =>
-                                setEditForm({ ...editForm, date: e.target.value })
-                              }
-                            />
-                          ) : (
-                            transaction.date
-                          )}
+                            <input type="date" value={editForm.date} onChange={(e) => setEditForm({ ...editForm, date: e.target.value })} />
+                          ) : transaction.date}
                         </td>
 
                         <td>
                           {isEditing ? (
-                            <select
-                              value={editForm.type}
-                              onChange={(e) =>
-                                setEditForm({ ...editForm, type: e.target.value })
-                              }
-                            >
+                            <select value={editForm.type} onChange={(e) => setEditForm({ ...editForm, type: e.target.value })}>
                               <option value="income">Income</option>
                               <option value="expense">Expense</option>
                             </select>
-                          ) : (
-                            transaction.type
-                          )}
+                          ) : transaction.type}
                         </td>
 
                         <td>
                           {isEditing ? (
-                            <input
-                              type="text"
-                              value={editForm.category}
-                              onChange={(e) =>
-                                setEditForm({ ...editForm, category: e.target.value })
-                              }
-                            />
-                          ) : (
-                            transaction.category
-                          )}
+                            <input type="text" value={editForm.category} onChange={(e) => setEditForm({ ...editForm, category: e.target.value })} />
+                          ) : transaction.category}
                         </td>
 
                         <td>
@@ -565,73 +516,46 @@ function TransactionsPage() {
                             <input
                               type="text"
                               value={editForm.description}
-                              onChange={(e) =>
-                                setEditForm({
-                                  ...editForm,
-                                  description: e.target.value,
-                                })
-                              }
+                              onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
                             />
+                          ) : transaction.description}
+                        </td>
+
+                        <td className={!isEditing ? (transaction.type === "income" ? "income-text" : "expense-text") : ""}>
+                          {isEditing ? (
+                            <input type="number" step="0.01" value={editForm.amount} onChange={(e) => setEditForm({ ...editForm, amount: e.target.value })} />
                           ) : (
-                            transaction.description
+                            <>{transaction.type === "income" ? "+" : "-"}${transaction.amount.toFixed(2)}</>
                           )}
                         </td>
 
-                        <td
-                          className={
-                            !isEditing
-                              ? transaction.type === "income"
-                                ? "income-text"
-                                : "expense-text"
-                              : ""
-                          }
-                        >
+                        <td>
                           {isEditing ? (
                             <input
                               type="number"
-                              step="0.01"
-                              value={editForm.amount}
-                              onChange={(e) =>
-                                setEditForm({ ...editForm, amount: e.target.value })
-                              }
+                              value={editForm.account_id}
+                              onChange={(e) => setEditForm({ ...editForm, account_id: e.target.value })}
                             />
-                          ) : (
-                            <>
-                              {transaction.type === "income" ? "+" : "-"}$
-                              {transaction.amount.toFixed(2)}
-                            </>
-                          )}
+                          ) : transaction.account_id}
                         </td>
 
                         <td>
                           <div className="transaction-actions-inline">
                             {isEditing ? (
                               <>
-                                <button
-                                  className="edit-button"
-                                  onClick={() => saveEdit(transaction.id)}
-                                >
+                                <button className="edit-button" onClick={() => saveEdit(transaction.id)}>
                                   Save
                                 </button>
-                                <button
-                                  className="secondary-button"
-                                  onClick={cancelEdit}
-                                >
+                                <button className="secondary-button" onClick={cancelEdit}>
                                   Cancel
                                 </button>
                               </>
                             ) : (
                               <>
-                                <button
-                                  className="edit-button"
-                                  onClick={() => startEdit(transaction)}
-                                >
+                                <button className="edit-button" onClick={() => startEdit(transaction)}>
                                   Edit
                                 </button>
-                                <button
-                                  className="delete-button"
-                                  onClick={() => handleDelete(transaction.id)}
-                                >
+                                <button className="delete-button" onClick={() => handleDelete(transaction.id)}>
                                   Delete
                                 </button>
                               </>

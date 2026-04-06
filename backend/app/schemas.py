@@ -8,6 +8,7 @@ from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
 TransactionType = Literal["income", "expense"]
 AssistantMode = Literal["balanced", "strict", "coach"]
+AccountType = Literal["chequing", "savings", "credit_card", "cash", "business", "other"]
 
 
 class ORMBaseModel(BaseModel):
@@ -65,12 +66,32 @@ class MessageResponse(BaseModel):
     message: str
 
 
+class AccountBase(BaseModel):
+    name: str = Field(min_length=1, max_length=100)
+    type: AccountType = "other"
+
+
+class AccountCreate(AccountBase):
+    pass
+
+
+class AccountUpdate(AccountBase):
+    pass
+
+
+class AccountResponse(AccountBase, ORMBaseModel):
+    id: int
+    owner_id: int
+    is_active: bool
+
+
 class TransactionBase(BaseModel):
     amount: float
     category: str = Field(min_length=1, max_length=100)
     description: str = Field(min_length=1, max_length=500)
     date: date
     type: TransactionType
+    account_id: int
 
 
 class TransactionCreate(TransactionBase):
@@ -107,6 +128,7 @@ class RecentTransactionItem(ORMBaseModel):
     description: str
     date: date
     type: TransactionType
+    account_id: int
 
 
 class TopExpenseCategory(BaseModel):

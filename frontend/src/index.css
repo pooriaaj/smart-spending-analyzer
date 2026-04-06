@@ -2610,3 +2610,15 @@ textarea {
     grid-template-columns: 1fr;
   }
 }
+.account-selector-block {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-width: 340px;
+}
+
+.account-selector-block label {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-main);
+}

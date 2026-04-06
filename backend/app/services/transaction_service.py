@@ -2,17 +2,41 @@ from __future__ import annotations
 
 import csv
 import io
-from datetime import datetime, date
+import re
+from datetime import date, datetime
 from typing import Iterable
 
 from sqlalchemy.orm import Session
 
-from app.models import Transaction
+from app.models import CategoryMemory, Transaction
 
 
 SUPPORTED_ENCODINGS = ["utf-8-sig", "utf-8", "cp1252", "latin-1"]
-REQUIRED_COLUMNS = {"date", "description", "amount", "type", "category"}
 UNCATEGORIZED_VALUES = {"other", "misc", "uncategorized", "unknown"}
+
+HEADER_ALIASES = {
+    "date": {"date", "transaction_date", "posted_date"},
+    "description": {"description", "details", "memo", "merchant", "transaction_description"},
+    "amount": {"amount", "transaction_amount"},
+    "debit": {"debit", "withdrawal", "money_out"},
+    "credit": {"credit", "deposit", "money_in"},
+    "type": {"type", "transaction_type"},
+    "category": {"category"},
+}
+
+CATEGORY_RULES = {
+    "salary": ["salary", "payroll", "paycheque", "paycheck", "deposit payroll"],
+    "rent": ["rent", "lease", "landlord"],
+    "groceries": ["grocery", "supermarket", "freshco", "nofrills", "costco", "walmart", "loblaws"],
+    "transport": ["uber", "lyft", "ttc", "metro", "gas", "shell", "esso", "petro"],
+    "internet": ["internet", "rogers", "bell internet"],
+    "phone": ["phone", "mobile", "wireless", "telus", "freedom", "fido"],
+    "restaurant": ["restaurant", "pizza", "burger", "shawarma", "mcdonald", "kfc", "subway"],
+    "cafe": ["coffee", "cafe", "starbucks", "tim hortons"],
+    "entertainment": ["netflix", "spotify", "cinema", "movie", "youtube"],
+    "shopping": ["amazon", "shop", "store", "mall", "purchase"],
+    "transfer": ["e-transfer", "transfer", "interac"],
+}
 
 
 def decode_file_bytes(file_bytes: bytes) -> str:
@@ -25,7 +49,7 @@ def decode_file_bytes(file_bytes: bytes) -> str:
 
 
 def normalize_header(value: str) -> str:
-    return value.strip().lower().replace(" ", "_")
+    return re.sub(r"[^a-z0-9_]+", "_", value.strip().lower().replace(" ", "_")).strip("_")
 
 
 def parse_date(value: str) -> date:
@@ -38,6 +62,7 @@ def parse_date(value: str) -> date:
         "%Y/%m/%d",
         "%m-%d-%Y",
         "%d-%m-%Y",
+        "%b %d, %Y",
     ]
 
     for fmt in date_formats:
@@ -51,14 +76,18 @@ def parse_date(value: str) -> date:
 
 def parse_amount(value: str) -> float:
     cleaned = value.replace(",", "").replace("$", "").strip()
+    if cleaned.startswith("(") and cleaned.endswith(")"):
+        cleaned = f"-{cleaned[1:-1]}"
     return float(cleaned)
 
 
 def normalize_type(value: str) -> str:
     normalized = value.strip().lower()
-    if normalized not in {"income", "expense"}:
-        raise ValueError(f"Invalid transaction type: {value}")
-    return normalized
+    if normalized in {"income", "credit", "deposit"}:
+        return "income"
+    if normalized in {"expense", "debit", "withdrawal"}:
+        return "expense"
+    raise ValueError(f"Invalid transaction type: {value}")
 
 
 def sniff_csv_dialect(text: str) -> csv.Dialect:
@@ -69,7 +98,30 @@ def sniff_csv_dialect(text: str) -> csv.Dialect:
         return csv.get_dialect("excel")
 
 
-def read_csv_rows(text: str) -> list[dict]:
+def resolve_header_mapping(fieldnames: list[str]) -> dict[str, str]:
+    normalized = [normalize_header(name) for name in fieldnames]
+    mapping: dict[str, str] = {}
+
+    for canonical, aliases in HEADER_ALIASES.items():
+        for header in normalized:
+            if header in aliases:
+                mapping[canonical] = header
+                break
+
+    if not mapping.get("date") or not mapping.get("description"):
+        raise ValueError("Statement must include at least date and description columns.")
+
+    if not (
+        mapping.get("amount")
+        or (mapping.get("debit") and mapping.get("credit"))
+        or mapping.get("type")
+    ):
+        raise ValueError("Statement must include amount, or debit/credit columns.")
+
+    return mapping
+
+
+def read_csv_rows(text: str) -> tuple[list[dict], dict[str, str]]:
     dialect = sniff_csv_dialect(text)
     reader = csv.DictReader(io.StringIO(text), dialect=dialect)
 
@@ -78,23 +130,100 @@ def read_csv_rows(text: str) -> list[dict]:
 
     normalized_headers = [normalize_header(field) for field in reader.fieldnames]
     reader.fieldnames = normalized_headers
-
-    missing = REQUIRED_COLUMNS - set(normalized_headers)
-    if missing:
-        raise ValueError(
-            f"CSV must contain: {', '.join(sorted(REQUIRED_COLUMNS))}"
-        )
+    header_mapping = resolve_header_mapping(normalized_headers)
 
     rows = []
     for row in reader:
         normalized_row = {normalize_header(k): (v or "").strip() for k, v in row.items()}
         rows.append(normalized_row)
 
-    return rows
+    return rows, header_mapping
+
+
+def infer_type_and_amount(row: dict, header_mapping: dict[str, str]) -> tuple[str, float]:
+    amount_key = header_mapping.get("amount")
+    debit_key = header_mapping.get("debit")
+    credit_key = header_mapping.get("credit")
+    type_key = header_mapping.get("type")
+
+    if amount_key:
+        amount = parse_amount(row.get(amount_key, "0"))
+        if type_key and row.get(type_key):
+            tx_type = normalize_type(row[type_key])
+            return tx_type, abs(amount)
+
+        if amount < 0:
+            return "expense", abs(amount)
+        return "income", abs(amount)
+
+    debit_value = row.get(debit_key, "") if debit_key else ""
+    credit_value = row.get(credit_key, "") if credit_key else ""
+
+    if debit_value:
+        return "expense", abs(parse_amount(debit_value))
+    if credit_value:
+        return "income", abs(parse_amount(credit_value))
+
+    raise ValueError("Could not infer transaction amount/type.")
+
+
+def normalize_description(value: str) -> str:
+    text = re.sub(r"\s+", " ", value.strip())
+    text = re.sub(r"\bpos\b|\bpurchase\b|\bpayment\b|\bdebit\b|\bcredit\b", "", text, flags=re.IGNORECASE)
+    text = re.sub(r"\s+", " ", text).strip(" -")
+    return text or value.strip()
+
+
+def learnable_category_from_memory(db: Session, owner_id: int, description: str, tx_type: str) -> str | None:
+    lowered = description.lower()
+
+    memories = (
+        db.query(CategoryMemory)
+        .filter(
+            CategoryMemory.owner_id == owner_id,
+            CategoryMemory.transaction_type == tx_type,
+        )
+        .all()
+    )
+
+    best_match = None
+    for item in memories:
+        keyword = item.keyword.lower().strip()
+        if keyword and keyword in lowered:
+            if best_match is None or len(keyword) > len(best_match[0]):
+                best_match = (keyword, item.category)
+
+    return best_match[1] if best_match else None
+
+
+def categorize_transaction(db: Session, owner_id: int, description: str, tx_type: str) -> str:
+    memory_category = learnable_category_from_memory(db, owner_id, description, tx_type)
+    if memory_category:
+        return memory_category
+
+    lowered = description.lower()
+
+    if tx_type == "income":
+        for keyword in CATEGORY_RULES["salary"]:
+            if keyword in lowered:
+                return "salary"
+        if "refund" in lowered:
+            return "refund"
+        return "income"
+
+    for category, keywords in CATEGORY_RULES.items():
+        if category == "salary":
+            continue
+        for keyword in keywords:
+            if keyword in lowered:
+                return category
+
+    return "other"
 
 
 def build_duplicate_key(
     owner_id: int,
+    account_id: int,
     tx_date: date,
     description: str,
     amount: float,
@@ -103,6 +232,7 @@ def build_duplicate_key(
 ) -> tuple:
     return (
         owner_id,
+        account_id,
         tx_date.isoformat(),
         description.strip().lower(),
         round(amount, 2),
@@ -111,16 +241,18 @@ def build_duplicate_key(
     )
 
 
-def get_existing_duplicate_keys(db: Session, owner_id: int) -> set[tuple]:
-    existing_transactions = (
-        db.query(Transaction)
-        .filter(Transaction.owner_id == owner_id)
-        .all()
-    )
+def get_existing_duplicate_keys(db: Session, owner_id: int, account_id: int | None = None) -> set[tuple]:
+    query = db.query(Transaction).filter(Transaction.owner_id == owner_id)
+
+    if account_id is not None:
+        query = query.filter(Transaction.account_id == account_id)
+
+    existing_transactions = query.all()
 
     return {
         build_duplicate_key(
             owner_id=transaction.owner_id,
+            account_id=transaction.account_id or 0,
             tx_date=transaction.date,
             description=transaction.description,
             amount=transaction.amount,
@@ -134,12 +266,13 @@ def get_existing_duplicate_keys(db: Session, owner_id: int) -> set[tuple]:
 def import_transactions_from_csv(
     db: Session,
     owner_id: int,
+    account_id: int,
     file_bytes: bytes,
 ) -> dict:
     text = decode_file_bytes(file_bytes)
-    rows = read_csv_rows(text)
+    rows, header_mapping = read_csv_rows(text)
 
-    existing_keys = get_existing_duplicate_keys(db, owner_id)
+    existing_keys = get_existing_duplicate_keys(db, owner_id, account_id=account_id)
     seen_in_file = set()
 
     to_insert: list[Transaction] = []
@@ -149,17 +282,23 @@ def import_transactions_from_csv(
 
     for row in rows:
         try:
-            tx_date = parse_date(row["date"])
-            description = row["description"].strip()
-            amount = parse_amount(row["amount"])
-            tx_type = normalize_type(row["type"])
-            category = row["category"].strip()
+            tx_date = parse_date(row[header_mapping["date"]])
+            raw_description = row[header_mapping["description"]]
+            description = normalize_description(raw_description)
+
+            tx_type, amount = infer_type_and_amount(row, header_mapping)
+
+            if header_mapping.get("category") and row.get(header_mapping["category"]):
+                category = row[header_mapping["category"]].strip()
+            else:
+                category = categorize_transaction(db, owner_id, description, tx_type)
 
             if not description or not category:
                 raise ValueError("Description and category are required.")
 
             duplicate_key = build_duplicate_key(
                 owner_id=owner_id,
+                account_id=account_id,
                 tx_date=tx_date,
                 description=description,
                 amount=amount,
@@ -181,6 +320,7 @@ def import_transactions_from_csv(
                     date=tx_date,
                     type=tx_type,
                     owner_id=owner_id,
+                    account_id=account_id,
                 )
             )
             imported += 1
@@ -193,30 +333,33 @@ def import_transactions_from_csv(
         db.commit()
 
     return {
-        "message": "CSV import completed",
+        "message": "Statement import completed",
         "imported": imported,
         "duplicates_skipped": duplicates_skipped,
         "invalid_rows_skipped": invalid_rows_skipped,
     }
 
 
-def get_transactions_for_user(db: Session, owner_id: int) -> list[Transaction]:
-    return (
-        db.query(Transaction)
-        .filter(Transaction.owner_id == owner_id)
-        .order_by(Transaction.date.desc(), Transaction.id.desc())
-        .all()
-    )
+def get_transactions_for_user(db: Session, owner_id: int, account_id: int | None = None) -> list[Transaction]:
+    query = db.query(Transaction).filter(Transaction.owner_id == owner_id)
+
+    if account_id is not None:
+        query = query.filter(Transaction.account_id == account_id)
+
+    return query.order_by(Transaction.date.desc(), Transaction.id.desc()).all()
 
 
-def get_uncategorized_candidates(db: Session, owner_id: int) -> list[Transaction]:
-    return (
+def get_uncategorized_candidates(db: Session, owner_id: int, account_id: int | None = None) -> list[Transaction]:
+    query = (
         db.query(Transaction)
         .filter(Transaction.owner_id == owner_id)
         .filter(Transaction.category.in_(UNCATEGORIZED_VALUES))
-        .order_by(Transaction.date.desc(), Transaction.id.desc())
-        .all()
     )
+
+    if account_id is not None:
+        query = query.filter(Transaction.account_id == account_id)
+
+    return query.order_by(Transaction.date.desc(), Transaction.id.desc()).all()
 
 
 def apply_bulk_categories(

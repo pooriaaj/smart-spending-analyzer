@@ -9,6 +9,7 @@ import AssistantPage from "./pages/AssistantPage";
 import ProfilePage from "./pages/ProfilePage";
 import ForgotPasswordPage from "./pages/ForgotPasswordPage";
 import ResetPasswordPage from "./pages/ResetPasswordPage";
+import AccountsPage from "./pages/AccountsPage";
 import ThemeToggle from "./components/ThemeToggle";
 
 function ProtectedRoute({ children }) {
@@ -22,22 +23,19 @@ function PublicHomeRoute() {
 }
 
 function App() {
-  const [theme, setTheme] = useState(
-    localStorage.getItem("theme") || "light"
-  );
+  const [theme, setTheme] = useState(localStorage.getItem("theme") || "light");
 
   useEffect(() => {
     document.documentElement.setAttribute("data-theme", theme);
     localStorage.setItem("theme", theme);
   }, [theme]);
 
-  const handleToggleTheme = () => {
-    setTheme((prev) => (prev === "light" ? "dark" : "light"));
-  };
-
   return (
     <BrowserRouter>
-      <ThemeToggle theme={theme} onToggle={handleToggleTheme} />
+      <ThemeToggle
+        theme={theme}
+        onToggle={() => setTheme((prev) => (prev === "light" ? "dark" : "light"))}
+      />
 
       <Routes>
         <Route path="/" element={<PublicHomeRoute />} />
@@ -45,50 +43,12 @@ function App() {
         <Route path="/forgot-password" element={<ForgotPasswordPage />} />
         <Route path="/reset-password" element={<ResetPasswordPage />} />
 
-        <Route
-          path="/dashboard"
-          element={
-            <ProtectedRoute>
-              <DashboardPage />
-            </ProtectedRoute>
-          }
-        />
-
-        <Route
-          path="/transactions"
-          element={
-            <ProtectedRoute>
-              <TransactionsPage />
-            </ProtectedRoute>
-          }
-        />
-
-        <Route
-          path="/analytics"
-          element={
-            <ProtectedRoute>
-              <AnalyticsPage />
-            </ProtectedRoute>
-          }
-        />
-
-        <Route
-          path="/assistant"
-          element={
-            <ProtectedRoute>
-              <AssistantPage />
-            </ProtectedRoute>
-          }
-        />
-
-        <Route
-          path="/profile"
-          element={
-            <ProtectedRoute>
-              <ProfilePage />
-            </ProtectedRoute>
-          }
-        />
+        <Route path="/dashboard" element={<ProtectedRoute><DashboardPage /></ProtectedRoute>} />
+        <Route path="/transactions" element={<ProtectedRoute><TransactionsPage /></ProtectedRoute>} />
+        <Route path="/analytics" element={<ProtectedRoute><AnalyticsPage /></ProtectedRoute>} />
+        <Route path="/assistant" element={<ProtectedRoute><AssistantPage /></ProtectedRoute>} />
+        <Route path="/profile" element={<ProtectedRoute><ProfilePage /></ProtectedRoute>} />
+        <Route path="/accounts" element={<ProtectedRoute><AccountsPage /></ProtectedRoute>} />
       </Routes>
     </BrowserRouter>
   );

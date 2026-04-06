@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import api, { handleApiAuthError } from "../services/api";
+import AccountSelector from "../components/AccountSelector";
+import { ALL_ACCOUNTS_VALUE } from "../services/accountStorage";
 
 const CATEGORY_RULES = {
   groceries: ["walmart", "costco", "freshco", "nofrills", "grocery", "supermarket"],
@@ -18,6 +20,7 @@ function DashboardPage() {
   const [dashboardData, setDashboardData] = useState(null);
   const [allTransactions, setAllTransactions] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [selectedAccountId, setSelectedAccountId] = useState(ALL_ACCOUNTS_VALUE);
 
   const [typeFilter, setTypeFilter] = useState("");
   const [monthFilter, setMonthFilter] = useState("");
@@ -34,11 +37,22 @@ function DashboardPage() {
 
   const navigate = useNavigate();
 
+  const normalizedAccountId =
+    selectedAccountId === ALL_ACCOUNTS_VALUE ? undefined : Number(selectedAccountId);
+
   const fetchData = async () => {
     try {
       const [dashboardRes, transactionsRes] = await Promise.all([
-        api.get("/analytics/dashboard"),
-        api.get("/transactions/"),
+        api.get("/analytics/dashboard", {
+          params: {
+            account_id: normalizedAccountId,
+          },
+        }),
+        api.get("/transactions/", {
+          params: {
+            account_id: normalizedAccountId,
+          },
+        }),
       ]);
 
       setDashboardData(dashboardRes.data);
@@ -53,7 +67,7 @@ function DashboardPage() {
 
   useEffect(() => {
     fetchData();
-  }, []);
+  }, [selectedAccountId]);
 
   const filteredRecentTransactions = useMemo(() => {
     const transactions = [...allTransactions]
@@ -98,10 +112,7 @@ function DashboardPage() {
     }
 
     if (transactionType === "income") {
-      const salaryMatch = CATEGORY_RULES.salary.find((keyword) =>
-        text.includes(keyword)
-      );
-
+      const salaryMatch = CATEGORY_RULES.salary.find((keyword) => text.includes(keyword));
       if (salaryMatch) {
         const suggested = {
           category: "Salary",
@@ -150,6 +161,11 @@ function DashboardPage() {
     e.preventDefault();
     setFormError("");
 
+    if (!normalizedAccountId) {
+      setFormError("Please select a specific account before adding a transaction.");
+      return;
+    }
+
     if (!amount || !description || !date || !transactionType || !category) {
       setFormError("Please fill all transaction fields.");
       return;
@@ -164,6 +180,7 @@ function DashboardPage() {
         description,
         date,
         type: transactionType,
+        account_id: normalizedAccountId,
       });
 
       setAmount("");
@@ -175,19 +192,12 @@ function DashboardPage() {
 
       await fetchData();
     } catch (error) {
-      console.error("Failed to add transaction:", error);
-
       if (!handleApiAuthError(error, navigate)) {
         setFormError("Failed to add transaction.");
       }
     } finally {
       setSubmitting(false);
     }
-  };
-
-  const handleLogout = () => {
-    localStorage.removeItem("token");
-    navigate("/", { replace: true });
   };
 
   if (loading) {
@@ -211,43 +221,41 @@ function DashboardPage() {
             <p className="eyebrow-text">Smart Spending Analyzer</p>
             <h1>Dashboard</h1>
             <p className="hero-subtitle">
-              Your financial overview, recent activity, and key insights in one place.
+              Track your whole financial picture or switch into a specific account.
             </p>
           </div>
 
           <div className="header-actions">
-            <button
-              className="secondary-button"
-              onClick={() => navigate("/transactions")}
-            >
+            <button className="secondary-button" onClick={() => navigate("/transactions")}>
               View Transactions
             </button>
-
-            <button
-              className="secondary-button"
-              onClick={() => navigate("/analytics")}
-            >
+            <button className="secondary-button" onClick={() => navigate("/analytics")}>
               Analytics
             </button>
-
-            <button
-              className="secondary-button"
-              onClick={() => navigate("/assistant")}
-            >
+            <button className="secondary-button" onClick={() => navigate("/assistant")}>
               Assistant
             </button>
-
-            <button
-              className="secondary-button"
-              onClick={() => navigate("/profile")}
-            >
+            <button className="secondary-button" onClick={() => navigate("/accounts")}>
+              Accounts
+            </button>
+            <button className="secondary-button" onClick={() => navigate("/profile")}>
               Profile
             </button>
-
-            <button className="logout-button" onClick={handleLogout}>
+            <button className="logout-button" onClick={() => {
+              localStorage.removeItem("token");
+              navigate("/", { replace: true });
+            }}>
               Logout
             </button>
           </div>
+        </div>
+
+        <div className="filter-card">
+          <div className="section-header">
+            <h2>Account View</h2>
+            <p>Switch between all accounts combined or one specific account.</p>
+          </div>
+          <AccountSelector onChange={setSelectedAccountId} allowAll={true} />
         </div>
 
         <div className="summary-grid">
@@ -279,10 +287,7 @@ function DashboardPage() {
             <span className="card-label">Analytics</span>
             <div className="summary-card-content analytics-card-content">
               <small className="summary-card-note">Open trends, charts, and insights</small>
-              <button
-                className="analytics-card-button"
-                onClick={() => navigate("/analytics")}
-              >
+              <button className="analytics-card-button" onClick={() => navigate("/analytics")}>
                 Open Analytics
               </button>
             </div>
@@ -292,51 +297,20 @@ function DashboardPage() {
         <div className="dashboard-card large-card">
           <div className="section-header">
             <h2>Add Transaction</h2>
-            <p>Add a new income or expense entry and use suggestion help if needed.</p>
+            <p>Add new income or expense into the currently selected account.</p>
           </div>
 
           <form className="transaction-form" onSubmit={handleAddTransaction}>
-            <input
-              type="number"
-              step="0.01"
-              placeholder="Amount"
-              value={amount}
-              onChange={(e) => setAmount(e.target.value)}
-            />
-
-            <input
-              type="text"
-              placeholder="Category"
-              value={category}
-              onChange={(e) => setCategory(e.target.value)}
-            />
-
-            <input
-              type="text"
-              placeholder="Description"
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-            />
-
-            <input
-              type="date"
-              value={date}
-              onChange={(e) => setDate(e.target.value)}
-            />
-
-            <select
-              value={transactionType}
-              onChange={(e) => setTransactionType(e.target.value)}
-            >
+            <input type="number" step="0.01" placeholder="Amount" value={amount} onChange={(e) => setAmount(e.target.value)} />
+            <input type="text" placeholder="Category" value={category} onChange={(e) => setCategory(e.target.value)} />
+            <input type="text" placeholder="Description" value={description} onChange={(e) => setDescription(e.target.value)} />
+            <input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+            <select value={transactionType} onChange={(e) => setTransactionType(e.target.value)}>
               <option value="expense">Expense</option>
               <option value="income">Income</option>
             </select>
 
-            <button
-              type="button"
-              className="suggest-button"
-              onClick={suggestCategory}
-            >
+            <button type="button" className="suggest-button" onClick={suggestCategory}>
               Suggest Category
             </button>
 
@@ -350,9 +324,7 @@ function DashboardPage() {
           {suggestion && (
             <div className="suggestion-box">
               <h3>Suggested Category</h3>
-              <p>
-                <strong>{suggestion.category}</strong>
-              </p>
+              <p><strong>{suggestion.category}</strong></p>
               <p>Confidence: {suggestion.confidence}%</p>
               <p>{suggestion.reason}</p>
             </div>
@@ -362,16 +334,13 @@ function DashboardPage() {
         <div className="filter-card">
           <div className="section-header">
             <h2>Recent Transaction Filters</h2>
-            <p>Filter the recent activity list by type and month.</p>
+            <p>Filter recent activity by type and month.</p>
           </div>
 
           <div className="filter-bar">
             <div>
               <label>Type</label>
-              <select
-                value={typeFilter}
-                onChange={(e) => setTypeFilter(e.target.value)}
-              >
+              <select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)}>
                 <option value="">All</option>
                 <option value="income">Income</option>
                 <option value="expense">Expense</option>
@@ -380,15 +349,10 @@ function DashboardPage() {
 
             <div>
               <label>Month</label>
-              <select
-                value={monthFilter}
-                onChange={(e) => setMonthFilter(e.target.value)}
-              >
+              <select value={monthFilter} onChange={(e) => setMonthFilter(e.target.value)}>
                 <option value="">All</option>
                 {availableMonths.map((month) => (
-                  <option key={month} value={month}>
-                    {month}
-                  </option>
+                  <option key={month} value={month}>{month}</option>
                 ))}
               </select>
             </div>
@@ -399,34 +363,22 @@ function DashboardPage() {
           <div className="dashboard-card large-card">
             <div className="section-header">
               <h2>Recent Transactions</h2>
-              <p>Your latest recorded income and expense activity.</p>
+              <p>Your latest activity in the selected account view.</p>
             </div>
 
             {filteredRecentTransactions.length === 0 ? (
-              <div className="empty-state">
-                <p>No recent transactions found.</p>
-              </div>
+              <div className="empty-state"><p>No recent transactions found.</p></div>
             ) : (
               <div className="transaction-list">
                 {filteredRecentTransactions.map((transaction) => (
                   <div key={transaction.id} className="transaction-item">
                     <div>
                       <strong>{transaction.description}</strong>
-                      <p>
-                        {transaction.category} • {transaction.type} • {transaction.date}
-                      </p>
+                      <p>{transaction.category} • {transaction.type} • {transaction.date}</p>
                     </div>
-
                     <div className="transaction-right">
-                      <strong
-                        className={
-                          transaction.type === "income"
-                            ? "income-text"
-                            : "expense-text"
-                        }
-                      >
-                        {transaction.type === "income" ? "+" : "-"}$
-                        {transaction.amount.toFixed(2)}
+                      <strong className={transaction.type === "income" ? "income-text" : "expense-text"}>
+                        {transaction.type === "income" ? "+" : "-"}${transaction.amount.toFixed(2)}
                       </strong>
                     </div>
                   </div>
@@ -442,9 +394,7 @@ function DashboardPage() {
             </div>
 
             {topCategories.length === 0 ? (
-              <div className="empty-state">
-                <p>No expense categories found.</p>
-              </div>
+              <div className="empty-state"><p>No expense categories found.</p></div>
             ) : (
               <div className="category-list">
                 {topCategories.map((item) => (

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 from sqlalchemy.orm import Session
 
 from app.dependencies import get_current_user, get_db
@@ -13,9 +13,11 @@ from app.schemas import (
     TransactionCreate,
     TransactionResponse,
 )
+from app.services.account_service import ensure_default_account, get_account_for_user
 from app.services.seed_service import seed_realistic_transactions
 from app.services.transaction_service import (
     apply_bulk_categories,
+    categorize_transaction,
     get_transactions_for_user,
     get_uncategorized_candidates,
     import_transactions_from_csv,
@@ -24,46 +26,20 @@ from app.services.transaction_service import (
 router = APIRouter(prefix="/transactions", tags=["Transactions"])
 
 
-CATEGORY_RULES = {
-    "grocery": ["grocery", "supermarket", "market", "freshco", "nofrills", "walmart", "costco"],
-    "transport": ["uber", "lyft", "ttc", "metro", "gas", "shell", "esso", "petro"],
-    "cafe": ["coffee", "cafe", "starbucks", "tim hortons"],
-    "restaurant": ["restaurant", "pizza", "burger", "shawarma", "mcdonald", "kfc", "subway"],
-    "rent": ["rent", "landlord", "lease"],
-    "salary": ["salary", "payroll", "paycheque", "paycheck", "deposit"],
-    "internet": ["internet", "wifi", "rogers", "bell"],
-    "phone": ["phone", "mobile", "cell", "telus", "freedom"],
-    "entertainment": ["netflix", "spotify", "youtube", "movie", "cinema"],
-}
-
-
-def suggest_category(description: str, tx_type: str) -> tuple[str, float, str | None, str]:
-    normalized = description.strip().lower()
-
-    if tx_type == "income":
-        if any(keyword in normalized for keyword in CATEGORY_RULES["salary"]):
-            return ("salary", 0.95, "salary", "Matched salary-related income keyword.")
-        return ("income", 0.70, None, "Defaulted to generic income category.")
-
-    for category, keywords in CATEGORY_RULES.items():
-        for keyword in keywords:
-            if keyword in normalized:
-                return (
-                    category,
-                    0.92,
-                    keyword,
-                    f"Matched keyword '{keyword}' to category '{category}'.",
-                )
-
-    return ("other", 0.45, None, "No strong keyword match found.")
-
-
 @router.get("/", response_model=list[TransactionResponse])
 def get_transactions(
+    account_id: int | None = Query(default=None),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    return get_transactions_for_user(db, current_user.id)
+    ensure_default_account(db, current_user)
+
+    if account_id is not None:
+        account = get_account_for_user(db, current_user.id, account_id)
+        if not account:
+            raise HTTPException(status_code=404, detail="Account not found")
+
+    return get_transactions_for_user(db, current_user.id, account_id=account_id)
 
 
 @router.post("/", response_model=TransactionResponse)
@@ -72,6 +48,11 @@ def create_transaction(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    ensure_default_account(db, current_user)
+    account = get_account_for_user(db, current_user.id, transaction.account_id)
+    if not account:
+        raise HTTPException(status_code=404, detail="Account not found")
+
     new_transaction = Transaction(
         amount=transaction.amount,
         category=transaction.category,
@@ -79,6 +60,7 @@ def create_transaction(
         date=transaction.date,
         type=transaction.type,
         owner_id=current_user.id,
+        account_id=transaction.account_id,
     )
 
     db.add(new_transaction)
@@ -103,11 +85,16 @@ def update_transaction(
     if not transaction:
         raise HTTPException(status_code=404, detail="Transaction not found")
 
+    account = get_account_for_user(db, current_user.id, updated_data.account_id)
+    if not account:
+        raise HTTPException(status_code=404, detail="Account not found")
+
     transaction.amount = updated_data.amount
     transaction.category = updated_data.category
     transaction.description = updated_data.description
     transaction.date = updated_data.date
     transaction.type = updated_data.type
+    transaction.account_id = updated_data.account_id
 
     db.commit()
     db.refresh(transaction)
@@ -134,22 +121,27 @@ def delete_transaction(
     return {"message": "Transaction deleted successfully"}
 
 
-@router.post("/import/csv")
-async def import_csv_transactions(
+@router.post("/import/statement")
+async def import_statement_transactions(
     file: UploadFile = File(...),
+    account_id: int = Form(...),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    account = get_account_for_user(db, current_user.id, account_id)
+    if not account:
+        raise HTTPException(status_code=404, detail="Account not found")
+
     if not file.filename.lower().endswith(".csv"):
-        raise HTTPException(status_code=400, detail="Only CSV files are allowed")
+        raise HTTPException(status_code=400, detail="Only CSV statement files are supported right now")
 
     try:
         file_bytes = await file.read()
-        return import_transactions_from_csv(db, current_user.id, file_bytes)
+        return import_transactions_from_csv(db, current_user.id, account_id, file_bytes)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"CSV import failed: {str(exc)}")
+        raise HTTPException(status_code=500, detail=f"Statement import failed: {str(exc)}")
 
 
 @router.post("/seed-realistic")
@@ -159,29 +151,51 @@ def seed_realistic_data(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    default_account = ensure_default_account(db, current_user)
+
     if months < 1 or months > 24:
         raise HTTPException(status_code=400, detail="Months must be between 1 and 24")
 
-    return seed_realistic_transactions(
+    result = seed_realistic_transactions(
         db=db,
         owner_id=current_user.id,
         months=months,
         clear_existing=clear_existing,
     )
 
+    uncategorized = (
+        db.query(Transaction)
+        .filter(Transaction.owner_id == current_user.id, Transaction.account_id.is_(None))
+        .all()
+    )
+    if uncategorized:
+        for item in uncategorized:
+            item.account_id = default_account.id
+        db.commit()
+
+    return result
+
 
 @router.get("/categorize/bulk-preview", response_model=BulkCategorySuggestionResponse)
 def get_bulk_category_preview(
+    account_id: int | None = Query(default=None),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    candidates = get_uncategorized_candidates(db, current_user.id)
+    if account_id is not None:
+        account = get_account_for_user(db, current_user.id, account_id)
+        if not account:
+            raise HTTPException(status_code=404, detail="Account not found")
+
+    candidates = get_uncategorized_candidates(db, current_user.id, account_id=account_id)
     suggestions: list[BulkCategorySuggestionItem] = []
 
     for transaction in candidates:
-        suggested_category, confidence, matched_keyword, reason = suggest_category(
-            transaction.description,
-            transaction.type,
+        suggested_category = categorize_transaction(
+            db=db,
+            owner_id=current_user.id,
+            description=transaction.description,
+            tx_type=transaction.type,
         )
 
         if suggested_category.lower() == transaction.category.lower():
@@ -194,9 +208,9 @@ def get_bulk_category_preview(
                 description=transaction.description,
                 type=transaction.type,
                 suggested_category=suggested_category,
-                confidence=confidence,
-                matched_keyword=matched_keyword,
-                reason=reason,
+                confidence=0.9,
+                matched_keyword=None,
+                reason="Suggested from learned memory and normalized merchant rules.",
             )
         )
 
@@ -216,9 +230,11 @@ def apply_bulk_category_suggestions(
 
     suggestion_map: dict[int, str] = {}
     for transaction in candidates:
-        suggested_category, _, _, _ = suggest_category(
-            transaction.description,
-            transaction.type,
+        suggested_category = categorize_transaction(
+            db=db,
+            owner_id=current_user.id,
+            description=transaction.description,
+            tx_type=transaction.type,
         )
         suggestion_map[transaction.id] = suggested_category
 
