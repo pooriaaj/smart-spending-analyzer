@@ -10,6 +10,7 @@ import ProfilePage from "./pages/ProfilePage";
 import ForgotPasswordPage from "./pages/ForgotPasswordPage";
 import ResetPasswordPage from "./pages/ResetPasswordPage";
 import AccountsPage from "./pages/AccountsPage";
+import ImportPage from "./pages/ImportPage";
 import ThemeToggle from "./components/ThemeToggle";
 
 function ProtectedRoute({ children }) {
@@ -49,6 +50,7 @@ function App() {
         <Route path="/assistant" element={<ProtectedRoute><AssistantPage /></ProtectedRoute>} />
         <Route path="/profile" element={<ProtectedRoute><ProfilePage /></ProtectedRoute>} />
         <Route path="/accounts" element={<ProtectedRoute><AccountsPage /></ProtectedRoute>} />
+        <Route path="/import" element={<ProtectedRoute><ImportPage /></ProtectedRoute>} />
       </Routes>
     </BrowserRouter>
   );

@@ -10,20 +10,22 @@ from app.schemas import (
     BulkCategoryApplyResponse,
     BulkCategorySuggestionItem,
     BulkCategorySuggestionResponse,
-    ReceiptScanResponse,
+    ConfirmPreviewImportRequest,
+    SmartImportResponse,
     TransactionCreate,
     TransactionResponse,
 )
 from app.services.account_service import ensure_default_account, get_account_for_user
-from app.services.receipt_service import scan_receipt_file
 from app.services.seed_service import seed_realistic_transactions
 from app.services.transaction_service import (
     apply_bulk_categories,
+    build_duplicate_key,
     categorize_transaction,
+    get_existing_duplicate_keys,
     get_transactions_for_user,
     get_uncategorized_candidates,
-    import_transactions_from_csv,
 )
+from app.services.unified_import_service import process_smart_import
 
 router = APIRouter(prefix="/transactions", tags=["Transactions"])
 
@@ -37,9 +39,9 @@ def get_transactions(
     ensure_default_account(db, current_user)
 
     if account_id is not None:
-        account = get_account_for_user(db, current_user.id, account_id)
-        if not account:
-            raise HTTPException(status_code=404, detail="Account not found")
+      account = get_account_for_user(db, current_user.id, account_id)
+      if not account:
+          raise HTTPException(status_code=404, detail="Account not found")
 
     return get_transactions_for_user(db, current_user.id, account_id=account_id)
 
@@ -123,31 +125,8 @@ def delete_transaction(
     return {"message": "Transaction deleted successfully"}
 
 
-@router.post("/import/statement")
-async def import_statement_transactions(
-    file: UploadFile = File(...),
-    account_id: int = Form(...),
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-):
-    account = get_account_for_user(db, current_user.id, account_id)
-    if not account:
-        raise HTTPException(status_code=404, detail="Account not found")
-
-    if not file.filename.lower().endswith(".csv"):
-        raise HTTPException(status_code=400, detail="Only CSV statement files are supported right now")
-
-    try:
-        file_bytes = await file.read()
-        return import_transactions_from_csv(db, current_user.id, account_id, file_bytes)
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"Statement import failed: {str(exc)}")
-
-
-@router.post("/scan-receipt", response_model=ReceiptScanResponse)
-async def scan_receipt(
+@router.post("/import/file", response_model=SmartImportResponse)
+async def smart_import_file(
     file: UploadFile = File(...),
     account_id: int = Form(...),
     db: Session = Depends(get_db),
@@ -159,9 +138,10 @@ async def scan_receipt(
 
     try:
         file_bytes = await file.read()
-        return scan_receipt_file(
+        return process_smart_import(
             db=db,
             owner_id=current_user.id,
+            account_id=account_id,
             file_bytes=file_bytes,
             filename=file.filename,
             content_type=file.content_type,
@@ -169,7 +149,70 @@ async def scan_receipt(
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"Receipt scan failed: {str(exc)}")
+        raise HTTPException(status_code=500, detail=f"Smart import failed: {str(exc)}")
+
+
+@router.post("/import/confirm-preview")
+def confirm_preview_import(
+    payload: ConfirmPreviewImportRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    account = get_account_for_user(db, current_user.id, payload.account_id)
+    if not account:
+        raise HTTPException(status_code=404, detail="Account not found")
+
+    existing_keys = get_existing_duplicate_keys(
+        db=db,
+        owner_id=current_user.id,
+        account_id=payload.account_id,
+    )
+    seen_in_request = set()
+
+    imported = 0
+    duplicates_skipped = 0
+    invalid_rows_skipped = 0
+
+    for row in payload.rows:
+        try:
+            duplicate_key = build_duplicate_key(
+                owner_id=current_user.id,
+                account_id=payload.account_id,
+                tx_date=row.date,
+                description=row.description,
+                amount=row.amount,
+                tx_type=row.type,
+                category=row.category,
+            )
+
+            if duplicate_key in existing_keys or duplicate_key in seen_in_request:
+                duplicates_skipped += 1
+                continue
+
+            seen_in_request.add(duplicate_key)
+
+            transaction = Transaction(
+                amount=row.amount,
+                category=row.category,
+                description=row.description,
+                date=row.date,
+                type=row.type,
+                owner_id=current_user.id,
+                account_id=payload.account_id,
+            )
+            db.add(transaction)
+            imported += 1
+        except Exception:
+            invalid_rows_skipped += 1
+
+    db.commit()
+
+    return {
+        "message": "Preview import completed",
+        "imported": imported,
+        "duplicates_skipped": duplicates_skipped,
+        "invalid_rows_skipped": invalid_rows_skipped,
+    }
 
 
 @router.post("/seed-realistic")

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import api, { handleApiAuthError } from "../services/api";
 import AccountSelector from "../components/AccountSelector";
@@ -11,18 +11,6 @@ function TransactionsPage() {
   const [categoryFilter, setCategoryFilter] = useState("");
   const [selectedAccountId, setSelectedAccountId] = useState(ALL_ACCOUNTS_VALUE);
   const [loading, setLoading] = useState(true);
-
-  const [importResult, setImportResult] = useState(null);
-  const [importError, setImportError] = useState("");
-  const [isUploading, setIsUploading] = useState(false);
-  const [selectedFileName, setSelectedFileName] = useState("");
-
-  const [receiptResult, setReceiptResult] = useState(null);
-  const [receiptError, setReceiptError] = useState("");
-  const [isScanningReceipt, setIsScanningReceipt] = useState(false);
-  const [selectedReceiptFileName, setSelectedReceiptFileName] = useState("");
-  const [receiptDraft, setReceiptDraft] = useState(null);
-  const [savingReceiptDraft, setSavingReceiptDraft] = useState(false);
 
   const [bulkSuggestions, setBulkSuggestions] = useState([]);
   const [bulkLoading, setBulkLoading] = useState(false);
@@ -39,8 +27,6 @@ function TransactionsPage() {
     account_id: "",
   });
 
-  const fileInputRef = useRef(null);
-  const receiptInputRef = useRef(null);
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
 
@@ -148,134 +134,6 @@ function TransactionsPage() {
     }
   };
 
-  const handleChooseFile = () => {
-    fileInputRef.current?.click();
-  };
-
-  const handleChooseReceipt = () => {
-    receiptInputRef.current?.click();
-  };
-
-  const clearImportMessages = () => {
-    setImportResult(null);
-    setImportError("");
-  };
-
-  const clearReceiptMessages = () => {
-    setReceiptResult(null);
-    setReceiptError("");
-    setReceiptDraft(null);
-  };
-
-  const handleStatementUpload = async (event) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-
-    if (!normalizedAccountId) {
-      setImportError("Please select a specific account before importing a statement.");
-      return;
-    }
-
-    setSelectedFileName(file.name);
-    setImportResult(null);
-    setImportError("");
-    setIsUploading(true);
-
-    const formData = new FormData();
-    formData.append("file", file);
-    formData.append("account_id", String(normalizedAccountId));
-
-    try {
-      const response = await api.post("/transactions/import/statement", formData, {
-        headers: {
-          "Content-Type": "multipart/form-data",
-        },
-      });
-
-      setImportResult(response.data);
-      await fetchTransactions();
-    } catch (error) {
-      if (!handleApiAuthError(error, navigate)) {
-        setImportError(error.response?.data?.detail || "Statement import failed");
-      }
-    } finally {
-      setIsUploading(false);
-      event.target.value = "";
-    }
-  };
-
-  const handleReceiptUpload = async (event) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-
-    if (!normalizedAccountId) {
-      setReceiptError("Please select a specific account before scanning a receipt.");
-      return;
-    }
-
-    setSelectedReceiptFileName(file.name);
-    setReceiptResult(null);
-    setReceiptError("");
-    setReceiptDraft(null);
-    setIsScanningReceipt(true);
-
-    const formData = new FormData();
-    formData.append("file", file);
-    formData.append("account_id", String(normalizedAccountId));
-
-    try {
-      const response = await api.post("/transactions/scan-receipt", formData, {
-        headers: {
-          "Content-Type": "multipart/form-data",
-        },
-      });
-
-      setReceiptResult(response.data);
-      setReceiptDraft({
-        amount: response.data.amount ?? "",
-        category: response.data.category || "other",
-        description: response.data.merchant || "Scanned receipt",
-        date: response.data.date || new Date().toISOString().slice(0, 10),
-        type: response.data.type || "expense",
-        account_id: normalizedAccountId,
-      });
-    } catch (error) {
-      if (!handleApiAuthError(error, navigate)) {
-        setReceiptError(error.response?.data?.detail || "Receipt scan failed");
-      }
-    } finally {
-      setIsScanningReceipt(false);
-      event.target.value = "";
-    }
-  };
-
-  const handleSaveReceiptDraft = async () => {
-    if (!receiptDraft) return;
-
-    try {
-      setSavingReceiptDraft(true);
-
-      await api.post("/transactions/", {
-        amount: Number(receiptDraft.amount),
-        category: receiptDraft.category,
-        description: receiptDraft.description,
-        date: receiptDraft.date,
-        type: receiptDraft.type,
-        account_id: Number(receiptDraft.account_id),
-      });
-
-      setReceiptDraft(null);
-      setReceiptResult(null);
-      await fetchTransactions();
-    } catch (error) {
-      if (!handleApiAuthError(error, navigate)) {
-        setReceiptError(error.response?.data?.detail || "Failed to save scanned receipt.");
-      }
-    } finally {
-      setSavingReceiptDraft(false);
-    }
-  };
-
   const handleBulkAnalyze = async () => {
     try {
       setBulkLoading(true);
@@ -339,13 +197,16 @@ function TransactionsPage() {
             <p className="eyebrow-text">Smart Spending Analyzer</p>
             <h1>All Transactions</h1>
             <p className="hero-subtitle">
-              Browse, filter, import statements, scan receipts, and manage transactions by account.
+              Browse, filter, manage, and improve your transaction history.
             </p>
           </div>
 
           <div className="header-actions">
             <button className="secondary-button" onClick={() => navigate("/dashboard")}>
               Back to Dashboard
+            </button>
+            <button className="secondary-button" onClick={() => navigate("/import")}>
+              Smart Import
             </button>
           </div>
         </div>
@@ -356,261 +217,6 @@ function TransactionsPage() {
             <p>Select all accounts or focus on one account.</p>
           </div>
           <AccountSelector onChange={setSelectedAccountId} allowAll={true} />
-        </div>
-
-        <div className="filter-card">
-          <div className="section-header">
-            <h2>Monthly Statement Import</h2>
-            <p>Upload a statement CSV and import categorized transactions into the selected account.</p>
-          </div>
-
-          <div className="import-upload-card">
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept=".csv"
-              onChange={handleStatementUpload}
-              disabled={isUploading}
-              className="hidden-file-input"
-            />
-
-            <div className="import-upload-top">
-              <div>
-                <h3>Statement Import</h3>
-                <p>
-                  Supported now: <strong>CSV bank/card statements</strong>. Choose a specific account first.
-                </p>
-              </div>
-
-              <button
-                type="button"
-                className="import-upload-button"
-                onClick={handleChooseFile}
-                disabled={isUploading}
-              >
-                {isUploading ? "Uploading..." : "Choose Statement CSV"}
-              </button>
-            </div>
-
-            <div className="import-upload-meta">
-              <span className="import-file-label">Selected file:</span>
-              <span className="import-file-name">{selectedFileName || "No file selected yet"}</span>
-            </div>
-
-            {isUploading && (
-              <div className="import-info-box">
-                <strong>Processing statement...</strong>
-                <p>Your statement is being parsed, categorized, and checked for duplicates.</p>
-              </div>
-            )}
-
-            {importResult && (
-              <div className="import-success">
-                <div className="import-message-header">
-                  <div>
-                    <h3>Import completed</h3>
-                    <p>{importResult.message}</p>
-                  </div>
-                  <button type="button" className="dismiss-message-button" onClick={clearImportMessages}>
-                    Dismiss
-                  </button>
-                </div>
-
-                <div className="import-stats-grid">
-                  <div className="import-stat-card">
-                    <span className="import-stat-label">Imported</span>
-                    <strong>{importResult.imported ?? 0}</strong>
-                  </div>
-                  <div className="import-stat-card">
-                    <span className="import-stat-label">Duplicates skipped</span>
-                    <strong>{importResult.duplicates_skipped ?? 0}</strong>
-                  </div>
-                  <div className="import-stat-card">
-                    <span className="import-stat-label">Invalid rows skipped</span>
-                    <strong>{importResult.invalid_rows_skipped ?? 0}</strong>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {importError && (
-              <div className="import-error">
-                <div className="import-message-header">
-                  <div>
-                    <h3>Import failed</h3>
-                    <p>{importError}</p>
-                  </div>
-                  <button
-                    type="button"
-                    className="dismiss-message-button dismiss-error-button"
-                    onClick={clearImportMessages}
-                  >
-                    Dismiss
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-
-        <div className="filter-card">
-          <div className="section-header">
-            <h2>Receipt Scanner</h2>
-            <p>Upload a receipt image, let the app extract a draft transaction, then review it before saving.</p>
-          </div>
-
-          <div className="import-upload-card">
-            <input
-              ref={receiptInputRef}
-              type="file"
-              accept=".jpg,.jpeg,.png,.webp"
-              onChange={handleReceiptUpload}
-              disabled={isScanningReceipt}
-              className="hidden-file-input"
-            />
-
-            <div className="import-upload-top">
-              <div>
-                <h3>Receipt OCR</h3>
-                <p>
-                  Supported now: <strong>JPG, PNG, WEBP</strong>. Use a clear photo and choose a specific account first.
-                </p>
-              </div>
-
-              <button
-                type="button"
-                className="import-upload-button"
-                onClick={handleChooseReceipt}
-                disabled={isScanningReceipt}
-              >
-                {isScanningReceipt ? "Scanning..." : "Choose Receipt Image"}
-              </button>
-            </div>
-
-            <div className="import-upload-meta">
-              <span className="import-file-label">Selected file:</span>
-              <span className="import-file-name">{selectedReceiptFileName || "No receipt selected yet"}</span>
-            </div>
-
-            {isScanningReceipt && (
-              <div className="import-info-box">
-                <strong>Scanning receipt...</strong>
-                <p>The app is extracting merchant, date, total, and category suggestions.</p>
-              </div>
-            )}
-
-            {receiptResult && (
-              <div className="receipt-result-card">
-                <div className="receipt-result-top">
-                  <div>
-                    <h3>Receipt scanned</h3>
-                    <p>Confidence: {Math.round((receiptResult.confidence || 0) * 100)}%</p>
-                  </div>
-                  <button type="button" className="dismiss-message-button" onClick={clearReceiptMessages}>
-                    Clear
-                  </button>
-                </div>
-
-                <div className="receipt-meta-grid">
-                  <div><strong>Merchant:</strong> {receiptResult.merchant || "Not found"}</div>
-                  <div><strong>Date:</strong> {receiptResult.date || "Not found"}</div>
-                  <div><strong>Amount:</strong> {receiptResult.amount != null ? `$${Number(receiptResult.amount).toFixed(2)}` : "Not found"}</div>
-                  <div><strong>Suggested category:</strong> {receiptResult.category}</div>
-                </div>
-
-                {receiptResult.raw_text_preview && (
-                  <div className="receipt-preview-box">
-                    <strong>OCR preview</strong>
-                    <p>{receiptResult.raw_text_preview}</p>
-                  </div>
-                )}
-
-                {receiptResult.notes?.length > 0 && (
-                  <div className="receipt-preview-box">
-                    <strong>Notes</strong>
-                    <ul className="assistant-list">
-                      {receiptResult.notes.map((item, index) => (
-                        <li key={`receipt-note-${index}`}>{item}</li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {receiptDraft && (
-              <div className="receipt-draft-card">
-                <div className="section-header">
-                  <h3>Review extracted transaction</h3>
-                  <p>Nothing is saved yet. Review and edit before adding it.</p>
-                </div>
-
-                <div className="transaction-form">
-                  <input
-                    type="number"
-                    step="0.01"
-                    value={receiptDraft.amount}
-                    onChange={(e) => setReceiptDraft({ ...receiptDraft, amount: e.target.value })}
-                    placeholder="Amount"
-                  />
-
-                  <input
-                    type="text"
-                    value={receiptDraft.category}
-                    onChange={(e) => setReceiptDraft({ ...receiptDraft, category: e.target.value })}
-                    placeholder="Category"
-                  />
-
-                  <input
-                    type="text"
-                    value={receiptDraft.description}
-                    onChange={(e) => setReceiptDraft({ ...receiptDraft, description: e.target.value })}
-                    placeholder="Description"
-                  />
-
-                  <input
-                    type="date"
-                    value={receiptDraft.date}
-                    onChange={(e) => setReceiptDraft({ ...receiptDraft, date: e.target.value })}
-                  />
-
-                  <select
-                    value={receiptDraft.type}
-                    onChange={(e) => setReceiptDraft({ ...receiptDraft, type: e.target.value })}
-                  >
-                    <option value="expense">Expense</option>
-                    <option value="income">Income</option>
-                  </select>
-
-                  <button
-                    type="button"
-                    onClick={handleSaveReceiptDraft}
-                    disabled={savingReceiptDraft}
-                  >
-                    {savingReceiptDraft ? "Saving..." : "Save Scanned Transaction"}
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {receiptError && (
-              <div className="import-error">
-                <div className="import-message-header">
-                  <div>
-                    <h3>Receipt scan failed</h3>
-                    <p>{receiptError}</p>
-                  </div>
-                  <button
-                    type="button"
-                    className="dismiss-message-button dismiss-error-button"
-                    onClick={clearReceiptMessages}
-                  >
-                    Dismiss
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
         </div>
 
         <div className="filter-card">

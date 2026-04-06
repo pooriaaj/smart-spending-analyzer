@@ -9,6 +9,8 @@ from pydantic import BaseModel, ConfigDict, EmailStr, Field
 TransactionType = Literal["income", "expense"]
 AssistantMode = Literal["balanced", "strict", "coach"]
 AccountType = Literal["chequing", "savings", "credit_card", "cash", "business", "other"]
+ImportDetectedType = Literal["csv_statement", "receipt_image", "pdf_statement"]
+ImportStatus = Literal["completed", "draft_review", "table_review"]
 
 
 class ORMBaseModel(BaseModel):
@@ -34,15 +36,6 @@ class UserProfileResponse(ORMBaseModel):
     id: int
     email: EmailStr
 
-class ReceiptScanResponse(BaseModel):
-    merchant: str | None = None
-    date: str | None = None
-    amount: float | None = None
-    category: str = "other"
-    type: TransactionType = "expense"
-    confidence: float = 0.0
-    raw_text_preview: str | None = None
-    notes: list[str] = Field(default_factory=list)    
 
 class UserProfileUpdate(BaseModel):
     email: EmailStr
@@ -249,3 +242,55 @@ class AssistantQueryResponse(BaseModel):
 
 class AssistantSuggestionsResponse(BaseModel):
     suggestions: list[str]
+
+
+class ReceiptScanResponse(BaseModel):
+    merchant: str | None = None
+    date: str | None = None
+    amount: float | None = None
+    category: str = "other"
+    type: TransactionType = "expense"
+    confidence: float = 0.0
+    raw_text_preview: str | None = None
+    notes: list[str] = Field(default_factory=list)
+
+
+class ImportSummary(BaseModel):
+    imported: int = 0
+    duplicates_skipped: int = 0
+    invalid_rows_skipped: int = 0
+
+
+class DraftTransaction(BaseModel):
+    amount: float | None = None
+    category: str = "other"
+    description: str = ""
+    date: str | None = None
+    type: TransactionType = "expense"
+    account_id: int
+    confidence: float = 0.0
+    notes: list[str] = Field(default_factory=list)
+
+
+class StatementPreviewRow(BaseModel):
+    date: str
+    description: str
+    amount: float
+    type: TransactionType
+    category: str
+    source_line: str | None = None
+
+
+class SmartImportResponse(BaseModel):
+    detected_type: ImportDetectedType
+    status: ImportStatus
+    message: str
+    import_summary: ImportSummary | None = None
+    draft_transaction: DraftTransaction | None = None
+    preview_rows: list[StatementPreviewRow] = Field(default_factory=list)
+    notes: list[str] = Field(default_factory=list)
+
+
+class ConfirmPreviewImportRequest(BaseModel):
+    account_id: int
+    rows: list[StatementPreviewRow] = Field(default_factory=list)
