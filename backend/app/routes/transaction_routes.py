@@ -26,6 +26,8 @@ from app.services.transaction_service import (
     get_existing_duplicate_keys,
     get_transactions_for_user,
     get_uncategorized_candidates,
+    normalize_category_name,
+    normalize_existing_categories_for_user,
 )
 from app.services.unified_import_service import process_smart_import
 
@@ -61,7 +63,7 @@ def create_transaction(
 
     new_transaction = Transaction(
         amount=transaction.amount,
-        category=transaction.category,
+        category=normalize_category_name(transaction.category),
         description=transaction.description,
         date=transaction.date,
         type=transaction.type,
@@ -96,7 +98,7 @@ def update_transaction(
         raise HTTPException(status_code=404, detail="Account not found")
 
     transaction.amount = updated_data.amount
-    transaction.category = updated_data.category
+    transaction.category = normalize_category_name(updated_data.category)
     transaction.description = updated_data.description
     transaction.date = updated_data.date
     transaction.type = updated_data.type
@@ -125,6 +127,24 @@ def delete_transaction(
     db.delete(transaction)
     db.commit()
     return {"message": "Transaction deleted successfully"}
+
+
+@router.post("/normalize-categories")
+def normalize_categories_route(
+    account_id: int | None = Query(default=None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    if account_id is not None:
+        account = get_account_for_user(db, current_user.id, account_id)
+        if not account:
+            raise HTTPException(status_code=404, detail="Account not found")
+
+    return normalize_existing_categories_for_user(
+        db=db,
+        owner_id=current_user.id,
+        account_id=account_id,
+    )
 
 
 @router.post("/import/file", response_model=SmartImportResponse)
@@ -178,6 +198,7 @@ def confirm_preview_import(
     for row in payload.rows:
         try:
             tx_date = date.fromisoformat(row.date)
+            normalized_category = normalize_category_name(row.category)
 
             duplicate_key = build_duplicate_key(
                 owner_id=current_user.id,
@@ -186,7 +207,7 @@ def confirm_preview_import(
                 description=row.description,
                 amount=row.amount,
                 tx_type=row.type,
-                category=row.category,
+                category=normalized_category,
             )
 
             if duplicate_key in existing_keys or duplicate_key in seen_in_request:
@@ -197,7 +218,7 @@ def confirm_preview_import(
 
             transaction = Transaction(
                 amount=row.amount,
-                category=row.category,
+                category=normalized_category,
                 description=row.description,
                 date=tx_date,
                 type=row.type,

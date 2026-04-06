@@ -32,10 +32,46 @@ CATEGORY_RULES = {
     "internet": ["internet", "rogers", "bell internet"],
     "phone": ["phone", "mobile", "wireless", "telus", "freedom", "fido"],
     "restaurant": ["restaurant", "pizza", "burger", "shawarma", "mcdonald", "kfc", "subway"],
-    "cafe": ["coffee", "cafe", "starbucks", "tim hortons"],
+    "cafe": ["coffee", "cafe", "café", "starbucks", "tim hortons"],
     "entertainment": ["netflix", "spotify", "cinema", "movie", "youtube"],
     "shopping": ["amazon", "shop", "store", "mall", "purchase"],
     "transfer": ["e-transfer", "transfer", "interac"],
+    "utilities": ["utility", "utilities", "hydro", "electric", "water", "gas bill"],
+    "car maintenance": ["car maintenance", "mechanic", "oil change", "tire", "repair"],
+    "personal": ["personal", "pharmacy", "shoppers drug mart", "beauty", "haircut"],
+}
+
+CATEGORY_ALIASES = {
+    "grocery": "groceries",
+    "groceries": "groceries",
+    "supermarket": "groceries",
+    "transport": "transport",
+    "transportation": "transport",
+    "cafe": "cafe",
+    "café": "cafe",
+    "coffee": "cafe",
+    "personal": "personal",
+    "shopping": "shopping",
+    "transfer": "transfer",
+    "transfers": "transfer",
+    "utilities": "utilities",
+    "utility": "utilities",
+    "other": "other",
+    "misc": "other",
+    "miscellaneous": "other",
+    "uncategorized": "other",
+    "unknown": "other",
+    "restaurant": "restaurant",
+    "restaurants": "restaurant",
+    "salary": "salary",
+    "income": "income",
+    "refund": "refund",
+    "rent": "rent",
+    "internet": "internet",
+    "phone": "phone",
+    "entertainment": "entertainment",
+    "car maintenance": "car maintenance",
+    "car_maintenance": "car maintenance",
 }
 
 
@@ -88,6 +124,33 @@ def normalize_type(value: str) -> str:
     if normalized in {"expense", "debit", "withdrawal"}:
         return "expense"
     raise ValueError(f"Invalid transaction type: {value}")
+
+
+def normalize_category_name(value: str | None) -> str:
+    if not value:
+        return "other"
+
+    cleaned = value.strip().lower()
+    cleaned = cleaned.replace("&", "and")
+    cleaned = re.sub(r"[_\-]+", " ", cleaned)
+    cleaned = re.sub(r"\s+", " ", cleaned).strip()
+
+    if not cleaned:
+        return "other"
+
+    if cleaned in CATEGORY_ALIASES:
+        return CATEGORY_ALIASES[cleaned]
+
+    singular_map = {
+        "restaurants": "restaurant",
+        "transfers": "transfer",
+        "utilities": "utilities",
+        "groceries": "groceries",
+    }
+    if cleaned in singular_map:
+        return singular_map[cleaned]
+
+    return cleaned
 
 
 def sniff_csv_dialect(text: str) -> csv.Dialect:
@@ -193,7 +256,7 @@ def learnable_category_from_memory(db: Session, owner_id: int, description: str,
             if best_match is None or len(keyword) > len(best_match[0]):
                 best_match = (keyword, item.category)
 
-    return best_match[1] if best_match else None
+    return normalize_category_name(best_match[1]) if best_match else None
 
 
 def categorize_transaction(db: Session, owner_id: int, description: str, tx_type: str) -> str:
@@ -216,7 +279,7 @@ def categorize_transaction(db: Session, owner_id: int, description: str, tx_type
             continue
         for keyword in keywords:
             if keyword in lowered:
-                return category
+                return normalize_category_name(category)
 
     return "other"
 
@@ -237,7 +300,7 @@ def build_duplicate_key(
         description.strip().lower(),
         round(amount, 2),
         tx_type.strip().lower(),
-        category.strip().lower(),
+        normalize_category_name(category),
     )
 
 
@@ -289,7 +352,7 @@ def import_transactions_from_csv(
             tx_type, amount = infer_type_and_amount(row, header_mapping)
 
             if header_mapping.get("category") and row.get(header_mapping["category"]):
-                category = row[header_mapping["category"]].strip()
+                category = normalize_category_name(row[header_mapping["category"]])
             else:
                 category = categorize_transaction(db, owner_id, description, tx_type)
 
@@ -377,7 +440,7 @@ def apply_bulk_categories(
     )
 
     for transaction in transactions:
-        new_category = suggested_category_map.get(transaction.id)
+        new_category = normalize_category_name(suggested_category_map.get(transaction.id))
         if new_category and transaction.category != new_category:
             transaction.category = new_category
             updated_count += 1
@@ -386,3 +449,37 @@ def apply_bulk_categories(
         db.commit()
 
     return updated_count
+
+
+def normalize_existing_categories_for_user(
+    db: Session,
+    owner_id: int,
+    account_id: int | None = None,
+) -> dict:
+    query = db.query(Transaction).filter(Transaction.owner_id == owner_id)
+
+    if account_id is not None:
+        query = query.filter(Transaction.account_id == account_id)
+
+    transactions = query.all()
+
+    updated_count = 0
+    changes: dict[str, str] = {}
+
+    for transaction in transactions:
+        old_category = transaction.category or "other"
+        new_category = normalize_category_name(old_category)
+
+        if old_category != new_category:
+            transaction.category = new_category
+            updated_count += 1
+            if old_category not in changes:
+                changes[old_category] = new_category
+
+    if updated_count > 0:
+        db.commit()
+
+    return {
+        "updated_count": updated_count,
+        "changes": changes,
+    }
