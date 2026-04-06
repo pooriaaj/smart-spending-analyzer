@@ -34,6 +34,15 @@ class UserProfileResponse(ORMBaseModel):
     id: int
     email: EmailStr
 
+class ReceiptScanResponse(BaseModel):
+    merchant: str | None = None
+    date: str | None = None
+    amount: float | None = None
+    category: str = "other"
+    type: TransactionType = "expense"
+    confidence: float = 0.0
+    raw_text_preview: str | None = None
+    notes: list[str] = Field(default_factory=list)    
 
 class UserProfileUpdate(BaseModel):
     email: EmailStr

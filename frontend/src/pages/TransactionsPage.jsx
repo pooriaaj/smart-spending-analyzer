@@ -17,6 +17,13 @@ function TransactionsPage() {
   const [isUploading, setIsUploading] = useState(false);
   const [selectedFileName, setSelectedFileName] = useState("");
 
+  const [receiptResult, setReceiptResult] = useState(null);
+  const [receiptError, setReceiptError] = useState("");
+  const [isScanningReceipt, setIsScanningReceipt] = useState(false);
+  const [selectedReceiptFileName, setSelectedReceiptFileName] = useState("");
+  const [receiptDraft, setReceiptDraft] = useState(null);
+  const [savingReceiptDraft, setSavingReceiptDraft] = useState(false);
+
   const [bulkSuggestions, setBulkSuggestions] = useState([]);
   const [bulkLoading, setBulkLoading] = useState(false);
   const [bulkApplying, setBulkApplying] = useState(false);
@@ -33,6 +40,7 @@ function TransactionsPage() {
   });
 
   const fileInputRef = useRef(null);
+  const receiptInputRef = useRef(null);
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
 
@@ -144,9 +152,19 @@ function TransactionsPage() {
     fileInputRef.current?.click();
   };
 
+  const handleChooseReceipt = () => {
+    receiptInputRef.current?.click();
+  };
+
   const clearImportMessages = () => {
     setImportResult(null);
     setImportError("");
+  };
+
+  const clearReceiptMessages = () => {
+    setReceiptResult(null);
+    setReceiptError("");
+    setReceiptDraft(null);
   };
 
   const handleStatementUpload = async (event) => {
@@ -183,6 +201,78 @@ function TransactionsPage() {
     } finally {
       setIsUploading(false);
       event.target.value = "";
+    }
+  };
+
+  const handleReceiptUpload = async (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    if (!normalizedAccountId) {
+      setReceiptError("Please select a specific account before scanning a receipt.");
+      return;
+    }
+
+    setSelectedReceiptFileName(file.name);
+    setReceiptResult(null);
+    setReceiptError("");
+    setReceiptDraft(null);
+    setIsScanningReceipt(true);
+
+    const formData = new FormData();
+    formData.append("file", file);
+    formData.append("account_id", String(normalizedAccountId));
+
+    try {
+      const response = await api.post("/transactions/scan-receipt", formData, {
+        headers: {
+          "Content-Type": "multipart/form-data",
+        },
+      });
+
+      setReceiptResult(response.data);
+      setReceiptDraft({
+        amount: response.data.amount ?? "",
+        category: response.data.category || "other",
+        description: response.data.merchant || "Scanned receipt",
+        date: response.data.date || new Date().toISOString().slice(0, 10),
+        type: response.data.type || "expense",
+        account_id: normalizedAccountId,
+      });
+    } catch (error) {
+      if (!handleApiAuthError(error, navigate)) {
+        setReceiptError(error.response?.data?.detail || "Receipt scan failed");
+      }
+    } finally {
+      setIsScanningReceipt(false);
+      event.target.value = "";
+    }
+  };
+
+  const handleSaveReceiptDraft = async () => {
+    if (!receiptDraft) return;
+
+    try {
+      setSavingReceiptDraft(true);
+
+      await api.post("/transactions/", {
+        amount: Number(receiptDraft.amount),
+        category: receiptDraft.category,
+        description: receiptDraft.description,
+        date: receiptDraft.date,
+        type: receiptDraft.type,
+        account_id: Number(receiptDraft.account_id),
+      });
+
+      setReceiptDraft(null);
+      setReceiptResult(null);
+      await fetchTransactions();
+    } catch (error) {
+      if (!handleApiAuthError(error, navigate)) {
+        setReceiptError(error.response?.data?.detail || "Failed to save scanned receipt.");
+      }
+    } finally {
+      setSavingReceiptDraft(false);
     }
   };
 
@@ -249,7 +339,7 @@ function TransactionsPage() {
             <p className="eyebrow-text">Smart Spending Analyzer</p>
             <h1>All Transactions</h1>
             <p className="hero-subtitle">
-              Browse, filter, import monthly statements, and manage transactions by account.
+              Browse, filter, import statements, scan receipts, and manage transactions by account.
             </p>
           </div>
 
@@ -271,9 +361,7 @@ function TransactionsPage() {
         <div className="filter-card">
           <div className="section-header">
             <h2>Monthly Statement Import</h2>
-            <p>
-              Upload a statement CSV. The importer reads date, description, amount, income/expense, and categorizes rows automatically.
-            </p>
+            <p>Upload a statement CSV and import categorized transactions into the selected account.</p>
           </div>
 
           <div className="import-upload-card">
@@ -290,7 +378,7 @@ function TransactionsPage() {
               <div>
                 <h3>Statement Import</h3>
                 <p>
-                  Supported now: <strong>CSV bank/card statements</strong>. You must choose a specific account first.
+                  Supported now: <strong>CSV bank/card statements</strong>. Choose a specific account first.
                 </p>
               </div>
 
@@ -356,6 +444,166 @@ function TransactionsPage() {
                     type="button"
                     className="dismiss-message-button dismiss-error-button"
                     onClick={clearImportMessages}
+                  >
+                    Dismiss
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="filter-card">
+          <div className="section-header">
+            <h2>Receipt Scanner</h2>
+            <p>Upload a receipt image, let the app extract a draft transaction, then review it before saving.</p>
+          </div>
+
+          <div className="import-upload-card">
+            <input
+              ref={receiptInputRef}
+              type="file"
+              accept=".jpg,.jpeg,.png,.webp"
+              onChange={handleReceiptUpload}
+              disabled={isScanningReceipt}
+              className="hidden-file-input"
+            />
+
+            <div className="import-upload-top">
+              <div>
+                <h3>Receipt OCR</h3>
+                <p>
+                  Supported now: <strong>JPG, PNG, WEBP</strong>. Use a clear photo and choose a specific account first.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                className="import-upload-button"
+                onClick={handleChooseReceipt}
+                disabled={isScanningReceipt}
+              >
+                {isScanningReceipt ? "Scanning..." : "Choose Receipt Image"}
+              </button>
+            </div>
+
+            <div className="import-upload-meta">
+              <span className="import-file-label">Selected file:</span>
+              <span className="import-file-name">{selectedReceiptFileName || "No receipt selected yet"}</span>
+            </div>
+
+            {isScanningReceipt && (
+              <div className="import-info-box">
+                <strong>Scanning receipt...</strong>
+                <p>The app is extracting merchant, date, total, and category suggestions.</p>
+              </div>
+            )}
+
+            {receiptResult && (
+              <div className="receipt-result-card">
+                <div className="receipt-result-top">
+                  <div>
+                    <h3>Receipt scanned</h3>
+                    <p>Confidence: {Math.round((receiptResult.confidence || 0) * 100)}%</p>
+                  </div>
+                  <button type="button" className="dismiss-message-button" onClick={clearReceiptMessages}>
+                    Clear
+                  </button>
+                </div>
+
+                <div className="receipt-meta-grid">
+                  <div><strong>Merchant:</strong> {receiptResult.merchant || "Not found"}</div>
+                  <div><strong>Date:</strong> {receiptResult.date || "Not found"}</div>
+                  <div><strong>Amount:</strong> {receiptResult.amount != null ? `$${Number(receiptResult.amount).toFixed(2)}` : "Not found"}</div>
+                  <div><strong>Suggested category:</strong> {receiptResult.category}</div>
+                </div>
+
+                {receiptResult.raw_text_preview && (
+                  <div className="receipt-preview-box">
+                    <strong>OCR preview</strong>
+                    <p>{receiptResult.raw_text_preview}</p>
+                  </div>
+                )}
+
+                {receiptResult.notes?.length > 0 && (
+                  <div className="receipt-preview-box">
+                    <strong>Notes</strong>
+                    <ul className="assistant-list">
+                      {receiptResult.notes.map((item, index) => (
+                        <li key={`receipt-note-${index}`}>{item}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {receiptDraft && (
+              <div className="receipt-draft-card">
+                <div className="section-header">
+                  <h3>Review extracted transaction</h3>
+                  <p>Nothing is saved yet. Review and edit before adding it.</p>
+                </div>
+
+                <div className="transaction-form">
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={receiptDraft.amount}
+                    onChange={(e) => setReceiptDraft({ ...receiptDraft, amount: e.target.value })}
+                    placeholder="Amount"
+                  />
+
+                  <input
+                    type="text"
+                    value={receiptDraft.category}
+                    onChange={(e) => setReceiptDraft({ ...receiptDraft, category: e.target.value })}
+                    placeholder="Category"
+                  />
+
+                  <input
+                    type="text"
+                    value={receiptDraft.description}
+                    onChange={(e) => setReceiptDraft({ ...receiptDraft, description: e.target.value })}
+                    placeholder="Description"
+                  />
+
+                  <input
+                    type="date"
+                    value={receiptDraft.date}
+                    onChange={(e) => setReceiptDraft({ ...receiptDraft, date: e.target.value })}
+                  />
+
+                  <select
+                    value={receiptDraft.type}
+                    onChange={(e) => setReceiptDraft({ ...receiptDraft, type: e.target.value })}
+                  >
+                    <option value="expense">Expense</option>
+                    <option value="income">Income</option>
+                  </select>
+
+                  <button
+                    type="button"
+                    onClick={handleSaveReceiptDraft}
+                    disabled={savingReceiptDraft}
+                  >
+                    {savingReceiptDraft ? "Saving..." : "Save Scanned Transaction"}
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {receiptError && (
+              <div className="import-error">
+                <div className="import-message-header">
+                  <div>
+                    <h3>Receipt scan failed</h3>
+                    <p>{receiptError}</p>
+                  </div>
+                  <button
+                    type="button"
+                    className="dismiss-message-button dismiss-error-button"
+                    onClick={clearReceiptMessages}
                   >
                     Dismiss
                   </button>

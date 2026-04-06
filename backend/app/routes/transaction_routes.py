@@ -10,10 +10,12 @@ from app.schemas import (
     BulkCategoryApplyResponse,
     BulkCategorySuggestionItem,
     BulkCategorySuggestionResponse,
+    ReceiptScanResponse,
     TransactionCreate,
     TransactionResponse,
 )
 from app.services.account_service import ensure_default_account, get_account_for_user
+from app.services.receipt_service import scan_receipt_file
 from app.services.seed_service import seed_realistic_transactions
 from app.services.transaction_service import (
     apply_bulk_categories,
@@ -142,6 +144,32 @@ async def import_statement_transactions(
         raise HTTPException(status_code=400, detail=str(exc))
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Statement import failed: {str(exc)}")
+
+
+@router.post("/scan-receipt", response_model=ReceiptScanResponse)
+async def scan_receipt(
+    file: UploadFile = File(...),
+    account_id: int = Form(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    account = get_account_for_user(db, current_user.id, account_id)
+    if not account:
+        raise HTTPException(status_code=404, detail="Account not found")
+
+    try:
+        file_bytes = await file.read()
+        return scan_receipt_file(
+            db=db,
+            owner_id=current_user.id,
+            file_bytes=file_bytes,
+            filename=file.filename,
+            content_type=file.content_type,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Receipt scan failed: {str(exc)}")
 
 
 @router.post("/seed-realistic")
