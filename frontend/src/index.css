@@ -286,9 +286,9 @@ textarea:focus,
 
 .summary-grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 18px;
-  margin-bottom: 24px;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 300px));
+  justify-content: center;
+  gap: 20px;
 }
 
 .summary-card {
