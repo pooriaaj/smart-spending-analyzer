@@ -2512,3 +2512,53 @@ textarea {
 :root[data-theme="dark"] .danger-zone-card {
   border-color: rgba(248, 113, 113, 0.2);
 }
+
+.auth-inline-link-row {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: -6px;
+}
+
+.auth-inline-link {
+  color: var(--brand);
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.auth-inline-link:hover {
+  text-decoration: underline;
+}
+
+.auth-layout-single {
+  grid-template-columns: 1fr;
+  max-width: 640px;
+}
+
+.auth-panel-centered {
+  justify-content: center;
+}
+
+.success-text {
+  margin: 14px 0 0 0;
+  color: var(--green-dark);
+  font-weight: 600;
+}
+
+.reset-link-box {
+  margin-top: 16px;
+  padding: 16px;
+  border-radius: 16px;
+  background: rgba(37, 99, 235, 0.08);
+  border: 1px solid rgba(37, 99, 235, 0.14);
+}
+
+.reset-link-label {
+  margin: 0 0 8px 0;
+  font-weight: 700;
+  color: var(--text-main);
+}
+
+:root[data-theme="dark"] .reset-link-box {
+  background: rgba(30, 41, 59, 0.82);
+  border-color: rgba(96, 165, 250, 0.14);
+}

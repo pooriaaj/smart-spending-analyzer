@@ -110,6 +110,12 @@ function LoginPage() {
                 required
               />
 
+              <div className="auth-inline-link-row">
+                <Link to="/forgot-password" className="auth-inline-link">
+                  Forgot password?
+                </Link>
+              </div>
+
               <button type="submit" className="auth-submit-button">
                 Login
               </button>
