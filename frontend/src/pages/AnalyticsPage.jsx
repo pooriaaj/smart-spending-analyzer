@@ -12,7 +12,92 @@ import {
   PieChart,
   Pie,
   Cell,
+  Legend,
 } from "recharts";
+
+const CATEGORY_ALIASES = {
+  grocery: "Groceries",
+  groceries: "Groceries",
+  transport: "Transport",
+  transportation: "Transport",
+  cafe: "Café",
+  café: "Café",
+  personal: "Personal",
+  shopping: "Shopping",
+  transfer: "Transfer",
+  utilities: "Utilities",
+  utility: "Utilities",
+  other: "Other",
+  misc: "Other",
+  miscellaneous: "Other",
+  uncategorized: "Other",
+  unknown: "Other",
+  restaurant: "Restaurant",
+  restaurants: "Restaurant",
+  salary: "Salary",
+  income: "Income",
+  rent: "Rent",
+  internet: "Internet",
+  phone: "Phone",
+  entertainment: "Entertainment",
+  "car maintenance": "Car Maintenance",
+};
+
+function formatCategoryName(category) {
+  if (!category || typeof category !== "string") return "Other";
+
+  const normalized = category.trim().toLowerCase();
+  if (!normalized) return "Other";
+
+  if (CATEGORY_ALIASES[normalized]) {
+    return CATEGORY_ALIASES[normalized];
+  }
+
+  return normalized
+    .split(" ")
+    .filter(Boolean)
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(" ");
+}
+
+function mergeCategoryBreakdown(items) {
+  const mergedMap = new Map();
+
+  (items || []).forEach((item) => {
+    const displayCategory = formatCategoryName(item.category);
+    const currentTotal = mergedMap.get(displayCategory) || 0;
+    mergedMap.set(displayCategory, currentTotal + Number(item.total || 0));
+  });
+
+  return Array.from(mergedMap.entries())
+    .map(([category, total]) => ({
+      category,
+      total: Number(total.toFixed(2)),
+    }))
+    .sort((a, b) => b.total - a.total);
+}
+
+function buildTopPieData(items, topN = 5) {
+  const merged = mergeCategoryBreakdown(items);
+
+  if (merged.length <= topN) {
+    return merged;
+  }
+
+  const topItems = merged.slice(0, topN);
+  const remainingTotal = merged
+    .slice(topN)
+    .reduce((sum, item) => sum + item.total, 0);
+
+  if (remainingTotal > 0) {
+    topItems.push({
+      category: "Other",
+      total: Number(remainingTotal.toFixed(2)),
+    });
+  }
+
+  return topItems;
+}
 
 function AnalyticsPage() {
   const [dashboardData, setDashboardData] = useState(null);
@@ -53,7 +138,7 @@ function AnalyticsPage() {
     const urlCategory = searchParams.get("category") || "";
 
     if (urlMonth) setSelectedMonth(urlMonth);
-    if (urlCategory) setSelectedCategory(urlCategory);
+    if (urlCategory) setSelectedCategory(formatCategoryName(urlCategory));
   }, [searchParams]);
 
   useEffect(() => {
@@ -126,11 +211,23 @@ function AnalyticsPage() {
     };
   }, [themeMode]);
 
+  const rawCategoryBreakdown = dashboardData?.category_breakdown || [];
+
+  const mergedCategoryBreakdown = useMemo(() => {
+    return mergeCategoryBreakdown(rawCategoryBreakdown);
+  }, [rawCategoryBreakdown]);
+
+  const topPieData = useMemo(() => {
+    return buildTopPieData(rawCategoryBreakdown, 5);
+  }, [rawCategoryBreakdown]);
+
+  const totalPieAmount = useMemo(() => {
+    return topPieData.reduce((sum, item) => sum + item.total, 0);
+  }, [topPieData]);
+
   const availableCategories = useMemo(() => {
-    const fromBreakdown =
-      dashboardData?.category_breakdown?.map((item) => item.category) || [];
-    return Array.from(new Set(fromBreakdown)).sort();
-  }, [dashboardData]);
+    return mergedCategoryBreakdown.map((item) => item.category);
+  }, [mergedCategoryBreakdown]);
 
   const clearFilters = () => {
     setSelectedMonth("");
@@ -162,6 +259,11 @@ function AnalyticsPage() {
         : "0 18px 40px rgba(15, 23, 42, 0.12)",
   };
 
+  const pieTooltipFormatter = (value, name) => {
+    const percentage = totalPieAmount > 0 ? ((value / totalPieAmount) * 100).toFixed(1) : "0.0";
+    return [`$${Number(value).toFixed(2)} (${percentage}%)`, name];
+  };
+
   if (loading) {
     return (
       <div className="page-container dashboard-page">
@@ -181,11 +283,17 @@ function AnalyticsPage() {
     balance: 0,
   };
   const topCategory = dashboardData?.top_category;
-  const categoryBreakdown = dashboardData?.category_breakdown || [];
   const monthlySummary = dashboardData?.monthly_summary || [];
   const spendingInsights = dashboardData?.spending_insights;
   const overspendingAlerts = dashboardData?.overspending_alerts;
   const categoryTrends = dashboardData?.category_trends;
+
+  const normalizedTopCategory = topCategory
+    ? {
+        ...topCategory,
+        category: formatCategoryName(topCategory.category),
+      }
+    : null;
 
   return (
     <div className="page-container dashboard-page">
@@ -317,8 +425,8 @@ function AnalyticsPage() {
           <div className="summary-card top-card">
             <span className="card-label">Top Expense Category</span>
             <p>
-              {topCategory
-                ? `${topCategory.category} ($${topCategory.total.toFixed(2)})`
+              {normalizedTopCategory
+                ? `${normalizedTopCategory.category} ($${normalizedTopCategory.total.toFixed(2)})`
                 : "No expense data"}
             </p>
           </div>
@@ -383,7 +491,7 @@ function AnalyticsPage() {
                       {categoryTrends.top_increases.map((item) => (
                         <div key={`increase-${item.category}`} className="trend-item">
                           <div>
-                            <strong>{item.category}</strong>
+                            <strong>{formatCategoryName(item.category)}</strong>
                             <p>
                               {categoryTrends.previous_month}: ${item.previous_amount.toFixed(2)} → {categoryTrends.current_month}: ${item.current_amount.toFixed(2)}
                             </p>
@@ -406,7 +514,7 @@ function AnalyticsPage() {
                       {categoryTrends.top_decreases.map((item) => (
                         <div key={`decrease-${item.category}`} className="trend-item">
                           <div>
-                            <strong>{item.category}</strong>
+                            <strong>{formatCategoryName(item.category)}</strong>
                             <p>
                               {categoryTrends.previous_month}: ${item.previous_amount.toFixed(2)} → {categoryTrends.current_month}: ${item.current_amount.toFixed(2)}
                             </p>
@@ -490,36 +598,51 @@ function AnalyticsPage() {
 
           <div className="dashboard-card">
             <div className="section-header">
-              <h2>Expense Category Chart</h2>
-              <p>See which spending categories take the largest share.</p>
+              <h2>Top 5 Expense Categories</h2>
+              <p>Focus on the categories that have the biggest effect on your balance.</p>
             </div>
 
-            {categoryBreakdown.length === 0 ? (
+            {topPieData.length === 0 ? (
               <div className="empty-state">
                 <p>No expense categories found.</p>
               </div>
             ) : (
-              <ResponsiveContainer width="100%" height={300}>
+              <ResponsiveContainer width="100%" height={340}>
                 <PieChart>
                   <Pie
-                    data={categoryBreakdown}
+                    data={topPieData}
                     dataKey="total"
                     nameKey="category"
                     cx="50%"
-                    cy="50%"
-                    outerRadius={104}
-                    innerRadius={42}
-                    paddingAngle={3}
-                    label
+                    cy="46%"
+                    outerRadius={100}
+                    innerRadius={52}
+                    paddingAngle={4}
+                    labelLine={false}
+                    label={({ name, percent }) =>
+                      percent >= 0.05 ? `${name} ${(percent * 100).toFixed(0)}%` : ""
+                    }
                   >
-                    {categoryBreakdown.map((entry, index) => (
+                    {topPieData.map((entry, index) => (
                       <Cell
                         key={`cell-${index}`}
                         fill={chartTheme.pieColors[index % chartTheme.pieColors.length]}
                       />
                     ))}
                   </Pie>
-                  <Tooltip contentStyle={customTooltipStyle} />
+
+                  <Tooltip
+                    formatter={pieTooltipFormatter}
+                    contentStyle={customTooltipStyle}
+                  />
+
+                  <Legend
+                    verticalAlign="bottom"
+                    height={36}
+                    formatter={(value) => (
+                      <span style={{ color: chartTheme.text }}>{value}</span>
+                    )}
+                  />
                 </PieChart>
               </ResponsiveContainer>
             )}
@@ -532,16 +655,16 @@ function AnalyticsPage() {
         >
           <div className="section-header">
             <h2>Expense Categories</h2>
-            <p>Ranked from highest to lowest total expense.</p>
+            <p>Ranked from highest to lowest total expense, with duplicates merged cleanly.</p>
           </div>
 
-          {categoryBreakdown.length === 0 ? (
+          {mergedCategoryBreakdown.length === 0 ? (
             <div className="empty-state">
               <p>No expense categories found.</p>
             </div>
           ) : (
             <div className="category-list">
-              {categoryBreakdown.map((item) => (
+              {mergedCategoryBreakdown.map((item) => (
                 <div key={item.category} className="category-item">
                   <span>{item.category}</span>
                   <strong>${item.total.toFixed(2)}</strong>
