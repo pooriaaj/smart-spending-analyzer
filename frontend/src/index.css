@@ -1488,6 +1488,46 @@ body {
   text-decoration: underline;
 }
 
+.password-input-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.password-input-wrapper input {
+  padding-right: 82px;
+}
+
+.password-toggle-button {
+  position: absolute;
+  right: 10px;
+  border: none;
+  background: transparent;
+  color: var(--brand);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  padding: 6px 8px;
+  border-radius: 10px;
+}
+
+.password-toggle-button:hover {
+  background: rgba(37, 99, 235, 0.08);
+}
+
+.password-toggle-button:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.14);
+}
+
+:root[data-theme="dark"] .password-toggle-button {
+  color: #93c5fd;
+}
+
+:root[data-theme="dark"] .password-toggle-button:hover {
+  background: rgba(96, 165, 250, 0.12);
+}
+
 .login-card,
 .login-form {
   all: unset;
