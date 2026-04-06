@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import date
+
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 from sqlalchemy.orm import Session
 
@@ -39,9 +41,9 @@ def get_transactions(
     ensure_default_account(db, current_user)
 
     if account_id is not None:
-      account = get_account_for_user(db, current_user.id, account_id)
-      if not account:
-          raise HTTPException(status_code=404, detail="Account not found")
+        account = get_account_for_user(db, current_user.id, account_id)
+        if not account:
+            raise HTTPException(status_code=404, detail="Account not found")
 
     return get_transactions_for_user(db, current_user.id, account_id=account_id)
 
@@ -175,10 +177,12 @@ def confirm_preview_import(
 
     for row in payload.rows:
         try:
+            tx_date = date.fromisoformat(row.date)
+
             duplicate_key = build_duplicate_key(
                 owner_id=current_user.id,
                 account_id=payload.account_id,
-                tx_date=row.date,
+                tx_date=tx_date,
                 description=row.description,
                 amount=row.amount,
                 tx_type=row.type,
@@ -195,7 +199,7 @@ def confirm_preview_import(
                 amount=row.amount,
                 category=row.category,
                 description=row.description,
-                date=row.date,
+                date=tx_date,
                 type=row.type,
                 owner_id=current_user.id,
                 account_id=payload.account_id,
