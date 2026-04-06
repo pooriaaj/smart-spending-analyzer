@@ -225,9 +225,23 @@ function DashboardPage() {
 
             <button
               className="secondary-button"
+              onClick={() => navigate("/analytics")}
+            >
+              Analytics
+            </button>
+
+            <button
+              className="secondary-button"
               onClick={() => navigate("/assistant")}
             >
               Assistant
+            </button>
+
+            <button
+              className="secondary-button"
+              onClick={() => navigate("/profile")}
+            >
+              Profile
             </button>
 
             <button className="logout-button" onClick={handleLogout}>
