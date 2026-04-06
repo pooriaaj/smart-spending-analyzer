@@ -261,28 +261,35 @@ function DashboardPage() {
           <AccountSelector onChange={setSelectedAccountId} allowAll={true} />
         </div>
 
-        <div className="summary-grid">
-          <div className="summary-card income-card">
-            <span className="card-label">Income</span>
-            <div className="summary-card-content">
-              <p>${summary.total_income.toFixed(2)}</p>
-              <small className="summary-card-note">Total recorded income</small>
-            </div>
+        <div className="dashboard-card">
+          <div className="section-header">
+            <h2>Overview</h2>
+            <p>Your key financial snapshot at a glance.</p>
           </div>
 
-          <div className="summary-card expense-card">
-            <span className="card-label">Expenses</span>
-            <div className="summary-card-content">
-              <p>${summary.total_expenses.toFixed(2)}</p>
-              <small className="summary-card-note">Total recorded expenses</small>
+          <div className="summary-grid">
+            <div className="summary-card income-card">
+              <span className="card-label">Income</span>
+              <div className="summary-card-content">
+                <p>${summary.total_income.toFixed(2)}</p>
+                <small className="summary-card-note">Total recorded income</small>
+              </div>
             </div>
-          </div>
 
-          <div className="summary-card balance-card">
-            <span className="card-label">Balance</span>
-            <div className="summary-card-content">
-              <p>${summary.balance.toFixed(2)}</p>
-              <small className="summary-card-note">Income minus expenses</small>
+            <div className="summary-card expense-card">
+              <span className="card-label">Expenses</span>
+              <div className="summary-card-content">
+                <p>${summary.total_expenses.toFixed(2)}</p>
+                <small className="summary-card-note">Total recorded expenses</small>
+              </div>
+            </div>
+
+            <div className="summary-card balance-card">
+              <span className="card-label">Balance</span>
+              <div className="summary-card-content">
+                <p>${summary.balance.toFixed(2)}</p>
+                <small className="summary-card-note">Income minus expenses</small>
+              </div>
             </div>
           </div>
         </div>

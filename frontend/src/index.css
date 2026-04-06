@@ -217,8 +217,13 @@ a {
 .dashboard-card {
   padding: 24px;
   margin-bottom: 22px;
+  margin-top: 24px  ;
 }
-
+.dashboard-wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
 .status-card {
   padding: 34px;
 }
@@ -288,7 +293,10 @@ textarea:focus,
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(260px, 300px));
   justify-content: center;
-  gap: 20px;
+  gap: 24px;
+  padding: 10px;
+  margin-bottom: 10px;
+  margin-top: 10px;
 }
 
 .summary-card {
