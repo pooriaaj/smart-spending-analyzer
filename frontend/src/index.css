@@ -216,8 +216,7 @@ a {
 .filter-card,
 .dashboard-card {
   padding: 24px;
-  margin-bottom: 22px;
-  margin-top: 24px  ;
+  margin-bottom: 16px;
 }
 .dashboard-wrapper {
   display: flex;
@@ -243,7 +242,7 @@ a {
 }
 
 .section-header {
-  margin-bottom: 18px;
+  margin-bottom: 14px;
 }
 
 .filter-bar {
@@ -291,12 +290,9 @@ textarea:focus,
 
 .summary-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(260px, 300px));
-  justify-content: center;
-  gap: 24px;
-  padding: 10px;
-  margin-bottom: 10px;
-  margin-top: 10px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 18px;
+  margin-bottom: 14px;
 }
 
 .summary-card {
@@ -839,7 +835,7 @@ textarea:focus,
 .assistant-card,
 .assistant-response-card,
 .assistant-chat-card {
-  margin-bottom: 24px;
+  margin-bottom: 16px;
 }
 
 .insights-block,
