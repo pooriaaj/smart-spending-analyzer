@@ -705,6 +705,34 @@ textarea:focus,
   flex-wrap: wrap;
 }
 
+.import-preview-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 18px;
+}
+
+.import-preview-summary strong {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--text-main);
+  font-size: 16px;
+}
+
+.import-preview-summary p {
+  margin: 0;
+  color: var(--text-soft);
+  line-height: 1.6;
+}
+
+.import-preview-actions {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
 .smart-action-button {
   background: linear-gradient(135deg, var(--purple) 0%, #8b5cf6 100%);
   color: white;
@@ -807,6 +835,40 @@ textarea:focus,
 
 .transactions-table tbody tr:hover {
   background: rgba(239, 246, 255, 0.55);
+}
+
+.import-actions-cell {
+  width: 1%;
+  white-space: nowrap;
+}
+
+.import-remove-row-button {
+  border: none;
+  border-radius: 12px;
+  padding: 10px 14px;
+  background: rgba(220, 38, 38, 0.1);
+  color: #b91c1c;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.import-remove-row-button:hover {
+  background: rgba(220, 38, 38, 0.16);
+  transform: translateY(-1px);
+}
+
+.import-remove-row-button:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.import-preview-empty {
+  display: grid;
+  gap: 12px;
+  justify-items: center;
 }
 
 .income-text {
@@ -2418,6 +2480,21 @@ textarea {
 .transactions-table input,
 .transactions-table select {
   min-width: 110px;
+}
+
+@media (max-width: 720px) {
+  .import-preview-toolbar {
+    margin-bottom: 14px;
+  }
+
+  .import-preview-actions,
+  .import-preview-empty .secondary-button {
+    width: 100%;
+  }
+
+  .import-preview-actions .secondary-button {
+    width: 100%;
+  }
 }
 
 .danger-zone-card {

@@ -20,6 +20,8 @@ function ImportPage() {
 
   const normalizedAccountId =
     selectedAccountId === ALL_ACCOUNTS_VALUE ? undefined : Number(selectedAccountId);
+  const detectedPreviewRows = importResult?.status === "table_review" ? importResult.preview_rows || [] : [];
+  const removedPreviewCount = Math.max(detectedPreviewRows.length - previewRows.length, 0);
 
   const clearAll = () => {
     setSelectedFileName("");
@@ -86,6 +88,14 @@ function ImportPage() {
         rowIndex === index ? { ...row, [field]: field === "amount" ? Number(value) : value } : row
       )
     );
+  };
+
+  const handleRemovePreviewRow = (index) => {
+    setPreviewRows((prev) => prev.filter((_, rowIndex) => rowIndex !== index));
+  };
+
+  const handleRestorePreviewRows = () => {
+    setPreviewRows(detectedPreviewRows);
   };
 
   const handleConfirmPreviewImport = async () => {
@@ -357,77 +367,128 @@ function ImportPage() {
           </div>
         )}
 
-        {importResult?.status === "table_review" && previewRows.length > 0 && (
+        {importResult?.status === "table_review" && (
           <div className="dashboard-card large-card">
             <div className="section-header">
               <h2>Review PDF Statement Rows</h2>
-              <p>Review detected rows before importing them into your account.</p>
+              <p>Review detected rows, remove anything incorrect, then import the final list.</p>
             </div>
 
-            <div className="transactions-table-wrapper">
-              <table className="transactions-table">
-                <thead>
-                  <tr>
-                    <th>Date</th>
-                    <th>Description</th>
-                    <th>Amount</th>
-                    <th>Type</th>
-                    <th>Category</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {previewRows.map((row, index) => (
-                    <tr key={`preview-row-${index}`}>
-                      <td>
-                        <input
-                          type="date"
-                          value={row.date}
-                          onChange={(e) => handlePreviewRowChange(index, "date", e.target.value)}
-                        />
-                      </td>
-                      <td>
-                        <input
-                          type="text"
-                          value={row.description}
-                          onChange={(e) => handlePreviewRowChange(index, "description", e.target.value)}
-                        />
-                      </td>
-                      <td>
-                        <input
-                          type="number"
-                          step="0.01"
-                          value={row.amount}
-                          onChange={(e) => handlePreviewRowChange(index, "amount", e.target.value)}
-                        />
-                      </td>
-                      <td>
-                        <select
-                          value={row.type}
-                          onChange={(e) => handlePreviewRowChange(index, "type", e.target.value)}
-                        >
-                          <option value="expense">Expense</option>
-                          <option value="income">Income</option>
-                        </select>
-                      </td>
-                      <td>
-                        <input
-                          type="text"
-                          value={row.category}
-                          onChange={(e) => handlePreviewRowChange(index, "category", e.target.value)}
-                        />
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+            <div className="import-preview-toolbar">
+              <div className="import-preview-summary">
+                <strong>{previewRows.length} row{previewRows.length === 1 ? "" : "s"} ready to import</strong>
+                <p>
+                  {removedPreviewCount > 0
+                    ? `${removedPreviewCount} removed row${removedPreviewCount === 1 ? "" : "s"} will be skipped when you confirm.`
+                    : "Remove any bad detections before importing, or edit the values directly in the table."}
+                </p>
+              </div>
+
+              {removedPreviewCount > 0 && (
+                <div className="import-preview-actions">
+                  <button
+                    type="button"
+                    className="secondary-button"
+                    onClick={handleRestorePreviewRows}
+                    disabled={confirmingPreview}
+                  >
+                    Restore Detected Rows
+                  </button>
+                </div>
+              )}
             </div>
+
+            {previewRows.length > 0 ? (
+              <div className="transactions-table-wrapper">
+                <table className="transactions-table">
+                  <thead>
+                    <tr>
+                      <th>Date</th>
+                      <th>Description</th>
+                      <th>Amount</th>
+                      <th>Type</th>
+                      <th>Category</th>
+                      <th>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {previewRows.map((row, index) => (
+                      <tr key={`preview-row-${index}`}>
+                        <td>
+                          <input
+                            type="date"
+                            value={row.date}
+                            onChange={(e) => handlePreviewRowChange(index, "date", e.target.value)}
+                          />
+                        </td>
+                        <td>
+                          <input
+                            type="text"
+                            value={row.description}
+                            onChange={(e) => handlePreviewRowChange(index, "description", e.target.value)}
+                          />
+                        </td>
+                        <td>
+                          <input
+                            type="number"
+                            step="0.01"
+                            value={row.amount}
+                            onChange={(e) => handlePreviewRowChange(index, "amount", e.target.value)}
+                          />
+                        </td>
+                        <td>
+                          <select
+                            value={row.type}
+                            onChange={(e) => handlePreviewRowChange(index, "type", e.target.value)}
+                          >
+                            <option value="expense">Expense</option>
+                            <option value="income">Income</option>
+                          </select>
+                        </td>
+                        <td>
+                          <input
+                            type="text"
+                            value={row.category}
+                            onChange={(e) => handlePreviewRowChange(index, "category", e.target.value)}
+                          />
+                        </td>
+                        <td className="import-actions-cell">
+                          <button
+                            type="button"
+                            className="import-remove-row-button"
+                            onClick={() => handleRemovePreviewRow(index)}
+                            disabled={confirmingPreview}
+                          >
+                            Remove
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <div className="empty-state import-preview-empty">
+                <p>No rows are currently selected for import.</p>
+                {detectedPreviewRows.length > 0 && (
+                  <button
+                    type="button"
+                    className="secondary-button"
+                    onClick={handleRestorePreviewRows}
+                    disabled={confirmingPreview}
+                  >
+                    Restore Detected Rows
+                  </button>
+                )}
+              </div>
+            )}
 
             <div className="smart-actions-row">
               <button
                 type="button"
                 className="smart-apply-button"
                 onClick={handleConfirmPreviewImport}
-                disabled={confirmingPreview}
+                disabled={confirmingPreview || previewRows.length === 0}
               >
                 {confirmingPreview ? "Importing..." : "Confirm Import"}
               </button>
