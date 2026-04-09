@@ -4,6 +4,40 @@ import api, { handleApiAuthError } from "../services/api";
 import AccountSelector from "../components/AccountSelector";
 import { ALL_ACCOUNTS_VALUE } from "../services/accountStorage";
 
+const ALLOWED_TRANSACTION_TYPES = new Set(["expense", "income"]);
+
+const isValidIsoDate = (value) => {
+  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    return false;
+  }
+
+  const parsed = new Date(`${value}T00:00:00`);
+  return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
+};
+
+const validatePreviewRow = (row) => {
+  const fieldIssues = {
+    date: !isValidIsoDate(row.date),
+    description: !row.description?.trim(),
+    amount: !Number.isFinite(Number(row.amount)) || Number(row.amount) <= 0,
+    type: !ALLOWED_TRANSACTION_TYPES.has(row.type),
+    category: !row.category?.trim(),
+  };
+
+  const messages = [];
+
+  if (fieldIssues.date) messages.push("fix the date");
+  if (fieldIssues.description) messages.push("add a description");
+  if (fieldIssues.amount) messages.push("enter an amount greater than 0");
+  if (fieldIssues.type) messages.push("choose income or expense");
+  if (fieldIssues.category) messages.push("add a category");
+
+  return {
+    fieldIssues,
+    messages,
+  };
+};
+
 function ImportPage() {
   const navigate = useNavigate();
   const fileInputRef = useRef(null);
@@ -22,6 +56,10 @@ function ImportPage() {
     selectedAccountId === ALL_ACCOUNTS_VALUE ? undefined : Number(selectedAccountId);
   const detectedPreviewRows = importResult?.status === "table_review" ? importResult.preview_rows || [] : [];
   const removedPreviewCount = Math.max(detectedPreviewRows.length - previewRows.length, 0);
+  const previewRowValidations = previewRows.map((row) => validatePreviewRow(row));
+  const invalidPreviewRowCount = previewRowValidations.filter(
+    (validation) => validation.messages.length > 0
+  ).length;
 
   const clearAll = () => {
     setSelectedFileName("");
@@ -85,7 +123,12 @@ function ImportPage() {
   const handlePreviewRowChange = (index, field, value) => {
     setPreviewRows((prev) =>
       prev.map((row, rowIndex) =>
-        rowIndex === index ? { ...row, [field]: field === "amount" ? Number(value) : value } : row
+        rowIndex === index
+          ? {
+              ...row,
+              [field]: field === "amount" ? (value === "" ? "" : Number(value)) : value,
+            }
+          : row
       )
     );
   };
@@ -378,7 +421,9 @@ function ImportPage() {
               <div className="import-preview-summary">
                 <strong>{previewRows.length} row{previewRows.length === 1 ? "" : "s"} ready to import</strong>
                 <p>
-                  {removedPreviewCount > 0
+                  {invalidPreviewRowCount > 0
+                    ? `${invalidPreviewRowCount} row${invalidPreviewRowCount === 1 ? "" : "s"} still need attention before you can import.`
+                    : removedPreviewCount > 0
                     ? `${removedPreviewCount} removed row${removedPreviewCount === 1 ? "" : "s"} will be skipped when you confirm.`
                     : "Remove any bad detections before importing, or edit the values directly in the table."}
                 </p>
@@ -398,6 +443,15 @@ function ImportPage() {
               )}
             </div>
 
+            {invalidPreviewRowCount > 0 && (
+              <div className="import-validation-box">
+                <strong>
+                  {invalidPreviewRowCount} row{invalidPreviewRowCount === 1 ? "" : "s"} need fixes
+                </strong>
+                <p>Review the highlighted fields before confirming import. Invalid rows are blocked on the client now.</p>
+              </div>
+            )}
+
             {previewRows.length > 0 ? (
               <div className="transactions-table-wrapper">
                 <table className="transactions-table">
@@ -412,58 +466,81 @@ function ImportPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {previewRows.map((row, index) => (
-                      <tr key={`preview-row-${index}`}>
-                        <td>
-                          <input
-                            type="date"
-                            value={row.date}
-                            onChange={(e) => handlePreviewRowChange(index, "date", e.target.value)}
-                          />
-                        </td>
-                        <td>
-                          <input
-                            type="text"
-                            value={row.description}
-                            onChange={(e) => handlePreviewRowChange(index, "description", e.target.value)}
-                          />
-                        </td>
-                        <td>
-                          <input
-                            type="number"
-                            step="0.01"
-                            value={row.amount}
-                            onChange={(e) => handlePreviewRowChange(index, "amount", e.target.value)}
-                          />
-                        </td>
-                        <td>
-                          <select
-                            value={row.type}
-                            onChange={(e) => handlePreviewRowChange(index, "type", e.target.value)}
-                          >
-                            <option value="expense">Expense</option>
-                            <option value="income">Income</option>
-                          </select>
-                        </td>
-                        <td>
-                          <input
-                            type="text"
-                            value={row.category}
-                            onChange={(e) => handlePreviewRowChange(index, "category", e.target.value)}
-                          />
-                        </td>
-                        <td className="import-actions-cell">
-                          <button
-                            type="button"
-                            className="import-remove-row-button"
-                            onClick={() => handleRemovePreviewRow(index)}
-                            disabled={confirmingPreview}
-                          >
-                            Remove
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
+                    {previewRows.map((row, index) => {
+                      const validation = previewRowValidations[index];
+
+                      return (
+                        <tr key={`preview-row-${index}`}>
+                          <td>
+                            <input
+                              type="date"
+                              className={validation.fieldIssues.date ? "import-invalid-input" : ""}
+                              value={row.date}
+                              onChange={(e) => handlePreviewRowChange(index, "date", e.target.value)}
+                            />
+                          </td>
+                          <td>
+                            <input
+                              type="text"
+                              className={validation.fieldIssues.description ? "import-invalid-input" : ""}
+                              value={row.description}
+                              onChange={(e) => handlePreviewRowChange(index, "description", e.target.value)}
+                            />
+                            {row.source_line && (
+                              <div className="import-source-line">
+                                <span className="import-source-label">Parsed From</span>
+                                <code>{row.source_line}</code>
+                              </div>
+                            )}
+                            {validation.messages.length > 0 && (
+                              <div className="import-row-issues">
+                                Needs review: {validation.messages.join(", ")}.
+                              </div>
+                            )}
+                          </td>
+                          <td>
+                            <input
+                              type="number"
+                              step="0.01"
+                              className={validation.fieldIssues.amount ? "import-invalid-input" : ""}
+                              value={row.amount}
+                              onChange={(e) => handlePreviewRowChange(index, "amount", e.target.value)}
+                            />
+                          </td>
+                          <td>
+                            <select
+                              className={validation.fieldIssues.type ? "import-invalid-input" : ""}
+                              value={row.type}
+                              onChange={(e) => handlePreviewRowChange(index, "type", e.target.value)}
+                            >
+                              <option value="expense">Expense</option>
+                              <option value="income">Income</option>
+                            </select>
+                          </td>
+                          <td>
+                            <input
+                              type="text"
+                              className={validation.fieldIssues.category ? "import-invalid-input" : ""}
+                              value={row.category}
+                              onChange={(e) => handlePreviewRowChange(index, "category", e.target.value)}
+                            />
+                          </td>
+                          <td className="import-actions-cell">
+                            <button
+                              type="button"
+                              className="import-remove-row-button"
+                              onClick={() => handleRemovePreviewRow(index)}
+                              disabled={confirmingPreview}
+                            >
+                              Remove
+                            </button>
+                            {validation.messages.length > 0 && (
+                              <span className="import-row-status import-row-status-warning">Needs review</span>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
@@ -488,7 +565,7 @@ function ImportPage() {
                 type="button"
                 className="smart-apply-button"
                 onClick={handleConfirmPreviewImport}
-                disabled={confirmingPreview || previewRows.length === 0}
+                disabled={confirmingPreview || previewRows.length === 0 || invalidPreviewRowCount > 0}
               >
                 {confirmingPreview ? "Importing..." : "Confirm Import"}
               </button>

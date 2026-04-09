@@ -733,6 +733,25 @@ textarea:focus,
   flex-wrap: wrap;
 }
 
+.import-validation-box {
+  margin-bottom: 18px;
+  padding: 16px 18px;
+  border-radius: 18px;
+  background: rgba(245, 158, 11, 0.12);
+  border: 1px solid rgba(245, 158, 11, 0.26);
+  color: #9a3412;
+}
+
+.import-validation-box strong {
+  display: block;
+  margin-bottom: 6px;
+}
+
+.import-validation-box p {
+  margin: 0;
+  line-height: 1.6;
+}
+
 .smart-action-button {
   background: linear-gradient(135deg, var(--purple) 0%, #8b5cf6 100%);
   color: white;
@@ -865,10 +884,90 @@ textarea:focus,
   transform: none;
 }
 
+.import-row-status {
+  display: inline-flex;
+  align-items: center;
+  margin-top: 10px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.import-row-status-warning {
+  background: rgba(245, 158, 11, 0.16);
+  color: #9a3412;
+}
+
 .import-preview-empty {
   display: grid;
   gap: 12px;
   justify-items: center;
+}
+
+.import-invalid-input {
+  border-color: rgba(245, 158, 11, 0.7) !important;
+  box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.14);
+  background: rgba(255, 251, 235, 0.9);
+}
+
+.import-source-line {
+  margin-top: 10px;
+}
+
+.import-source-label {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--text-faint);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.import-source-line code {
+  display: block;
+  padding: 8px 10px;
+  border-radius: 12px;
+  background: rgba(148, 163, 184, 0.12);
+  color: var(--text-soft);
+  white-space: normal;
+  word-break: break-word;
+  line-height: 1.5;
+}
+
+.import-row-issues {
+  margin-top: 10px;
+  color: #9a3412;
+  font-size: 12px;
+  line-height: 1.5;
+  font-weight: 600;
+}
+
+:root[data-theme="dark"] .import-validation-box {
+  background: rgba(245, 158, 11, 0.12);
+  border-color: rgba(251, 191, 36, 0.24);
+  color: #fbbf24;
+}
+
+:root[data-theme="dark"] .import-row-status-warning,
+:root[data-theme="dark"] .import-row-issues {
+  color: #fbbf24;
+}
+
+:root[data-theme="dark"] .import-row-status-warning {
+  background: rgba(251, 191, 36, 0.14);
+}
+
+:root[data-theme="dark"] .import-invalid-input {
+  background: rgba(120, 53, 15, 0.18);
+  border-color: rgba(251, 191, 36, 0.56) !important;
+  box-shadow: 0 0 0 3px rgba(251, 191, 36, 0.12);
+}
+
+:root[data-theme="dark"] .import-source-line code {
+  background: rgba(148, 163, 184, 0.14);
+  color: var(--text-soft);
 }
 
 .income-text {
