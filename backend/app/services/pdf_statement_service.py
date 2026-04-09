@@ -458,6 +458,50 @@ def split_line_and_trailing_amounts(line: str) -> tuple[str, list[str]]:
     return body, trailing_amounts
 
 
+def is_zero_amount_token(value: str) -> bool:
+    parsed = parse_amount_token(value)
+    return parsed is not None and abs(parsed) < 0.005
+
+
+def resolve_trailing_amount_columns(
+    trailing_amounts: list[str],
+) -> tuple[str | None, str | None, str | None]:
+    if not trailing_amounts:
+        return None, None, None
+
+    if len(trailing_amounts) == 1:
+        transaction_amount = trailing_amounts[0]
+        return transaction_amount, None, infer_amount_token_type(transaction_amount)
+
+    if len(trailing_amounts) >= 3:
+        debit_amount = trailing_amounts[0]
+        credit_amount = trailing_amounts[1]
+        balance_amount = trailing_amounts[-1]
+
+        debit_is_zero = is_zero_amount_token(debit_amount)
+        credit_is_zero = is_zero_amount_token(credit_amount)
+
+        if debit_is_zero and not credit_is_zero:
+            return credit_amount, balance_amount, "income"
+        if credit_is_zero and not debit_is_zero:
+            return debit_amount, balance_amount, "expense"
+
+        explicit_type = infer_amount_token_type(debit_amount) or infer_amount_token_type(credit_amount)
+        return debit_amount, balance_amount, explicit_type
+
+    first_amount, second_amount = trailing_amounts
+    first_is_zero = is_zero_amount_token(first_amount)
+    second_is_zero = is_zero_amount_token(second_amount)
+
+    if first_is_zero and not second_is_zero:
+        return second_amount, None, "income"
+    if second_is_zero and not first_is_zero:
+        return first_amount, None, "expense"
+
+    explicit_type = infer_amount_token_type(first_amount)
+    return first_amount, second_amount, explicit_type
+
+
 def infer_transaction_type(description: str) -> str:
     if is_income_description(description):
         return "income"
@@ -563,22 +607,25 @@ def finalize_pending_transaction(
     owner_id: int,
     current_date: date | None,
     description_parts: list[str],
-    amount_text_1: str | None,
-    amount_text_2: str | None,
+    trailing_amounts: list[str],
     preview_rows: list[StatementPreviewRow],
 ) -> None:
-    if not current_date or not description_parts or not amount_text_1:
+    if not current_date or not description_parts or not trailing_amounts:
         return
 
     description = clean_description_line(" ".join(part for part in description_parts if part))
     if not description:
         return
 
+    amount_text_1, amount_text_2, explicit_type = resolve_trailing_amount_columns(trailing_amounts)
+    if not amount_text_1:
+        return
+
     amount = parse_amount_token(amount_text_1)
     if amount is None:
         return
 
-    tx_type = resolve_transaction_type(amount_text_1, description)
+    tx_type = explicit_type or resolve_transaction_type(amount_text_1, description)
     category = categorize_transaction(
         db=db,
         owner_id=owner_id,
@@ -647,8 +694,6 @@ def parse_rbc_statement_preview(
 
         body, trailing_amounts = split_line_and_trailing_amounts(line)
         if trailing_amounts:
-            amount_1 = trailing_amounts[0]
-            amount_2 = trailing_amounts[1] if len(trailing_amounts) > 1 else None
             body = clean_description_line(body)
 
             if body:
@@ -659,8 +704,7 @@ def parse_rbc_statement_preview(
                 owner_id=owner_id,
                 current_date=current_date,
                 description_parts=description_parts,
-                amount_text_1=amount_1,
-                amount_text_2=amount_2,
+                trailing_amounts=trailing_amounts,
                 preview_rows=preview_rows,
             )
 
@@ -738,8 +782,6 @@ def parse_pdf_statement_preview(
 
         body, trailing_amounts = split_line_and_trailing_amounts(line)
         if trailing_amounts:
-            amount_1 = trailing_amounts[0]
-            amount_2 = trailing_amounts[1] if len(trailing_amounts) > 1 else None
             body = clean_description_line(body)
 
             if body:
@@ -750,8 +792,7 @@ def parse_pdf_statement_preview(
                 owner_id=owner_id,
                 current_date=current_date,
                 description_parts=description_parts,
-                amount_text_1=amount_1,
-                amount_text_2=amount_2,
+                trailing_amounts=trailing_amounts,
                 preview_rows=preview_rows,
             )
 

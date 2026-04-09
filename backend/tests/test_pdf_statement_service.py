@@ -23,6 +23,21 @@ class PdfStatementServiceHelpersTest(unittest.TestCase):
         self.assertEqual(body, "GROCERY STORE TORONTO")
         self.assertEqual(trailing_amounts, ["$45.67", "$1,234.56"])
 
+    def test_resolve_trailing_amount_columns_handles_debit_credit_balance_layout(self) -> None:
+        amount_text, balance_text, explicit_type = service.resolve_trailing_amount_columns(
+            ["0.00", "1,500.00", "1,700.00"]
+        )
+        self.assertEqual(amount_text, "1,500.00")
+        self.assertEqual(balance_text, "1,700.00")
+        self.assertEqual(explicit_type, "income")
+
+        amount_text, balance_text, explicit_type = service.resolve_trailing_amount_columns(
+            ["15.99", "0.00", "1,684.01"]
+        )
+        self.assertEqual(amount_text, "15.99")
+        self.assertEqual(balance_text, "1,684.01")
+        self.assertEqual(explicit_type, "expense")
+
     def test_cross_year_statement_resolution_uses_month_bucket(self) -> None:
         start_year, end_year = service.extract_statement_year_range(
             "From December 15, 2024 to January 15, 2025"
@@ -199,6 +214,34 @@ Jan 03 MONTHLY FEE 15.99DR
         self.assertEqual(preview_rows[0].amount, 1500.00)
         self.assertEqual(preview_rows[1].type, "expense")
         self.assertEqual(preview_rows[1].amount, 15.99)
+
+    def test_parse_pdf_statement_preview_supports_debit_credit_balance_columns(self) -> None:
+        text = """
+TD Canada Trust
+Statement period 12/28/2024 - 01/10/2025
+Transaction Date Description Debit Credit Balance
+Jan 02 PAYROLL 0.00 1,500.00 1,700.00
+Jan 03 MONTHLY FEE 15.99 0.00 1,684.01
+        """.strip()
+
+        with (
+            patch.object(service, "extract_pdf_text", return_value=text),
+            patch.object(service, "categorize_transaction", side_effect=self.categorize),
+        ):
+            result = service.parse_pdf_statement_preview(
+                db=self.db,
+                owner_id=123,
+                file_bytes=b"fake-pdf",
+            )
+
+        preview_rows = result["preview_rows"]
+        self.assertEqual(len(preview_rows), 2)
+        self.assertEqual(preview_rows[0].type, "income")
+        self.assertEqual(preview_rows[0].amount, 1500.00)
+        self.assertIn("balance=1,700.00", preview_rows[0].source_line or "")
+        self.assertEqual(preview_rows[1].type, "expense")
+        self.assertEqual(preview_rows[1].amount, 15.99)
+        self.assertIn("balance=1,684.01", preview_rows[1].source_line or "")
 
 
 if __name__ == "__main__":

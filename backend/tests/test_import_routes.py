@@ -317,6 +317,31 @@ class SmartImportRouteTest(unittest.TestCase):
         self.assertEqual(preview_rows[1]["type"], "expense")
         self.assertEqual(preview_rows[1]["amount"], 15.99)
 
+    def test_import_file_supports_debit_credit_balance_columns(self) -> None:
+        pdf_bytes = build_text_pdf(
+            [
+                "TD Canada Trust",
+                "Statement period 12/28/2024 - 01/10/2025",
+                "Transaction Date Description Debit Credit Balance",
+                "Jan 02 PAYROLL 0.00 1,500.00 1,700.00",
+                "Jan 03 MONTHLY FEE 15.99 0.00 1,684.01",
+            ]
+        )
+
+        response = self.client.post(
+            "/transactions/import/file",
+            data={"account_id": str(self.account_id)},
+            files={"file": ("td-columns.pdf", pdf_bytes, "application/pdf")},
+        )
+
+        self.assertEqual(response.status_code, 200, response.text)
+        preview_rows = response.json()["preview_rows"]
+        self.assertEqual(len(preview_rows), 2)
+        self.assertEqual(preview_rows[0]["type"], "income")
+        self.assertEqual(preview_rows[0]["amount"], 1500.00)
+        self.assertEqual(preview_rows[1]["type"], "expense")
+        self.assertEqual(preview_rows[1]["amount"], 15.99)
+
 
 if __name__ == "__main__":
     unittest.main()
