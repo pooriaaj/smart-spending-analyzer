@@ -243,6 +243,80 @@ class SmartImportRouteTest(unittest.TestCase):
             "Duplicate of another row in this preview.",
         )
 
+    def test_import_file_supports_numeric_period_and_month_first_dates(self) -> None:
+        pdf_bytes = build_text_pdf(
+            [
+                "Account Statement",
+                "Statement period 12/28/2024 - 01/10/2025",
+                "Jan 02 PAYROLL DEPOSIT $1,500.00",
+                "01/03 BOOK STORE $12.34",
+            ]
+        )
+
+        response = self.client.post(
+            "/transactions/import/file",
+            data={"account_id": str(self.account_id)},
+            files={"file": ("generic-alt-dates.pdf", pdf_bytes, "application/pdf")},
+        )
+
+        self.assertEqual(response.status_code, 200, response.text)
+        preview_rows = response.json()["preview_rows"]
+        self.assertEqual(len(preview_rows), 2)
+        self.assertEqual(preview_rows[0]["date"], "2025-01-02")
+        self.assertEqual(preview_rows[0]["type"], "income")
+        self.assertEqual(preview_rows[1]["date"], "2025-01-03")
+        self.assertEqual(preview_rows[1]["amount"], 12.34)
+
+    def test_import_file_reports_detected_td_profile(self) -> None:
+        pdf_bytes = build_text_pdf(
+            [
+                "TD Canada Trust",
+                "Statement period 12/28/2024 - 01/10/2025",
+                "Transaction Date Description Amount",
+                "Jan 02 PAYROLL DEPOSIT $1,500.00",
+            ]
+        )
+
+        response = self.client.post(
+            "/transactions/import/file",
+            data={"account_id": str(self.account_id)},
+            files={"file": ("td-statement.pdf", pdf_bytes, "application/pdf")},
+        )
+
+        self.assertEqual(response.status_code, 200, response.text)
+        payload = response.json()
+        self.assertEqual(
+            payload["notes"],
+            ["Detected bank profile: TD Canada Trust. Using generic parser with bank-aware noise filtering; review carefully."],
+        )
+        self.assertEqual(len(payload["preview_rows"]), 1)
+        self.assertEqual(payload["preview_rows"][0]["date"], "2025-01-02")
+
+    def test_import_file_supports_cibc_credit_debit_amount_markers(self) -> None:
+        pdf_bytes = build_text_pdf(
+            [
+                "Canadian Imperial Bank of Commerce",
+                "Statement period 12/28/2024 - 01/10/2025",
+                "Transaction Date Description Amount",
+                "Jan 02 PAYROLL 1,500.00CR",
+                "Jan 03 MONTHLY FEE 15.99DR",
+            ]
+        )
+
+        response = self.client.post(
+            "/transactions/import/file",
+            data={"account_id": str(self.account_id)},
+            files={"file": ("cibc-statement.pdf", pdf_bytes, "application/pdf")},
+        )
+
+        self.assertEqual(response.status_code, 200, response.text)
+        preview_rows = response.json()["preview_rows"]
+        self.assertEqual(len(preview_rows), 2)
+        self.assertEqual(preview_rows[0]["type"], "income")
+        self.assertEqual(preview_rows[0]["amount"], 1500.00)
+        self.assertEqual(preview_rows[1]["type"], "expense")
+        self.assertEqual(preview_rows[1]["amount"], 15.99)
+
 
 if __name__ == "__main__":
     unittest.main()
