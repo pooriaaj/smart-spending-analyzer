@@ -13,7 +13,12 @@ from app.services.transaction_service import categorize_transaction
 
 
 DATE_START_REGEX = re.compile(r"^(?P<day>\d{1,2})\s+(?P<mon>[A-Za-z]{3})\s+(?P<rest>.*)$")
-ENDING_AMOUNTS_REGEX = re.compile(r"(?P<body>.*?)(?P<a1>\d+\.\d{2})(?:\s+(?P<a2>\d+\.\d{2}))?$")
+TRAILING_AMOUNT_TOKEN_REGEX = re.compile(r"\(?-?\$?\d[\d,]*\.\d{2}\)?$")
+STATEMENT_RANGE_REGEX = re.compile(
+    r"From\s+(?P<m1>[A-Za-z]+)\s+(?P<d1>\d{1,2}),\s+(?P<y1>\d{4})\s+to\s+"
+    r"(?P<m2>[A-Za-z]+)\s+(?P<d2>\d{1,2}),\s+(?P<y2>\d{4})",
+    flags=re.IGNORECASE,
+)
 MONTH_MAP = {
     "jan": 1,
     "feb": 2,
@@ -43,11 +48,7 @@ def extract_pdf_text(file_bytes: bytes) -> str:
 
 
 def extract_statement_year(text: str) -> int:
-    match = re.search(
-        r"From\s+[A-Za-z]+\s+\d{1,2},\s+(?P<y1>\d{4})\s+to\s+[A-Za-z]+\s+\d{1,2},\s+(?P<y2>\d{4})",
-        text,
-        flags=re.IGNORECASE,
-    )
+    match = STATEMENT_RANGE_REGEX.search(text)
     if match:
         return int(match.group("y2"))
 
@@ -58,13 +59,20 @@ def extract_statement_year(text: str) -> int:
     return datetime.utcnow().year
 
 
-def normalize_statement_date(day: str, mon: str, year: int) -> str | None:
+def extract_statement_year_range(text: str) -> tuple[int | None, int | None]:
+    match = STATEMENT_RANGE_REGEX.search(text)
+    if not match:
+        return None, None
+    return int(match.group("y1")), int(match.group("y2"))
+
+
+def normalize_statement_date(day: str, mon: str, year: int) -> date | None:
     month_num = MONTH_MAP.get(mon.strip().lower())
     if not month_num:
         return None
 
     try:
-        return date(year, month_num, int(day)).isoformat()
+        return date(year, month_num, int(day))
     except ValueError:
         return None
 
@@ -126,20 +134,103 @@ def is_income_description(description: str) -> bool:
         "payroll",
         "refund",
         "interest",
+        "income tax refund",
+        "direct deposit",
     ]
 
     return any(marker in lowered for marker in income_markers)
 
 
+def is_expense_description(description: str) -> bool:
+    lowered = description.lower()
+    expense_markers = [
+        "purchase",
+        "pos",
+        "debit",
+        "bill payment",
+        "withdrawal",
+        "fee",
+        "service charge",
+        "pre-authorized",
+        "subscription",
+        "payment sent",
+        "e-transfer sent",
+    ]
+    return any(marker in lowered for marker in expense_markers)
+
+
 def looks_like_balance_only_line(line: str) -> bool:
     lowered = line.lower()
-    return "opening balance" in lowered or "closing balance" in lowered
+    balance_markers = [
+        "opening balance",
+        "closing balance",
+        "balance brought forward",
+        "balance carried forward",
+        "daily closing balance",
+    ]
+    return any(marker in lowered for marker in balance_markers)
+
+
+def parse_amount_token(value: str) -> float | None:
+    cleaned = value.strip().replace("$", "").replace(",", "")
+    if not cleaned:
+        return None
+
+    if cleaned.startswith("(") and cleaned.endswith(")"):
+        cleaned = f"-{cleaned[1:-1]}"
+
+    try:
+        return float(cleaned)
+    except ValueError:
+        return None
+
+
+def split_line_and_trailing_amounts(line: str) -> tuple[str, list[str]]:
+    tokens = line.split()
+    trailing_amounts_reversed: list[str] = []
+
+    for token in reversed(tokens):
+        if TRAILING_AMOUNT_TOKEN_REGEX.fullmatch(token):
+            trailing_amounts_reversed.append(token)
+        else:
+            break
+
+    trailing_amounts = list(reversed(trailing_amounts_reversed))
+    body_token_count = len(tokens) - len(trailing_amounts)
+    body = " ".join(tokens[:body_token_count]).strip()
+    return body, trailing_amounts
+
+
+def infer_transaction_type(description: str) -> str:
+    if is_income_description(description):
+        return "income"
+    if is_expense_description(description):
+        return "expense"
+    return "expense"
+
+
+def resolve_statement_year_for_month(
+    month_num: int,
+    start_year: int | None,
+    end_year: int | None,
+) -> int:
+    if start_year is None or end_year is None:
+        return end_year or start_year or datetime.utcnow().year
+
+    if start_year == end_year:
+        return end_year
+
+    # Cross-year statements are typically Dec->Jan. Use month bucket to reduce
+    # January transactions being assigned to the prior year.
+    if month_num >= 10:
+        return start_year
+    return end_year
 
 
 def finalize_pending_transaction(
     db: Session,
     owner_id: int,
-    current_date: str | None,
+    current_date: date | None,
     description_parts: list[str],
     amount_text_1: str | None,
     amount_text_2: str | None,
@@ -152,12 +243,11 @@ def finalize_pending_transaction(
     if not description:
         return
 
-    try:
-        amount = float(amount_text_1)
-    except ValueError:
+    amount = parse_amount_token(amount_text_1)
+    if amount is None:
         return
 
-    tx_type = "income" if is_income_description(description) else "expense"
+    tx_type = infer_transaction_type(description)
     category = categorize_transaction(
         db=db,
         owner_id=owner_id,
@@ -173,7 +263,7 @@ def finalize_pending_transaction(
 
     preview_rows.append(
         StatementPreviewRow(
-            date=current_date,
+            date=current_date.isoformat(),
             description=description,
             amount=abs(amount),
             type=tx_type,
@@ -188,13 +278,14 @@ def parse_rbc_statement_preview(
     owner_id: int,
     text: str,
 ) -> dict[str, Any]:
-    year = extract_statement_year(text)
+    statement_start_year, statement_end_year = extract_statement_year_range(text)
+    fallback_year = extract_statement_year(text)
     lines = [line.rstrip() for line in text.splitlines()]
 
     preview_rows: list[StatementPreviewRow] = []
     notes: list[str] = []
 
-    current_date: str | None = None
+    current_date: date | None = None
     description_parts: list[str] = []
 
     for raw_line in lines:
@@ -214,7 +305,15 @@ def parse_rbc_statement_preview(
             day = date_match.group("day")
             mon = date_match.group("mon")
             rest = date_match.group("rest").strip()
-            normalized_date = normalize_statement_date(day, mon, year)
+            month_num = MONTH_MAP.get(mon.strip().lower())
+            if not month_num:
+                continue
+            resolved_year = resolve_statement_year_for_month(
+                month_num=month_num,
+                start_year=statement_start_year,
+                end_year=statement_end_year,
+            )
+            normalized_date = normalize_statement_date(day, mon, resolved_year or fallback_year)
 
             if normalized_date:
                 current_date = normalized_date
@@ -225,11 +324,11 @@ def parse_rbc_statement_preview(
         if not current_date:
             continue
 
-        amount_match = ENDING_AMOUNTS_REGEX.match(line)
-        if amount_match:
-            body = clean_description_line(amount_match.group("body"))
-            amount_1 = amount_match.group("a1")
-            amount_2 = amount_match.group("a2")
+        body, trailing_amounts = split_line_and_trailing_amounts(line)
+        if trailing_amounts:
+            amount_1 = trailing_amounts[0]
+            amount_2 = trailing_amounts[1] if len(trailing_amounts) > 1 else None
+            body = clean_description_line(body)
 
             if body:
                 description_parts.append(body)
@@ -286,8 +385,9 @@ def parse_pdf_statement_preview(
     notes = ["Used generic PDF parser. Accuracy may vary for this bank format."]
 
     lines = [line.strip() for line in text.splitlines() if line.strip()]
-    current_year = extract_statement_year(text)
-    current_date: str | None = None
+    statement_start_year, statement_end_year = extract_statement_year_range(text)
+    fallback_year = extract_statement_year(text)
+    current_date: date | None = None
     description_parts: list[str] = []
 
     for line in lines:
@@ -299,21 +399,29 @@ def parse_pdf_statement_preview(
             if description_parts:
                 description_parts = []
 
+            month_num = MONTH_MAP.get(date_match.group("mon").strip().lower())
+            if not month_num:
+                continue
+            resolved_year = resolve_statement_year_for_month(
+                month_num=month_num,
+                start_year=statement_start_year,
+                end_year=statement_end_year,
+            )
             current_date = normalize_statement_date(
                 date_match.group("day"),
                 date_match.group("mon"),
-                current_year,
+                resolved_year or fallback_year,
             )
             line = date_match.group("rest").strip()
 
         if not current_date:
             continue
 
-        amount_match = ENDING_AMOUNTS_REGEX.match(line)
-        if amount_match:
-            body = clean_description_line(amount_match.group("body"))
-            amount_1 = amount_match.group("a1")
-            amount_2 = amount_match.group("a2")
+        body, trailing_amounts = split_line_and_trailing_amounts(line)
+        if trailing_amounts:
+            amount_1 = trailing_amounts[0]
+            amount_2 = trailing_amounts[1] if len(trailing_amounts) > 1 else None
+            body = clean_description_line(body)
 
             if body:
                 description_parts.append(body)
