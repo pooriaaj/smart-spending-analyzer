@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import unittest
 from collections.abc import Generator
+from datetime import date
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -197,6 +198,50 @@ class SmartImportRouteTest(unittest.TestCase):
         self.assertEqual(transactions[0].type, "expense")
         self.assertEqual(transactions[1].date.isoformat(), "2025-01-02")
         self.assertEqual(transactions[1].type, "income")
+
+    def test_import_file_marks_existing_and_in_preview_duplicates(self) -> None:
+        with self.session_local() as session:
+            session.add(
+                Transaction(
+                    amount=12.34,
+                    category="shopping",
+                    description="BOOK STORE",
+                    date=date(2024, 12, 28),
+                    type="expense",
+                    owner_id=self.user_id,
+                    account_id=self.account_id,
+                )
+            )
+            session.commit()
+
+        pdf_bytes = build_text_pdf(
+            [
+                "Account Statement",
+                "From December 28, 2024 to December 31, 2024",
+                "28 Dec BOOK STORE $12.34",
+                "29 Dec GIFT SHOP $50.00",
+                "29 Dec GIFT SHOP $50.00",
+            ]
+        )
+
+        response = self.client.post(
+            "/transactions/import/file",
+            data={"account_id": str(self.account_id)},
+            files={"file": ("duplicate-check.pdf", pdf_bytes, "application/pdf")},
+        )
+
+        self.assertEqual(response.status_code, 200, response.text)
+        preview_rows = response.json()["preview_rows"]
+        self.assertEqual(len(preview_rows), 3)
+        self.assertTrue(preview_rows[0]["is_duplicate"])
+        self.assertEqual(preview_rows[0]["duplicate_reason"], "Already exists in this account.")
+        self.assertFalse(preview_rows[1]["is_duplicate"])
+        self.assertIsNone(preview_rows[1]["duplicate_reason"])
+        self.assertTrue(preview_rows[2]["is_duplicate"])
+        self.assertEqual(
+            preview_rows[2]["duplicate_reason"],
+            "Duplicate of another row in this preview.",
+        )
 
 
 if __name__ == "__main__":

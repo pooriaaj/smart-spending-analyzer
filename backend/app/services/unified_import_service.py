@@ -1,18 +1,76 @@
 from __future__ import annotations
 
+from datetime import date
 from pathlib import Path
 from typing import Any
 
 from sqlalchemy.orm import Session
 
+from app.schemas import StatementPreviewRow
 from app.services.pdf_statement_service import parse_pdf_statement_preview
 from app.services.receipt_service import scan_receipt_file
-from app.services.transaction_service import import_transactions_from_csv
+from app.services.transaction_service import (
+    build_duplicate_key,
+    get_existing_duplicate_keys,
+    import_transactions_from_csv,
+)
 
 
 IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp"}
 CSV_EXTENSIONS = {".csv"}
 PDF_EXTENSIONS = {".pdf"}
+
+
+def annotate_preview_rows_for_duplicates(
+    db: Session,
+    owner_id: int,
+    account_id: int,
+    preview_rows: list[StatementPreviewRow],
+) -> list[StatementPreviewRow]:
+    existing_keys = get_existing_duplicate_keys(db, owner_id, account_id=account_id)
+    seen_in_preview: set[tuple] = set()
+    annotated_rows: list[StatementPreviewRow] = []
+
+    for row in preview_rows:
+        duplicate_reason: str | None = None
+
+        try:
+            duplicate_key = build_duplicate_key(
+                owner_id=owner_id,
+                account_id=account_id,
+                tx_date=date.fromisoformat(row.date),
+                description=row.description,
+                amount=row.amount,
+                tx_type=row.type,
+                category=row.category,
+            )
+        except Exception:
+            annotated_rows.append(
+                row.model_copy(
+                    update={
+                        "is_duplicate": False,
+                        "duplicate_reason": None,
+                    }
+                )
+            )
+            continue
+
+        if duplicate_key in existing_keys:
+            duplicate_reason = "Already exists in this account."
+        elif duplicate_key in seen_in_preview:
+            duplicate_reason = "Duplicate of another row in this preview."
+
+        seen_in_preview.add(duplicate_key)
+        annotated_rows.append(
+            row.model_copy(
+                update={
+                    "is_duplicate": duplicate_reason is not None,
+                    "duplicate_reason": duplicate_reason,
+                }
+            )
+        )
+
+    return annotated_rows
 
 
 def detect_import_type(filename: str, content_type: str | None) -> str:
@@ -99,11 +157,17 @@ def process_smart_import(
             owner_id=owner_id,
             file_bytes=file_bytes,
         )
+        preview_rows = annotate_preview_rows_for_duplicates(
+            db=db,
+            owner_id=owner_id,
+            account_id=account_id,
+            preview_rows=result.get("preview_rows", []),
+        )
         return {
             "detected_type": "pdf_statement",
             "status": "table_review",
             "message": "PDF statement parsed. Review the detected rows before importing.",
-            "preview_rows": result.get("preview_rows", []),
+            "preview_rows": preview_rows,
             "notes": result.get("notes", []),
         }
 

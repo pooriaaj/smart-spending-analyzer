@@ -38,6 +38,20 @@ const validatePreviewRow = (row) => {
   };
 };
 
+const buildPreviewDuplicateKey = (row, validation) => {
+  if (validation.messages.length > 0) {
+    return null;
+  }
+
+  return JSON.stringify({
+    date: row.date,
+    description: row.description.trim().toLowerCase(),
+    amount: Number(row.amount).toFixed(2),
+    type: row.type.trim().toLowerCase(),
+    category: row.category.trim().toLowerCase(),
+  });
+};
+
 function ImportPage() {
   const navigate = useNavigate();
   const fileInputRef = useRef(null);
@@ -51,15 +65,55 @@ function ImportPage() {
   const [loading, setLoading] = useState(false);
   const [confirmingPreview, setConfirmingPreview] = useState(false);
   const [savingDraft, setSavingDraft] = useState(false);
+  const [previewFilter, setPreviewFilter] = useState("all");
 
   const normalizedAccountId =
     selectedAccountId === ALL_ACCOUNTS_VALUE ? undefined : Number(selectedAccountId);
   const detectedPreviewRows = importResult?.status === "table_review" ? importResult.preview_rows || [] : [];
   const removedPreviewCount = Math.max(detectedPreviewRows.length - previewRows.length, 0);
   const previewRowValidations = previewRows.map((row) => validatePreviewRow(row));
+  const previewDuplicateCounts = previewRows.reduce((counts, row, index) => {
+    const duplicateKey = buildPreviewDuplicateKey(row, previewRowValidations[index]);
+    if (!duplicateKey) {
+      return counts;
+    }
+
+    return {
+      ...counts,
+      [duplicateKey]: (counts[duplicateKey] || 0) + 1,
+    };
+  }, {});
+  const previewRowItems = previewRows.map((row, index) => ({
+    row,
+    index,
+    validation: previewRowValidations[index],
+    duplicateReason:
+      row.is_duplicate && row.duplicate_reason
+        ? row.duplicate_reason
+        : (() => {
+            const duplicateKey = buildPreviewDuplicateKey(row, previewRowValidations[index]);
+            if (duplicateKey && previewDuplicateCounts[duplicateKey] > 1) {
+              return "Duplicate of another row in this preview.";
+            }
+            return null;
+          })(),
+  }));
   const invalidPreviewRowCount = previewRowValidations.filter(
     (validation) => validation.messages.length > 0
   ).length;
+  const duplicatePreviewRowCount = previewRowItems.filter((item) => item.duplicateReason).length;
+  const readyPreviewRowCount = previewRowItems.filter(
+    ({ duplicateReason, validation }) => !duplicateReason && validation.messages.length === 0
+  ).length;
+  const filteredPreviewRows = previewRowItems.filter(({ duplicateReason, validation }) => {
+    if (previewFilter === "needs_review") {
+      return validation.messages.length > 0;
+    }
+    if (previewFilter === "duplicates") {
+      return Boolean(duplicateReason);
+    }
+    return true;
+  });
 
   const clearAll = () => {
     setSelectedFileName("");
@@ -67,6 +121,7 @@ function ImportPage() {
     setPreviewRows([]);
     setReceiptDraft(null);
     setError("");
+    setPreviewFilter("all");
   };
 
   const handleChooseFile = () => {
@@ -105,6 +160,7 @@ function ImportPage() {
 
       if (data.status === "table_review") {
         setPreviewRows(data.preview_rows || []);
+        setPreviewFilter("all");
       }
 
       if (data.status === "draft_review") {
@@ -127,6 +183,8 @@ function ImportPage() {
           ? {
               ...row,
               [field]: field === "amount" ? (value === "" ? "" : Number(value)) : value,
+              is_duplicate: false,
+              duplicate_reason: null,
             }
           : row
       )
@@ -139,6 +197,13 @@ function ImportPage() {
 
   const handleRestorePreviewRows = () => {
     setPreviewRows(detectedPreviewRows);
+    setPreviewFilter("all");
+  };
+
+  const handleRemoveDuplicatePreviewRows = () => {
+    setPreviewRows((prev) =>
+      prev.filter((_, index) => !previewRowItems[index]?.duplicateReason)
+    );
   };
 
   const handleConfirmPreviewImport = async () => {
@@ -419,18 +484,30 @@ function ImportPage() {
 
             <div className="import-preview-toolbar">
               <div className="import-preview-summary">
-                <strong>{previewRows.length} row{previewRows.length === 1 ? "" : "s"} ready to import</strong>
+                <strong>{previewRows.length} row{previewRows.length === 1 ? "" : "s"} currently selected</strong>
                 <p>
                   {invalidPreviewRowCount > 0
                     ? `${invalidPreviewRowCount} row${invalidPreviewRowCount === 1 ? "" : "s"} still need attention before you can import.`
+                    : duplicatePreviewRowCount > 0
+                    ? `${duplicatePreviewRowCount} row${duplicatePreviewRowCount === 1 ? "" : "s"} look like duplicates and may be skipped on import.`
                     : removedPreviewCount > 0
                     ? `${removedPreviewCount} removed row${removedPreviewCount === 1 ? "" : "s"} will be skipped when you confirm.`
                     : "Remove any bad detections before importing, or edit the values directly in the table."}
                 </p>
               </div>
 
-              {removedPreviewCount > 0 && (
+              {(removedPreviewCount > 0 || duplicatePreviewRowCount > 0) && (
                 <div className="import-preview-actions">
+                  {duplicatePreviewRowCount > 0 && (
+                    <button
+                      type="button"
+                      className="secondary-button"
+                      onClick={handleRemoveDuplicatePreviewRows}
+                      disabled={confirmingPreview}
+                    >
+                      Remove Flagged Duplicates
+                    </button>
+                  )}
                   <button
                     type="button"
                     className="secondary-button"
@@ -443,6 +520,49 @@ function ImportPage() {
               )}
             </div>
 
+            <div className="import-preview-stats-grid">
+              <div className="import-preview-stat-card">
+                <span className="import-preview-stat-label">Ready</span>
+                <strong>{readyPreviewRowCount}</strong>
+              </div>
+              <div className="import-preview-stat-card">
+                <span className="import-preview-stat-label">Needs Review</span>
+                <strong>{invalidPreviewRowCount}</strong>
+              </div>
+              <div className="import-preview-stat-card">
+                <span className="import-preview-stat-label">Duplicates</span>
+                <strong>{duplicatePreviewRowCount}</strong>
+              </div>
+              <div className="import-preview-stat-card">
+                <span className="import-preview-stat-label">Removed</span>
+                <strong>{removedPreviewCount}</strong>
+              </div>
+            </div>
+
+            <div className="import-preview-filters" role="tablist" aria-label="Preview row filters">
+              <button
+                type="button"
+                className={`import-filter-chip ${previewFilter === "all" ? "import-filter-chip-active" : ""}`}
+                onClick={() => setPreviewFilter("all")}
+              >
+                All ({previewRows.length})
+              </button>
+              <button
+                type="button"
+                className={`import-filter-chip ${previewFilter === "needs_review" ? "import-filter-chip-active" : ""}`}
+                onClick={() => setPreviewFilter("needs_review")}
+              >
+                Needs Review ({invalidPreviewRowCount})
+              </button>
+              <button
+                type="button"
+                className={`import-filter-chip ${previewFilter === "duplicates" ? "import-filter-chip-active" : ""}`}
+                onClick={() => setPreviewFilter("duplicates")}
+              >
+                Likely Duplicates ({duplicatePreviewRowCount})
+              </button>
+            </div>
+
             {invalidPreviewRowCount > 0 && (
               <div className="import-validation-box">
                 <strong>
@@ -452,7 +572,18 @@ function ImportPage() {
               </div>
             )}
 
-            {previewRows.length > 0 ? (
+            {duplicatePreviewRowCount > 0 && (
+              <div className="import-duplicate-box">
+                <strong>
+                  {duplicatePreviewRowCount} likely duplicate row{duplicatePreviewRowCount === 1 ? "" : "s"}
+                </strong>
+                <p>
+                  These rows matched an existing transaction or another row in this preview. You can remove them now or keep them and let the backend skip them during import.
+                </p>
+              </div>
+            )}
+
+            {previewRows.length > 0 && filteredPreviewRows.length > 0 ? (
               <div className="transactions-table-wrapper">
                 <table className="transactions-table">
                   <thead>
@@ -466,8 +597,7 @@ function ImportPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {previewRows.map((row, index) => {
-                      const validation = previewRowValidations[index];
+                    {filteredPreviewRows.map(({ row, index, validation, duplicateReason }) => {
 
                       return (
                         <tr key={`preview-row-${index}`}>
@@ -491,6 +621,9 @@ function ImportPage() {
                                 <span className="import-source-label">Parsed From</span>
                                 <code>{row.source_line}</code>
                               </div>
+                            )}
+                            {duplicateReason && (
+                              <div className="import-duplicate-note">{duplicateReason}</div>
                             )}
                             {validation.messages.length > 0 && (
                               <div className="import-row-issues">
@@ -534,6 +667,9 @@ function ImportPage() {
                             >
                               Remove
                             </button>
+                            {duplicateReason && (
+                              <span className="import-row-status import-row-status-duplicate">Likely duplicate</span>
+                            )}
                             {validation.messages.length > 0 && (
                               <span className="import-row-status import-row-status-warning">Needs review</span>
                             )}
@@ -543,6 +679,17 @@ function ImportPage() {
                     })}
                   </tbody>
                 </table>
+              </div>
+            ) : previewRows.length > 0 ? (
+              <div className="empty-state import-preview-empty">
+                <p>No rows match the current filter.</p>
+                <button
+                  type="button"
+                  className="secondary-button"
+                  onClick={() => setPreviewFilter("all")}
+                >
+                  Show All Rows
+                </button>
               </div>
             ) : (
               <div className="empty-state import-preview-empty">

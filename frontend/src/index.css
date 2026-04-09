@@ -733,6 +733,67 @@ textarea:focus,
   flex-wrap: wrap;
 }
 
+.import-preview-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 18px;
+}
+
+.import-preview-stat-card {
+  padding: 14px 16px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.82);
+  border: 1px solid rgba(15, 23, 42, 0.06);
+}
+
+.import-preview-stat-label {
+  display: block;
+  margin-bottom: 8px;
+  color: var(--text-faint);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.import-preview-stat-card strong {
+  font-size: 28px;
+  color: var(--text-main);
+}
+
+.import-preview-filters {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 18px;
+}
+
+.import-filter-chip {
+  border: 1px solid rgba(15, 23, 42, 0.1);
+  border-radius: 999px;
+  padding: 10px 14px;
+  background: rgba(248, 250, 252, 0.9);
+  color: var(--text-soft);
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.import-filter-chip:hover {
+  transform: translateY(-1px);
+  border-color: rgba(59, 130, 246, 0.22);
+  color: var(--text-main);
+}
+
+.import-filter-chip-active {
+  background: rgba(59, 130, 246, 0.12);
+  border-color: rgba(59, 130, 246, 0.26);
+  color: #1d4ed8;
+  box-shadow: 0 10px 24px rgba(59, 130, 246, 0.1);
+}
+
 .import-validation-box {
   margin-bottom: 18px;
   padding: 16px 18px;
@@ -748,6 +809,25 @@ textarea:focus,
 }
 
 .import-validation-box p {
+  margin: 0;
+  line-height: 1.6;
+}
+
+.import-duplicate-box {
+  margin-bottom: 18px;
+  padding: 16px 18px;
+  border-radius: 18px;
+  background: rgba(59, 130, 246, 0.1);
+  border: 1px solid rgba(59, 130, 246, 0.2);
+  color: #1d4ed8;
+}
+
+.import-duplicate-box strong {
+  display: block;
+  margin-bottom: 6px;
+}
+
+.import-duplicate-box p {
   margin: 0;
   line-height: 1.6;
 }
@@ -899,6 +979,11 @@ textarea:focus,
   color: #9a3412;
 }
 
+.import-row-status-duplicate {
+  background: rgba(59, 130, 246, 0.12);
+  color: #1d4ed8;
+}
+
 .import-preview-empty {
   display: grid;
   gap: 12px;
@@ -944,10 +1029,51 @@ textarea:focus,
   font-weight: 600;
 }
 
+.import-duplicate-note {
+  margin-top: 10px;
+  color: #1d4ed8;
+  font-size: 12px;
+  line-height: 1.5;
+  font-weight: 600;
+}
+
 :root[data-theme="dark"] .import-validation-box {
   background: rgba(245, 158, 11, 0.12);
   border-color: rgba(251, 191, 36, 0.24);
   color: #fbbf24;
+}
+
+:root[data-theme="dark"] .import-preview-stat-card {
+  background: rgba(15, 23, 42, 0.78);
+  border-color: rgba(148, 163, 184, 0.14);
+}
+
+:root[data-theme="dark"] .import-preview-stat-card strong {
+  color: var(--text-main);
+}
+
+:root[data-theme="dark"] .import-filter-chip {
+  background: rgba(15, 23, 42, 0.78);
+  border-color: rgba(148, 163, 184, 0.16);
+  color: var(--text-soft);
+}
+
+:root[data-theme="dark"] .import-filter-chip:hover {
+  border-color: rgba(96, 165, 250, 0.3);
+  color: var(--text-main);
+}
+
+:root[data-theme="dark"] .import-filter-chip-active {
+  background: rgba(59, 130, 246, 0.14);
+  border-color: rgba(96, 165, 250, 0.32);
+  color: #93c5fd;
+  box-shadow: 0 12px 28px rgba(59, 130, 246, 0.16);
+}
+
+:root[data-theme="dark"] .import-duplicate-box {
+  background: rgba(59, 130, 246, 0.12);
+  border-color: rgba(96, 165, 250, 0.22);
+  color: #93c5fd;
 }
 
 :root[data-theme="dark"] .import-row-status-warning,
@@ -955,8 +1081,17 @@ textarea:focus,
   color: #fbbf24;
 }
 
+:root[data-theme="dark"] .import-row-status-duplicate,
+:root[data-theme="dark"] .import-duplicate-note {
+  color: #93c5fd;
+}
+
 :root[data-theme="dark"] .import-row-status-warning {
   background: rgba(251, 191, 36, 0.14);
+}
+
+:root[data-theme="dark"] .import-row-status-duplicate {
+  background: rgba(96, 165, 250, 0.16);
 }
 
 :root[data-theme="dark"] .import-invalid-input {
@@ -2582,12 +2717,17 @@ textarea {
 }
 
 @media (max-width: 720px) {
+  .import-preview-stats-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .import-preview-toolbar {
     margin-bottom: 14px;
   }
 
   .import-preview-actions,
-  .import-preview-empty .secondary-button {
+  .import-preview-empty .secondary-button,
+  .import-filter-chip {
     width: 100%;
   }
 

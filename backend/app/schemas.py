@@ -279,6 +279,8 @@ class StatementPreviewRow(BaseModel):
     type: TransactionType
     category: str
     source_line: str | None = None
+    is_duplicate: bool = False
+    duplicate_reason: str | None = None
 
 
 class SmartImportResponse(BaseModel):
