@@ -5,6 +5,7 @@ import AccountSelector from "../components/AccountSelector";
 import { ALL_ACCOUNTS_VALUE } from "../services/accountStorage";
 
 const ALLOWED_TRANSACTION_TYPES = new Set(["expense", "income"]);
+const todayIsoDate = () => new Date().toISOString().slice(0, 10);
 
 const isValidIsoDate = (value) => {
   if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) {
@@ -38,6 +39,40 @@ const validatePreviewRow = (row) => {
   };
 };
 
+const validateReceiptDraft = (draft) => {
+  const fieldIssues = {
+    amount: !Number.isFinite(Number(draft?.amount)) || Number(draft?.amount) <= 0,
+    category: !draft?.category?.trim(),
+    description: !draft?.description?.trim(),
+    date: !isValidIsoDate(draft?.date || ""),
+    type: !ALLOWED_TRANSACTION_TYPES.has(draft?.type),
+  };
+
+  const messages = [];
+
+  if (fieldIssues.amount) messages.push("enter an amount greater than 0");
+  if (fieldIssues.category) messages.push("add a category");
+  if (fieldIssues.description) messages.push("add a description");
+  if (fieldIssues.date) messages.push("fix the date");
+  if (fieldIssues.type) messages.push("choose income or expense");
+
+  return {
+    fieldIssues,
+    messages,
+  };
+};
+
+const buildManualPreviewRow = (fallbackDate) => ({
+  date: fallbackDate || todayIsoDate(),
+  description: "",
+  amount: "",
+  type: "expense",
+  category: "other",
+  source_line: "Added manually during review.",
+  is_duplicate: false,
+  duplicate_reason: null,
+});
+
 const buildPreviewDuplicateKey = (row, validation) => {
   if (validation.messages.length > 0) {
     return null;
@@ -69,6 +104,49 @@ function ImportPage() {
 
   const normalizedAccountId =
     selectedAccountId === ALL_ACCOUNTS_VALUE ? undefined : Number(selectedAccountId);
+  const normalizedError = error.trim().toLowerCase();
+  const importErrorGuidance = (() => {
+    if (
+      normalizedError.includes("no selectable text") ||
+      normalizedError.includes("image-only or scanned")
+    ) {
+      return {
+        title: "What to try next",
+        items: [
+          "Download the original statement PDF from online banking when possible.",
+          "Avoid camera scans, screenshot-to-PDF exports, or printer-scanned statements for import.",
+          "If your bank only provides scanned pages, statement OCR fallback still needs to be added.",
+        ],
+      };
+    }
+
+    if (normalizedError.includes("no transaction rows were recognized")) {
+      return {
+        title: "What to try next",
+        items: [
+          "This file had readable text, but the row layout did not match a supported parser pattern yet.",
+          "If your bank offers another PDF layout or a CSV export, try that version first.",
+          "Keep this statement available for future parser tuning if the same bank format keeps failing.",
+        ],
+      };
+    }
+
+    if (
+      normalizedError.includes("receipt ocr is not enabled yet") ||
+      normalizedError.includes("valid openai_api_key")
+    ) {
+      return {
+        title: "What to try next",
+        items: [
+          "Add a valid OPENAI_API_KEY in the backend environment to enable receipt scanning.",
+          "Use CSV or PDF statement import for statements, or add receipt transactions manually until OCR is enabled.",
+          "Once OCR is enabled, the app will return a draft transaction for review before saving.",
+        ],
+      };
+    }
+
+    return null;
+  })();
   const detectedPreviewRows = importResult?.status === "table_review" ? importResult.preview_rows || [] : [];
   const removedPreviewCount = Math.max(detectedPreviewRows.length - previewRows.length, 0);
   const previewRowValidations = previewRows.map((row) => validatePreviewRow(row));
@@ -102,9 +180,13 @@ function ImportPage() {
     (validation) => validation.messages.length > 0
   ).length;
   const duplicatePreviewRowCount = previewRowItems.filter((item) => item.duplicateReason).length;
+  const manualPreviewRowCount = previewRows.filter(
+    (row) => row.source_line === "Added manually during review."
+  ).length;
   const readyPreviewRowCount = previewRowItems.filter(
     ({ duplicateReason, validation }) => !duplicateReason && validation.messages.length === 0
   ).length;
+  const receiptDraftValidation = validateReceiptDraft(receiptDraft);
   const filteredPreviewRows = previewRowItems.filter(({ duplicateReason, validation }) => {
     if (previewFilter === "needs_review") {
       return validation.messages.length > 0;
@@ -204,6 +286,22 @@ function ImportPage() {
     setPreviewRows((prev) =>
       prev.filter((_, index) => !previewRowItems[index]?.duplicateReason)
     );
+  };
+
+  const handleRemoveNeedsReviewRows = () => {
+    setPreviewRows((prev) =>
+      prev.filter((_, index) => previewRowValidations[index]?.messages.length === 0)
+    );
+  };
+
+  const handleAddManualPreviewRow = () => {
+    const fallbackDate =
+      previewRows[previewRows.length - 1]?.date ||
+      detectedPreviewRows[detectedPreviewRows.length - 1]?.date ||
+      todayIsoDate();
+
+    setPreviewRows((prev) => [...prev, buildManualPreviewRow(fallbackDate)]);
+    setPreviewFilter("all");
   };
 
   const handleConfirmPreviewImport = async () => {
@@ -364,6 +462,17 @@ function ImportPage() {
                     Dismiss
                   </button>
                 </div>
+
+                {importErrorGuidance && (
+                  <div className="import-error-guidance">
+                    <strong>{importErrorGuidance.title}</strong>
+                    <ul className="assistant-list">
+                      {importErrorGuidance.items.map((item, index) => (
+                        <li key={`import-error-guidance-${index}`}>{item}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
               </div>
             )}
 
@@ -424,6 +533,7 @@ function ImportPage() {
               <input
                 type="number"
                 step="0.01"
+                className={receiptDraftValidation.fieldIssues.amount ? "import-invalid-input" : ""}
                 value={receiptDraft.amount ?? ""}
                 onChange={(e) => setReceiptDraft({ ...receiptDraft, amount: e.target.value })}
                 placeholder="Amount"
@@ -431,6 +541,7 @@ function ImportPage() {
 
               <input
                 type="text"
+                className={receiptDraftValidation.fieldIssues.category ? "import-invalid-input" : ""}
                 value={receiptDraft.category}
                 onChange={(e) => setReceiptDraft({ ...receiptDraft, category: e.target.value })}
                 placeholder="Category"
@@ -438,6 +549,7 @@ function ImportPage() {
 
               <input
                 type="text"
+                className={receiptDraftValidation.fieldIssues.description ? "import-invalid-input" : ""}
                 value={receiptDraft.description}
                 onChange={(e) => setReceiptDraft({ ...receiptDraft, description: e.target.value })}
                 placeholder="Description"
@@ -445,11 +557,13 @@ function ImportPage() {
 
               <input
                 type="date"
+                className={receiptDraftValidation.fieldIssues.date ? "import-invalid-input" : ""}
                 value={receiptDraft.date || ""}
                 onChange={(e) => setReceiptDraft({ ...receiptDraft, date: e.target.value })}
               />
 
               <select
+                className={receiptDraftValidation.fieldIssues.type ? "import-invalid-input" : ""}
                 value={receiptDraft.type}
                 onChange={(e) => setReceiptDraft({ ...receiptDraft, type: e.target.value })}
               >
@@ -457,10 +571,28 @@ function ImportPage() {
                 <option value="income">Income</option>
               </select>
 
-              <button type="button" onClick={handleSaveReceiptDraft} disabled={savingDraft}>
+              <button
+                type="button"
+                onClick={handleSaveReceiptDraft}
+                disabled={savingDraft || receiptDraftValidation.messages.length > 0}
+              >
                 {savingDraft ? "Saving..." : "Save Transaction"}
               </button>
             </div>
+
+            {receiptDraftValidation.messages.length > 0 && (
+              <div className="import-validation-box">
+                <strong>Receipt draft still needs fixes</strong>
+                <p>Before saving, please {receiptDraftValidation.messages.join(", ")}.</p>
+              </div>
+            )}
+
+            {receiptDraft.raw_text_preview && (
+              <div className="receipt-preview-box">
+                <strong>OCR Text Preview</strong>
+                <p>{receiptDraft.raw_text_preview}</p>
+              </div>
+            )}
 
             {receiptDraft.notes?.length > 0 && (
               <div className="receipt-preview-box">
@@ -492,12 +624,33 @@ function ImportPage() {
                     ? `${duplicatePreviewRowCount} row${duplicatePreviewRowCount === 1 ? "" : "s"} look like duplicates and may be skipped on import.`
                     : removedPreviewCount > 0
                     ? `${removedPreviewCount} removed row${removedPreviewCount === 1 ? "" : "s"} will be skipped when you confirm.`
+                    : manualPreviewRowCount > 0
+                    ? `${manualPreviewRowCount} manual row${manualPreviewRowCount === 1 ? "" : "s"} were added during review.`
                     : "Remove any bad detections before importing, or edit the values directly in the table."}
                 </p>
               </div>
 
-              {(removedPreviewCount > 0 || duplicatePreviewRowCount > 0) && (
-                <div className="import-preview-actions">
+              <div className="import-preview-actions">
+                <button
+                  type="button"
+                  className="secondary-button"
+                  onClick={handleAddManualPreviewRow}
+                  disabled={confirmingPreview}
+                >
+                  Add Manual Row
+                </button>
+                {invalidPreviewRowCount > 0 && (
+                  <button
+                    type="button"
+                    className="secondary-button"
+                    onClick={handleRemoveNeedsReviewRows}
+                    disabled={confirmingPreview}
+                  >
+                    Remove Needs Review
+                  </button>
+                )}
+                {(removedPreviewCount > 0 || duplicatePreviewRowCount > 0 || detectedPreviewRows.length > 0) && (
+                  <>
                   {duplicatePreviewRowCount > 0 && (
                     <button
                       type="button"
@@ -516,8 +669,9 @@ function ImportPage() {
                   >
                     Restore Detected Rows
                   </button>
-                </div>
-              )}
+                  </>
+                )}
+              </div>
             </div>
 
             <div className="import-preview-stats-grid">
@@ -536,6 +690,10 @@ function ImportPage() {
               <div className="import-preview-stat-card">
                 <span className="import-preview-stat-label">Removed</span>
                 <strong>{removedPreviewCount}</strong>
+              </div>
+              <div className="import-preview-stat-card">
+                <span className="import-preview-stat-label">Manual</span>
+                <strong>{manualPreviewRowCount}</strong>
               </div>
             </div>
 
@@ -667,6 +825,9 @@ function ImportPage() {
                             >
                               Remove
                             </button>
+                            {row.source_line === "Added manually during review." && (
+                              <span className="import-row-status import-row-status-manual">Manual row</span>
+                            )}
                             {duplicateReason && (
                               <span className="import-row-status import-row-status-duplicate">Likely duplicate</span>
                             )}
@@ -694,16 +855,26 @@ function ImportPage() {
             ) : (
               <div className="empty-state import-preview-empty">
                 <p>No rows are currently selected for import.</p>
-                {detectedPreviewRows.length > 0 && (
+                <div className="import-preview-actions">
                   <button
                     type="button"
                     className="secondary-button"
-                    onClick={handleRestorePreviewRows}
+                    onClick={handleAddManualPreviewRow}
                     disabled={confirmingPreview}
                   >
-                    Restore Detected Rows
+                    Add Manual Row
                   </button>
-                )}
+                  {detectedPreviewRows.length > 0 && (
+                    <button
+                      type="button"
+                      className="secondary-button"
+                      onClick={handleRestorePreviewRows}
+                      disabled={confirmingPreview}
+                    >
+                      Restore Detected Rows
+                    </button>
+                  )}
+                </div>
               </div>
             )}
 

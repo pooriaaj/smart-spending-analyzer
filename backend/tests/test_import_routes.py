@@ -243,6 +243,53 @@ class SmartImportRouteTest(unittest.TestCase):
             "Duplicate of another row in this preview.",
         )
 
+    def test_import_file_reports_pdf_with_no_selectable_text(self) -> None:
+        pdf_bytes = build_text_pdf([])
+
+        response = self.client.post(
+            "/transactions/import/file",
+            data={"account_id": str(self.account_id)},
+            files={"file": ("scanned.pdf", pdf_bytes, "application/pdf")},
+        )
+
+        self.assertEqual(response.status_code, 400, response.text)
+        self.assertEqual(
+            response.json(),
+            {
+                "detail": (
+                    "This PDF appears to have no selectable text. It may be image-only or scanned. "
+                    "OCR fallback is not available yet."
+                )
+            },
+        )
+
+    def test_import_file_reports_unrecognized_pdf_layout_when_text_exists(self) -> None:
+        pdf_bytes = build_text_pdf(
+            [
+                "Account Statement",
+                "Statement period 12/28/2024 - 01/10/2025",
+                "Important information about your account",
+                "Please check this account statement",
+            ]
+        )
+
+        response = self.client.post(
+            "/transactions/import/file",
+            data={"account_id": str(self.account_id)},
+            files={"file": ("needs-tuning.pdf", pdf_bytes, "application/pdf")},
+        )
+
+        self.assertEqual(response.status_code, 400, response.text)
+        self.assertEqual(
+            response.json(),
+            {
+                "detail": (
+                    "Readable text was extracted from this PDF, but no transaction rows were recognized. "
+                    "This bank layout may need more parser tuning."
+                )
+            },
+        )
+
     def test_import_file_supports_numeric_period_and_month_first_dates(self) -> None:
         pdf_bytes = build_text_pdf(
             [
@@ -291,6 +338,33 @@ class SmartImportRouteTest(unittest.TestCase):
         )
         self.assertEqual(len(payload["preview_rows"]), 1)
         self.assertEqual(payload["preview_rows"][0]["date"], "2025-01-02")
+
+    def test_import_file_supports_transaction_and_posted_dates(self) -> None:
+        pdf_bytes = build_text_pdf(
+            [
+                "TD Canada Trust",
+                "Statement period 12/28/2024 - 01/10/2025",
+                "Transaction Date Posted Date Description Debit Credit Balance",
+                "Jan 02 Jan 03 PAYROLL 0.00 1,500.00 1,700.00",
+                "Jan 03 Jan 04 MONTHLY FEE 15.99 0.00 1,684.01",
+            ]
+        )
+
+        response = self.client.post(
+            "/transactions/import/file",
+            data={"account_id": str(self.account_id)},
+            files={"file": ("td-posted-dates.pdf", pdf_bytes, "application/pdf")},
+        )
+
+        self.assertEqual(response.status_code, 200, response.text)
+        preview_rows = response.json()["preview_rows"]
+        self.assertEqual(len(preview_rows), 2)
+        self.assertEqual(preview_rows[0]["date"], "2025-01-02")
+        self.assertEqual(preview_rows[0]["description"], "PAYROLL")
+        self.assertEqual(preview_rows[0]["type"], "income")
+        self.assertEqual(preview_rows[1]["date"], "2025-01-03")
+        self.assertEqual(preview_rows[1]["description"], "MONTHLY FEE")
+        self.assertEqual(preview_rows[1]["type"], "expense")
 
     def test_import_file_supports_cibc_credit_debit_amount_markers(self) -> None:
         pdf_bytes = build_text_pdf(
@@ -341,6 +415,51 @@ class SmartImportRouteTest(unittest.TestCase):
         self.assertEqual(preview_rows[0]["amount"], 1500.00)
         self.assertEqual(preview_rows[1]["type"], "expense")
         self.assertEqual(preview_rows[1]["amount"], 15.99)
+
+    def test_import_file_supports_placeholder_debit_credit_columns(self) -> None:
+        pdf_bytes = build_text_pdf(
+            [
+                "TD Canada Trust",
+                "Statement period 12/28/2024 - 01/10/2025",
+                "Transaction Date Description Debit Credit Balance",
+                "Jan 02 PAYROLL - 1,500.00 1,700.00",
+                "Jan 03 MONTHLY FEE 15.99 - 1,684.01",
+            ]
+        )
+
+        response = self.client.post(
+            "/transactions/import/file",
+            data={"account_id": str(self.account_id)},
+            files={"file": ("td-placeholders.pdf", pdf_bytes, "application/pdf")},
+        )
+
+        self.assertEqual(response.status_code, 200, response.text)
+        preview_rows = response.json()["preview_rows"]
+        self.assertEqual(len(preview_rows), 2)
+        self.assertEqual(preview_rows[0]["type"], "income")
+        self.assertEqual(preview_rows[0]["amount"], 1500.00)
+        self.assertEqual(preview_rows[1]["type"], "expense")
+        self.assertEqual(preview_rows[1]["amount"], 15.99)
+
+    def test_import_file_uses_statement_period_to_disambiguate_numeric_dates(self) -> None:
+        pdf_bytes = build_text_pdf(
+            [
+                "Account Statement",
+                "Statement period 12/28/2024 - 01/10/2025",
+                "03/01 BOOK STORE $12.34",
+            ]
+        )
+
+        response = self.client.post(
+            "/transactions/import/file",
+            data={"account_id": str(self.account_id)},
+            files={"file": ("ambiguous-date.pdf", pdf_bytes, "application/pdf")},
+        )
+
+        self.assertEqual(response.status_code, 200, response.text)
+        preview_rows = response.json()["preview_rows"]
+        self.assertEqual(len(preview_rows), 1)
+        self.assertEqual(preview_rows[0]["date"], "2025-01-03")
 
 
 if __name__ == "__main__":

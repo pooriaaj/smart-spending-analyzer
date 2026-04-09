@@ -25,6 +25,7 @@ NUMERIC_DATE_START_REGEX = re.compile(
 TRAILING_AMOUNT_TOKEN_REGEX = re.compile(
     r"(?i)(?:\(?[+-]?\$?\d[\d,]*\.\d{2}\)?(?:cr|dr)?|\$?\d[\d,]*\.\d{2}-)$"
 )
+PLACEHOLDER_AMOUNT_TOKEN_REGEX = re.compile(r"^[-–—]+$")
 WORD_STATEMENT_RANGE_REGEX = re.compile(
     r"From\s+(?P<m1>[A-Za-z]+)\s+(?P<d1>\d{1,2}),\s+(?P<y1>\d{4})\s+to\s+"
     r"(?P<m2>[A-Za-z]+)\s+(?P<d2>\d{1,2}),\s+(?P<y2>\d{4})",
@@ -121,6 +122,13 @@ class StatementProfile:
     match_all_markers: bool = False
 
 
+@dataclass(frozen=True)
+class PdfTextExtractionResult:
+    text: str
+    total_pages: int
+    readable_text_pages: int
+
+
 STATEMENT_PROFILES = (
     StatementProfile(
         profile_id="rbc",
@@ -175,18 +183,32 @@ GENERIC_STATEMENT_PROFILE = StatementProfile(
     display_name="Generic bank statement",
     detection_markers=(),
 )
+DEFAULT_NO_TRANSACTIONS_ERROR = (
+    "No transaction rows could be extracted from this PDF. Try a more text-based statement PDF."
+)
 
 
-def extract_pdf_text(file_bytes: bytes) -> str:
+def extract_pdf_text_result(file_bytes: bytes) -> PdfTextExtractionResult:
     reader = PdfReader(io.BytesIO(file_bytes))
     text_parts: list[str] = []
+    total_pages = len(reader.pages)
+    readable_text_pages = 0
 
     for page in reader.pages:
         page_text = page.extract_text() or ""
         if page_text.strip():
+            readable_text_pages += 1
             text_parts.append(page_text)
 
-    return "\n".join(text_parts).strip()
+    return PdfTextExtractionResult(
+        text="\n".join(text_parts).strip(),
+        total_pages=total_pages,
+        readable_text_pages=readable_text_pages,
+    )
+
+
+def extract_pdf_text(file_bytes: bytes) -> str:
+    return extract_pdf_text_result(file_bytes).text
 
 
 def normalize_year_token(year_text: str | None, fallback_year: int) -> int:
@@ -212,6 +234,51 @@ def resolve_numeric_month_day(first_text: str, second_text: str) -> tuple[int | 
     if second > 31:
         return None, None
     return first, second
+
+
+def build_numeric_date_candidates(
+    first_text: str,
+    second_text: str,
+    year_text: str | None,
+    fallback_year: int,
+    start_date: date | None = None,
+    end_date: date | None = None,
+) -> list[date]:
+    first = int(first_text)
+    second = int(second_text)
+
+    month_day_pairs: list[tuple[int, int]] = []
+    if first <= 12 and second <= 31:
+        month_day_pairs.append((first, second))
+    if second <= 12 and first <= 31 and (second, first) not in month_day_pairs:
+        month_day_pairs.append((second, first))
+
+    candidate_years: list[int] = []
+    if year_text:
+        candidate_years.append(normalize_year_token(year_text, fallback_year))
+    else:
+        candidate_years.append(fallback_year)
+        if start_date:
+            candidate_years.append(start_date.year)
+        if end_date:
+            candidate_years.append(end_date.year)
+
+    candidates: list[date] = []
+    seen: set[tuple[int, int, int]] = set()
+    for year in candidate_years:
+        for month_num, day_num in month_day_pairs:
+            try:
+                candidate = date(year, month_num, day_num)
+            except ValueError:
+                continue
+
+            key = (candidate.year, candidate.month, candidate.day)
+            if key in seen:
+                continue
+            seen.add(key)
+            candidates.append(candidate)
+
+    return candidates
 
 
 def parse_numeric_statement_date(
@@ -398,6 +465,10 @@ def looks_like_balance_only_line(line: str, extra_balance_markers: tuple[str, ..
     return any(marker in lowered for marker in balance_markers)
 
 
+def is_placeholder_amount_token(value: str) -> bool:
+    return bool(PLACEHOLDER_AMOUNT_TOKEN_REGEX.fullmatch(value.strip()))
+
+
 def infer_amount_token_type(value: str) -> str | None:
     lowered = value.strip().lower()
     if not lowered:
@@ -447,7 +518,7 @@ def split_line_and_trailing_amounts(line: str) -> tuple[str, list[str]]:
     trailing_amounts_reversed: list[str] = []
 
     for token in reversed(tokens):
-        if TRAILING_AMOUNT_TOKEN_REGEX.fullmatch(token):
+        if TRAILING_AMOUNT_TOKEN_REGEX.fullmatch(token) or is_placeholder_amount_token(token):
             trailing_amounts_reversed.append(token)
         else:
             break
@@ -463,6 +534,10 @@ def is_zero_amount_token(value: str) -> bool:
     return parsed is not None and abs(parsed) < 0.005
 
 
+def is_effectively_empty_amount_token(value: str) -> bool:
+    return is_placeholder_amount_token(value) or is_zero_amount_token(value)
+
+
 def resolve_trailing_amount_columns(
     trailing_amounts: list[str],
 ) -> tuple[str | None, str | None, str | None]:
@@ -471,15 +546,17 @@ def resolve_trailing_amount_columns(
 
     if len(trailing_amounts) == 1:
         transaction_amount = trailing_amounts[0]
+        if is_effectively_empty_amount_token(transaction_amount):
+            return None, None, None
         return transaction_amount, None, infer_amount_token_type(transaction_amount)
 
     if len(trailing_amounts) >= 3:
         debit_amount = trailing_amounts[0]
         credit_amount = trailing_amounts[1]
-        balance_amount = trailing_amounts[-1]
+        balance_amount = None if is_placeholder_amount_token(trailing_amounts[-1]) else trailing_amounts[-1]
 
-        debit_is_zero = is_zero_amount_token(debit_amount)
-        credit_is_zero = is_zero_amount_token(credit_amount)
+        debit_is_zero = is_effectively_empty_amount_token(debit_amount)
+        credit_is_zero = is_effectively_empty_amount_token(credit_amount)
 
         if debit_is_zero and not credit_is_zero:
             return credit_amount, balance_amount, "income"
@@ -490,8 +567,8 @@ def resolve_trailing_amount_columns(
         return debit_amount, balance_amount, explicit_type
 
     first_amount, second_amount = trailing_amounts
-    first_is_zero = is_zero_amount_token(first_amount)
-    second_is_zero = is_zero_amount_token(second_amount)
+    first_is_zero = is_effectively_empty_amount_token(first_amount)
+    second_is_zero = is_effectively_empty_amount_token(second_amount)
 
     if first_is_zero and not second_is_zero:
         return second_amount, None, "income"
@@ -541,6 +618,8 @@ def extract_transaction_date_from_line(
     start_year: int | None,
     end_year: int | None,
     fallback_year: int,
+    start_date: date | None = None,
+    end_date: date | None = None,
 ) -> tuple[date, str] | None:
     for regex in (DAY_MONTH_DATE_START_REGEX, MONTH_DAY_DATE_START_REGEX):
         match = regex.match(line)
@@ -580,14 +659,23 @@ def extract_transaction_date_from_line(
             end_year=end_year,
         )
 
-    normalized_date = parse_numeric_statement_date(
+    candidates = build_numeric_date_candidates(
         numeric_match.group("n1"),
         numeric_match.group("n2"),
         numeric_match.group("year"),
         default_year or fallback_year,
+        start_date=start_date,
+        end_date=end_date,
     )
-    if not normalized_date:
+    if not candidates:
         return None
+
+    if start_date and end_date:
+        in_period_candidates = [candidate for candidate in candidates if start_date <= candidate <= end_date]
+        if len(in_period_candidates) == 1:
+            return in_period_candidates[0], numeric_match.group("rest").strip()
+
+    normalized_date = candidates[0]
 
     return normalized_date, numeric_match.group("rest").strip()
 
@@ -600,6 +688,77 @@ def build_profile_notes(profile: StatementProfile) -> list[str]:
     return [
         f"Detected bank profile: {profile.display_name}. Using generic parser with bank-aware noise filtering; review carefully."
     ]
+
+
+def build_extraction_notes(extraction_result: PdfTextExtractionResult) -> list[str]:
+    if (
+        extraction_result.total_pages > 1
+        and 0 < extraction_result.readable_text_pages < extraction_result.total_pages
+    ):
+        return [
+            (
+                f"Only {extraction_result.readable_text_pages} of {extraction_result.total_pages} PDF pages "
+                "contained readable text. Some pages may be image-only until OCR fallback is added."
+            )
+        ]
+
+    return []
+
+
+def build_no_readable_text_error(extraction_result: PdfTextExtractionResult) -> str:
+    return (
+        "This PDF appears to have no selectable text. It may be image-only or scanned. "
+        "OCR fallback is not available yet."
+    )
+
+
+def build_no_transaction_rows_error(
+    profile: StatementProfile,
+    extraction_result: PdfTextExtractionResult,
+) -> str:
+    if (
+        extraction_result.total_pages > 1
+        and 0 < extraction_result.readable_text_pages < extraction_result.total_pages
+    ):
+        return (
+            f"Readable text was extracted from only {extraction_result.readable_text_pages} "
+            f"of {extraction_result.total_pages} PDF pages, but no transaction rows were recognized. "
+            "Some pages may be image-only, and OCR fallback is not available yet."
+        )
+
+    if profile.profile_id == "generic":
+        return (
+            "Readable text was extracted from this PDF, but no transaction rows were recognized. "
+            "This bank layout may need more parser tuning."
+        )
+
+    return (
+        f"Readable text was extracted from this PDF, but no transaction rows were recognized for "
+        f"the detected {profile.display_name} layout. This statement format may need more parser tuning."
+    )
+
+
+def strip_secondary_leading_date(
+    line: str,
+    start_year: int | None,
+    end_year: int | None,
+    fallback_year: int,
+    start_date: date | None = None,
+    end_date: date | None = None,
+) -> str:
+    secondary_date = extract_transaction_date_from_line(
+        line=line,
+        start_year=start_year,
+        end_year=end_year,
+        fallback_year=fallback_year,
+        start_date=start_date,
+        end_date=end_date,
+    )
+    if not secondary_date:
+        return line
+
+    _, remaining_line = secondary_date
+    return remaining_line or line
 
 
 def finalize_pending_transaction(
@@ -656,7 +815,10 @@ def parse_rbc_statement_preview(
     owner_id: int,
     text: str,
     profile: StatementProfile | None = None,
+    additional_notes: list[str] | None = None,
+    empty_result_message: str | None = None,
 ) -> dict[str, Any]:
+    statement_start_date, statement_end_date = extract_statement_period(text)
     profile = profile or detect_statement_profile(text)
     statement_start_year, statement_end_year = extract_statement_year_range(text)
     fallback_year = extract_statement_year(text)
@@ -664,6 +826,8 @@ def parse_rbc_statement_preview(
 
     preview_rows: list[StatementPreviewRow] = []
     notes = build_profile_notes(profile)
+    if additional_notes:
+        notes.extend(additional_notes)
 
     current_date: date | None = None
     description_parts: list[str] = []
@@ -681,6 +845,8 @@ def parse_rbc_statement_preview(
             start_year=statement_start_year,
             end_year=statement_end_year,
             fallback_year=fallback_year,
+            start_date=statement_start_date,
+            end_date=statement_end_date,
         )
         if extracted_date:
             # If a new dated row starts while a previous row was incomplete, discard the incomplete one.
@@ -688,6 +854,14 @@ def parse_rbc_statement_preview(
                 description_parts = []
 
             current_date, line = extracted_date
+            line = strip_secondary_leading_date(
+                line=line,
+                start_year=statement_start_year,
+                end_year=statement_end_year,
+                fallback_year=fallback_year,
+                start_date=statement_start_date,
+                end_date=statement_end_date,
+            )
 
         if not current_date:
             continue
@@ -716,9 +890,7 @@ def parse_rbc_statement_preview(
             description_parts.append(cleaned)
 
     if not preview_rows:
-        raise ValueError(
-            "No transaction rows could be extracted from this PDF. Try a more text-based statement PDF."
-        )
+        raise ValueError(empty_result_message or DEFAULT_NO_TRANSACTIONS_ERROR)
 
     return {
         "preview_rows": preview_rows[:200],
@@ -731,14 +903,15 @@ def parse_pdf_statement_preview(
     owner_id: int,
     file_bytes: bytes,
 ) -> dict[str, Any]:
-    text = extract_pdf_text(file_bytes)
+    extraction_result = extract_pdf_text_result(file_bytes)
+    text = extraction_result.text
 
     if not text:
-        raise ValueError(
-            "No readable text was found in this PDF statement. Scanned PDF OCR fallback is not available yet."
-        )
+        raise ValueError(build_no_readable_text_error(extraction_result))
 
     profile = detect_statement_profile(text)
+    extraction_notes = build_extraction_notes(extraction_result)
+    no_transaction_rows_error = build_no_transaction_rows_error(profile, extraction_result)
 
     if profile.parser_kind == "rbc":
         return parse_rbc_statement_preview(
@@ -746,13 +919,16 @@ def parse_pdf_statement_preview(
             owner_id=owner_id,
             text=text,
             profile=profile,
+            additional_notes=extraction_notes,
+            empty_result_message=no_transaction_rows_error,
         )
 
     # Fallback generic parser
     preview_rows: list[StatementPreviewRow] = []
-    notes = build_profile_notes(profile)
+    notes = build_profile_notes(profile) + extraction_notes
 
     lines = [line.strip() for line in text.splitlines() if line.strip()]
+    statement_start_date, statement_end_date = extract_statement_period(text)
     statement_start_year, statement_end_year = extract_statement_year_range(text)
     fallback_year = extract_statement_year(text)
     current_date: date | None = None
@@ -770,12 +946,22 @@ def parse_pdf_statement_preview(
             start_year=statement_start_year,
             end_year=statement_end_year,
             fallback_year=fallback_year,
+            start_date=statement_start_date,
+            end_date=statement_end_date,
         )
         if extracted_date:
             if description_parts:
                 description_parts = []
 
             current_date, line = extracted_date
+            line = strip_secondary_leading_date(
+                line=line,
+                start_year=statement_start_year,
+                end_year=statement_end_year,
+                fallback_year=fallback_year,
+                start_date=statement_start_date,
+                end_date=statement_end_date,
+            )
 
         if not current_date:
             continue
@@ -804,9 +990,7 @@ def parse_pdf_statement_preview(
             description_parts.append(cleaned)
 
     if not preview_rows:
-        raise ValueError(
-            "No transaction rows could be extracted from this PDF. Try a more text-based statement PDF."
-        )
+        raise ValueError(no_transaction_rows_error)
 
     return {
         "preview_rows": preview_rows[:200],

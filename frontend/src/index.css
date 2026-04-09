@@ -653,6 +653,17 @@ textarea:focus,
   color: var(--red-dark);
 }
 
+.import-error-guidance {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid rgba(248, 113, 113, 0.22);
+}
+
+.import-error-guidance strong {
+  display: block;
+  margin-bottom: 8px;
+}
+
 .import-message-header {
   display: flex;
   justify-content: space-between;
@@ -735,7 +746,7 @@ textarea:focus,
 
 .import-preview-stats-grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
   gap: 12px;
   margin-bottom: 18px;
 }
@@ -984,6 +995,11 @@ textarea:focus,
   color: #1d4ed8;
 }
 
+.import-row-status-manual {
+  background: rgba(16, 185, 129, 0.14);
+  color: #047857;
+}
+
 .import-preview-empty {
   display: grid;
   gap: 12px;
@@ -1076,6 +1092,10 @@ textarea:focus,
   color: #93c5fd;
 }
 
+:root[data-theme="dark"] .import-error-guidance {
+  border-top-color: rgba(248, 113, 113, 0.22);
+}
+
 :root[data-theme="dark"] .import-row-status-warning,
 :root[data-theme="dark"] .import-row-issues {
   color: #fbbf24;
@@ -1084,6 +1104,11 @@ textarea:focus,
 :root[data-theme="dark"] .import-row-status-duplicate,
 :root[data-theme="dark"] .import-duplicate-note {
   color: #93c5fd;
+}
+
+:root[data-theme="dark"] .import-row-status-manual {
+  color: #6ee7b7;
+  background: rgba(16, 185, 129, 0.14);
 }
 
 :root[data-theme="dark"] .import-row-status-warning {
