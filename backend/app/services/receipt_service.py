@@ -1,26 +1,18 @@
 from __future__ import annotations
 
-import base64
 import json
-import os
 import re
 from datetime import datetime
 from typing import Any
 
-from dotenv import load_dotenv
-from openai import OpenAI
 from sqlalchemy.orm import Session
 
 from app.services.transaction_service import categorize_transaction
-
-BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
-ENV_PATH = os.path.join(BASE_DIR, ".env")
-load_dotenv(dotenv_path=ENV_PATH)
-
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
-OCR_VISION_MODEL = os.getenv("OCR_VISION_MODEL", "gpt-4.1-mini")
-
-_openai_client: OpenAI | None = OpenAI(api_key=OPENAI_API_KEY) if OPENAI_API_KEY else None
+from app.services.vision_ocr_service import (
+    build_input_image_part,
+    is_vision_ocr_enabled,
+    run_vision_prompt,
+)
 
 SUPPORTED_RECEIPT_TYPES = {
     "image/jpeg",
@@ -113,14 +105,12 @@ def scan_receipt_file(
     if content_type not in SUPPORTED_RECEIPT_TYPES:
         raise ValueError("Only JPG, PNG, and WEBP receipt images are supported right now.")
 
-    if _openai_client is None:
+    if not is_vision_ocr_enabled():
         raise ValueError(
             "Receipt OCR is not enabled yet. Add a valid OPENAI_API_KEY to enable vision scanning."
         )
 
     mime_type = content_type or "image/png"
-    base64_image = base64.b64encode(file_bytes).decode("utf-8")
-    data_url = f"data:{mime_type};base64,{base64_image}"
 
     prompt = """
 You are extracting receipt information from a shopping or payment receipt image.
@@ -148,20 +138,11 @@ Rules:
 - do not include markdown
 """.strip()
 
-    response = _openai_client.responses.create(
-        model=OCR_VISION_MODEL,
-        input=[
-            {
-                "role": "user",
-                "content": [
-                    {"type": "input_text", "text": prompt},
-                    {"type": "input_image", "image_url": data_url},
-                ],
-            }
-        ],
+    response_text = run_vision_prompt(
+        prompt,
+        [build_input_image_part(file_bytes, mime_type)],
     )
-
-    parsed = _clean_json_text(response.output_text)
+    parsed = _clean_json_text(response_text)
 
     merchant = parsed.get("merchant")
     date_value = _normalize_date(parsed.get("date"))

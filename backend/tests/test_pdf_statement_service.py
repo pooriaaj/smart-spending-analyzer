@@ -122,11 +122,20 @@ class PdfStatementServicePreviewParsingTest(unittest.TestCase):
         text: str,
         total_pages: int = 1,
         readable_text_pages: int = 1,
+        page_texts: tuple[str, ...] | None = None,
     ) -> service.PdfTextExtractionResult:
+        resolved_page_texts = page_texts
+        if resolved_page_texts is None:
+            if total_pages == 1:
+                resolved_page_texts = (text,)
+            else:
+                resolved_page_texts = tuple("" for _ in range(total_pages))
+
         return service.PdfTextExtractionResult(
             text=text,
             total_pages=total_pages,
             readable_text_pages=readable_text_pages,
+            page_texts=resolved_page_texts,
         )
 
     def test_parse_rbc_preview_handles_cross_year_and_multiline_rows(self) -> None:
@@ -430,20 +439,89 @@ Statement period 12/28/2024 - 01/10/2025
         self.assertEqual(preview_rows[0].date, "2025-01-03")
 
     def test_parse_pdf_statement_preview_reports_scanned_or_image_only_pdf(self) -> None:
-        with patch.object(
-            service,
-            "extract_pdf_text_result",
-            return_value=self.extraction_result("", total_pages=2, readable_text_pages=0),
+        with (
+            patch.object(
+                service,
+                "extract_pdf_text_result",
+                return_value=self.extraction_result(
+                    "",
+                    total_pages=2,
+                    readable_text_pages=0,
+                    page_texts=("", ""),
+                ),
+            ),
+            patch.object(service, "extract_pdf_page_image_candidates", return_value=[]),
+            patch.object(service, "is_vision_ocr_enabled", return_value=False),
         ):
             with self.assertRaisesRegex(
                 ValueError,
-                "This PDF appears to have no selectable text. It may be image-only or scanned.",
+                "Add a valid OPENAI_API_KEY to enable OCR fallback for scanned PDFs.",
             ):
                 service.parse_pdf_statement_preview(
                     db=self.db,
                     owner_id=123,
                     file_bytes=b"fake-pdf",
                 )
+
+    def test_parse_pdf_statement_preview_uses_ocr_fallback_for_scanned_pdf(self) -> None:
+        ocr_text = """
+Account Statement
+Statement period 12/28/2024 - 01/10/2025
+Jan 02 PAYROLL DEPOSIT $1,500.00
+Jan 03 BOOK STORE $12.34
+        """.strip()
+
+        with (
+            patch.object(
+                service,
+                "extract_pdf_text_result",
+                return_value=self.extraction_result(
+                    "",
+                    total_pages=2,
+                    readable_text_pages=0,
+                    page_texts=("", ""),
+                ),
+            ),
+            patch.object(
+                service,
+                "extract_pdf_page_image_candidates",
+                return_value=[
+                    service.PdfPageImageCandidate(
+                        page_number=1,
+                        name="page-1.jpg",
+                        data=b"fake-image",
+                        mime_type="image/jpeg",
+                    )
+                ],
+            ),
+            patch.object(service, "is_vision_ocr_enabled", return_value=True),
+            patch.object(
+                service,
+                "ocr_pdf_page_images_to_text",
+                return_value=service.PdfOcrFallbackResult(
+                    text=ocr_text,
+                    notes=("Used OCR fallback on 1 scanned PDF page. Review extracted rows carefully.",),
+                    candidate_pages=1,
+                    processed_pages=1,
+                ),
+            ),
+            patch.object(service, "categorize_transaction", side_effect=self.categorize),
+        ):
+            result = service.parse_pdf_statement_preview(
+                db=self.db,
+                owner_id=123,
+                file_bytes=b"fake-pdf",
+            )
+
+        preview_rows = result["preview_rows"]
+        self.assertEqual(len(preview_rows), 2)
+        self.assertEqual(preview_rows[0].date, "2025-01-02")
+        self.assertEqual(preview_rows[0].type, "income")
+        self.assertEqual(preview_rows[1].date, "2025-01-03")
+        self.assertEqual(result["notes"], [
+            "Used generic PDF parser. Accuracy may vary for this bank format.",
+            "Used OCR fallback on 1 scanned PDF page. Review extracted rows carefully.",
+        ])
 
     def test_parse_pdf_statement_preview_adds_note_for_partially_readable_pdf(self) -> None:
         text = """
@@ -458,6 +536,7 @@ Jan 02 PAYROLL DEPOSIT $1,500.00
                 "extract_pdf_text_result",
                 return_value=self.extraction_result(text, total_pages=3, readable_text_pages=1),
             ),
+            patch.object(service, "extract_pdf_page_image_candidates", return_value=[]),
             patch.object(service, "categorize_transaction", side_effect=self.categorize),
         ):
             result = service.parse_pdf_statement_preview(
@@ -470,7 +549,7 @@ Jan 02 PAYROLL DEPOSIT $1,500.00
             result["notes"],
             [
                 "Used generic PDF parser. Accuracy may vary for this bank format.",
-                "Only 1 of 3 PDF pages contained readable text. Some pages may be image-only until OCR fallback is added.",
+                "Only 1 of 3 PDF pages contained selectable text. Image-only pages were checked for OCR fallback when available.",
             ],
         )
 

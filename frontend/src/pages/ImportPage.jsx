@@ -113,9 +113,9 @@ function ImportPage() {
       return {
         title: "What to try next",
         items: [
-          "Download the original statement PDF from online banking when possible.",
-          "Avoid camera scans, screenshot-to-PDF exports, or printer-scanned statements for import.",
-          "If your bank only provides scanned pages, statement OCR fallback still needs to be added.",
+          "If scanned-PDF OCR is enabled on the backend, try the upload again and the app will attempt OCR fallback automatically.",
+          "If OCR is not enabled yet, add a valid OPENAI_API_KEY to the backend environment for scanned PDF support.",
+          "Original downloadable statement PDFs still import more reliably than camera scans or screenshot-to-PDF exports.",
         ],
       };
     }
@@ -406,6 +406,7 @@ function ImportPage() {
             <h2>Upload File</h2>
             <p>
               Supported files: CSV statements, PDF statements, and receipt images (JPG, PNG, WEBP).
+              Scanned PDFs can use OCR fallback when vision OCR is configured.
             </p>
           </div>
 

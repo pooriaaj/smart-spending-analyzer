@@ -11,6 +11,11 @@ from sqlalchemy.orm import Session
 
 from app.schemas import StatementPreviewRow
 from app.services.transaction_service import categorize_transaction
+from app.services.vision_ocr_service import (
+    build_input_image_part,
+    is_vision_ocr_enabled,
+    run_vision_prompt,
+)
 
 
 DAY_MONTH_DATE_START_REGEX = re.compile(
@@ -127,6 +132,7 @@ class PdfTextExtractionResult:
     text: str
     total_pages: int
     readable_text_pages: int
+    page_texts: tuple[str, ...] = ()
 
 
 STATEMENT_PROFILES = (
@@ -186,6 +192,23 @@ GENERIC_STATEMENT_PROFILE = StatementProfile(
 DEFAULT_NO_TRANSACTIONS_ERROR = (
     "No transaction rows could be extracted from this PDF. Try a more text-based statement PDF."
 )
+PDF_OCR_MAX_PAGES = 8
+
+
+@dataclass(frozen=True)
+class PdfPageImageCandidate:
+    page_number: int
+    name: str
+    data: bytes
+    mime_type: str
+
+
+@dataclass(frozen=True)
+class PdfOcrFallbackResult:
+    text: str = ""
+    notes: tuple[str, ...] = ()
+    candidate_pages: int = 0
+    processed_pages: int = 0
 
 
 def extract_pdf_text_result(file_bytes: bytes) -> PdfTextExtractionResult:
@@ -193,9 +216,12 @@ def extract_pdf_text_result(file_bytes: bytes) -> PdfTextExtractionResult:
     text_parts: list[str] = []
     total_pages = len(reader.pages)
     readable_text_pages = 0
+    page_texts: list[str] = []
 
     for page in reader.pages:
         page_text = page.extract_text() or ""
+        normalized_page_text = page_text.strip()
+        page_texts.append(normalized_page_text)
         if page_text.strip():
             readable_text_pages += 1
             text_parts.append(page_text)
@@ -204,11 +230,117 @@ def extract_pdf_text_result(file_bytes: bytes) -> PdfTextExtractionResult:
         text="\n".join(text_parts).strip(),
         total_pages=total_pages,
         readable_text_pages=readable_text_pages,
+        page_texts=tuple(page_texts),
     )
 
 
 def extract_pdf_text(file_bytes: bytes) -> str:
     return extract_pdf_text_result(file_bytes).text
+
+
+def infer_pdf_image_mime_type(image_name: str, image_bytes: bytes) -> str | None:
+    lowered_name = image_name.lower()
+
+    if lowered_name.endswith((".jpg", ".jpeg")) or image_bytes.startswith(b"\xff\xd8\xff"):
+        return "image/jpeg"
+    if lowered_name.endswith(".png") or image_bytes.startswith(b"\x89PNG\r\n\x1a\n"):
+        return "image/png"
+    if lowered_name.endswith(".webp") or (
+        image_bytes.startswith(b"RIFF") and image_bytes[8:12] == b"WEBP"
+    ):
+        return "image/webp"
+
+    return None
+
+
+def extract_pdf_page_image_candidates(
+    file_bytes: bytes,
+    page_texts: tuple[str, ...] = (),
+) -> list[PdfPageImageCandidate]:
+    try:
+        reader = PdfReader(io.BytesIO(file_bytes))
+    except Exception:
+        return []
+
+    candidates: list[PdfPageImageCandidate] = []
+
+    for page_index, page in enumerate(reader.pages):
+        if page_texts and page_index < len(page_texts) and page_texts[page_index].strip():
+            continue
+
+        try:
+            page_images = list(page.images)
+        except Exception:
+            continue
+        if not page_images:
+            continue
+
+        supported_images: list[tuple[int, Any, str]] = []
+        for image in page_images:
+            mime_type = infer_pdf_image_mime_type(image.name, image.data)
+            if not mime_type:
+                continue
+            supported_images.append((len(image.data), image, mime_type))
+
+        if not supported_images:
+            continue
+
+        _, chosen_image, mime_type = max(supported_images, key=lambda item: item[0])
+        candidates.append(
+            PdfPageImageCandidate(
+                page_number=page_index + 1,
+                name=chosen_image.name,
+                data=chosen_image.data,
+                mime_type=mime_type,
+            )
+        )
+
+    return candidates
+
+
+def ocr_pdf_page_images_to_text(
+    image_candidates: list[PdfPageImageCandidate],
+) -> PdfOcrFallbackResult:
+    if not image_candidates:
+        return PdfOcrFallbackResult()
+
+    processed_candidates = image_candidates[:PDF_OCR_MAX_PAGES]
+    prompt = """
+You are extracting raw text from scanned bank statement page images.
+
+Return only plain text from the page image.
+Preserve dates, descriptions, balances, statement headers, and transaction rows.
+Keep transaction rows on separate lines when possible.
+Do not summarize, explain, or use markdown.
+""".strip()
+
+    page_texts: list[str] = []
+    for candidate in processed_candidates:
+        page_text = run_vision_prompt(
+            prompt,
+            [build_input_image_part(candidate.data, candidate.mime_type)],
+        )
+        cleaned_text = page_text.strip()
+        if cleaned_text:
+            page_texts.append(cleaned_text)
+
+    notes: list[str] = []
+    if page_texts:
+        notes.append(
+            f"Used OCR fallback on {len(page_texts)} scanned PDF page"
+            f"{'' if len(page_texts) == 1 else 's'}. Review extracted rows carefully."
+        )
+    if len(image_candidates) > len(processed_candidates):
+        notes.append(
+            f"OCR fallback processed the first {len(processed_candidates)} image-only PDF pages."
+        )
+
+    return PdfOcrFallbackResult(
+        text="\n\n".join(page_texts).strip(),
+        notes=tuple(notes),
+        candidate_pages=len(image_candidates),
+        processed_pages=len(processed_candidates),
+    )
 
 
 def normalize_year_token(year_text: str | None, fallback_year: int) -> int:
@@ -698,17 +830,32 @@ def build_extraction_notes(extraction_result: PdfTextExtractionResult) -> list[s
         return [
             (
                 f"Only {extraction_result.readable_text_pages} of {extraction_result.total_pages} PDF pages "
-                "contained readable text. Some pages may be image-only until OCR fallback is added."
+                "contained selectable text. Image-only pages were checked for OCR fallback when available."
             )
         ]
 
     return []
 
 
-def build_no_readable_text_error(extraction_result: PdfTextExtractionResult) -> str:
+def build_no_readable_text_error(
+    extraction_result: PdfTextExtractionResult,
+    image_candidate_count: int,
+) -> str:
+    if not is_vision_ocr_enabled():
+        return (
+            "This PDF appears to have no selectable text. It may be image-only or scanned. "
+            "Add a valid OPENAI_API_KEY to enable OCR fallback for scanned PDFs."
+        )
+
+    if image_candidate_count <= 0:
+        return (
+            "This PDF appears to have no selectable text, and no page images could be extracted "
+            "for OCR fallback."
+        )
+
     return (
-        "This PDF appears to have no selectable text. It may be image-only or scanned. "
-        "OCR fallback is not available yet."
+        "This PDF appears to have no selectable text, and OCR fallback could not recover "
+        "readable text from its scanned pages."
     )
 
 
@@ -723,7 +870,7 @@ def build_no_transaction_rows_error(
         return (
             f"Readable text was extracted from only {extraction_result.readable_text_pages} "
             f"of {extraction_result.total_pages} PDF pages, but no transaction rows were recognized. "
-            "Some pages may be image-only, and OCR fallback is not available yet."
+            "Some pages may still need additional OCR cleanup or parser tuning."
         )
 
     if profile.profile_id == "generic":
@@ -905,12 +1052,29 @@ def parse_pdf_statement_preview(
 ) -> dict[str, Any]:
     extraction_result = extract_pdf_text_result(file_bytes)
     text = extraction_result.text
+    image_candidates: list[PdfPageImageCandidate] = []
+    ocr_result = PdfOcrFallbackResult()
+
+    if extraction_result.readable_text_pages < extraction_result.total_pages:
+        image_candidates = extract_pdf_page_image_candidates(
+            file_bytes,
+            page_texts=extraction_result.page_texts,
+        )
+        if image_candidates and is_vision_ocr_enabled():
+            ocr_result = ocr_pdf_page_images_to_text(image_candidates)
+            if ocr_result.text:
+                text = "\n\n".join(part for part in [text, ocr_result.text] if part).strip()
 
     if not text:
-        raise ValueError(build_no_readable_text_error(extraction_result))
+        raise ValueError(
+            build_no_readable_text_error(
+                extraction_result,
+                image_candidate_count=len(image_candidates),
+            )
+        )
 
     profile = detect_statement_profile(text)
-    extraction_notes = build_extraction_notes(extraction_result)
+    extraction_notes = build_extraction_notes(extraction_result) + list(ocr_result.notes)
     no_transaction_rows_error = build_no_transaction_rows_error(profile, extraction_result)
 
     if profile.parser_kind == "rbc":

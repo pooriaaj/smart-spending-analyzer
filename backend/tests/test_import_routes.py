@@ -3,6 +3,7 @@ from __future__ import annotations
 import unittest
 from collections.abc import Generator
 from datetime import date
+from unittest.mock import patch
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -14,6 +15,7 @@ from app.database import Base
 from app.dependencies import get_current_user, get_db
 from app.models import Account, Transaction, User
 from app.routes.transaction_routes import router as transaction_router
+from app.services import pdf_statement_service
 
 
 def build_text_pdf(lines: list[str]) -> bytes:
@@ -246,11 +248,15 @@ class SmartImportRouteTest(unittest.TestCase):
     def test_import_file_reports_pdf_with_no_selectable_text(self) -> None:
         pdf_bytes = build_text_pdf([])
 
-        response = self.client.post(
-            "/transactions/import/file",
-            data={"account_id": str(self.account_id)},
-            files={"file": ("scanned.pdf", pdf_bytes, "application/pdf")},
-        )
+        with (
+            patch.object(pdf_statement_service, "extract_pdf_page_image_candidates", return_value=[]),
+            patch.object(pdf_statement_service, "is_vision_ocr_enabled", return_value=False),
+        ):
+            response = self.client.post(
+                "/transactions/import/file",
+                data={"account_id": str(self.account_id)},
+                files={"file": ("scanned.pdf", pdf_bytes, "application/pdf")},
+            )
 
         self.assertEqual(response.status_code, 400, response.text)
         self.assertEqual(
@@ -258,9 +264,70 @@ class SmartImportRouteTest(unittest.TestCase):
             {
                 "detail": (
                     "This PDF appears to have no selectable text. It may be image-only or scanned. "
-                    "OCR fallback is not available yet."
+                    "Add a valid OPENAI_API_KEY to enable OCR fallback for scanned PDFs."
                 )
             },
+        )
+
+    def test_import_file_uses_ocr_fallback_for_scanned_pdf(self) -> None:
+        pdf_bytes = build_text_pdf([])
+
+        with (
+            patch.object(
+                pdf_statement_service,
+                "extract_pdf_text_result",
+                return_value=pdf_statement_service.PdfTextExtractionResult(
+                    text="",
+                    total_pages=1,
+                    readable_text_pages=0,
+                    page_texts=("",),
+                ),
+            ),
+            patch.object(
+                pdf_statement_service,
+                "extract_pdf_page_image_candidates",
+                return_value=[
+                    pdf_statement_service.PdfPageImageCandidate(
+                        page_number=1,
+                        name="page-1.jpg",
+                        data=b"fake-image",
+                        mime_type="image/jpeg",
+                    )
+                ],
+            ),
+            patch.object(pdf_statement_service, "is_vision_ocr_enabled", return_value=True),
+            patch.object(
+                pdf_statement_service,
+                "ocr_pdf_page_images_to_text",
+                return_value=pdf_statement_service.PdfOcrFallbackResult(
+                    text=(
+                        "Account Statement\n"
+                        "Statement period 12/28/2024 - 01/10/2025\n"
+                        "Jan 02 PAYROLL DEPOSIT $1,500.00"
+                    ),
+                    notes=("Used OCR fallback on 1 scanned PDF page. Review extracted rows carefully.",),
+                    candidate_pages=1,
+                    processed_pages=1,
+                ),
+            ),
+        ):
+            response = self.client.post(
+                "/transactions/import/file",
+                data={"account_id": str(self.account_id)},
+                files={"file": ("scanned-ocr.pdf", pdf_bytes, "application/pdf")},
+            )
+
+        self.assertEqual(response.status_code, 200, response.text)
+        payload = response.json()
+        self.assertEqual(payload["status"], "table_review")
+        self.assertEqual(len(payload["preview_rows"]), 1)
+        self.assertEqual(payload["preview_rows"][0]["date"], "2025-01-02")
+        self.assertEqual(
+            payload["notes"],
+            [
+                "Used generic PDF parser. Accuracy may vary for this bank format.",
+                "Used OCR fallback on 1 scanned PDF page. Review extracted rows carefully.",
+            ],
         )
 
     def test_import_file_reports_unrecognized_pdf_layout_when_text_exists(self) -> None:
