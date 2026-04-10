@@ -3,6 +3,7 @@ from __future__ import annotations
 from sqlalchemy.orm import Session
 
 from app.models import Account, User
+from app.services.analytics_service import get_summary, get_top_expense_category
 
 
 DEFAULT_ACCOUNT_NAME = "Main Account"
@@ -44,6 +45,31 @@ def get_user_accounts(db: Session, user_id: int) -> list[Account]:
         .order_by(Account.name.asc(), Account.id.asc())
         .all()
     )
+
+
+def get_user_accounts_with_stats(db: Session, user_id: int) -> list[dict]:
+    accounts = get_user_accounts(db, user_id)
+    result: list[dict] = []
+
+    for account in accounts:
+        summary = get_summary(db, user_id, account_id=account.id)
+        top_category = get_top_expense_category(db, user_id, account_id=account.id)
+        result.append(
+            {
+                "id": account.id,
+                "name": account.name,
+                "type": account.type,
+                "owner_id": account.owner_id,
+                "is_active": account.is_active,
+                "total_income": float(summary["total_income"]),
+                "total_expenses": float(summary["total_expenses"]),
+                "balance": float(summary["balance"]),
+                "top_category": top_category["category"] if top_category else None,
+                "top_category_amount": float(top_category["total"]) if top_category else 0.0,
+            }
+        )
+
+    return result
 
 
 def get_account_for_user(db: Session, user_id: int, account_id: int) -> Account | None:

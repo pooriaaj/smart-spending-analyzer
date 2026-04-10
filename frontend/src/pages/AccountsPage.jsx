@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import api, { handleApiAuthError } from "../services/api";
+import { setSelectedAccountId } from "../services/accountStorage";
 
 function AccountsPage() {
   const navigate = useNavigate();
@@ -47,6 +48,11 @@ function AccountsPage() {
         setError(error?.response?.data?.detail || "Failed to delete account.");
       }
     }
+  };
+
+  const handleReviewAccount = (accountId) => {
+    setSelectedAccountId(String(accountId));
+    navigate("/dashboard");
   };
 
   return (
@@ -106,21 +112,51 @@ function AccountsPage() {
           {accounts.length === 0 ? (
             <div className="empty-state"><p>No accounts found.</p></div>
           ) : (
-            <div className="transaction-list">
+            <div className="account-summary-list">
               {accounts.map((account) => (
-                <div key={account.id} className="transaction-item">
-                  <div>
-                    <strong>{account.name}</strong>
-                    <p>{account.type}</p>
+                <div key={account.id} className="account-summary-item">
+                  <div className="account-summary-top">
+                    <div>
+                      <strong>{account.name}</strong>
+                      <p>{account.type}</p>
+                    </div>
+
+                    <div className="transaction-actions-inline">
+                      <button
+                        className="secondary-button"
+                        onClick={() => handleReviewAccount(account.id)}
+                      >
+                        Review
+                      </button>
+                      <button
+                        className="delete-button"
+                        onClick={() => handleDelete(account.id)}
+                      >
+                        Delete
+                      </button>
+                    </div>
                   </div>
-                  <div className="transaction-actions-inline">
-                    <button
-                      className="delete-button"
-                      onClick={() => handleDelete(account.id)}
-                    >
-                      Delete
-                    </button>
+
+                  <div className="account-summary-metrics">
+                    <div>
+                      <span>Income</span>
+                      <strong>${Number(account.total_income || 0).toFixed(2)}</strong>
+                    </div>
+                    <div>
+                      <span>Expenses</span>
+                      <strong>${Number(account.total_expenses || 0).toFixed(2)}</strong>
+                    </div>
+                    <div>
+                      <span>Balance</span>
+                      <strong>${Number(account.balance || 0).toFixed(2)}</strong>
+                    </div>
                   </div>
+
+                  <p className="account-summary-footnote">
+                    {account.top_category
+                      ? `Top category: ${account.top_category} ($${Number(account.top_category_amount || 0).toFixed(2)})`
+                      : "No expense category recorded yet."}
+                  </p>
                 </div>
               ))}
             </div>

@@ -5,26 +5,27 @@ from sqlalchemy.orm import Session
 
 from app.dependencies import get_current_user, get_db
 from app.models import User
-from app.schemas import AccountCreate, AccountResponse, AccountUpdate, MessageResponse
+from app.schemas import AccountCreate, AccountResponse, AccountSummaryResponse, AccountUpdate, MessageResponse
 from app.services.account_service import (
     create_account,
     deactivate_account,
     ensure_default_account,
     get_account_for_user,
     get_user_accounts,
+    get_user_accounts_with_stats,
     update_account,
 )
 
 router = APIRouter(prefix="/accounts", tags=["Accounts"])
 
 
-@router.get("/", response_model=list[AccountResponse])
+@router.get("/", response_model=list[AccountSummaryResponse])
 def list_accounts(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     ensure_default_account(db, current_user)
-    return get_user_accounts(db, current_user.id)
+    return get_user_accounts_with_stats(db, current_user.id)
 
 
 @router.post("/", response_model=AccountResponse)

@@ -1170,6 +1170,63 @@ textarea:focus,
   line-height: 1.6;
 }
 
+.account-summary-list {
+  display: grid;
+  gap: 16px;
+}
+
+.account-summary-item {
+  border-radius: 20px;
+  padding: 20px;
+  background: rgba(255, 255, 255, 0.82);
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  box-shadow: var(--shadow-sm);
+}
+
+.account-summary-top {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: flex-start;
+  margin-bottom: 18px;
+}
+
+.account-summary-top strong {
+  font-size: 20px;
+}
+
+.account-summary-top p {
+  margin: 6px 0 0 0;
+  color: var(--text-soft);
+  text-transform: capitalize;
+}
+
+.account-summary-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.account-summary-metrics span {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--text-faint);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.account-summary-metrics strong {
+  font-size: 17px;
+}
+
+.account-summary-footnote {
+  margin: 18px 0 0 0;
+  color: var(--text-soft);
+  line-height: 1.6;
+}
+
 :root[data-theme="dark"] .account-comparison-item {
   background: rgba(15, 23, 42, 0.82);
   border-color: rgba(148, 163, 184, 0.14);
@@ -1183,6 +1240,11 @@ textarea:focus,
 :root[data-theme="dark"] .account-comparison-badge {
   background: rgba(37, 99, 235, 0.22);
   color: #bfdbfe;
+}
+
+:root[data-theme="dark"] .account-summary-item {
+  background: rgba(15, 23, 42, 0.82);
+  border-color: rgba(148, 163, 184, 0.14);
 }
 
 :root[data-theme="dark"] .import-filter-chip:hover {
@@ -3005,6 +3067,14 @@ textarea {
 
 @media (max-width: 900px) {
   .assistant-mode-row {
+    grid-template-columns: 1fr;
+  }
+
+  .account-summary-top {
+    flex-direction: column;
+  }
+
+  .account-summary-metrics {
     grid-template-columns: 1fr;
   }
 }

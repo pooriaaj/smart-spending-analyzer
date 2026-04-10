@@ -87,6 +87,14 @@ class AccountResponse(AccountBase, ORMBaseModel):
     is_active: bool
 
 
+class AccountSummaryResponse(AccountResponse):
+    total_income: float = 0.0
+    total_expenses: float = 0.0
+    balance: float = 0.0
+    top_category: str | None = None
+    top_category_amount: float = 0.0
+
+
 class TransactionBase(BaseModel):
     amount: float
     category: str = Field(min_length=1, max_length=100)
