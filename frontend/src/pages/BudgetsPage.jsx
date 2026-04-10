@@ -15,6 +15,47 @@ function formatBudgetCategory(value) {
     .join(" ");
 }
 
+function shiftMonthLabel(month, offset) {
+  const [yearText, monthText] = (month || "").split("-");
+  const year = Number(yearText);
+  const monthNumber = Number(monthText);
+
+  if (!year || !monthNumber) return month;
+
+  const totalMonths = year * 12 + (monthNumber - 1) + offset;
+  const shiftedYear = Math.floor(totalMonths / 12);
+  const shiftedMonth = (totalMonths % 12) + 1;
+  return `${shiftedYear.toString().padStart(4, "0")}-${shiftedMonth.toString().padStart(2, "0")}`;
+}
+
+function formatMoney(value) {
+  return `$${Number(value || 0).toFixed(2)}`;
+}
+
+function buildBudgetPaceLabel(budget) {
+  if (!budget) return "";
+
+  if (budget.days_remaining > 0 && budget.daily_allowance != null) {
+    const allowanceText =
+      budget.daily_allowance >= 0
+        ? `${formatMoney(budget.daily_allowance)}/day left`
+        : `${formatMoney(Math.abs(budget.daily_allowance))}/day over pace`;
+    const paceText =
+      budget.daily_pace != null ? ` Current pace: ${formatMoney(budget.daily_pace)}/day.` : "";
+    return `${allowanceText} for the next ${budget.days_remaining} day(s).${paceText}`;
+  }
+
+  if (budget.days_remaining === 0 && budget.daily_pace != null) {
+    return `Final average pace: ${formatMoney(budget.daily_pace)}/day across ${budget.days_total} day(s).`;
+  }
+
+  if (budget.days_elapsed === 0 && budget.daily_allowance != null) {
+    return `Planned average pace: ${formatMoney(budget.daily_allowance)}/day across ${budget.days_total} day(s).`;
+  }
+
+  return "";
+}
+
 function BudgetsPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -29,6 +70,7 @@ function BudgetsPage() {
   const [amount, setAmount] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [copying, setCopying] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
 
@@ -128,6 +170,8 @@ function BudgetsPage() {
   };
 
   const budgetCards = budgetData?.budgets || [];
+  const suggestedBudgets = budgetData?.suggestions || [];
+  const previousMonth = useMemo(() => shiftMonthLabel(month, -1), [month]);
   const categoryOptions = useMemo(
     () => budgetData?.available_categories || [],
     [budgetData]
@@ -145,6 +189,35 @@ function BudgetsPage() {
       return { label: "At risk", className: "budget-status budget-status-risk" };
     }
     return { label: "On track", className: "budget-status budget-status-on-track" };
+  };
+
+  const handleUseSuggestion = (suggestion) => {
+    setCategory(formatBudgetCategory(suggestion.category));
+    setAmount(String(suggestion.suggested_amount));
+    setMessage(`Loaded ${formatBudgetCategory(suggestion.category)} into the form.`);
+    setError("");
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  const handleCopyPreviousMonth = async () => {
+    setCopying(true);
+    setError("");
+    setMessage("");
+
+    try {
+      const response = await api.post("/budgets/copy-previous-month", {
+        month,
+        account_id: normalizedAccountId,
+      });
+      setMessage(response.data.message || `Copied budgets from ${previousMonth}.`);
+      await fetchBudgets();
+    } catch (copyError) {
+      if (!handleApiAuthError(copyError, navigate)) {
+        setError(copyError?.response?.data?.detail || "Failed to copy previous month budgets.");
+      }
+    } finally {
+      setCopying(false);
+    }
   };
 
   return (
@@ -191,7 +264,62 @@ function BudgetsPage() {
               />
             </div>
           </div>
+
+          <div className="budget-scope-actions">
+            <p className="budget-inline-note">
+              Reuse last month&apos;s budget setup for this same scope. Existing budgets in {month} stay untouched.
+            </p>
+            <button
+              type="button"
+              className="secondary-button"
+              onClick={handleCopyPreviousMonth}
+              disabled={copying}
+            >
+              {copying ? "Copying..." : `Copy ${previousMonth} Budgets`}
+            </button>
+          </div>
         </div>
+
+        {suggestedBudgets.length > 0 && (
+          <div className="dashboard-card">
+            <div className="section-header">
+              <h2>Suggested Budgets</h2>
+              <p>Quick starting points based on your recent spending in this scope.</p>
+            </div>
+
+            <div className="budget-suggestion-grid">
+              {suggestedBudgets.map((suggestion) => (
+                <div
+                  key={`${suggestion.category}-${suggestion.suggested_amount}`}
+                  className="budget-card budget-suggestion-card"
+                >
+                  <div className="budget-card-top">
+                    <div>
+                      <h3>{formatBudgetCategory(suggestion.category)}</h3>
+                      <p>Suggested budget ${suggestion.suggested_amount.toFixed(2)}</p>
+                    </div>
+
+                    <div className="budget-card-actions">
+                      <button
+                        type="button"
+                        className="secondary-button"
+                        onClick={() => handleUseSuggestion(suggestion)}
+                      >
+                        Use Suggestion
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="budget-suggestion-meta">
+                    <span>Average spent: ${suggestion.average_spent.toFixed(2)}</span>
+                    <span>Current month: ${suggestion.latest_month_spent.toFixed(2)}</span>
+                  </div>
+                  <p className="budget-inline-note">{suggestion.note}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         <div className="dashboard-card">
           <div className="section-header">
@@ -318,6 +446,11 @@ function BudgetsPage() {
                           : `$${Math.abs(budget.remaining_amount).toFixed(2)} over`}
                       </span>
                     </div>
+
+                    {buildBudgetPaceLabel(budget) && (
+                      <p className="budget-pace-metrics">{buildBudgetPaceLabel(budget)}</p>
+                    )}
+                    {budget.pace_note && <p className="budget-pace-note">{budget.pace_note}</p>}
                   </div>
                 );
               })}

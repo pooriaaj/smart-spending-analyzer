@@ -5,9 +5,17 @@ from sqlalchemy.orm import Session
 
 from app.dependencies import get_current_user, get_db
 from app.models import User
-from app.schemas import BudgetListResponse, BudgetPlanCreate, BudgetPlanResponse, MessageResponse
+from app.schemas import (
+    BudgetCopyRequest,
+    BudgetCopyResponse,
+    BudgetListResponse,
+    BudgetPlanCreate,
+    BudgetPlanResponse,
+    MessageResponse,
+)
 from app.services.account_service import get_account_for_user
 from app.services.budget_service import (
+    copy_previous_month_budgets,
     delete_budget_plan,
     get_budget_plan_for_user,
     get_default_budget_month,
@@ -36,6 +44,25 @@ def list_budgets_route(
         owner_id=current_user.id,
         month=month or get_default_budget_month(),
         account_id=account_id,
+    )
+
+
+@router.post("/copy-previous-month", response_model=BudgetCopyResponse)
+def copy_previous_month_budgets_route(
+    payload: BudgetCopyRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    if payload.account_id is not None:
+        account = get_account_for_user(db, current_user.id, payload.account_id)
+        if account is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Account not found")
+
+    return copy_previous_month_budgets(
+        db=db,
+        owner_id=current_user.id,
+        month=payload.month,
+        account_id=payload.account_id,
     )
 
 

@@ -1231,6 +1231,14 @@ textarea:focus,
   align-items: end;
 }
 
+.budget-scope-actions {
+  margin-top: 18px;
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: center;
+}
+
 .budget-form-field {
   display: flex;
   flex-direction: column;
@@ -1246,6 +1254,12 @@ textarea:focus,
 .budget-list {
   display: grid;
   gap: 16px;
+}
+
+.budget-suggestion-grid {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
 }
 
 .budget-card {
@@ -1336,6 +1350,38 @@ textarea:focus,
   font-weight: 600;
 }
 
+.budget-pace-metrics {
+  margin: 14px 0 0 0;
+  color: var(--text-main);
+  font-weight: 700;
+  line-height: 1.6;
+}
+
+.budget-pace-note {
+  margin: 8px 0 0 0;
+  color: var(--text-soft);
+  line-height: 1.6;
+}
+
+.budget-suggestion-card {
+  align-self: stretch;
+}
+
+.budget-suggestion-meta {
+  margin-top: 14px;
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--text-soft);
+  font-weight: 600;
+}
+
+.budget-inline-note {
+  margin: 14px 0 0 0;
+  color: var(--text-soft);
+  line-height: 1.6;
+}
+
 :root[data-theme="dark"] .account-comparison-item {
   background: rgba(15, 23, 42, 0.82);
   border-color: rgba(148, 163, 184, 0.14);
@@ -1359,6 +1405,10 @@ textarea:focus,
 :root[data-theme="dark"] .budget-card {
   background: rgba(15, 23, 42, 0.82);
   border-color: rgba(148, 163, 184, 0.14);
+}
+
+:root[data-theme="dark"] .budget-pace-metrics {
+  color: #e2e8f0;
 }
 
 :root[data-theme="dark"] .budget-status-on-track {
@@ -3209,7 +3259,9 @@ textarea {
 
   .budget-card-top,
   .budget-card-actions,
-  .budget-card-meta {
+  .budget-card-meta,
+  .budget-suggestion-meta,
+  .budget-scope-actions {
     flex-direction: column;
     align-items: flex-start;
   }

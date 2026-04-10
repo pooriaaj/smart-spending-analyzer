@@ -106,6 +106,11 @@ class BudgetPlanCreate(BudgetPlanBase):
     pass
 
 
+class BudgetCopyRequest(BaseModel):
+    month: str = Field(pattern=r"^\d{4}-\d{2}$")
+    account_id: int | None = None
+
+
 class BudgetPlanResponse(ORMBaseModel):
     id: int
     month: str
@@ -117,6 +122,20 @@ class BudgetPlanResponse(ORMBaseModel):
     remaining_amount: float = 0.0
     usage_percent: float = 0.0
     status: str
+    days_total: int | None = None
+    days_elapsed: int | None = None
+    days_remaining: int | None = None
+    daily_allowance: float | None = None
+    daily_pace: float | None = None
+    pace_note: str | None = None
+
+
+class BudgetSuggestionResponse(BaseModel):
+    category: str
+    suggested_amount: float
+    average_spent: float = 0.0
+    latest_month_spent: float = 0.0
+    note: str
 
 
 class BudgetSummaryResponse(BaseModel):
@@ -134,6 +153,16 @@ class BudgetListResponse(BaseModel):
     budgets: list[BudgetPlanResponse]
     summary: BudgetSummaryResponse
     available_categories: list[str] = Field(default_factory=list)
+    suggestions: list[BudgetSuggestionResponse] = Field(default_factory=list)
+
+
+class BudgetCopyResponse(BaseModel):
+    source_month: str
+    target_month: str
+    account_id: int | None = None
+    copied_count: int = 0
+    skipped_existing_count: int = 0
+    message: str
 
 
 class TransactionBase(BaseModel):
