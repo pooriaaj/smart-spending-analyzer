@@ -1,10 +1,13 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import api, { handleApiAuthError } from "../services/api";
+import AccountSelector from "../components/AccountSelector";
+import { ALL_ACCOUNTS_VALUE, getSelectedAccountId } from "../services/accountStorage";
 
 function AssistantPage() {
   const [question, setQuestion] = useState("");
   const [assistantMode, setAssistantMode] = useState("balanced");
+  const [selectedAccountId, setSelectedAccountId] = useState(getSelectedAccountId());
   const [messages, setMessages] = useState([
     {
       role: "assistant",
@@ -19,6 +22,8 @@ function AssistantPage() {
   const [error, setError] = useState("");
 
   const navigate = useNavigate();
+  const normalizedAccountId =
+    selectedAccountId === ALL_ACCOUNTS_VALUE ? undefined : Number(selectedAccountId);
 
   const fallbackQuestions = [
     "What is my balance?",
@@ -44,7 +49,11 @@ function AssistantPage() {
     const loadSuggestions = async () => {
       try {
         setSuggestionsLoading(true);
-        const response = await api.get("/analytics/assistant-suggestions");
+        const response = await api.get("/analytics/assistant-suggestions", {
+          params: {
+            account_id: normalizedAccountId,
+          },
+        });
         setSmartSuggestions(response.data.suggestions || []);
       } catch (error) {
         console.error("Failed to load assistant suggestions:", error);
@@ -58,7 +67,7 @@ function AssistantPage() {
     };
 
     loadSuggestions();
-  }, [navigate]);
+  }, [navigate, normalizedAccountId]);
 
   const buildHistoryPayload = (existingMessages, newQuestion) => {
     return [
@@ -139,6 +148,7 @@ function AssistantPage() {
         question: finalQuestion,
         history: buildHistoryPayload(messages, finalQuestion),
         mode: assistantMode,
+        account_id: normalizedAccountId,
       });
 
       const assistantMessage = {
@@ -168,6 +178,10 @@ function AssistantPage() {
       : assistantMode === "coach"
       ? "Supportive and motivating."
       : "Neutral and practical.";
+  const scopeDescription =
+    selectedAccountId === ALL_ACCOUNTS_VALUE
+      ? "All accounts combined."
+      : "Focused on the selected account only.";
 
   return (
     <div className="page-container dashboard-page">
@@ -226,11 +240,29 @@ function AssistantPage() {
 
         <div className="dashboard-card assistant-card">
           <div className="section-header">
+            <h2>Assistant scope</h2>
+            <p>Choose whether answers should use all accounts combined or one specific account.</p>
+          </div>
+
+          <div className="assistant-mode-row">
+            <AccountSelector
+              label="Assistant scope"
+              onChange={setSelectedAccountId}
+            />
+
+            <div className="assistant-mode-note">
+              <strong>Current scope:</strong> {scopeDescription}
+            </div>
+          </div>
+        </div>
+
+        <div className="dashboard-card assistant-card">
+          <div className="section-header">
             <h2>Smart prompts</h2>
             <p>
               {suggestionsLoading
                 ? "Loading finance-aware prompts..."
-                : "These prompts are generated from your current financial data."}
+                : "These prompts are generated from your current financial data in the selected scope."}
             </p>
           </div>
 
@@ -292,6 +324,13 @@ function AssistantPage() {
 
                 {message.role === "assistant" && message.data && (
                   <div className="assistant-chat-details">
+                    {message.data.scope_label && (
+                      <div className="assistant-chat-detail-block">
+                        <h4>Answer Scope</h4>
+                        <p className="assistant-scope-summary">{message.data.scope_label}</p>
+                      </div>
+                    )}
+
                     {message.data.supporting_points?.length > 0 && (
                       <div className="assistant-chat-detail-block">
                         <h4>Supporting Points</h4>

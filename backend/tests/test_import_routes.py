@@ -394,6 +394,8 @@ class SmartImportRouteTest(unittest.TestCase):
         self.assertEqual(len(suggestions), 1)
         self.assertEqual(suggestions[0]["description"], "Chipotle Union")
         self.assertEqual(suggestions[0]["suggested_category"], "restaurant")
+        self.assertEqual(suggestions[0]["matched_keyword"], "chipotle")
+        self.assertIn("learned category memory", suggestions[0]["reason"].lower())
 
         with self.session_local() as session:
             memories = session.query(CategoryMemory).filter(CategoryMemory.owner_id == self.user_id).all()
@@ -440,6 +442,8 @@ class SmartImportRouteTest(unittest.TestCase):
         self.assertEqual(len(suggestions), 1)
         self.assertEqual(suggestions[0]["description"], "Sephora Yorkdale")
         self.assertEqual(suggestions[0]["suggested_category"], "personal")
+        self.assertEqual(suggestions[0]["matched_keyword"], "sephora")
+        self.assertIn("learned category memory", suggestions[0]["reason"].lower())
 
     def test_normalize_categories_route_backfills_category_memory(self) -> None:
         with self.session_local() as session:
@@ -485,6 +489,106 @@ class SmartImportRouteTest(unittest.TestCase):
         self.assertEqual(len(suggestions), 1)
         self.assertEqual(suggestions[0]["description"], "Aesop King")
         self.assertEqual(suggestions[0]["suggested_category"], "personal")
+        self.assertEqual(suggestions[0]["matched_keyword"], "aesop")
+        self.assertIn("learned category memory", suggestions[0]["reason"].lower())
+
+    def test_bulk_category_preview_returns_rule_based_explanation(self) -> None:
+        with self.session_local() as session:
+            session.add(
+                Transaction(
+                    amount=7.45,
+                    category="other",
+                    description="Starbucks Front",
+                    date=date(2025, 1, 5),
+                    type="expense",
+                    owner_id=self.user_id,
+                    account_id=self.account_id,
+                )
+            )
+            session.commit()
+
+        preview_response = self.client.get(
+            "/transactions/categorize/bulk-preview",
+            params={"account_id": self.account_id},
+        )
+        self.assertEqual(preview_response.status_code, 200, preview_response.text)
+        suggestions = preview_response.json()["suggestions"]
+        self.assertEqual(len(suggestions), 1)
+        self.assertEqual(suggestions[0]["suggested_category"], "cafe")
+        self.assertEqual(suggestions[0]["matched_keyword"], "starbucks")
+        self.assertIn("merchant/category rule", suggestions[0]["reason"].lower())
+
+    def test_bulk_category_preview_skips_low_confidence_fallback_suggestions(self) -> None:
+        with self.session_local() as session:
+            session.add(
+                Transaction(
+                    amount=14.75,
+                    category="other",
+                    description="Unmapped Merchant 123",
+                    date=date(2025, 1, 6),
+                    type="expense",
+                    owner_id=self.user_id,
+                    account_id=self.account_id,
+                )
+            )
+            session.commit()
+
+        preview_response = self.client.get(
+            "/transactions/categorize/bulk-preview",
+            params={"account_id": self.account_id},
+        )
+        self.assertEqual(preview_response.status_code, 200, preview_response.text)
+        suggestions = preview_response.json()["suggestions"]
+        self.assertEqual(suggestions, [])
+
+    def test_bulk_category_preview_sorts_stronger_suggestions_first(self) -> None:
+        categorized_response = self.client.post(
+            "/transactions/",
+            json={
+                "amount": 18.25,
+                "category": "restaurant",
+                "description": "Chipotle Yorkdale",
+                "date": "2025-01-03",
+                "type": "expense",
+                "account_id": self.account_id,
+            },
+        )
+        self.assertEqual(categorized_response.status_code, 200, categorized_response.text)
+
+        with self.session_local() as session:
+            session.add_all(
+                [
+                    Transaction(
+                        amount=16.10,
+                        category="other",
+                        description="Chipotle Union",
+                        date=date(2025, 1, 4),
+                        type="expense",
+                        owner_id=self.user_id,
+                        account_id=self.account_id,
+                    ),
+                    Transaction(
+                        amount=7.45,
+                        category="other",
+                        description="Starbucks Front",
+                        date=date(2025, 1, 5),
+                        type="expense",
+                        owner_id=self.user_id,
+                        account_id=self.account_id,
+                    ),
+                ]
+            )
+            session.commit()
+
+        preview_response = self.client.get(
+            "/transactions/categorize/bulk-preview",
+            params={"account_id": self.account_id},
+        )
+        self.assertEqual(preview_response.status_code, 200, preview_response.text)
+        suggestions = preview_response.json()["suggestions"]
+        self.assertEqual(len(suggestions), 2)
+        self.assertEqual(suggestions[0]["description"], "Chipotle Union")
+        self.assertGreater(suggestions[0]["confidence"], suggestions[1]["confidence"])
 
     def test_import_file_supports_numeric_period_and_month_first_dates(self) -> None:
         pdf_bytes = build_text_pdf(

@@ -23,6 +23,7 @@ from app.services.transaction_service import (
     apply_bulk_categories,
     build_duplicate_key,
     categorize_transaction,
+    categorize_transaction_details,
     get_existing_duplicate_keys,
     get_transactions_for_user,
     get_uncategorized_candidates,
@@ -309,14 +310,18 @@ def get_bulk_category_preview(
     suggestions: list[BulkCategorySuggestionItem] = []
 
     for transaction in candidates:
-        suggested_category = categorize_transaction(
+        decision = categorize_transaction_details(
             db=db,
             owner_id=current_user.id,
             description=transaction.description,
             tx_type=transaction.type,
         )
+        suggested_category = decision.category
 
         if suggested_category.lower() == transaction.category.lower():
+            continue
+
+        if decision.source == "fallback":
             continue
 
         suggestions.append(
@@ -326,11 +331,15 @@ def get_bulk_category_preview(
                 description=transaction.description,
                 type=transaction.type,
                 suggested_category=suggested_category,
-                confidence=0.9,
-                matched_keyword=None,
-                reason="Suggested from learned memory and normalized merchant rules.",
+                confidence=decision.confidence,
+                matched_keyword=decision.matched_keyword,
+                reason=decision.reason,
             )
         )
+
+    suggestions.sort(
+        key=lambda item: (-item.confidence, item.description.lower(), item.transaction_id)
+    )
 
     return BulkCategorySuggestionResponse(
         total_candidates=len(suggestions),
@@ -348,13 +357,13 @@ def apply_bulk_category_suggestions(
 
     suggestion_map: dict[int, str] = {}
     for transaction in candidates:
-        suggested_category = categorize_transaction(
+        decision = categorize_transaction_details(
             db=db,
             owner_id=current_user.id,
             description=transaction.description,
             tx_type=transaction.type,
         )
-        suggestion_map[transaction.id] = suggested_category
+        suggestion_map[transaction.id] = decision.category
 
     updated_count = apply_bulk_categories(
         db=db,

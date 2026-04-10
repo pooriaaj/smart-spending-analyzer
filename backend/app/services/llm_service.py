@@ -131,6 +131,9 @@ Recent conversation context:
 
 ACCOUNT CONTEXT
 -------------
+Analysis scope:
+- {_safe_text(account_context.get("scope_label"))}
+
 Balance summary:
 - Total income: {_safe_text(account_context.get("total_income"))}
 - Total expenses: {_safe_text(account_context.get("total_expenses"))}

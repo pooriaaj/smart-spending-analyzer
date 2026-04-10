@@ -3,6 +3,7 @@ from __future__ import annotations
 import csv
 import io
 import re
+from dataclasses import dataclass
 from datetime import date, datetime
 from typing import Iterable
 
@@ -116,6 +117,15 @@ CATEGORY_MEMORY_STOPWORDS = {
     "visa",
     "withdrawal",
 }
+
+
+@dataclass(frozen=True)
+class CategoryDecision:
+    category: str
+    confidence: float
+    matched_keyword: str | None
+    reason: str
+    source: str
 
 
 def decode_file_bytes(file_bytes: bytes) -> str:
@@ -369,7 +379,12 @@ def normalize_description(value: str) -> str:
     return text or value.strip()
 
 
-def learnable_category_from_memory(db: Session, owner_id: int, description: str, tx_type: str) -> str | None:
+def learnable_category_from_memory(
+    db: Session,
+    owner_id: int,
+    description: str,
+    tx_type: str,
+) -> tuple[str, str] | None:
     lowered = description.lower()
 
     memories = (
@@ -388,32 +403,86 @@ def learnable_category_from_memory(db: Session, owner_id: int, description: str,
             if best_match is None or len(keyword) > len(best_match[0]):
                 best_match = (keyword, item.category)
 
-    return normalize_category_name(best_match[1]) if best_match else None
+    if not best_match:
+        return None
+
+    return normalize_category_name(best_match[1]), best_match[0]
 
 
-def categorize_transaction(db: Session, owner_id: int, description: str, tx_type: str) -> str:
-    memory_category = learnable_category_from_memory(db, owner_id, description, tx_type)
-    if memory_category:
-        return memory_category
+def categorize_transaction_details(
+    db: Session,
+    owner_id: int,
+    description: str,
+    tx_type: str,
+) -> CategoryDecision:
+    memory_match = learnable_category_from_memory(db, owner_id, description, tx_type)
+    if memory_match:
+        category, matched_keyword = memory_match
+        return CategoryDecision(
+            category=category,
+            confidence=0.98,
+            matched_keyword=matched_keyword,
+            reason="Matched learned category memory from your previous confirmed edits or imports.",
+            source="memory",
+        )
 
     lowered = description.lower()
 
     if tx_type == "income":
         for keyword in CATEGORY_RULES["salary"]:
             if keyword in lowered:
-                return "salary"
+                return CategoryDecision(
+                    category="salary",
+                    confidence=0.94,
+                    matched_keyword=keyword,
+                    reason="Matched an income rule in the transaction description.",
+                    source="rule",
+                )
         if "refund" in lowered:
-            return "refund"
-        return "income"
+            return CategoryDecision(
+                category="refund",
+                confidence=0.9,
+                matched_keyword="refund",
+                reason="Matched a refund keyword in the transaction description.",
+                source="rule",
+            )
+        return CategoryDecision(
+            category="income",
+            confidence=0.62,
+            matched_keyword=None,
+            reason="Defaulted to income because the transaction type is income and no stronger rule matched.",
+            source="fallback",
+        )
 
     for category, keywords in CATEGORY_RULES.items():
         if category == "salary":
             continue
         for keyword in keywords:
             if keyword in lowered:
-                return normalize_category_name(category)
+                return CategoryDecision(
+                    category=normalize_category_name(category),
+                    confidence=0.88,
+                    matched_keyword=keyword,
+                    reason="Matched a normalized merchant/category rule in the transaction description.",
+                    source="rule",
+                )
 
-    return "other"
+    return CategoryDecision(
+        category="other",
+        confidence=0.24,
+        matched_keyword=None,
+        reason="No learned memory or built-in category rule matched this description yet.",
+        source="fallback",
+    )
+
+
+def categorize_transaction(db: Session, owner_id: int, description: str, tx_type: str) -> str:
+    return categorize_transaction_details(
+        db=db,
+        owner_id=owner_id,
+        description=description,
+        tx_type=tx_type,
+    ).category
 
 
 def build_duplicate_key(

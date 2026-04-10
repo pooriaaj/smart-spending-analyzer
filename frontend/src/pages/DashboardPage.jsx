@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import api, { handleApiAuthError } from "../services/api";
 import AccountSelector from "../components/AccountSelector";
-import { ALL_ACCOUNTS_VALUE } from "../services/accountStorage";
+import { ALL_ACCOUNTS_VALUE, getSelectedAccountId } from "../services/accountStorage";
 
 const CATEGORY_RULES = {
   groceries: ["walmart", "costco", "freshco", "nofrills", "grocery", "supermarket"],
@@ -20,7 +20,7 @@ function DashboardPage() {
   const [dashboardData, setDashboardData] = useState(null);
   const [allTransactions, setAllTransactions] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [selectedAccountId, setSelectedAccountId] = useState(ALL_ACCOUNTS_VALUE);
+  const [selectedAccountId, setSelectedAccountId] = useState(getSelectedAccountId());
 
   const [typeFilter, setTypeFilter] = useState("");
   const [monthFilter, setMonthFilter] = useState("");

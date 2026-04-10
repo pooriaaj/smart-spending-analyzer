@@ -880,6 +880,13 @@ textarea:focus,
   gap: 16px;
 }
 
+.bulk-suggestion-badges {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  flex-wrap: wrap;
+}
+
 .bulk-suggestion-top h3 {
   margin: 0 0 6px 0;
   font-size: 18px;
@@ -899,6 +906,21 @@ textarea:focus,
   color: #6d28d9;
   font-size: 13px;
   font-weight: 750;
+}
+
+.bulk-confidence-pill-memory {
+  background: rgba(16, 185, 129, 0.14);
+  color: #047857;
+}
+
+.bulk-confidence-pill-rule {
+  background: rgba(59, 130, 246, 0.14);
+  color: #1d4ed8;
+}
+
+.bulk-confidence-pill-review {
+  background: rgba(245, 158, 11, 0.16);
+  color: #9a3412;
 }
 
 .bulk-suggestion-meta {
@@ -2878,6 +2900,12 @@ textarea {
   display: flex;
   flex-wrap: wrap;
   gap: 10px;
+}
+
+.assistant-scope-summary {
+  margin: 0;
+  color: var(--text-soft);
+  font-weight: 700;
 }
 
 :root[data-theme="dark"] .assistant-mode-note {

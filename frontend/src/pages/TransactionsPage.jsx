@@ -34,6 +34,16 @@ function TransactionsPage() {
   const normalizedAccountId =
     selectedAccountId === ALL_ACCOUNTS_VALUE ? undefined : Number(selectedAccountId);
 
+  const getSuggestionStrength = (confidence) => {
+    if (confidence >= 0.95) {
+      return { label: "Learned", className: "bulk-confidence-pill bulk-confidence-pill-memory" };
+    }
+    if (confidence >= 0.85) {
+      return { label: "Strong rule", className: "bulk-confidence-pill bulk-confidence-pill-rule" };
+    }
+    return { label: "Review", className: "bulk-confidence-pill bulk-confidence-pill-review" };
+  };
+
   useEffect(() => {
     setTypeFilter(searchParams.get("type") || "");
     setMonthFilter(searchParams.get("month") || "");
@@ -288,25 +298,39 @@ function TransactionsPage() {
 
           {bulkSuggestions.length > 0 && (
             <div className="bulk-suggestions-list">
-              {bulkSuggestions.map((item) => (
-                <div key={item.transaction_id} className="bulk-suggestion-card">
-                  <div className="bulk-suggestion-top">
-                    <div>
-                      <h3>{item.description}</h3>
-                      <p>
-                        Current: <strong>{item.current_category}</strong> → Suggested: <strong>{item.suggested_category}</strong>
-                      </p>
+              {bulkSuggestions.map((item) => {
+                const suggestionStrength = getSuggestionStrength(item.confidence);
+
+                return (
+                  <div key={item.transaction_id} className="bulk-suggestion-card">
+                    <div className="bulk-suggestion-top">
+                      <div>
+                        <h3>{item.description}</h3>
+                        <p>
+                          Current: <strong>{item.current_category}</strong> {"->"} Suggested: <strong>{item.suggested_category}</strong>
+                        </p>
+                      </div>
+
+                      <div className="bulk-suggestion-badges">
+                        <span className={suggestionStrength.className}>
+                          {suggestionStrength.label}
+                        </span>
+                        <span className="bulk-confidence-pill">
+                          {Math.round(item.confidence * 100)}%
+                        </span>
+                      </div>
                     </div>
 
-                    <span className="bulk-confidence-pill">
-                      {Math.round(item.confidence * 100)}%
-                    </span>
+                    <p className="bulk-suggestion-meta">Type: {item.type}</p>
+                    {item.matched_keyword && (
+                      <p className="bulk-suggestion-meta">
+                        Matched keyword: <strong>{item.matched_keyword}</strong>
+                      </p>
+                    )}
+                    <p className="bulk-suggestion-meta">{item.reason}</p>
                   </div>
-
-                  <p className="bulk-suggestion-meta">Type: {item.type}</p>
-                  <p className="bulk-suggestion-meta">{item.reason}</p>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
 

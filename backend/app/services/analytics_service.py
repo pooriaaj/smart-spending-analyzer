@@ -16,6 +16,13 @@ def parse_iso_date(value: str | None) -> date | None:
     return date.fromisoformat(value)
 
 
+def month_bucket_expression(db: Session):
+    dialect_name = getattr(getattr(db, "bind", None), "dialect", None)
+    if getattr(dialect_name, "name", None) == "sqlite":
+        return func.strftime("%Y-%m", Transaction.date)
+    return func.to_char(Transaction.date, "YYYY-MM")
+
+
 def build_filtered_query(
     db: Session,
     user_id: int,
@@ -24,14 +31,16 @@ def build_filtered_query(
     end_date: str | None = None,
     transaction_type: str | None = None,
     category: str | None = None,
+    account_id: int | None = None,
 ) -> Query:
     query = db.query(Transaction).filter(Transaction.owner_id == user_id)
+    month_expr = month_bucket_expression(db)
 
     parsed_start = parse_iso_date(start_date)
     parsed_end = parse_iso_date(end_date)
 
     if month:
-        query = query.filter(func.to_char(Transaction.date, "YYYY-MM") == month)
+        query = query.filter(month_expr == month)
     if parsed_start:
         query = query.filter(Transaction.date >= parsed_start)
     if parsed_end:
@@ -40,6 +49,8 @@ def build_filtered_query(
         query = query.filter(Transaction.type == transaction_type)
     if category:
         query = query.filter(Transaction.category == category)
+    if account_id is not None:
+        query = query.filter(Transaction.account_id == account_id)
 
     return query
 
@@ -52,6 +63,7 @@ def get_summary(
     end_date: str | None = None,
     transaction_type: str | None = None,
     category: str | None = None,
+    account_id: int | None = None,
 ) -> dict[str, float]:
     query = build_filtered_query(
         db,
@@ -61,6 +73,7 @@ def get_summary(
         end_date=end_date,
         transaction_type=transaction_type,
         category=category,
+        account_id=account_id,
     ).with_entities(
         func.coalesce(
             func.sum(case((Transaction.type == "income", Transaction.amount), else_=0.0)),
@@ -91,6 +104,7 @@ def get_category_breakdown(
     end_date: str | None = None,
     transaction_type: str | None = None,
     category: str | None = None,
+    account_id: int | None = None,
 ) -> list[dict[str, Any]]:
     query = build_filtered_query(
         db,
@@ -100,6 +114,7 @@ def get_category_breakdown(
         end_date=end_date,
         transaction_type=transaction_type,
         category=category,
+        account_id=account_id,
     ).filter(Transaction.type == "expense")
 
     rows = (
@@ -122,6 +137,7 @@ def get_monthly_summary(
     end_date: str | None = None,
     transaction_type: str | None = None,
     category: str | None = None,
+    account_id: int | None = None,
 ) -> list[dict[str, Any]]:
     query = build_filtered_query(
         db,
@@ -131,9 +147,10 @@ def get_monthly_summary(
         end_date=end_date,
         transaction_type=transaction_type,
         category=category,
+        account_id=account_id,
     )
 
-    month_expr = func.to_char(Transaction.date, "YYYY-MM")
+    month_expr = month_bucket_expression(db)
 
     rows = (
         query.with_entities(
@@ -175,6 +192,7 @@ def get_recent_transactions(
     end_date: str | None = None,
     transaction_type: str | None = None,
     category: str | None = None,
+    account_id: int | None = None,
     limit: int = 5,
 ):
     return (
@@ -186,6 +204,7 @@ def get_recent_transactions(
             end_date=end_date,
             transaction_type=transaction_type,
             category=category,
+            account_id=account_id,
         )
         .order_by(Transaction.date.desc(), Transaction.id.desc())
         .limit(limit)
@@ -196,18 +215,22 @@ def get_recent_transactions(
 def get_top_expense_categories(
     db: Session,
     user_id: int,
+    account_id: int | None = None,
     limit: int = 3,
 ) -> list[dict[str, Any]]:
+    query = db.query(
+        Transaction.category.label("category"),
+        func.coalesce(func.sum(Transaction.amount), 0.0).label("total"),
+    ).filter(
+        Transaction.owner_id == user_id,
+        Transaction.type == "expense",
+    )
+
+    if account_id is not None:
+        query = query.filter(Transaction.account_id == account_id)
+
     rows = (
-        db.query(
-            Transaction.category.label("category"),
-            func.coalesce(func.sum(Transaction.amount), 0.0).label("total"),
-        )
-        .filter(
-            Transaction.owner_id == user_id,
-            Transaction.type == "expense",
-        )
-        .group_by(Transaction.category)
+        query.group_by(Transaction.category)
         .order_by(func.sum(Transaction.amount).desc())
         .limit(limit)
         .all()
@@ -220,15 +243,19 @@ def get_transactions_for_category(
     db: Session,
     user_id: int,
     category: str,
+    account_id: int | None = None,
     limit: int = 5,
 ) -> list[Transaction]:
+    query = db.query(Transaction).filter(
+        Transaction.owner_id == user_id,
+        Transaction.category == category,
+    )
+
+    if account_id is not None:
+        query = query.filter(Transaction.account_id == account_id)
+
     return (
-        db.query(Transaction)
-        .filter(
-            Transaction.owner_id == user_id,
-            Transaction.category == category,
-        )
-        .order_by(Transaction.date.desc(), Transaction.id.desc())
+        query.order_by(Transaction.date.desc(), Transaction.id.desc())
         .limit(limit)
         .all()
     )
@@ -237,10 +264,16 @@ def get_transactions_for_category(
 def get_top_categories_with_transactions(
     db: Session,
     user_id: int,
+    account_id: int | None = None,
     category_limit: int = 3,
     transaction_limit: int = 3,
 ) -> list[dict[str, Any]]:
-    top_categories = get_top_expense_categories(db, user_id, limit=category_limit)
+    top_categories = get_top_expense_categories(
+        db,
+        user_id,
+        account_id=account_id,
+        limit=category_limit,
+    )
 
     result = []
     for item in top_categories:
@@ -248,6 +281,7 @@ def get_top_categories_with_transactions(
             db,
             user_id,
             item["category"],
+            account_id=account_id,
             limit=transaction_limit,
         )
         result.append(
@@ -269,6 +303,7 @@ def get_top_expense_category(
     end_date: str | None = None,
     transaction_type: str | None = None,
     category: str | None = None,
+    account_id: int | None = None,
 ) -> dict[str, Any] | None:
     query = build_filtered_query(
         db,
@@ -278,6 +313,7 @@ def get_top_expense_category(
         end_date=end_date,
         transaction_type=transaction_type,
         category=category,
+        account_id=account_id,
     ).filter(Transaction.type == "expense")
 
     row = (
@@ -299,10 +335,14 @@ def get_top_expense_category(
     }
 
 
-def build_financial_snapshot(db: Session, user_id: int) -> dict[str, Any]:
-    summary = get_summary(db, user_id)
-    monthly_summary = get_monthly_summary(db, user_id)
-    top_category = get_top_expense_category(db, user_id)
+def build_financial_snapshot(
+    db: Session,
+    user_id: int,
+    account_id: int | None = None,
+) -> dict[str, Any]:
+    summary = get_summary(db, user_id, account_id=account_id)
+    monthly_summary = get_monthly_summary(db, user_id, account_id=account_id)
+    top_category = get_top_expense_category(db, user_id, account_id=account_id)
 
     total_income = float(summary["total_income"])
     total_expenses = float(summary["total_expenses"])
@@ -342,8 +382,12 @@ def build_financial_snapshot(db: Session, user_id: int) -> dict[str, Any]:
     }
 
 
-def get_spending_insights(db: Session, user_id: int) -> dict[str, Any]:
-    snapshot = build_financial_snapshot(db, user_id)
+def get_spending_insights(
+    db: Session,
+    user_id: int,
+    account_id: int | None = None,
+) -> dict[str, Any]:
+    snapshot = build_financial_snapshot(db, user_id, account_id=account_id)
 
     total_expenses = snapshot["total_expenses"]
     top_category = snapshot["top_category"]
@@ -428,10 +472,19 @@ def get_spending_insights(db: Session, user_id: int) -> dict[str, Any]:
     }
 
 
-def get_overspending_alerts(db: Session, user_id: int) -> dict[str, Any]:
-    monthly_summary = get_monthly_summary(db, user_id)
+def get_overspending_alerts(
+    db: Session,
+    user_id: int,
+    account_id: int | None = None,
+) -> dict[str, Any]:
+    monthly_summary = get_monthly_summary(db, user_id, account_id=account_id)
     monthly_breakdowns = {
-        item["month"]: get_category_breakdown(db, user_id, month=item["month"])
+        item["month"]: get_category_breakdown(
+            db,
+            user_id,
+            month=item["month"],
+            account_id=account_id,
+        )
         for item in monthly_summary
     }
 
@@ -504,8 +557,12 @@ def get_overspending_alerts(db: Session, user_id: int) -> dict[str, Any]:
     return {"current_month": current_month, "alerts": alerts}
 
 
-def get_category_trends(db: Session, user_id: int) -> dict[str, Any]:
-    monthly_summary = get_monthly_summary(db, user_id)
+def get_category_trends(
+    db: Session,
+    user_id: int,
+    account_id: int | None = None,
+) -> dict[str, Any]:
+    monthly_summary = get_monthly_summary(db, user_id, account_id=account_id)
 
     if not monthly_summary:
         return {
@@ -530,11 +587,21 @@ def get_category_trends(db: Session, user_id: int) -> dict[str, Any]:
 
     previous_categories = {
         item["category"]: item["total"]
-        for item in get_category_breakdown(db, user_id, month=previous_month)
+        for item in get_category_breakdown(
+            db,
+            user_id,
+            month=previous_month,
+            account_id=account_id,
+        )
     }
     current_categories = {
         item["category"]: item["total"]
-        for item in get_category_breakdown(db, user_id, month=current_month)
+        for item in get_category_breakdown(
+            db,
+            user_id,
+            month=current_month,
+            account_id=account_id,
+        )
     }
 
     all_categories = sorted(set(previous_categories.keys()) | set(current_categories.keys()))
@@ -924,12 +991,20 @@ def generate_assistant_response(
     question: str,
     history: list[Any] | None = None,
     mode: str = "balanced",
+    account_id: int | None = None,
+    scope_label: str = "All accounts combined",
 ) -> dict[str, Any]:
     history = history or []
-    snapshot = build_financial_snapshot(db, user_id)
-    category_trends = get_category_trends(db, user_id)
-    overspending_alerts = get_overspending_alerts(db, user_id)
-    recent_transactions = get_recent_transactions(db, user_id, limit=5)
+    snapshot = build_financial_snapshot(db, user_id, account_id=account_id)
+    snapshot["scope_label"] = scope_label
+    category_trends = get_category_trends(db, user_id, account_id=account_id)
+    overspending_alerts = get_overspending_alerts(db, user_id, account_id=account_id)
+    recent_transactions = get_recent_transactions(
+        db,
+        user_id,
+        account_id=account_id,
+        limit=5,
+    )
 
     q = (question or "").strip().lower()
     context_text = extract_recent_context(history)
@@ -1027,6 +1102,7 @@ def generate_assistant_response(
             "supporting_points": llm_result["supporting_points"],
             "suggested_followups": followups,
             "suggested_actions": suggested_actions,
+            "scope_label": scope_label,
         }
 
     if total_income == 0 and total_expenses == 0:
@@ -1047,6 +1123,7 @@ def generate_assistant_response(
                 driver_category=None,
             ),
             "suggested_actions": [],
+            "scope_label": scope_label,
         }
 
     if not q:
@@ -1064,10 +1141,16 @@ def generate_assistant_response(
                 driver_category=primary_driver,
             ),
             "suggested_actions": [],
+            "scope_label": scope_label,
         }
 
     if intent == "top_categories_multi":
-        top_three = get_top_expense_categories(db, user_id, limit=3)
+        top_three = get_top_expense_categories(
+            db,
+            user_id,
+            account_id=account_id,
+            limit=3,
+        )
 
         if not top_three:
             answer = "I do not have enough expense data yet to identify your top categories."
@@ -1084,6 +1167,7 @@ def generate_assistant_response(
                     driver_category=primary_driver,
                 ),
                 "suggested_actions": [],
+                "scope_label": scope_label,
             }
 
         points = [
@@ -1113,12 +1197,14 @@ def generate_assistant_response(
                     "page": "transactions",
                 }
             ],
+            "scope_label": scope_label,
         }
 
     if intent == "category_transactions":
         top_with_transactions = get_top_categories_with_transactions(
             db,
             user_id,
+            account_id=account_id,
             category_limit=3,
             transaction_limit=2,
         )
@@ -1138,6 +1224,7 @@ def generate_assistant_response(
                     driver_category=primary_driver,
                 ),
                 "suggested_actions": [],
+                "scope_label": scope_label,
             }
 
         points = []
@@ -1172,6 +1259,7 @@ def generate_assistant_response(
                     "page": "transactions",
                 }
             ],
+            "scope_label": scope_label,
         }
 
     if intent in {"spending_change", "driver", "alerts", "saving_advice", "summary", "balance", "top_category", "general"}:
@@ -1276,6 +1364,7 @@ def generate_assistant_response(
                 intent=intent,
                 driver_category=primary_driver,
             ),
+            "scope_label": scope_label,
         }
 
     return {
@@ -1291,12 +1380,17 @@ def generate_assistant_response(
             driver_category=primary_driver,
         ),
         "suggested_actions": [],
+        "scope_label": scope_label,
     }
 
 
-def generate_assistant_suggestions(db: Session, user_id: int) -> list[str]:
-    snapshot = build_financial_snapshot(db, user_id)
-    category_trends = get_category_trends(db, user_id)
+def generate_assistant_suggestions(
+    db: Session,
+    user_id: int,
+    account_id: int | None = None,
+) -> list[str]:
+    snapshot = build_financial_snapshot(db, user_id, account_id=account_id)
+    category_trends = get_category_trends(db, user_id, account_id=account_id)
 
     suggestions: list[str] = ["What is my balance?"]
 
@@ -1337,6 +1431,7 @@ def get_dashboard_payload(
     end_date: str | None = None,
     transaction_type: str | None = None,
     category: str | None = None,
+    account_id: int | None = None,
 ) -> dict[str, Any]:
     return {
         "summary": get_summary(
@@ -1347,6 +1442,7 @@ def get_dashboard_payload(
             end_date=end_date,
             transaction_type=transaction_type,
             category=category,
+            account_id=account_id,
         ),
         "top_category": get_top_expense_category(
             db,
@@ -1356,6 +1452,7 @@ def get_dashboard_payload(
             end_date=end_date,
             transaction_type=transaction_type,
             category=category,
+            account_id=account_id,
         ),
         "category_breakdown": get_category_breakdown(
             db,
@@ -1365,6 +1462,7 @@ def get_dashboard_payload(
             end_date=end_date,
             transaction_type=transaction_type,
             category=category,
+            account_id=account_id,
         ),
         "monthly_summary": get_monthly_summary(
             db,
@@ -1373,6 +1471,7 @@ def get_dashboard_payload(
             end_date=end_date,
             transaction_type=transaction_type,
             category=category,
+            account_id=account_id,
         ),
         "recent_transactions": get_recent_transactions(
             db,
@@ -1382,8 +1481,13 @@ def get_dashboard_payload(
             end_date=end_date,
             transaction_type=transaction_type,
             category=category,
+            account_id=account_id,
         ),
-        "spending_insights": get_spending_insights(db, user_id),
-        "overspending_alerts": get_overspending_alerts(db, user_id),
-        "category_trends": get_category_trends(db, user_id),
+        "spending_insights": get_spending_insights(db, user_id, account_id=account_id),
+        "overspending_alerts": get_overspending_alerts(
+            db,
+            user_id,
+            account_id=account_id,
+        ),
+        "category_trends": get_category_trends(db, user_id, account_id=account_id),
     }

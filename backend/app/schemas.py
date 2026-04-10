@@ -231,6 +231,7 @@ class AssistantQueryRequest(BaseModel):
     question: str = Field(min_length=1)
     history: list[AssistantMessage] = Field(default_factory=list)
     mode: AssistantMode = "balanced"
+    account_id: int | None = None
 
 
 class AssistantQueryResponse(BaseModel):
@@ -238,6 +239,7 @@ class AssistantQueryResponse(BaseModel):
     supporting_points: list[str]
     suggested_followups: list[str]
     suggested_actions: list[AssistantAction] = Field(default_factory=list)
+    scope_label: str = "All accounts combined"
 
 
 class AssistantSuggestionsResponse(BaseModel):

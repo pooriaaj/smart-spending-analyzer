@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import api from "../services/api";
+import AccountSelector from "../components/AccountSelector";
+import { ALL_ACCOUNTS_VALUE, getSelectedAccountId } from "../services/accountStorage";
 import {
   BarChart,
   Bar,
@@ -101,6 +103,7 @@ function buildTopPieData(items, topN = 5) {
 
 function AnalyticsPage() {
   const [dashboardData, setDashboardData] = useState(null);
+  const [selectedAccountId, setSelectedAccountId] = useState(getSelectedAccountId());
   const [selectedMonth, setSelectedMonth] = useState("");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
@@ -119,6 +122,8 @@ function AnalyticsPage() {
 
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
+  const normalizedAccountId =
+    selectedAccountId === ALL_ACCOUNTS_VALUE ? undefined : Number(selectedAccountId);
 
   useEffect(() => {
     const observer = new MutationObserver(() => {
@@ -148,6 +153,7 @@ function AnalyticsPage() {
 
         const response = await api.get("/analytics/dashboard", {
           params: {
+            account_id: normalizedAccountId,
             month: selectedMonth || undefined,
             start_date: startDate || undefined,
             end_date: endDate || undefined,
@@ -170,7 +176,7 @@ function AnalyticsPage() {
     };
 
     fetchDashboardAnalytics();
-  }, [navigate, selectedMonth, startDate, endDate, selectedType, selectedCategory]);
+  }, [navigate, normalizedAccountId, selectedMonth, startDate, endDate, selectedType, selectedCategory]);
 
   useEffect(() => {
     const section = searchParams.get("section");
@@ -334,10 +340,12 @@ function AnalyticsPage() {
         <div className="filter-card">
           <div className="section-header">
             <h2>Analytics Filters</h2>
-            <p>Refine the analysis using month, date range, type, and category.</p>
+            <p>Refine the analysis using account scope, month, date range, type, and category.</p>
           </div>
 
           <div className="filter-bar">
+            <AccountSelector label="Account scope" onChange={setSelectedAccountId} />
+
             <div>
               <label>Month</label>
               <select
