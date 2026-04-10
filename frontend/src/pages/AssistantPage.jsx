@@ -141,6 +141,11 @@ function AssistantPage() {
       return;
     }
 
+    if (action.page === "accounts") {
+      navigate("/accounts");
+      return;
+    }
+
     if (action.page === "external_resource") {
       const topic = encodeURIComponent(action.section || "budgeting basics");
       window.open(`https://www.google.com/search?q=${topic}`, "_blank");

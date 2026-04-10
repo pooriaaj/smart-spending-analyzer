@@ -254,6 +254,46 @@ class AnalyticsRouteTest(unittest.TestCase):
         self.assertEqual(payload["suggested_actions"][0]["page"], "transactions")
         self.assertEqual(payload["suggested_actions"][0]["account_id"], self.chequing_account_id)
 
+    def test_assistant_can_compare_accounts_in_all_accounts_scope(self) -> None:
+        self.seed_transactions()
+
+        response = self.client.post(
+            "/analytics/assistant-response",
+            json={
+                "question": "Which account is driving my spending?",
+                "history": [],
+                "mode": "balanced",
+                "account_id": None,
+            },
+        )
+
+        self.assertEqual(response.status_code, 200, response.text)
+        payload = response.json()
+
+        self.assertIn("Daily Spending", payload["answer"])
+        self.assertEqual(payload["suggested_actions"][0]["page"], "accounts")
+        self.assertEqual(payload["suggested_actions"][1]["account_id"], self.chequing_account_id)
+
+    def test_assistant_account_comparison_requires_all_accounts_scope(self) -> None:
+        self.seed_transactions()
+
+        response = self.client.post(
+            "/analytics/assistant-response",
+            json={
+                "question": "Compare my accounts",
+                "history": [],
+                "mode": "balanced",
+                "account_id": self.chequing_account_id,
+            },
+        )
+
+        self.assertEqual(response.status_code, 200, response.text)
+        payload = response.json()
+
+        self.assertIn("can't compare accounts", payload["answer"])
+        self.assertEqual(payload["scope_label"], "Daily Spending (chequing)")
+        self.assertEqual(payload["suggested_actions"][0]["page"], "accounts")
+
 
 if __name__ == "__main__":
     unittest.main()

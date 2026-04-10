@@ -7,7 +7,7 @@ from typing import Any
 from sqlalchemy import case, func
 from sqlalchemy.orm import Query, Session
 
-from app.models import Transaction
+from app.models import Account, Transaction
 from app.services.llm_service import generate_llm_assistant_response
 
 
@@ -294,6 +294,44 @@ def get_top_categories_with_transactions(
         )
 
     return result
+
+
+def get_account_comparison_snapshot(
+    db: Session,
+    user_id: int,
+) -> list[dict[str, Any]]:
+    accounts = (
+        db.query(Account)
+        .filter(
+            Account.owner_id == user_id,
+            Account.is_active.is_(True),
+        )
+        .order_by(Account.name.asc(), Account.id.asc())
+        .all()
+    )
+
+    comparison: list[dict[str, Any]] = []
+    for account in accounts:
+        summary = get_summary(db, user_id, account_id=account.id)
+        top_category = get_top_expense_category(db, user_id, account_id=account.id)
+        comparison.append(
+            {
+                "account_id": account.id,
+                "name": account.name,
+                "type": account.type,
+                "total_income": float(summary["total_income"]),
+                "total_expenses": float(summary["total_expenses"]),
+                "balance": float(summary["balance"]),
+                "top_category": top_category["category"] if top_category else None,
+                "top_category_amount": float(top_category["total"]) if top_category else 0.0,
+            }
+        )
+
+    return sorted(
+        comparison,
+        key=lambda item: (item["total_expenses"], item["total_income"]),
+        reverse=True,
+    )
 
 
 def get_top_expense_category(
@@ -951,6 +989,22 @@ def classify_question(question: str, context_text: str) -> str:
     ):
         return "review_path"
 
+    if "compare" in text and "account" in text:
+        return "account_comparison"
+
+    if any(
+        phrase in text
+        for phrase in [
+            "compare accounts",
+            "which account",
+            "account is driving",
+            "driving my spending by account",
+            "highest spending account",
+            "most expensive account",
+        ]
+    ):
+        return "account_comparison"
+
     if any(
         phrase in text
         for phrase in [
@@ -1030,6 +1084,14 @@ def build_assistant_actions(
                 "section": "monthly",
                 "month": current_month,
                 "account_id": account_id,
+            }
+        )
+
+    elif intent == "account_comparison":
+        actions.append(
+            {
+                "label": "Open accounts",
+                "page": "accounts",
             }
         )
 
@@ -1223,6 +1285,13 @@ def generate_dynamic_followups(
             f"How can I improve my {focus_category} spending?",
         ]
 
+    if intent == "account_comparison":
+        return [
+            "Which account should I review first?",
+            "Show me transactions from the highest-spending account.",
+            "Which account has the healthiest balance?",
+        ]
+
     if mode == "strict":
         if intent in {"spending_change", "driver", "alerts"}:
             return [
@@ -1363,6 +1432,113 @@ def generate_assistant_response(
         if focus_category
         else None
     )
+
+    if intent == "account_comparison":
+        if account_id is not None:
+            return {
+                "answer": (
+                    f"You're currently focused on {scope_label}, so I can't compare accounts inside this scoped view. "
+                    "Switch to all accounts and ask again if you want a cross-account comparison."
+                ),
+                "supporting_points": [
+                    f"Current scope: {scope_label}",
+                    f"Balance in this scope: {format_currency(balance)}",
+                ],
+                "suggested_followups": generate_dynamic_followups(
+                    intent=intent,
+                    mode=mode,
+                    top_category=top_category,
+                    driver_category=primary_driver,
+                    focus_category=focus_category,
+                ),
+                "suggested_actions": [
+                    {
+                        "label": "Open accounts",
+                        "page": "accounts",
+                    }
+                ],
+                "scope_label": scope_label,
+            }
+
+        account_comparison = get_account_comparison_snapshot(db, user_id)
+        if len(account_comparison) < 2:
+            return {
+                "answer": "I need at least two active accounts before I can compare which one is driving your spending.",
+                "supporting_points": [
+                    f"Active accounts found: {len(account_comparison)}",
+                ],
+                "suggested_followups": generate_dynamic_followups(
+                    intent=intent,
+                    mode=mode,
+                    top_category=top_category,
+                    driver_category=primary_driver,
+                    focus_category=focus_category,
+                ),
+                "suggested_actions": [
+                    {
+                        "label": "Open accounts",
+                        "page": "accounts",
+                    }
+                ],
+                "scope_label": scope_label,
+            }
+
+        leading_account = account_comparison[0]
+        runner_up = account_comparison[1]
+        expense_gap = leading_account["total_expenses"] - runner_up["total_expenses"]
+
+        if mode == "strict":
+            answer = (
+                f"{leading_account['name']} is driving the most spending at {format_currency(leading_account['total_expenses'])}. "
+                f"That is {format_currency(expense_gap)} more than {runner_up['name']}, so start there first."
+            )
+        elif mode == "coach":
+            answer = (
+                f"{leading_account['name']} is the main spending driver right now at {format_currency(leading_account['total_expenses'])}. "
+                f"That gives us a clear account to review first."
+            )
+        else:
+            answer = (
+                f"{leading_account['name']} currently has the highest expenses at {format_currency(leading_account['total_expenses'])}, "
+                f"followed by {runner_up['name']} at {format_currency(runner_up['total_expenses'])}."
+            )
+
+        supporting_points = []
+        for item in account_comparison[:3]:
+            point = (
+                f"{item['name']} ({item['type']}): expenses {format_currency(item['total_expenses'])}, "
+                f"income {format_currency(item['total_income'])}, balance {format_currency(item['balance'])}"
+            )
+            if item["top_category"]:
+                point += (
+                    f", top category {item['top_category']} "
+                    f"at {format_currency(item['top_category_amount'])}"
+                )
+            supporting_points.append(point)
+
+        return {
+            "answer": answer,
+            "supporting_points": supporting_points,
+            "suggested_followups": generate_dynamic_followups(
+                intent=intent,
+                mode=mode,
+                top_category=top_category,
+                driver_category=primary_driver,
+                focus_category=focus_category,
+            ),
+            "suggested_actions": [
+                {
+                    "label": "Open accounts",
+                    "page": "accounts",
+                },
+                {
+                    "label": f"Review {leading_account['name']} transactions",
+                    "page": "transactions",
+                    "account_id": leading_account["account_id"],
+                },
+            ],
+            "scope_label": scope_label,
+        }
 
     llm_result = generate_llm_assistant_response(
         question=question,
