@@ -36,6 +36,13 @@ class User(Base):
         passive_deletes=True,
     )
 
+    budgets = relationship(
+        "BudgetPlan",
+        back_populates="owner",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
+
 
 class Account(Base):
     __tablename__ = "accounts"
@@ -49,6 +56,12 @@ class Account(Base):
     owner = relationship("User", back_populates="accounts")
     transactions = relationship(
         "Transaction",
+        back_populates="account",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
+    budgets = relationship(
+        "BudgetPlan",
         back_populates="account",
         cascade="all, delete-orphan",
         passive_deletes=True,
@@ -101,4 +114,23 @@ class CategoryMemory(Base):
             name="uq_category_memory_owner_keyword_type",
         ),
         Index("ix_category_memories_owner_keyword", "owner_id", "keyword"),
+    )
+
+
+class BudgetPlan(Base):
+    __tablename__ = "budget_plans"
+
+    id = Column(Integer, primary_key=True, index=True)
+    month = Column(String(7), nullable=False, index=True)
+    category = Column(String(100), nullable=False, index=True)
+    amount = Column(Float, nullable=False)
+    owner_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    account_id = Column(Integer, ForeignKey("accounts.id", ondelete="CASCADE"), nullable=True, index=True)
+
+    owner = relationship("User", back_populates="budgets")
+    account = relationship("Account", back_populates="budgets")
+
+    __table_args__ = (
+        Index("ix_budget_plans_owner_month", "owner_id", "month"),
+        Index("ix_budget_plans_owner_account_month", "owner_id", "account_id", "month"),
     )

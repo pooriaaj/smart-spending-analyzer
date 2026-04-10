@@ -7,7 +7,7 @@ from typing import Any
 from sqlalchemy import case, func
 from sqlalchemy.orm import Query, Session
 
-from app.models import Account, Transaction
+from app.models import Account, BudgetPlan, Transaction
 from app.services.llm_service import generate_llm_assistant_response
 
 
@@ -49,7 +49,7 @@ def build_filtered_query(
     if transaction_type:
         query = query.filter(Transaction.type == transaction_type)
     if category:
-        query = query.filter(Transaction.category == category)
+        query = query.filter(func.lower(Transaction.category) == category.strip().lower())
     if account_id is not None:
         query = query.filter(Transaction.account_id == account_id)
 
@@ -249,7 +249,7 @@ def get_transactions_for_category(
 ) -> list[Transaction]:
     query = db.query(Transaction).filter(
         Transaction.owner_id == user_id,
-        Transaction.category == category,
+        func.lower(Transaction.category) == category.strip().lower(),
     )
 
     if account_id is not None:
@@ -371,6 +371,101 @@ def get_top_expense_category(
     return {
         "category": row.category,
         "total": float(row.total),
+    }
+
+
+def get_default_budget_month() -> str:
+    return date.today().strftime("%Y-%m")
+
+
+def compute_budget_status(amount: float, spent_amount: float) -> tuple[float, float, str]:
+    remaining_amount = amount - spent_amount
+    usage_percent = (spent_amount / amount) * 100 if amount > 0 else 0.0
+
+    if spent_amount > amount:
+        status = "over_budget"
+    elif usage_percent >= 80:
+        status = "at_risk"
+    else:
+        status = "on_track"
+
+    return remaining_amount, usage_percent, status
+
+
+def get_budget_progress_snapshot(
+    db: Session,
+    user_id: int,
+    month: str | None = None,
+    account_id: int | None = None,
+) -> dict[str, Any]:
+    budget_month = month or get_default_budget_month()
+    query = db.query(BudgetPlan).filter(
+        BudgetPlan.owner_id == user_id,
+        BudgetPlan.month == budget_month,
+    )
+
+    if account_id is None:
+        query = query.filter(BudgetPlan.account_id.is_(None))
+    else:
+        query = query.filter(BudgetPlan.account_id == account_id)
+
+    budgets = query.order_by(BudgetPlan.category.asc(), BudgetPlan.id.asc()).all()
+
+    items: list[dict[str, Any]] = []
+    for budget in budgets:
+        summary = get_summary(
+            db,
+            user_id,
+            month=budget.month,
+            transaction_type="expense",
+            category=budget.category,
+            account_id=budget.account_id,
+        )
+        spent_amount = float(summary["total_expenses"])
+        remaining_amount, usage_percent, status = compute_budget_status(
+            float(budget.amount),
+            spent_amount,
+        )
+        items.append(
+            {
+                "id": budget.id,
+                "category": budget.category,
+                "amount": float(budget.amount),
+                "spent_amount": spent_amount,
+                "remaining_amount": remaining_amount,
+                "usage_percent": usage_percent,
+                "status": status,
+            }
+        )
+
+    issue_priority = {"over_budget": 0, "at_risk": 1, "on_track": 2}
+    items_by_priority = sorted(
+        items,
+        key=lambda item: (
+            issue_priority.get(item["status"], 3),
+            -item["usage_percent"],
+            item["category"].lower(),
+        ),
+    )
+
+    total_budgeted = sum(item["amount"] for item in items)
+    total_spent = sum(item["spent_amount"] for item in items)
+    total_remaining = sum(item["remaining_amount"] for item in items)
+    over_budget_count = sum(1 for item in items if item["status"] == "over_budget")
+    at_risk_count = sum(1 for item in items if item["status"] == "at_risk")
+    on_track_count = sum(1 for item in items if item["status"] == "on_track")
+
+    return {
+        "month": budget_month,
+        "budget_count": len(items),
+        "total_budgeted": total_budgeted,
+        "total_spent": total_spent,
+        "total_remaining": total_remaining,
+        "over_budget_count": over_budget_count,
+        "at_risk_count": at_risk_count,
+        "on_track_count": on_track_count,
+        "items": items,
+        "issue_items": items_by_priority[:3],
     }
 
 
@@ -726,6 +821,17 @@ def format_currency(value: float) -> str:
     return f"${value:.2f}"
 
 
+def format_category_label(value: str | None) -> str:
+    if not value:
+        return "Unknown"
+
+    normalized = normalize_text_for_matching(value)
+    if not normalized:
+        return "Unknown"
+
+    return " ".join(word.capitalize() for word in normalized.split())
+
+
 def normalize_text_for_matching(value: str) -> str:
     return re.sub(r"[^a-z0-9]+", " ", (value or "").lower()).strip()
 
@@ -1037,6 +1143,21 @@ def classify_question(question: str, context_text: str) -> str:
     if any(word in text for word in ["top expense", "top category", "biggest category", "most spent"]):
         return "top_category"
 
+    if any(
+        phrase in text
+        for phrase in [
+            "budget",
+            "budgets",
+            "on track",
+            "over budget",
+            "left in my budget",
+            "remaining budget",
+            "budget limit",
+            "close to the limit",
+        ]
+    ):
+        return "budget_status"
+
     if any(word in text for word in ["increase", "decrease", "trend", "last month", "this month", "overspend", "spending change"]):
         return "spending_change"
 
@@ -1150,6 +1271,14 @@ def build_assistant_actions(
                 "label": "Open spending insights",
                 "page": "analytics",
                 "section": "insights",
+                "account_id": account_id,
+            }
+        )
+        actions.append(
+            {
+                "label": "Open budgets",
+                "page": "budgets",
+                "month": snapshot.get("current_month"),
                 "account_id": account_id,
             }
         )
@@ -1292,6 +1421,13 @@ def generate_dynamic_followups(
             "Which account has the healthiest balance?",
         ]
 
+    if intent == "budget_status":
+        return [
+            "Which budget is closest to the limit?",
+            "Show me the transactions behind it.",
+            "How can I get back on track?",
+        ]
+
     if mode == "strict":
         if intent in {"spending_change", "driver", "alerts"}:
             return [
@@ -1400,10 +1536,32 @@ def generate_assistant_response(
     q = (question or "").strip().lower()
     context_text = extract_recent_context(history)
     intent = classify_question(q, context_text)
+    current_month = snapshot["current_month"]
+    budget_snapshot = get_budget_progress_snapshot(
+        db,
+        user_id,
+        month=current_month or get_default_budget_month(),
+        account_id=account_id,
+    )
+    budget_categories = [item["category"] for item in budget_snapshot["items"]]
+    focus_categories = get_distinct_categories(db, user_id, account_id=account_id)
+    seen_focus_categories = {
+        normalize_text_for_matching(item)
+        for item in focus_categories
+    }
+    for category in budget_categories:
+        normalized_category = normalize_text_for_matching(category)
+        if normalized_category and normalized_category not in seen_focus_categories:
+            focus_categories.append(category)
+            seen_focus_categories.add(normalized_category)
+
     focus_category = detect_focus_category(
         question=question,
         context_text=context_text,
-        categories=get_distinct_categories(db, user_id, account_id=account_id),
+        categories=sorted(
+            focus_categories,
+            key=lambda item: (-len(normalize_text_for_matching(item)), item.lower()),
+        ),
     )
     if focus_category and "transaction" in q:
         intent = "category_transactions"
@@ -1414,7 +1572,6 @@ def generate_assistant_response(
     top_category = snapshot["top_category"]
     top_category_amount = snapshot["top_category_amount"]
     top_category_share_percent = snapshot["top_category_share_percent"]
-    current_month = snapshot["current_month"]
     expense_change_percent = snapshot["expense_change_percent"]
 
     primary_driver = None
@@ -1431,6 +1588,14 @@ def generate_assistant_response(
         )
         if focus_category
         else None
+    )
+    focused_budget = next(
+        (
+            item
+            for item in budget_snapshot["items"]
+            if normalize_text_for_matching(item["category"]) == normalize_text_for_matching(focus_category or "")
+        ),
+        None,
     )
 
     if intent == "account_comparison":
@@ -1537,6 +1702,197 @@ def generate_assistant_response(
                     "account_id": leading_account["account_id"],
                 },
             ],
+            "scope_label": scope_label,
+        }
+
+    if intent == "budget_status":
+        budget_month = budget_snapshot["month"]
+
+        if budget_snapshot["budget_count"] == 0:
+            return {
+                "answer": (
+                    f"You do not have any budgets set for {budget_month} in {scope_label} yet. "
+                    "Create a few category targets first so I can tell you what is on track or under pressure."
+                ),
+                "supporting_points": [
+                    f"Current budget month: {budget_month}",
+                    f"Current scope: {scope_label}",
+                    f"Recorded expenses in this scope: {format_currency(total_expenses)}",
+                ],
+                "suggested_followups": generate_dynamic_followups(
+                    intent=intent,
+                    mode=mode,
+                    top_category=top_category,
+                    driver_category=primary_driver,
+                    focus_category=focus_category,
+                ),
+                "suggested_actions": [
+                    {
+                        "label": "Open budgets",
+                        "page": "budgets",
+                        "month": budget_month,
+                        "account_id": account_id,
+                    }
+                ],
+                "scope_label": scope_label,
+            }
+
+        if focused_budget:
+            focused_budget_label = format_category_label(focus_category or focused_budget["category"])
+            remaining_text = (
+                f"{format_currency(focused_budget['remaining_amount'])} remaining"
+                if focused_budget["remaining_amount"] >= 0
+                else f"{format_currency(abs(focused_budget['remaining_amount']))} over"
+            )
+
+            if focused_budget["status"] == "over_budget":
+                if mode == "strict":
+                    answer = (
+                        f"{focused_budget_label} is already over budget for {budget_month}. "
+                        f"You have used {focused_budget['usage_percent']:.1f}% of the limit."
+                    )
+                elif mode == "coach":
+                    answer = (
+                        f"{focused_budget_label} is over budget for {budget_month}, "
+                        "so this is the clearest place to tighten up next."
+                    )
+                else:
+                    answer = (
+                        f"{focused_budget_label} is over budget for {budget_month}. "
+                        f"You have used {focused_budget['usage_percent']:.1f}% of the target."
+                    )
+            elif focused_budget["status"] == "at_risk":
+                if mode == "strict":
+                    answer = (
+                        f"{focused_budget_label} is getting close to the limit for {budget_month}. "
+                        f"You have already used {focused_budget['usage_percent']:.1f}% of the budget."
+                    )
+                elif mode == "coach":
+                    answer = (
+                        f"{focused_budget_label} is still on the board for {budget_month}, "
+                        "but it is close enough to the limit that it deserves attention now."
+                    )
+                else:
+                    answer = (
+                        f"{focused_budget_label} is at risk for {budget_month}. "
+                        f"You have used {focused_budget['usage_percent']:.1f}% of the budget."
+                    )
+            else:
+                answer = (
+                    f"{focused_budget_label} is on track for {budget_month}. "
+                    f"You have used {focused_budget['usage_percent']:.1f}% of the budget so far."
+                )
+
+            supporting_points = [
+                f"Budget: {format_currency(focused_budget['amount'])}",
+                f"Spent so far: {format_currency(focused_budget['spent_amount'])}",
+                remaining_text,
+                f"Usage: {focused_budget['usage_percent']:.1f}%",
+            ]
+
+            if focus_snapshot and focus_snapshot["recent_transactions"]:
+                recent_text = ", ".join(
+                    f"{tx.description} ({format_currency(tx.amount)})"
+                    for tx in focus_snapshot["recent_transactions"][:3]
+                )
+                supporting_points.append(f"Recent {focused_budget_label} transactions: {recent_text}")
+
+            return {
+                "answer": answer,
+                "supporting_points": supporting_points[:5],
+                "suggested_followups": generate_dynamic_followups(
+                    intent=intent,
+                    mode=mode,
+                    top_category=top_category,
+                    driver_category=primary_driver,
+                    focus_category=focus_category,
+                ),
+                "suggested_actions": [
+                    {
+                        "label": f"Open {focused_budget_label} budget",
+                        "page": "budgets",
+                        "month": budget_month,
+                        "category": focused_budget["category"],
+                        "account_id": account_id,
+                    },
+                    {
+                        "label": f"Review {focused_budget_label} transactions",
+                        "page": "transactions",
+                        "category": focused_budget["category"],
+                        "transaction_type": "expense",
+                        "month": budget_month,
+                        "account_id": account_id,
+                    },
+                ],
+                "scope_label": scope_label,
+            }
+
+        lead_budget = (
+            budget_snapshot["issue_items"][0]
+            if budget_snapshot["issue_items"]
+            else None
+        )
+
+        if budget_snapshot["over_budget_count"] > 0:
+            answer = (
+                f"You are tracking {budget_snapshot['budget_count']} budgets for {budget_month}, "
+                f"and {budget_snapshot['over_budget_count']} of them are already over budget."
+            )
+        elif budget_snapshot["at_risk_count"] > 0:
+            answer = (
+                f"Your budgets for {budget_month} are mostly intact, but {budget_snapshot['at_risk_count']} "
+                "category budgets are getting close to the limit."
+            )
+        else:
+            answer = (
+                f"Your budgets for {budget_month} are on track right now. "
+                f"You have {format_currency(budget_snapshot['total_remaining'])} of planned room left."
+            )
+
+        supporting_points = [
+            f"Total budgeted: {format_currency(budget_snapshot['total_budgeted'])}",
+            f"Total spent against budgets: {format_currency(budget_snapshot['total_spent'])}",
+            f"Remaining budget room: {format_currency(budget_snapshot['total_remaining'])}",
+        ]
+
+        for item in budget_snapshot["issue_items"]:
+            status_label = item["status"].replace("_", " ")
+            supporting_points.append(
+                f"{format_category_label(item['category'])}: {format_currency(item['spent_amount'])} spent vs {format_currency(item['amount'])} budget ({item['usage_percent']:.1f}% used, {status_label})"
+            )
+
+        suggested_actions = [
+            {
+                "label": "Open budgets",
+                "page": "budgets",
+                "month": budget_month,
+                "account_id": account_id,
+            }
+        ]
+
+        if lead_budget:
+            suggested_actions.append(
+                {
+                    "label": f"Review {format_category_label(lead_budget['category'])} transactions",
+                    "page": "transactions",
+                    "category": lead_budget["category"],
+                    "transaction_type": "expense",
+                    "month": budget_month,
+                    "account_id": account_id,
+                }
+            )
+
+        return {
+            "answer": answer,
+            "supporting_points": supporting_points[:5],
+            "suggested_followups": generate_dynamic_followups(
+                intent=intent,
+                mode=mode,
+                top_category=top_category,
+                driver_category=primary_driver,
+                focus_category=focus_category,
+            ),
+            "suggested_actions": suggested_actions,
             "scope_label": scope_label,
         }
 
@@ -1970,12 +2326,26 @@ def generate_assistant_suggestions(
 ) -> list[str]:
     snapshot = build_financial_snapshot(db, user_id, account_id=account_id)
     category_trends = get_category_trends(db, user_id, account_id=account_id)
+    budget_snapshot = get_budget_progress_snapshot(
+        db,
+        user_id,
+        month=snapshot["current_month"] or get_default_budget_month(),
+        account_id=account_id,
+    )
 
     suggestions: list[str] = ["What is my balance?"]
 
     if snapshot["top_category"]:
         suggestions.append(f"Why is {snapshot['top_category']} my top expense category?")
         suggestions.append(f"How can I reduce {snapshot['top_category']} spending?")
+
+    if budget_snapshot["budget_count"] > 0:
+        if budget_snapshot["over_budget_count"] > 0:
+            suggestions.append("Which category is over budget right now?")
+        elif budget_snapshot["at_risk_count"] > 0:
+            suggestions.append("Which budget is closest to the limit?")
+        else:
+            suggestions.append("Am I on track with my budgets?")
 
     if category_trends.get("top_increases"):
         suggestions.append(

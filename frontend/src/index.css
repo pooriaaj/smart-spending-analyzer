@@ -1227,6 +1227,115 @@ textarea:focus,
   line-height: 1.6;
 }
 
+.budget-form {
+  align-items: end;
+}
+
+.budget-form-field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.budget-form-field label {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-main);
+}
+
+.budget-list {
+  display: grid;
+  gap: 16px;
+}
+
+.budget-card {
+  border-radius: 20px;
+  padding: 20px;
+  background: rgba(255, 255, 255, 0.82);
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  box-shadow: var(--shadow-sm);
+}
+
+.budget-card-top {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: flex-start;
+}
+
+.budget-card-top h3 {
+  margin: 0;
+  font-size: 20px;
+}
+
+.budget-card-top p {
+  margin: 8px 0 0 0;
+  color: var(--text-soft);
+}
+
+.budget-card-actions {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.budget-status {
+  padding: 8px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.budget-status-on-track {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.budget-status-risk {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.budget-status-over {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.budget-progress-track {
+  margin-top: 18px;
+  height: 12px;
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.16);
+  overflow: hidden;
+}
+
+.budget-progress-fill {
+  height: 100%;
+  border-radius: inherit;
+}
+
+.budget-progress-on_track {
+  background: linear-gradient(90deg, #16a34a 0%, #4ade80 100%);
+}
+
+.budget-progress-at_risk {
+  background: linear-gradient(90deg, #d97706 0%, #fbbf24 100%);
+}
+
+.budget-progress-over_budget {
+  background: linear-gradient(90deg, #dc2626 0%, #f87171 100%);
+}
+
+.budget-card-meta {
+  margin-top: 14px;
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--text-soft);
+  font-weight: 600;
+}
+
 :root[data-theme="dark"] .account-comparison-item {
   background: rgba(15, 23, 42, 0.82);
   border-color: rgba(148, 163, 184, 0.14);
@@ -1245,6 +1354,26 @@ textarea:focus,
 :root[data-theme="dark"] .account-summary-item {
   background: rgba(15, 23, 42, 0.82);
   border-color: rgba(148, 163, 184, 0.14);
+}
+
+:root[data-theme="dark"] .budget-card {
+  background: rgba(15, 23, 42, 0.82);
+  border-color: rgba(148, 163, 184, 0.14);
+}
+
+:root[data-theme="dark"] .budget-status-on-track {
+  background: rgba(22, 163, 74, 0.22);
+  color: #bbf7d0;
+}
+
+:root[data-theme="dark"] .budget-status-risk {
+  background: rgba(217, 119, 6, 0.22);
+  color: #fde68a;
+}
+
+:root[data-theme="dark"] .budget-status-over {
+  background: rgba(220, 38, 38, 0.22);
+  color: #fecaca;
 }
 
 :root[data-theme="dark"] .import-filter-chip:hover {
@@ -3076,6 +3205,13 @@ textarea {
 
   .account-summary-metrics {
     grid-template-columns: 1fr;
+  }
+
+  .budget-card-top,
+  .budget-card-actions,
+  .budget-card-meta {
+    flex-direction: column;
+    align-items: flex-start;
   }
 }
 .account-selector-block {

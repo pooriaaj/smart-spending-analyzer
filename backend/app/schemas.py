@@ -95,6 +95,47 @@ class AccountSummaryResponse(AccountResponse):
     top_category_amount: float = 0.0
 
 
+class BudgetPlanBase(BaseModel):
+    month: str = Field(pattern=r"^\d{4}-\d{2}$")
+    category: str = Field(min_length=1, max_length=100)
+    amount: float = Field(gt=0)
+    account_id: int | None = None
+
+
+class BudgetPlanCreate(BudgetPlanBase):
+    pass
+
+
+class BudgetPlanResponse(ORMBaseModel):
+    id: int
+    month: str
+    category: str
+    amount: float
+    owner_id: int
+    account_id: int | None = None
+    spent_amount: float = 0.0
+    remaining_amount: float = 0.0
+    usage_percent: float = 0.0
+    status: str
+
+
+class BudgetSummaryResponse(BaseModel):
+    total_budgeted: float = 0.0
+    total_spent: float = 0.0
+    total_remaining: float = 0.0
+    over_budget_count: int = 0
+    at_risk_count: int = 0
+    on_track_count: int = 0
+
+
+class BudgetListResponse(BaseModel):
+    month: str
+    account_id: int | None = None
+    budgets: list[BudgetPlanResponse]
+    summary: BudgetSummaryResponse
+    available_categories: list[str] = Field(default_factory=list)
+
+
 class TransactionBase(BaseModel):
     amount: float
     category: str = Field(min_length=1, max_length=100)

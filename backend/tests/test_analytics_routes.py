@@ -13,7 +13,7 @@ from sqlalchemy.pool import StaticPool
 
 from app.database import Base
 from app.dependencies import get_current_user, get_db
-from app.models import Account, Transaction, User
+from app.models import Account, BudgetPlan, Transaction, User
 from app.routes.analytics_routes import router as analytics_router
 
 
@@ -79,6 +79,7 @@ class AnalyticsRouteTest(unittest.TestCase):
     def tearDown(self) -> None:
         with self.session_local() as session:
             session.query(Transaction).delete()
+            session.query(BudgetPlan).delete()
             session.commit()
 
     def seed_transactions(self) -> None:
@@ -143,6 +144,19 @@ class AnalyticsRouteTest(unittest.TestCase):
             )
             session.commit()
 
+    def seed_budget(self, *, month: str, category: str, amount: float, account_id: int | None = None) -> None:
+        with self.session_local() as session:
+            session.add(
+                BudgetPlan(
+                    month=month,
+                    category=category,
+                    amount=amount,
+                    owner_id=self.user_id,
+                    account_id=account_id,
+                )
+            )
+            session.commit()
+
     def test_dashboard_respects_account_scope(self) -> None:
         self.seed_transactions()
 
@@ -196,6 +210,25 @@ class AnalyticsRouteTest(unittest.TestCase):
         self.assertIn("How can I reduce Entertainment spending?", suggestions)
         self.assertNotIn("Why is Groceries my top expense category?", suggestions)
 
+    def test_assistant_suggestions_include_budget_prompt_when_budgets_exist(self) -> None:
+        self.seed_transactions()
+        self.seed_budget(
+            month="2026-02",
+            category="groceries",
+            amount=120.0,
+            account_id=self.chequing_account_id,
+        )
+
+        response = self.client.get(
+            "/analytics/assistant-suggestions",
+            params={"account_id": self.chequing_account_id},
+        )
+
+        self.assertEqual(response.status_code, 200, response.text)
+        suggestions = response.json()["suggestions"]
+
+        self.assertIn("Which budget is closest to the limit?", suggestions)
+
     def test_assistant_response_reports_scoped_balance(self) -> None:
         self.seed_transactions()
 
@@ -241,6 +274,37 @@ class AnalyticsRouteTest(unittest.TestCase):
         )
         self.assertEqual(payload["suggested_actions"][0]["category"], "Groceries")
         self.assertEqual(payload["suggested_actions"][0]["account_id"], self.chequing_account_id)
+
+    def test_assistant_response_reports_budget_status_for_focused_category(self) -> None:
+        self.seed_transactions()
+        self.seed_budget(
+            month="2026-02",
+            category="groceries",
+            amount=120.0,
+            account_id=self.chequing_account_id,
+        )
+
+        with patch("app.services.analytics_service.generate_llm_assistant_response", return_value=None):
+            response = self.client.post(
+                "/analytics/assistant-response",
+                json={
+                    "question": "How is my groceries budget looking?",
+                    "history": [],
+                    "mode": "balanced",
+                    "account_id": self.chequing_account_id,
+                },
+            )
+
+        self.assertEqual(response.status_code, 200, response.text)
+        payload = response.json()
+
+        self.assertIn("Groceries", payload["answer"])
+        self.assertIn("83.3%", payload["answer"])
+        self.assertIn("Budget: $120.00", payload["supporting_points"])
+        self.assertIn("Spent so far: $100.00", payload["supporting_points"])
+        self.assertEqual(payload["suggested_actions"][0]["page"], "budgets")
+        self.assertEqual(payload["suggested_actions"][0]["account_id"], self.chequing_account_id)
+        self.assertEqual(payload["suggested_actions"][1]["page"], "transactions")
 
     def test_assistant_response_shows_recent_transactions_for_focused_category(self) -> None:
         self.seed_transactions()

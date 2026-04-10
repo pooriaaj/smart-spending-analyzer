@@ -1,0 +1,332 @@
+import { useEffect, useMemo, useState } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
+import api, { handleApiAuthError } from "../services/api";
+import AccountSelector from "../components/AccountSelector";
+import { ALL_ACCOUNTS_VALUE, getSelectedAccountId } from "../services/accountStorage";
+
+function formatBudgetCategory(value) {
+  if (!value || typeof value !== "string") return "";
+
+  return value
+    .trim()
+    .split(" ")
+    .filter(Boolean)
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(" ");
+}
+
+function BudgetsPage() {
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const [selectedAccountId, setSelectedAccountId] = useState(getSelectedAccountId());
+  const [month, setMonth] = useState(
+    searchParams.get("month") || new Date().toISOString().slice(0, 7)
+  );
+  const [budgetData, setBudgetData] = useState(null);
+  const [category, setCategory] = useState(
+    formatBudgetCategory(searchParams.get("category") || "")
+  );
+  const [amount, setAmount] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState("");
+  const [error, setError] = useState("");
+
+  const normalizedAccountId =
+    selectedAccountId === ALL_ACCOUNTS_VALUE ? undefined : Number(selectedAccountId);
+
+  const fetchBudgets = async () => {
+    try {
+      setLoading(true);
+      setError("");
+      const response = await api.get("/budgets/", {
+        params: {
+          month,
+          account_id: normalizedAccountId,
+        },
+      });
+      setBudgetData(response.data);
+    } catch (fetchError) {
+      if (!handleApiAuthError(fetchError, navigate)) {
+        setError("Failed to load budgets.");
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchBudgets();
+  }, [month, normalizedAccountId]);
+
+  useEffect(() => {
+    const urlMonth = searchParams.get("month");
+    const urlCategory = searchParams.get("category");
+
+    if (urlMonth && /^\d{4}-\d{2}$/.test(urlMonth)) {
+      setMonth(urlMonth);
+    }
+
+    if (urlCategory) {
+      setCategory(formatBudgetCategory(urlCategory));
+    }
+  }, [searchParams]);
+
+  const handleSaveBudget = async (event) => {
+    event.preventDefault();
+    setSaving(true);
+    setError("");
+    setMessage("");
+
+    try {
+      await api.post("/budgets/", {
+        month,
+        category,
+        amount: Number(amount),
+        account_id: normalizedAccountId,
+      });
+      setCategory("");
+      setAmount("");
+      setMessage("Budget saved.");
+      await fetchBudgets();
+    } catch (saveError) {
+      if (!handleApiAuthError(saveError, navigate)) {
+        setError(saveError?.response?.data?.detail || "Failed to save budget.");
+      }
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDeleteBudget = async (budgetId) => {
+    setError("");
+    setMessage("");
+
+    try {
+      await api.delete(`/budgets/${budgetId}`);
+      setMessage("Budget deleted.");
+      await fetchBudgets();
+    } catch (deleteError) {
+      if (!handleApiAuthError(deleteError, navigate)) {
+        setError(deleteError?.response?.data?.detail || "Failed to delete budget.");
+      }
+    }
+  };
+
+  const scopeDescription =
+    normalizedAccountId == null
+      ? "These budgets apply across all accounts combined."
+      : "These budgets apply only to the selected account.";
+
+  const budgetSummary = budgetData?.summary || {
+    total_budgeted: 0,
+    total_spent: 0,
+    total_remaining: 0,
+    over_budget_count: 0,
+    at_risk_count: 0,
+    on_track_count: 0,
+  };
+
+  const budgetCards = budgetData?.budgets || [];
+  const categoryOptions = useMemo(
+    () => budgetData?.available_categories || [],
+    [budgetData]
+  );
+  const formattedCategoryOptions = useMemo(
+    () => categoryOptions.map((item) => formatBudgetCategory(item)),
+    [categoryOptions]
+  );
+
+  const getBudgetStatusMeta = (status) => {
+    if (status === "over_budget") {
+      return { label: "Over budget", className: "budget-status budget-status-over" };
+    }
+    if (status === "at_risk") {
+      return { label: "At risk", className: "budget-status budget-status-risk" };
+    }
+    return { label: "On track", className: "budget-status budget-status-on-track" };
+  };
+
+  return (
+    <div className="page-container dashboard-page">
+      <div className="dashboard-wrapper">
+        <div className="dashboard-hero">
+          <div>
+            <p className="eyebrow-text">Smart Spending Analyzer</p>
+            <h1>Budgets</h1>
+            <p className="hero-subtitle">
+              Plan category limits by month and see how your real spending is tracking against them.
+            </p>
+          </div>
+
+          <div className="header-actions">
+            <button className="secondary-button" onClick={() => navigate("/dashboard")}>
+              Back to Dashboard
+            </button>
+            <button className="secondary-button" onClick={() => navigate("/analytics")}>
+              View Analytics
+            </button>
+            <button className="secondary-button" onClick={() => navigate("/assistant")}>
+              Assistant
+            </button>
+          </div>
+        </div>
+
+        <div className="dashboard-card">
+          <div className="section-header">
+            <h2>Budget Scope</h2>
+            <p>{scopeDescription}</p>
+          </div>
+
+          <div className="assistant-mode-row">
+            <AccountSelector label="Budget scope" onChange={setSelectedAccountId} />
+
+            <div className="assistant-mode-field">
+              <label htmlFor="budget-month">Month</label>
+              <input
+                id="budget-month"
+                type="month"
+                value={month}
+                onChange={(event) => setMonth(event.target.value)}
+              />
+            </div>
+          </div>
+        </div>
+
+        <div className="dashboard-card">
+          <div className="section-header">
+            <h2>Create Or Update Budget</h2>
+            <p>Set a monthly spending target for a category. Saving the same category again updates it.</p>
+          </div>
+
+          <form className="transaction-form budget-form" onSubmit={handleSaveBudget}>
+            <div className="budget-form-field">
+              <label htmlFor="budget-category">Category</label>
+              <input
+                id="budget-category"
+                list="budget-category-options"
+                value={category}
+                onChange={(event) => setCategory(event.target.value)}
+                placeholder="Groceries"
+                required
+              />
+              <datalist id="budget-category-options">
+                {formattedCategoryOptions.map((item) => (
+                  <option key={item} value={item} />
+                ))}
+              </datalist>
+            </div>
+
+            <div className="budget-form-field">
+              <label htmlFor="budget-amount">Budget amount</label>
+              <input
+                id="budget-amount"
+                type="number"
+                min="0.01"
+                step="0.01"
+                value={amount}
+                onChange={(event) => setAmount(event.target.value)}
+                placeholder="400"
+                required
+              />
+            </div>
+
+            <button type="submit" disabled={saving}>
+              {saving ? "Saving..." : "Save Budget"}
+            </button>
+          </form>
+
+          {message && <p className="success-text">{message}</p>}
+          {error && <p className="error-text">{error}</p>}
+        </div>
+
+        <div className="summary-grid">
+          <div className="summary-card income-card">
+            <span className="card-label">Budgeted</span>
+            <p>${budgetSummary.total_budgeted.toFixed(2)}</p>
+          </div>
+
+          <div className="summary-card expense-card">
+            <span className="card-label">Spent</span>
+            <p>${budgetSummary.total_spent.toFixed(2)}</p>
+          </div>
+
+          <div className="summary-card balance-card">
+            <span className="card-label">Remaining</span>
+            <p>${budgetSummary.total_remaining.toFixed(2)}</p>
+          </div>
+
+          <div className="summary-card top-card">
+            <span className="card-label">Watchlist</span>
+            <p>{budgetSummary.over_budget_count} over / {budgetSummary.at_risk_count} at risk</p>
+          </div>
+        </div>
+
+        <div className="dashboard-card">
+          <div className="section-header">
+            <h2>Budget Tracking</h2>
+            <p>Watch each category move from safe to at-risk to over budget.</p>
+          </div>
+
+          {loading ? (
+            <div className="empty-state">
+              <p>Loading budgets...</p>
+            </div>
+          ) : budgetCards.length === 0 ? (
+            <div className="empty-state">
+              <p>No budgets set for this scope and month yet.</p>
+            </div>
+          ) : (
+            <div className="budget-list">
+              {budgetCards.map((budget) => {
+                const statusMeta = getBudgetStatusMeta(budget.status);
+                const progressWidth = Math.min(budget.usage_percent, 100);
+
+                return (
+                  <div key={budget.id} className="budget-card">
+                    <div className="budget-card-top">
+                      <div>
+                        <h3>{formatBudgetCategory(budget.category)}</h3>
+                        <p>
+                          Budget ${budget.amount.toFixed(2)} • Spent ${budget.spent_amount.toFixed(2)}
+                        </p>
+                      </div>
+
+                      <div className="budget-card-actions">
+                        <span className={statusMeta.className}>{statusMeta.label}</span>
+                        <button
+                          className="delete-button"
+                          onClick={() => handleDeleteBudget(budget.id)}
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="budget-progress-track">
+                      <div
+                        className={`budget-progress-fill budget-progress-${budget.status}`}
+                        style={{ width: `${progressWidth}%` }}
+                      />
+                    </div>
+
+                    <div className="budget-card-meta">
+                      <span>{budget.usage_percent.toFixed(1)}% used</span>
+                      <span>
+                        {budget.remaining_amount >= 0
+                          ? `$${budget.remaining_amount.toFixed(2)} remaining`
+                          : `$${Math.abs(budget.remaining_amount).toFixed(2)} over`}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export default BudgetsPage;

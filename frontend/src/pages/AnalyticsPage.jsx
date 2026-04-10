@@ -110,6 +110,8 @@ function AnalyticsPage() {
   const [selectedType, setSelectedType] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("");
   const [loading, setLoading] = useState(true);
+  const [budgetData, setBudgetData] = useState(null);
+  const [budgetLoading, setBudgetLoading] = useState(true);
   const [themeMode, setThemeMode] = useState(
     document.documentElement.getAttribute("data-theme") || "light"
   );
@@ -124,6 +126,7 @@ function AnalyticsPage() {
   const [searchParams] = useSearchParams();
   const normalizedAccountId =
     selectedAccountId === ALL_ACCOUNTS_VALUE ? undefined : Number(selectedAccountId);
+  const budgetMonth = selectedMonth || new Date().toISOString().slice(0, 7);
 
   useEffect(() => {
     const observer = new MutationObserver(() => {
@@ -177,6 +180,35 @@ function AnalyticsPage() {
 
     fetchDashboardAnalytics();
   }, [navigate, normalizedAccountId, selectedMonth, startDate, endDate, selectedType, selectedCategory]);
+
+  useEffect(() => {
+    const fetchBudgetSnapshot = async () => {
+      try {
+        setBudgetLoading(true);
+        const response = await api.get("/budgets/", {
+          params: {
+            month: budgetMonth,
+            account_id: normalizedAccountId,
+          },
+        });
+        setBudgetData(response.data);
+      } catch (error) {
+        console.error("Failed to load budget snapshot:", error);
+
+        if (error.response?.status === 401) {
+          localStorage.removeItem("token");
+          navigate("/", { replace: true });
+          return;
+        }
+
+        setBudgetData(null);
+      } finally {
+        setBudgetLoading(false);
+      }
+    };
+
+    fetchBudgetSnapshot();
+  }, [budgetMonth, navigate, normalizedAccountId]);
 
   useEffect(() => {
     const section = searchParams.get("section");
@@ -234,6 +266,33 @@ function AnalyticsPage() {
   const availableCategories = useMemo(() => {
     return mergedCategoryBreakdown.map((item) => item.category);
   }, [mergedCategoryBreakdown]);
+
+  const budgetSummary = budgetData?.summary || {
+    total_budgeted: 0,
+    total_spent: 0,
+    total_remaining: 0,
+    over_budget_count: 0,
+    at_risk_count: 0,
+    on_track_count: 0,
+  };
+
+  const budgetWatchlist = useMemo(() => {
+    const items = budgetData?.budgets || [];
+    const statusOrder = {
+      over_budget: 0,
+      at_risk: 1,
+      on_track: 2,
+    };
+
+    const sortedItems = [...items].sort((a, b) => {
+      const statusDiff = statusOrder[a.status] - statusOrder[b.status];
+      if (statusDiff !== 0) return statusDiff;
+      return b.usage_percent - a.usage_percent;
+    });
+
+    const issues = sortedItems.filter((item) => item.status !== "on_track");
+    return (issues.length > 0 ? issues : sortedItems).slice(0, 3);
+  }, [budgetData]);
 
   const clearFilters = () => {
     setSelectedMonth("");
@@ -334,6 +393,13 @@ function AnalyticsPage() {
               onClick={() => navigate("/assistant")}
             >
               Assistant
+            </button>
+
+            <button
+              className="secondary-button"
+              onClick={() => navigate("/budgets")}
+            >
+              Budgets
             </button>
           </div>
         </div>
@@ -439,6 +505,116 @@ function AnalyticsPage() {
                 : "No expense data"}
             </p>
           </div>
+        </div>
+
+        <div className="dashboard-card">
+          <div className="section-header">
+            <h2>Budget Snapshot</h2>
+            <p>Monthly budget progress for {budgetMonth} in the current account scope.</p>
+          </div>
+
+          {budgetLoading ? (
+            <div className="empty-state">
+              <p>Loading budget snapshot...</p>
+            </div>
+          ) : budgetWatchlist.length === 0 ? (
+            <div className="empty-state">
+              <p>No budgets are set for {budgetMonth} in this scope yet.</p>
+              <button
+                className="secondary-button"
+                onClick={() => navigate(`/budgets?month=${budgetMonth}`)}
+              >
+                Create Budgets
+              </button>
+            </div>
+          ) : (
+            <>
+              <div className="summary-grid">
+                <div className="summary-card income-card">
+                  <span className="card-label">Budgeted</span>
+                  <p>${budgetSummary.total_budgeted.toFixed(2)}</p>
+                </div>
+
+                <div className="summary-card expense-card">
+                  <span className="card-label">Spent</span>
+                  <p>${budgetSummary.total_spent.toFixed(2)}</p>
+                </div>
+
+                <div className="summary-card balance-card">
+                  <span className="card-label">Remaining</span>
+                  <p>${budgetSummary.total_remaining.toFixed(2)}</p>
+                </div>
+
+                <div className="summary-card top-card">
+                  <span className="card-label">Watchlist</span>
+                  <p>{budgetSummary.over_budget_count} over / {budgetSummary.at_risk_count} at risk</p>
+                </div>
+              </div>
+
+              {budgetSummary.over_budget_count === 0 && budgetSummary.at_risk_count === 0 && (
+                <p className="account-summary-footnote">
+                  All budgets are on track right now. These are the categories closest to the limit.
+                </p>
+              )}
+
+              <div className="budget-list">
+                {budgetWatchlist.map((budget) => (
+                  <div key={`analytics-budget-${budget.id}`} className="budget-card">
+                    <div className="budget-card-top">
+                      <div>
+                        <h3>{formatCategoryName(budget.category)}</h3>
+                        <p>
+                          Budget ${budget.amount.toFixed(2)} - Spent ${budget.spent_amount.toFixed(2)}
+                        </p>
+                      </div>
+
+                      <div className="budget-card-actions">
+                        <span
+                          className={`budget-status ${
+                            budget.status === "over_budget"
+                              ? "budget-status-over"
+                              : budget.status === "at_risk"
+                              ? "budget-status-risk"
+                              : "budget-status-on-track"
+                          }`}
+                        >
+                          {budget.status === "over_budget"
+                            ? "Over budget"
+                            : budget.status === "at_risk"
+                            ? "At risk"
+                            : "On track"}
+                        </span>
+                        <button
+                          className="secondary-button"
+                          onClick={() =>
+                            navigate(`/budgets?month=${budgetMonth}&category=${encodeURIComponent(budget.category)}`)
+                          }
+                        >
+                          Open Budget
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="budget-progress-track">
+                      <div
+                        className={`budget-progress-fill budget-progress-${budget.status}`}
+                        style={{ width: `${Math.min(budget.usage_percent, 100)}%` }}
+                      />
+                    </div>
+
+                    <div className="budget-card-meta">
+                      <span>{budget.usage_percent.toFixed(1)}% used</span>
+                      <span>
+                        {budget.remaining_amount >= 0
+                          ? `$${budget.remaining_amount.toFixed(2)} remaining`
+                          : `$${Math.abs(budget.remaining_amount).toFixed(2)} over`}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
         </div>
 
         {normalizedAccountId === undefined && accountComparison.length > 1 && (

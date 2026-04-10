@@ -125,6 +125,16 @@ function AssistantPage() {
       return;
     }
 
+    if (action.page === "budgets") {
+      const params = new URLSearchParams();
+
+      if (action.month) params.set("month", action.month);
+      if (action.category) params.set("category", action.category);
+
+      navigate(`/budgets${params.toString() ? `?${params.toString()}` : ""}`);
+      return;
+    }
+
     if (action.page === "transactions") {
       const params = new URLSearchParams();
 
@@ -238,6 +248,13 @@ function AssistantPage() {
               onClick={() => navigate("/analytics")}
             >
               View Analytics
+            </button>
+
+            <button
+              className="secondary-button"
+              onClick={() => navigate("/budgets")}
+            >
+              Budgets
             </button>
           </div>
         </div>
