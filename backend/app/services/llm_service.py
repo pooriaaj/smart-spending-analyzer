@@ -152,6 +152,20 @@ Category context:
 - Top category share percent: {_safe_text(account_context.get("top_category_share_percent"))}
 - Fastest-growing category: {_safe_text(account_context.get("primary_driver"))}
 
+Focused category context:
+- Matched category: {_safe_text(account_context.get("focus_category"))}
+- Category type: {_safe_text(account_context.get("focus_category_type"))}
+- Total amount in scope: {_safe_text(account_context.get("focus_category_total_amount"))}
+- Current month: {_safe_text(account_context.get("focus_category_current_month"))}
+- Current month amount: {_safe_text(account_context.get("focus_category_current_month_amount"))}
+- Previous month: {_safe_text(account_context.get("focus_category_previous_month"))}
+- Previous month amount: {_safe_text(account_context.get("focus_category_previous_month_amount"))}
+- Change amount: {_safe_text(account_context.get("focus_category_change_amount"))}
+- Change percent: {_safe_text(account_context.get("focus_category_change_percent"))}
+- Current month share percent: {_safe_text(account_context.get("focus_category_share_percent"))}
+- Recent matching transactions:
+{_safe_text(account_context.get("focus_category_recent_transactions_text"))}
+
 Overspending alerts:
 {_safe_text(account_context.get("alerts_text"))}
 
@@ -273,6 +287,7 @@ def build_account_context(
     category_trends: dict[str, Any],
     overspending_alerts: dict[str, Any],
     recent_transactions: list[Any],
+    focus_category_context: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     primary_driver = None
     if category_trends.get("top_increases"):
@@ -297,6 +312,25 @@ def build_account_context(
     context["alerts_text"] = alerts_text
     context["recent_transactions_text"] = recent_transactions_text
     context["trend_summary_text"] = trend_summary_text
+
+    focus = focus_category_context or {}
+    focus_recent_transactions = focus.get("recent_transactions", [])
+    focus_recent_transactions_text = "\n".join(
+        f"- {tx.date} | {tx.type} | {tx.description} | ${tx.amount:.2f}"
+        for tx in focus_recent_transactions[:3]
+    ) or "- None"
+
+    context["focus_category"] = focus.get("category")
+    context["focus_category_type"] = focus.get("transaction_type")
+    context["focus_category_total_amount"] = focus.get("total_amount")
+    context["focus_category_current_month"] = focus.get("current_month")
+    context["focus_category_current_month_amount"] = focus.get("current_month_amount")
+    context["focus_category_previous_month"] = focus.get("previous_month")
+    context["focus_category_previous_month_amount"] = focus.get("previous_month_amount")
+    context["focus_category_change_amount"] = focus.get("change_amount")
+    context["focus_category_change_percent"] = focus.get("change_percent")
+    context["focus_category_share_percent"] = focus.get("current_share_percent")
+    context["focus_category_recent_transactions_text"] = focus_recent_transactions_text
     return context
 
 
@@ -315,6 +349,7 @@ def generate_llm_assistant_response(
     category_trends: dict[str, Any],
     overspending_alerts: dict[str, Any],
     recent_transactions: list[Any],
+    focus_category_context: dict[str, Any] | None = None,
     mode: str = "balanced",
 ) -> dict[str, Any] | None:
     if not llm_assistant_enabled():
@@ -325,6 +360,7 @@ def generate_llm_assistant_response(
         category_trends=category_trends,
         overspending_alerts=overspending_alerts,
         recent_transactions=recent_transactions,
+        focus_category_context=focus_category_context,
     )
 
     prompt = build_finance_prompt(

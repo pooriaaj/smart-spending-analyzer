@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import date
+import re
 from typing import Any
 
 from sqlalchemy import case, func
@@ -687,6 +688,254 @@ def format_currency(value: float) -> str:
     return f"${value:.2f}"
 
 
+def normalize_text_for_matching(value: str) -> str:
+    return re.sub(r"[^a-z0-9]+", " ", (value or "").lower()).strip()
+
+
+def get_distinct_categories(
+    db: Session,
+    user_id: int,
+    account_id: int | None = None,
+) -> list[str]:
+    query = db.query(Transaction.category).filter(Transaction.owner_id == user_id)
+
+    if account_id is not None:
+        query = query.filter(Transaction.account_id == account_id)
+
+    categories = {
+        (row[0] or "").strip()
+        for row in query.distinct().all()
+        if row[0] and str(row[0]).strip()
+    }
+
+    return sorted(
+        categories,
+        key=lambda item: (-len(normalize_text_for_matching(item)), item.lower()),
+    )
+
+
+def detect_focus_category(
+    question: str,
+    context_text: str,
+    categories: list[str],
+) -> str | None:
+    normalized_text = f" {normalize_text_for_matching(f'{context_text} {question}')} "
+
+    for category in categories:
+        normalized_category = normalize_text_for_matching(category)
+        if not normalized_category:
+            continue
+
+        variants = {normalized_category}
+        if normalized_category.endswith("ies") and len(normalized_category) > 3:
+            variants.add(f"{normalized_category[:-3]}y")
+        elif normalized_category.endswith("s") and len(normalized_category) > 1:
+            variants.add(normalized_category[:-1])
+
+        if any(f" {variant} " in normalized_text for variant in variants if variant):
+            return category
+
+    return None
+
+
+def build_category_focus_snapshot(
+    db: Session,
+    user_id: int,
+    category: str,
+    snapshot: dict[str, Any],
+    account_id: int | None = None,
+) -> dict[str, Any]:
+    overall_summary = get_summary(
+        db,
+        user_id,
+        category=category,
+        account_id=account_id,
+    )
+    focus_type = (
+        "income"
+        if overall_summary["total_income"] > overall_summary["total_expenses"]
+        else "expense"
+    )
+    total_amount = (
+        float(overall_summary["total_income"])
+        if focus_type == "income"
+        else float(overall_summary["total_expenses"])
+    )
+
+    current_month = snapshot.get("current_month")
+    previous_month = snapshot.get("previous_month")
+
+    current_summary = (
+        get_summary(
+            db,
+            user_id,
+            month=current_month,
+            category=category,
+            transaction_type=focus_type,
+            account_id=account_id,
+        )
+        if current_month
+        else {"total_income": 0.0, "total_expenses": 0.0}
+    )
+    previous_summary = (
+        get_summary(
+            db,
+            user_id,
+            month=previous_month,
+            category=category,
+            transaction_type=focus_type,
+            account_id=account_id,
+        )
+        if previous_month
+        else {"total_income": 0.0, "total_expenses": 0.0}
+    )
+
+    current_month_amount = (
+        float(current_summary["total_income"])
+        if focus_type == "income"
+        else float(current_summary["total_expenses"])
+    )
+    previous_month_amount = (
+        float(previous_summary["total_income"])
+        if focus_type == "income"
+        else float(previous_summary["total_expenses"])
+    )
+
+    change_amount = current_month_amount - previous_month_amount
+    change_percent = None
+    if previous_month_amount > 0:
+        change_percent = (change_amount / previous_month_amount) * 100
+
+    month_scope_summary = (
+        get_summary(
+            db,
+            user_id,
+            month=current_month,
+            transaction_type=focus_type,
+            account_id=account_id,
+        )
+        if current_month
+        else {"total_income": 0.0, "total_expenses": 0.0}
+    )
+    month_scope_total = (
+        float(month_scope_summary["total_income"])
+        if focus_type == "income"
+        else float(month_scope_summary["total_expenses"])
+    )
+    current_share_percent = None
+    if month_scope_total > 0 and current_month_amount > 0:
+        current_share_percent = (current_month_amount / month_scope_total) * 100
+
+    recent_transactions = get_transactions_for_category(
+        db,
+        user_id,
+        category,
+        account_id=account_id,
+        limit=3,
+    )
+
+    return {
+        "category": category,
+        "transaction_type": focus_type,
+        "total_amount": total_amount,
+        "current_month": current_month,
+        "previous_month": previous_month,
+        "current_month_amount": current_month_amount,
+        "previous_month_amount": previous_month_amount,
+        "change_amount": change_amount,
+        "change_percent": change_percent,
+        "current_share_percent": current_share_percent,
+        "recent_transactions": recent_transactions,
+        "is_top_category": snapshot.get("top_category") == category,
+    }
+
+
+def build_category_focus_supporting_points(
+    focus_snapshot: dict[str, Any],
+) -> list[str]:
+    category = focus_snapshot["category"]
+    current_month = focus_snapshot["current_month"]
+    previous_month = focus_snapshot["previous_month"]
+
+    points = [
+        f"{category} total in this scope: {format_currency(focus_snapshot['total_amount'])}",
+    ]
+
+    if current_month:
+        points.append(
+            f"{current_month}: {format_currency(focus_snapshot['current_month_amount'])}"
+        )
+
+    if previous_month and focus_snapshot["previous_month_amount"] > 0:
+        direction = "up" if focus_snapshot["change_amount"] >= 0 else "down"
+        points.append(
+            f"Month-over-month: {direction} {format_currency(abs(focus_snapshot['change_amount']))} from {previous_month}"
+        )
+
+    if focus_snapshot["current_share_percent"] is not None:
+        share_label = "income" if focus_snapshot["transaction_type"] == "income" else "spending"
+        points.append(
+            f"{category} makes up {focus_snapshot['current_share_percent']:.1f}% of current-month {share_label}"
+        )
+
+    if focus_snapshot["recent_transactions"]:
+        recent_text = ", ".join(
+            f"{tx.description} ({format_currency(tx.amount)})"
+            for tx in focus_snapshot["recent_transactions"]
+        )
+        points.append(f"Recent matching transactions: {recent_text}")
+
+    return points[:5]
+
+
+def build_category_focus_answer(
+    intent: str,
+    mode: str,
+    focus_snapshot: dict[str, Any],
+    top_category: str | None,
+) -> str:
+    category = focus_snapshot["category"]
+    total_amount = format_currency(focus_snapshot["total_amount"])
+    current_month = focus_snapshot["current_month"]
+    current_month_amount = format_currency(focus_snapshot["current_month_amount"])
+    change_amount = focus_snapshot["change_amount"]
+    change_percent = focus_snapshot["change_percent"]
+    is_expense = focus_snapshot["transaction_type"] == "expense"
+    recent_transactions = focus_snapshot["recent_transactions"]
+
+    change_text = ""
+    if current_month:
+        change_text = f" In {current_month}, it is {current_month_amount}."
+    if change_percent is not None:
+        direction = "up" if change_amount >= 0 else "down"
+        change_text += f" That is {direction} {abs(change_percent):.1f}% from the previous month."
+
+    if intent == "category_transactions" or intent == "recent":
+        recent_hint = (
+            f" Recent items include {', '.join(tx.description for tx in recent_transactions[:2])}."
+            if recent_transactions
+            else ""
+        )
+        if mode == "strict":
+            return f"{category} is where the detail is.{change_text or f' It totals {total_amount} in this scope.'}{recent_hint}"
+        if mode == "coach":
+            return f"{category} is a good place to zoom in.{change_text or f' It totals {total_amount} in this scope.'}{recent_hint}"
+        return f"Here is the focused view for {category}. It totals {total_amount} in this scope.{change_text}{recent_hint}"
+
+    if intent in {"saving_advice", "spending_change", "driver", "alerts"} and is_expense:
+        if mode == "strict":
+            return f"{category} is worth reviewing closely. It totals {total_amount} in this scope.{change_text}"
+        if mode == "coach":
+            return f"{category} looks like a practical place to focus. It totals {total_amount} in this scope.{change_text}"
+        return f"{category} is a meaningful spending category here. It totals {total_amount} in this scope.{change_text}"
+
+    if focus_snapshot["is_top_category"]:
+        return f"{category} is currently your top category in this scope at {total_amount}.{change_text}"
+
+    comparator = f" {top_category} is currently higher." if top_category and top_category != category else ""
+    return f"{category} totals {total_amount} in this scope.{change_text}{comparator}"
+
+
 def classify_question(question: str, context_text: str) -> str:
     text = f"{context_text} {question}".lower().strip()
 
@@ -762,11 +1011,15 @@ def build_assistant_actions(
     snapshot: dict[str, Any],
     intent: str,
     driver_category: str | None = None,
+    focus_category: str | None = None,
+    focus_transaction_type: str = "expense",
 ) -> list[dict[str, Any]]:
     actions: list[dict[str, Any]] = []
     top_category = snapshot["top_category"]
     current_month = snapshot["current_month"]
-    target_category = driver_category or top_category
+    target_category = focus_category or driver_category or top_category
+    target_transaction_type = focus_transaction_type if focus_category else "expense"
+    target_label_suffix = "transactions" if target_transaction_type == "income" else "expenses"
 
     if intent == "balance":
         actions.append(
@@ -782,10 +1035,10 @@ def build_assistant_actions(
         if target_category:
             actions.append(
                 {
-                    "label": f"Open {target_category} expenses",
+                    "label": f"Open {target_category} {target_label_suffix}",
                     "page": "transactions",
                     "category": target_category,
-                    "transaction_type": "expense",
+                    "transaction_type": target_transaction_type,
                 }
             )
             actions.append(
@@ -814,10 +1067,10 @@ def build_assistant_actions(
         if target_category:
             actions.append(
                 {
-                    "label": f"Review {target_category} expenses",
+                    "label": f"Review {target_category} {target_label_suffix}",
                     "page": "transactions",
                     "category": target_category,
-                    "transaction_type": "expense",
+                    "transaction_type": target_transaction_type,
                     "month": current_month,
                 }
             )
@@ -836,7 +1089,7 @@ def build_assistant_actions(
                     "label": f"Review {target_category} transactions",
                     "page": "transactions",
                     "category": target_category,
-                    "transaction_type": "expense",
+                    "transaction_type": target_transaction_type,
                 }
             )
 
@@ -862,10 +1115,10 @@ def build_assistant_actions(
         if target_category:
             actions.append(
                 {
-                    "label": f"Inspect {target_category} expenses",
+                    "label": f"Inspect {target_category} {target_label_suffix}",
                     "page": "transactions",
                     "category": target_category,
-                    "transaction_type": "expense",
+                    "transaction_type": target_transaction_type,
                     "month": current_month,
                 }
             )
@@ -887,7 +1140,34 @@ def build_assistant_actions(
         )
 
     elif intent == "recent":
-        actions.append({"label": "View all transactions", "page": "transactions"})
+        if target_category:
+            actions.append(
+                {
+                    "label": f"Open {target_category} transactions",
+                    "page": "transactions",
+                    "category": target_category,
+                    "transaction_type": target_transaction_type,
+                }
+            )
+        else:
+            actions.append({"label": "View all transactions", "page": "transactions"})
+
+    elif intent == "general" and target_category:
+        actions.append(
+            {
+                "label": f"Open {target_category} transactions",
+                "page": "transactions",
+                "category": target_category,
+                "transaction_type": target_transaction_type,
+            }
+        )
+        actions.append(
+            {
+                "label": "Open category trends",
+                "page": "analytics",
+                "section": "trends",
+            }
+        )
 
     return actions[:3]
 
@@ -900,7 +1180,20 @@ def generate_mode_intro(mode: str) -> str:
     return ""
 
 
-def generate_dynamic_followups(intent: str, mode: str, top_category: str | None, driver_category: str | None) -> list[str]:
+def generate_dynamic_followups(
+    intent: str,
+    mode: str,
+    top_category: str | None,
+    driver_category: str | None,
+    focus_category: str | None = None,
+) -> list[str]:
+    if focus_category:
+        return [
+            f"Show me recent {focus_category} transactions",
+            f"How has {focus_category} changed month to month?",
+            f"How can I improve my {focus_category} spending?",
+        ]
+
     if mode == "strict":
         if intent in {"spending_change", "driver", "alerts"}:
             return [
@@ -1009,6 +1302,13 @@ def generate_assistant_response(
     q = (question or "").strip().lower()
     context_text = extract_recent_context(history)
     intent = classify_question(q, context_text)
+    focus_category = detect_focus_category(
+        question=question,
+        context_text=context_text,
+        categories=get_distinct_categories(db, user_id, account_id=account_id),
+    )
+    if focus_category and "transaction" in q:
+        intent = "category_transactions"
 
     total_income = snapshot["total_income"]
     total_expenses = snapshot["total_expenses"]
@@ -1023,6 +1323,18 @@ def generate_assistant_response(
     if category_trends.get("top_increases"):
         primary_driver = category_trends["top_increases"][0]["category"]
 
+    focus_snapshot = (
+        build_category_focus_snapshot(
+            db,
+            user_id,
+            focus_category,
+            snapshot,
+            account_id=account_id,
+        )
+        if focus_category
+        else None
+    )
+
     llm_result = generate_llm_assistant_response(
         question=question,
         conversation_context=context_text,
@@ -1030,6 +1342,7 @@ def generate_assistant_response(
         category_trends=category_trends,
         overspending_alerts=overspending_alerts,
         recent_transactions=recent_transactions,
+        focus_category_context=focus_snapshot,
         mode=mode,
     )
 
@@ -1045,8 +1358,16 @@ def generate_assistant_response(
                 {
                     "label": action_label or "Review transactions",
                     "page": "transactions",
-                    "category": action_target if action_target and action_target.lower() != "none" else primary_driver or top_category,
-                    "transaction_type": "expense",
+                    "category": (
+                        action_target
+                        if action_target and action_target.lower() != "none"
+                        else focus_category or primary_driver or top_category
+                    ),
+                    "transaction_type": (
+                        focus_snapshot["transaction_type"]
+                        if focus_snapshot
+                        else "expense"
+                    ),
                     "month": current_month,
                 }
             )
@@ -1095,6 +1416,7 @@ def generate_assistant_response(
             mode=mode,
             top_category=top_category,
             driver_category=primary_driver,
+            focus_category=focus_category,
         )
 
         return {
@@ -1121,6 +1443,7 @@ def generate_assistant_response(
                 mode=mode,
                 top_category=None,
                 driver_category=None,
+                focus_category=focus_category,
             ),
             "suggested_actions": [],
             "scope_label": scope_label,
@@ -1139,8 +1462,45 @@ def generate_assistant_response(
                 mode=mode,
                 top_category=top_category,
                 driver_category=primary_driver,
+                focus_category=focus_category,
             ),
             "suggested_actions": [],
+            "scope_label": scope_label,
+        }
+
+    if focus_snapshot and intent in {
+        "category_transactions",
+        "recent",
+        "saving_advice",
+        "spending_change",
+        "driver",
+        "alerts",
+        "top_category",
+        "general",
+        "summary",
+    }:
+        return {
+            "answer": build_category_focus_answer(
+                intent=intent,
+                mode=mode,
+                focus_snapshot=focus_snapshot,
+                top_category=top_category,
+            ),
+            "supporting_points": build_category_focus_supporting_points(focus_snapshot),
+            "suggested_followups": generate_dynamic_followups(
+                intent=intent,
+                mode=mode,
+                top_category=top_category,
+                driver_category=primary_driver,
+                focus_category=focus_category,
+            ),
+            "suggested_actions": build_assistant_actions(
+                snapshot=snapshot,
+                intent="recent" if intent == "category_transactions" else intent,
+                driver_category=primary_driver,
+                focus_category=focus_category,
+                focus_transaction_type=focus_snapshot["transaction_type"],
+            ),
             "scope_label": scope_label,
         }
 
@@ -1165,6 +1525,7 @@ def generate_assistant_response(
                     mode=mode,
                     top_category=top_category,
                     driver_category=primary_driver,
+                    focus_category=focus_category,
                 ),
                 "suggested_actions": [],
                 "scope_label": scope_label,
@@ -1190,6 +1551,7 @@ def generate_assistant_response(
                 mode=mode,
                 top_category=top_category,
                 driver_category=primary_driver,
+                focus_category=focus_category,
             ),
             "suggested_actions": [
                 {
@@ -1222,6 +1584,7 @@ def generate_assistant_response(
                     mode=mode,
                     top_category=top_category,
                     driver_category=primary_driver,
+                    focus_category=focus_category,
                 ),
                 "suggested_actions": [],
                 "scope_label": scope_label,
@@ -1252,6 +1615,7 @@ def generate_assistant_response(
                 mode=mode,
                 top_category=top_category,
                 driver_category=primary_driver,
+                focus_category=focus_category,
             ),
             "suggested_actions": [
                 {
@@ -1358,11 +1722,14 @@ def generate_assistant_response(
                 mode=mode,
                 top_category=top_category,
                 driver_category=primary_driver,
+                focus_category=focus_category,
             ),
             "suggested_actions": build_assistant_actions(
                 snapshot=snapshot,
                 intent=intent,
                 driver_category=primary_driver,
+                focus_category=focus_category,
+                focus_transaction_type=focus_snapshot["transaction_type"] if focus_snapshot else "expense",
             ),
             "scope_label": scope_label,
         }
@@ -1378,6 +1745,7 @@ def generate_assistant_response(
             mode=mode,
             top_category=top_category,
             driver_category=primary_driver,
+            focus_category=focus_category,
         ),
         "suggested_actions": [],
         "scope_label": scope_label,

@@ -1,10 +1,16 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import api, { handleApiAuthError } from "../services/api";
 import AccountSelector from "../components/AccountSelector";
 import { ALL_ACCOUNTS_VALUE, getSelectedAccountId } from "../services/accountStorage";
 
 function AssistantPage() {
+  const initialAssistantMessage = {
+    role: "assistant",
+    content:
+      "Hi - I'm your financial assistant. Ask me about your balance, spending changes, alerts, recent transactions, categories, or savings.",
+    data: null,
+  };
   const [question, setQuestion] = useState("");
   const [assistantMode, setAssistantMode] = useState("balanced");
   const [selectedAccountId, setSelectedAccountId] = useState(getSelectedAccountId());
@@ -22,6 +28,7 @@ function AssistantPage() {
   const [error, setError] = useState("");
 
   const navigate = useNavigate();
+  const didMountScopeRef = useRef(false);
   const normalizedAccountId =
     selectedAccountId === ALL_ACCOUNTS_VALUE ? undefined : Number(selectedAccountId);
 
@@ -44,6 +51,17 @@ function AssistantPage() {
   useEffect(() => {
     localStorage.setItem("assistantMode", assistantMode);
   }, [assistantMode]);
+
+  useEffect(() => {
+    if (!didMountScopeRef.current) {
+      didMountScopeRef.current = true;
+      return;
+    }
+
+    setMessages([initialAssistantMessage]);
+    setQuestion("");
+    setError("");
+  }, [selectedAccountId]);
 
   useEffect(() => {
     const loadSuggestions = async () => {

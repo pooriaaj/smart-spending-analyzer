@@ -204,6 +204,54 @@ class AnalyticsRouteTest(unittest.TestCase):
         self.assertIn("$1050.00", payload["answer"])
         self.assertIn("Balance: $1050.00", payload["supporting_points"])
 
+    def test_assistant_response_focuses_on_explicit_category(self) -> None:
+        self.seed_transactions()
+
+        with patch("app.services.analytics_service.generate_llm_assistant_response", return_value=None):
+            response = self.client.post(
+                "/analytics/assistant-response",
+                json={
+                    "question": "How is groceries looking?",
+                    "history": [],
+                    "mode": "balanced",
+                    "account_id": self.chequing_account_id,
+                },
+            )
+
+        self.assertEqual(response.status_code, 200, response.text)
+        payload = response.json()
+
+        self.assertIn("Groceries", payload["answer"])
+        self.assertIn("Groceries total in this scope: $250.00", payload["supporting_points"])
+        self.assertTrue(
+            any("FreshCo ($100.00)" in item for item in payload["supporting_points"])
+        )
+        self.assertEqual(payload["suggested_actions"][0]["category"], "Groceries")
+
+    def test_assistant_response_shows_recent_transactions_for_focused_category(self) -> None:
+        self.seed_transactions()
+
+        with patch("app.services.analytics_service.generate_llm_assistant_response", return_value=None):
+            response = self.client.post(
+                "/analytics/assistant-response",
+                json={
+                    "question": "Show me groceries transactions",
+                    "history": [],
+                    "mode": "balanced",
+                    "account_id": self.chequing_account_id,
+                },
+            )
+
+        self.assertEqual(response.status_code, 200, response.text)
+        payload = response.json()
+
+        self.assertIn("Here is the focused view for Groceries.", payload["answer"])
+        self.assertTrue(
+            any("Costco ($150.00)" in item and "FreshCo ($100.00)" in item for item in payload["supporting_points"])
+        )
+        self.assertEqual(payload["suggested_actions"][0]["category"], "Groceries")
+        self.assertEqual(payload["suggested_actions"][0]["page"], "transactions")
+
 
 if __name__ == "__main__":
     unittest.main()
