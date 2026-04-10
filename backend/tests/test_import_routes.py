@@ -13,7 +13,7 @@ from sqlalchemy.pool import StaticPool
 
 from app.database import Base
 from app.dependencies import get_current_user, get_db
-from app.models import Account, Transaction, User
+from app.models import Account, CategoryMemory, Transaction, User
 from app.routes.transaction_routes import router as transaction_router
 from app.services import pdf_statement_service
 
@@ -123,6 +123,7 @@ class SmartImportRouteTest(unittest.TestCase):
     def tearDown(self) -> None:
         with self.session_local() as session:
             session.query(Transaction).delete()
+            session.query(CategoryMemory).delete()
             session.commit()
 
     def test_import_file_returns_rbc_preview_from_pdf_upload(self) -> None:
@@ -356,6 +357,134 @@ class SmartImportRouteTest(unittest.TestCase):
                 )
             },
         )
+
+    def test_create_transaction_saves_category_memory_for_future_suggestions(self) -> None:
+        categorized_response = self.client.post(
+            "/transactions/",
+            json={
+                "amount": 18.25,
+                "category": "restaurant",
+                "description": "Chipotle Yorkdale",
+                "date": "2025-01-03",
+                "type": "expense",
+                "account_id": self.account_id,
+            },
+        )
+        self.assertEqual(categorized_response.status_code, 200, categorized_response.text)
+
+        uncategorized_response = self.client.post(
+            "/transactions/",
+            json={
+                "amount": 16.10,
+                "category": "other",
+                "description": "Chipotle Union",
+                "date": "2025-01-04",
+                "type": "expense",
+                "account_id": self.account_id,
+            },
+        )
+        self.assertEqual(uncategorized_response.status_code, 200, uncategorized_response.text)
+
+        preview_response = self.client.get(
+            "/transactions/categorize/bulk-preview",
+            params={"account_id": self.account_id},
+        )
+        self.assertEqual(preview_response.status_code, 200, preview_response.text)
+        suggestions = preview_response.json()["suggestions"]
+        self.assertEqual(len(suggestions), 1)
+        self.assertEqual(suggestions[0]["description"], "Chipotle Union")
+        self.assertEqual(suggestions[0]["suggested_category"], "restaurant")
+
+        with self.session_local() as session:
+            memories = session.query(CategoryMemory).filter(CategoryMemory.owner_id == self.user_id).all()
+
+        self.assertTrue(any(memory.keyword == "chipotle" for memory in memories))
+
+    def test_confirm_preview_import_saves_category_memory_for_future_suggestions(self) -> None:
+        confirm_response = self.client.post(
+            "/transactions/import/confirm-preview",
+            json={
+                "account_id": self.account_id,
+                "rows": [
+                    {
+                        "date": "2025-01-03",
+                        "description": "Sephora Eaton",
+                        "amount": 42.15,
+                        "type": "expense",
+                        "category": "personal",
+                    }
+                ],
+            },
+        )
+        self.assertEqual(confirm_response.status_code, 200, confirm_response.text)
+
+        uncategorized_response = self.client.post(
+            "/transactions/",
+            json={
+                "amount": 28.40,
+                "category": "other",
+                "description": "Sephora Yorkdale",
+                "date": "2025-01-04",
+                "type": "expense",
+                "account_id": self.account_id,
+            },
+        )
+        self.assertEqual(uncategorized_response.status_code, 200, uncategorized_response.text)
+
+        preview_response = self.client.get(
+            "/transactions/categorize/bulk-preview",
+            params={"account_id": self.account_id},
+        )
+        self.assertEqual(preview_response.status_code, 200, preview_response.text)
+        suggestions = preview_response.json()["suggestions"]
+        self.assertEqual(len(suggestions), 1)
+        self.assertEqual(suggestions[0]["description"], "Sephora Yorkdale")
+        self.assertEqual(suggestions[0]["suggested_category"], "personal")
+
+    def test_normalize_categories_route_backfills_category_memory(self) -> None:
+        with self.session_local() as session:
+            session.add_all(
+                [
+                    Transaction(
+                        amount=33.50,
+                        category="Personal",
+                        description="Aesop Queen",
+                        date=date(2025, 1, 3),
+                        type="expense",
+                        owner_id=self.user_id,
+                        account_id=self.account_id,
+                    ),
+                    Transaction(
+                        amount=19.25,
+                        category="other",
+                        description="Aesop King",
+                        date=date(2025, 1, 4),
+                        type="expense",
+                        owner_id=self.user_id,
+                        account_id=self.account_id,
+                    ),
+                ]
+            )
+            session.commit()
+
+        normalize_response = self.client.post(
+            "/transactions/normalize-categories",
+            params={"account_id": self.account_id},
+        )
+        self.assertEqual(normalize_response.status_code, 200, normalize_response.text)
+        payload = normalize_response.json()
+        self.assertEqual(payload["updated_count"], 1)
+        self.assertGreaterEqual(payload["memory_entries_created"], 1)
+
+        preview_response = self.client.get(
+            "/transactions/categorize/bulk-preview",
+            params={"account_id": self.account_id},
+        )
+        self.assertEqual(preview_response.status_code, 200, preview_response.text)
+        suggestions = preview_response.json()["suggestions"]
+        self.assertEqual(len(suggestions), 1)
+        self.assertEqual(suggestions[0]["description"], "Aesop King")
+        self.assertEqual(suggestions[0]["suggested_category"], "personal")
 
     def test_import_file_supports_numeric_period_and_month_first_dates(self) -> None:
         pdf_bytes = build_text_pdf(

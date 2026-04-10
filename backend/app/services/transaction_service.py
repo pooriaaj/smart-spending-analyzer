@@ -74,6 +74,49 @@ CATEGORY_ALIASES = {
     "car_maintenance": "car maintenance",
 }
 
+CATEGORY_MEMORY_STOPWORDS = {
+    "account",
+    "authorized",
+    "bank",
+    "bill",
+    "canada",
+    "card",
+    "cash",
+    "chequing",
+    "credit",
+    "debit",
+    "deposit",
+    "etransfer",
+    "e",
+    "fee",
+    "from",
+    "funds",
+    "inc",
+    "international",
+    "interac",
+    "internet",
+    "ltd",
+    "memo",
+    "monthly",
+    "online",
+    "payment",
+    "payroll",
+    "pos",
+    "preauthorized",
+    "purchase",
+    "recurring",
+    "ref",
+    "refund",
+    "sent",
+    "service",
+    "statement",
+    "store",
+    "transfer",
+    "txn",
+    "visa",
+    "withdrawal",
+}
+
 
 def decode_file_bytes(file_bytes: bytes) -> str:
     for encoding in SUPPORTED_ENCODINGS:
@@ -151,6 +194,95 @@ def normalize_category_name(value: str | None) -> str:
         return singular_map[cleaned]
 
     return cleaned
+
+
+def should_store_category_memory(category: str | None) -> bool:
+    normalized = normalize_category_name(category)
+    return normalized not in UNCATEGORIZED_VALUES
+
+
+def derive_category_memory_keywords(description: str) -> list[str]:
+    normalized_description = normalize_description(description).lower()
+    normalized_description = re.sub(r"[^a-z0-9& ]+", " ", normalized_description)
+    normalized_description = re.sub(r"\s+", " ", normalized_description).strip()
+    if not normalized_description:
+        return []
+
+    tokens = normalized_description.split()
+    significant_tokens = [
+        token
+        for token in tokens
+        if len(token) >= 3 and not token.isdigit() and token not in CATEGORY_MEMORY_STOPWORDS
+    ]
+    if not significant_tokens:
+        return []
+
+    keywords: list[str] = []
+    primary_keyword = significant_tokens[0]
+    if len(significant_tokens) >= 2:
+        combined = f"{significant_tokens[0]} {significant_tokens[1]}".strip()
+        if len(combined) <= 40:
+            keywords.append(combined)
+    keywords.append(primary_keyword)
+
+    deduped_keywords: list[str] = []
+    seen = set()
+    for keyword in keywords:
+        cleaned_keyword = re.sub(r"\s+", " ", keyword).strip()
+        if not cleaned_keyword or cleaned_keyword in seen:
+            continue
+        seen.add(cleaned_keyword)
+        deduped_keywords.append(cleaned_keyword)
+
+    return deduped_keywords
+
+
+def save_category_memory(
+    db: Session,
+    owner_id: int,
+    description: str,
+    category: str,
+    tx_type: str,
+) -> dict[str, int]:
+    normalized_category = normalize_category_name(category)
+    if not should_store_category_memory(normalized_category):
+        return {"created": 0, "updated": 0}
+
+    keywords = derive_category_memory_keywords(description)
+    if not keywords:
+        return {"created": 0, "updated": 0}
+
+    created = 0
+    updated = 0
+
+    for keyword in keywords:
+        existing = (
+            db.query(CategoryMemory)
+            .filter(
+                CategoryMemory.owner_id == owner_id,
+                CategoryMemory.keyword == keyword,
+                CategoryMemory.transaction_type == tx_type,
+            )
+            .first()
+        )
+
+        if existing:
+            if existing.category != normalized_category:
+                existing.category = normalized_category
+                updated += 1
+            continue
+
+        db.add(
+            CategoryMemory(
+                keyword=keyword,
+                category=normalized_category,
+                transaction_type=tx_type,
+                owner_id=owner_id,
+            )
+        )
+        created += 1
+
+    return {"created": created, "updated": updated}
 
 
 def sniff_csv_dialect(text: str) -> csv.Dialect:
@@ -432,6 +564,8 @@ def apply_bulk_categories(
     suggested_category_map: dict[int, str],
 ) -> int:
     updated_count = 0
+    memory_created = 0
+    memory_updated = 0
 
     transactions = (
         db.query(Transaction)
@@ -444,8 +578,17 @@ def apply_bulk_categories(
         if new_category and transaction.category != new_category:
             transaction.category = new_category
             updated_count += 1
+            memory_stats = save_category_memory(
+                db=db,
+                owner_id=owner_id,
+                description=transaction.description,
+                category=new_category,
+                tx_type=transaction.type,
+            )
+            memory_created += memory_stats["created"]
+            memory_updated += memory_stats["updated"]
 
-    if updated_count > 0:
+    if updated_count > 0 or memory_created > 0 or memory_updated > 0:
         db.commit()
 
     return updated_count
@@ -465,6 +608,8 @@ def normalize_existing_categories_for_user(
 
     updated_count = 0
     changes: dict[str, str] = {}
+    memory_created = 0
+    memory_updated = 0
 
     for transaction in transactions:
         old_category = transaction.category or "other"
@@ -476,10 +621,22 @@ def normalize_existing_categories_for_user(
             if old_category not in changes:
                 changes[old_category] = new_category
 
-    if updated_count > 0:
+        memory_stats = save_category_memory(
+            db=db,
+            owner_id=owner_id,
+            description=transaction.description,
+            category=new_category,
+            tx_type=transaction.type,
+        )
+        memory_created += memory_stats["created"]
+        memory_updated += memory_stats["updated"]
+
+    if updated_count > 0 or memory_created > 0 or memory_updated > 0:
         db.commit()
 
     return {
         "updated_count": updated_count,
         "changes": changes,
+        "memory_entries_created": memory_created,
+        "memory_entries_updated": memory_updated,
     }

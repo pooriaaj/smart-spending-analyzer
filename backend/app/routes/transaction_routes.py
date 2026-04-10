@@ -28,6 +28,7 @@ from app.services.transaction_service import (
     get_uncategorized_candidates,
     normalize_category_name,
     normalize_existing_categories_for_user,
+    save_category_memory,
 )
 from app.services.unified_import_service import process_smart_import
 
@@ -72,6 +73,13 @@ def create_transaction(
     )
 
     db.add(new_transaction)
+    save_category_memory(
+        db=db,
+        owner_id=current_user.id,
+        description=transaction.description,
+        category=transaction.category,
+        tx_type=transaction.type,
+    )
     db.commit()
     db.refresh(new_transaction)
     return new_transaction
@@ -104,6 +112,13 @@ def update_transaction(
     transaction.type = updated_data.type
     transaction.account_id = updated_data.account_id
 
+    save_category_memory(
+        db=db,
+        owner_id=current_user.id,
+        description=updated_data.description,
+        category=updated_data.category,
+        tx_type=updated_data.type,
+    )
     db.commit()
     db.refresh(transaction)
     return transaction
@@ -226,6 +241,13 @@ def confirm_preview_import(
                 account_id=payload.account_id,
             )
             db.add(transaction)
+            save_category_memory(
+                db=db,
+                owner_id=current_user.id,
+                description=row.description,
+                category=normalized_category,
+                tx_type=row.type,
+            )
             imported += 1
         except Exception:
             invalid_rows_skipped += 1

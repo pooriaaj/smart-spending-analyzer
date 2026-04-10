@@ -15,6 +15,7 @@ function TransactionsPage() {
   const [bulkSuggestions, setBulkSuggestions] = useState([]);
   const [bulkLoading, setBulkLoading] = useState(false);
   const [bulkApplying, setBulkApplying] = useState(false);
+  const [normalizingCategories, setNormalizingCategories] = useState(false);
   const [bulkMessage, setBulkMessage] = useState("");
 
   const [editingId, setEditingId] = useState(null);
@@ -176,6 +177,35 @@ function TransactionsPage() {
     }
   };
 
+  const handleNormalizeCategories = async () => {
+    try {
+      setNormalizingCategories(true);
+      setBulkMessage("");
+
+      const response = await api.post("/transactions/normalize-categories", null, {
+        params: {
+          account_id: normalizedAccountId,
+        },
+      });
+
+      const updatedCount = response.data?.updated_count || 0;
+      const memoryCreated = response.data?.memory_entries_created || 0;
+      const memoryUpdated = response.data?.memory_entries_updated || 0;
+
+      setBulkMessage(
+        `Normalized ${updatedCount} transaction categor${updatedCount === 1 ? "y" : "ies"} and refreshed ${memoryCreated + memoryUpdated} saved memory pattern${memoryCreated + memoryUpdated === 1 ? "" : "s"}.`
+      );
+      setBulkSuggestions([]);
+      await fetchTransactions();
+    } catch (error) {
+      if (!handleApiAuthError(error, navigate)) {
+        setBulkMessage("Failed to normalize existing categories.");
+      }
+    } finally {
+      setNormalizingCategories(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="page-container dashboard-page">
@@ -222,7 +252,7 @@ function TransactionsPage() {
         <div className="filter-card">
           <div className="section-header">
             <h2>Smart Categorization</h2>
-            <p>Analyze transactions still labeled as Other, Misc, Uncategorized, or Unknown.</p>
+            <p>Analyze uncategorized rows and clean up legacy category labels so future suggestions stay consistent.</p>
           </div>
 
           <div className="smart-actions-row">
@@ -242,6 +272,15 @@ function TransactionsPage() {
               disabled={bulkApplying || bulkSuggestions.length === 0}
             >
               {bulkApplying ? "Applying..." : "Apply Suggested Categories"}
+            </button>
+
+            <button
+              type="button"
+              className="secondary-button"
+              onClick={handleNormalizeCategories}
+              disabled={normalizingCategories}
+            >
+              {normalizingCategories ? "Normalizing..." : "Normalize Existing Categories"}
             </button>
           </div>
 
