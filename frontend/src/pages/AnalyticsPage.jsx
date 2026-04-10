@@ -4,6 +4,11 @@ import api from "../services/api";
 import AccountSelector from "../components/AccountSelector";
 import { ALL_ACCOUNTS_VALUE, getSelectedAccountId } from "../services/accountStorage";
 import {
+  buildBudgetForecastSummary,
+  buildBudgetProjectionLabel,
+  getBudgetPriority,
+} from "../utils/budgetDisplay";
+import {
   BarChart,
   Bar,
   XAxis,
@@ -274,23 +279,28 @@ function AnalyticsPage() {
     over_budget_count: 0,
     at_risk_count: 0,
     on_track_count: 0,
+    projected_total_spent: 0,
+    projected_total_remaining: 0,
+    projected_over_budget_count: 0,
+    projected_at_risk_count: 0,
+    projected_on_track_count: 0,
   };
 
   const budgetWatchlist = useMemo(() => {
     const items = budgetData?.budgets || [];
-    const statusOrder = {
-      over_budget: 0,
-      at_risk: 1,
-      on_track: 2,
-    };
 
     const sortedItems = [...items].sort((a, b) => {
-      const statusDiff = statusOrder[a.status] - statusOrder[b.status];
-      if (statusDiff !== 0) return statusDiff;
-      return b.usage_percent - a.usage_percent;
+      const priorityDiff = getBudgetPriority(a) - getBudgetPriority(b);
+      if (priorityDiff !== 0) return priorityDiff;
+
+      const usageA = Math.max(a.usage_percent || 0, a.projected_usage_percent || 0);
+      const usageB = Math.max(b.usage_percent || 0, b.projected_usage_percent || 0);
+      return usageB - usageA;
     });
 
-    const issues = sortedItems.filter((item) => item.status !== "on_track");
+    const issues = sortedItems.filter(
+      (item) => item.status !== "on_track" || item.projected_status !== "on_track"
+    );
     return (issues.length > 0 ? issues : sortedItems).slice(0, 3);
   }, [budgetData]);
 
@@ -551,7 +561,12 @@ function AnalyticsPage() {
                 </div>
               </div>
 
-              {budgetSummary.over_budget_count === 0 && budgetSummary.at_risk_count === 0 && (
+              <p className="budget-forecast-banner">{buildBudgetForecastSummary(budgetSummary)}</p>
+
+              {budgetSummary.over_budget_count === 0 &&
+                budgetSummary.at_risk_count === 0 &&
+                budgetSummary.projected_over_budget_count === 0 &&
+                budgetSummary.projected_at_risk_count === 0 && (
                 <p className="account-summary-footnote">
                   All budgets are on track right now. These are the categories closest to the limit.
                 </p>
@@ -610,6 +625,15 @@ function AnalyticsPage() {
                           : `$${Math.abs(budget.remaining_amount).toFixed(2)} over`}
                       </span>
                     </div>
+
+                    {buildBudgetProjectionLabel(budget) && (
+                      <p className="budget-projection-metrics">
+                        {buildBudgetProjectionLabel(budget)}
+                      </p>
+                    )}
+                    {budget.projection_note && (
+                      <p className="budget-projection-note">{budget.projection_note}</p>
+                    )}
                   </div>
                 ))}
               </div>

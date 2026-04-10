@@ -3,6 +3,11 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import api, { handleApiAuthError } from "../services/api";
 import AccountSelector from "../components/AccountSelector";
 import { ALL_ACCOUNTS_VALUE, getSelectedAccountId } from "../services/accountStorage";
+import {
+  buildBudgetForecastSummary,
+  buildBudgetPaceLabel,
+  buildBudgetProjectionLabel,
+} from "../utils/budgetDisplay";
 
 function formatBudgetCategory(value) {
   if (!value || typeof value !== "string") return "";
@@ -26,34 +31,6 @@ function shiftMonthLabel(month, offset) {
   const shiftedYear = Math.floor(totalMonths / 12);
   const shiftedMonth = (totalMonths % 12) + 1;
   return `${shiftedYear.toString().padStart(4, "0")}-${shiftedMonth.toString().padStart(2, "0")}`;
-}
-
-function formatMoney(value) {
-  return `$${Number(value || 0).toFixed(2)}`;
-}
-
-function buildBudgetPaceLabel(budget) {
-  if (!budget) return "";
-
-  if (budget.days_remaining > 0 && budget.daily_allowance != null) {
-    const allowanceText =
-      budget.daily_allowance >= 0
-        ? `${formatMoney(budget.daily_allowance)}/day left`
-        : `${formatMoney(Math.abs(budget.daily_allowance))}/day over pace`;
-    const paceText =
-      budget.daily_pace != null ? ` Current pace: ${formatMoney(budget.daily_pace)}/day.` : "";
-    return `${allowanceText} for the next ${budget.days_remaining} day(s).${paceText}`;
-  }
-
-  if (budget.days_remaining === 0 && budget.daily_pace != null) {
-    return `Final average pace: ${formatMoney(budget.daily_pace)}/day across ${budget.days_total} day(s).`;
-  }
-
-  if (budget.days_elapsed === 0 && budget.daily_allowance != null) {
-    return `Planned average pace: ${formatMoney(budget.daily_allowance)}/day across ${budget.days_total} day(s).`;
-  }
-
-  return "";
 }
 
 function BudgetsPage() {
@@ -167,6 +144,11 @@ function BudgetsPage() {
     over_budget_count: 0,
     at_risk_count: 0,
     on_track_count: 0,
+    projected_total_spent: 0,
+    projected_total_remaining: 0,
+    projected_over_budget_count: 0,
+    projected_at_risk_count: 0,
+    projected_on_track_count: 0,
   };
 
   const budgetCards = budgetData?.budgets || [];
@@ -390,6 +372,10 @@ function BudgetsPage() {
           </div>
         </div>
 
+        {budgetCards.length > 0 && (
+          <p className="budget-forecast-banner">{buildBudgetForecastSummary(budgetSummary)}</p>
+        )}
+
         <div className="dashboard-card">
           <div className="section-header">
             <h2>Budget Tracking</h2>
@@ -451,6 +437,14 @@ function BudgetsPage() {
                       <p className="budget-pace-metrics">{buildBudgetPaceLabel(budget)}</p>
                     )}
                     {budget.pace_note && <p className="budget-pace-note">{budget.pace_note}</p>}
+                    {buildBudgetProjectionLabel(budget) && (
+                      <p className="budget-projection-metrics">
+                        {buildBudgetProjectionLabel(budget)}
+                      </p>
+                    )}
+                    {budget.projection_note && (
+                      <p className="budget-projection-note">{budget.projection_note}</p>
+                    )}
                   </div>
                 );
               })}

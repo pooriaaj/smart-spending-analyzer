@@ -3,6 +3,12 @@ import { useNavigate } from "react-router-dom";
 import api, { handleApiAuthError } from "../services/api";
 import AccountSelector from "../components/AccountSelector";
 import { ALL_ACCOUNTS_VALUE, getSelectedAccountId } from "../services/accountStorage";
+import {
+  buildBudgetForecastSummary,
+  buildBudgetPaceLabel,
+  buildBudgetProjectionLabel,
+  getBudgetPriority,
+} from "../utils/budgetDisplay";
 
 const CATEGORY_RULES = {
   groceries: ["walmart", "costco", "freshco", "nofrills", "grocery", "supermarket"],
@@ -25,34 +31,6 @@ function formatBudgetCategory(value) {
     .filter(Boolean)
     .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
     .join(" ");
-}
-
-function formatMoney(value) {
-  return `$${Number(value || 0).toFixed(2)}`;
-}
-
-function buildBudgetPaceLabel(budget) {
-  if (!budget) return "";
-
-  if (budget.days_remaining > 0 && budget.daily_allowance != null) {
-    const allowanceText =
-      budget.daily_allowance >= 0
-        ? `${formatMoney(budget.daily_allowance)}/day left`
-        : `${formatMoney(Math.abs(budget.daily_allowance))}/day over pace`;
-    const paceText =
-      budget.daily_pace != null ? ` Current pace: ${formatMoney(budget.daily_pace)}/day.` : "";
-    return `${allowanceText} for the next ${budget.days_remaining} day(s).${paceText}`;
-  }
-
-  if (budget.days_remaining === 0 && budget.daily_pace != null) {
-    return `Final average pace: ${formatMoney(budget.daily_pace)}/day across ${budget.days_total} day(s).`;
-  }
-
-  if (budget.days_elapsed === 0 && budget.daily_allowance != null) {
-    return `Planned average pace: ${formatMoney(budget.daily_allowance)}/day across ${budget.days_total} day(s).`;
-  }
-
-  return "";
 }
 
 function DashboardPage() {
@@ -152,20 +130,22 @@ function DashboardPage() {
     total_remaining: 0,
     over_budget_count: 0,
     at_risk_count: 0,
+    projected_total_spent: 0,
+    projected_total_remaining: 0,
+    projected_over_budget_count: 0,
+    projected_at_risk_count: 0,
   };
   const budgetWatchlist = useMemo(() => {
     const items = budgetData?.budgets || [];
-    const statusOrder = {
-      over_budget: 0,
-      at_risk: 1,
-      on_track: 2,
-    };
 
     return [...items]
       .sort((a, b) => {
-        const statusDiff = statusOrder[a.status] - statusOrder[b.status];
-        if (statusDiff !== 0) return statusDiff;
-        return b.usage_percent - a.usage_percent;
+        const priorityDiff = getBudgetPriority(a) - getBudgetPriority(b);
+        if (priorityDiff !== 0) return priorityDiff;
+
+        const usageA = Math.max(a.usage_percent || 0, a.projected_usage_percent || 0);
+        const usageB = Math.max(b.usage_percent || 0, b.projected_usage_percent || 0);
+        return usageB - usageA;
       })
       .slice(0, 3);
   }, [budgetData]);
@@ -408,6 +388,8 @@ function DashboardPage() {
                 </div>
               </div>
 
+              <p className="budget-forecast-banner">{buildBudgetForecastSummary(budgetSummary)}</p>
+
               <div className="budget-list">
                 {budgetWatchlist.map((budget) => (
                   <div key={`dashboard-budget-${budget.id}`} className="budget-card">
@@ -469,7 +451,15 @@ function DashboardPage() {
                     {buildBudgetPaceLabel(budget) && (
                       <p className="budget-pace-metrics">{buildBudgetPaceLabel(budget)}</p>
                     )}
+                    {buildBudgetProjectionLabel(budget) && (
+                      <p className="budget-projection-metrics">
+                        {buildBudgetProjectionLabel(budget)}
+                      </p>
+                    )}
                     {budget.pace_note && <p className="budget-pace-note">{budget.pace_note}</p>}
+                    {budget.projection_note && (
+                      <p className="budget-projection-note">{budget.projection_note}</p>
+                    )}
                   </div>
                 ))}
               </div>

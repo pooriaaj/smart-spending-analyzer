@@ -8,6 +8,11 @@ from sqlalchemy import case, func
 from sqlalchemy.orm import Query, Session
 
 from app.models import Account, BudgetPlan, Transaction
+from app.services.budget_metrics import (
+    build_budget_projection_context,
+    compute_budget_status,
+    get_default_budget_month,
+)
 from app.services.llm_service import generate_llm_assistant_response
 
 
@@ -372,26 +377,6 @@ def get_top_expense_category(
         "category": row.category,
         "total": float(row.total),
     }
-
-
-def get_default_budget_month() -> str:
-    return date.today().strftime("%Y-%m")
-
-
-def compute_budget_status(amount: float, spent_amount: float) -> tuple[float, float, str]:
-    remaining_amount = amount - spent_amount
-    usage_percent = (spent_amount / amount) * 100 if amount > 0 else 0.0
-
-    if spent_amount > amount:
-        status = "over_budget"
-    elif usage_percent >= 80:
-        status = "at_risk"
-    else:
-        status = "on_track"
-
-    return remaining_amount, usage_percent, status
-
-
 def get_budget_progress_snapshot(
     db: Session,
     user_id: int,
@@ -426,6 +411,11 @@ def get_budget_progress_snapshot(
             float(budget.amount),
             spent_amount,
         )
+        projection_context = build_budget_projection_context(
+            month=budget.month,
+            amount=float(budget.amount),
+            spent_amount=spent_amount,
+        )
         items.append(
             {
                 "id": budget.id,
@@ -435,6 +425,11 @@ def get_budget_progress_snapshot(
                 "remaining_amount": remaining_amount,
                 "usage_percent": usage_percent,
                 "status": status,
+                "projected_spent_amount": projection_context["projected_spent_amount"],
+                "projected_remaining_amount": projection_context["projected_remaining_amount"],
+                "projected_usage_percent": projection_context["projected_usage_percent"],
+                "projected_status": projection_context["projected_status"],
+                "projection_note": projection_context["projection_note"],
             }
         )
 
@@ -447,6 +442,14 @@ def get_budget_progress_snapshot(
             item["category"].lower(),
         ),
     )
+    projected_items_by_priority = sorted(
+        items,
+        key=lambda item: (
+            issue_priority.get(item["projected_status"], 3),
+            -(item["projected_usage_percent"] or 0.0),
+            item["category"].lower(),
+        ),
+    )
 
     total_budgeted = sum(item["amount"] for item in items)
     total_spent = sum(item["spent_amount"] for item in items)
@@ -454,6 +457,17 @@ def get_budget_progress_snapshot(
     over_budget_count = sum(1 for item in items if item["status"] == "over_budget")
     at_risk_count = sum(1 for item in items if item["status"] == "at_risk")
     on_track_count = sum(1 for item in items if item["status"] == "on_track")
+    projected_total_spent = sum(item["projected_spent_amount"] or 0.0 for item in items)
+    projected_total_remaining = sum(item["projected_remaining_amount"] or 0.0 for item in items)
+    projected_over_budget_count = sum(
+        1 for item in items if item["projected_status"] == "over_budget"
+    )
+    projected_at_risk_count = sum(
+        1 for item in items if item["projected_status"] == "at_risk"
+    )
+    projected_on_track_count = sum(
+        1 for item in items if item["projected_status"] == "on_track"
+    )
 
     return {
         "month": budget_month,
@@ -464,8 +478,14 @@ def get_budget_progress_snapshot(
         "over_budget_count": over_budget_count,
         "at_risk_count": at_risk_count,
         "on_track_count": on_track_count,
+        "projected_total_spent": projected_total_spent,
+        "projected_total_remaining": projected_total_remaining,
+        "projected_over_budget_count": projected_over_budget_count,
+        "projected_at_risk_count": projected_at_risk_count,
+        "projected_on_track_count": projected_on_track_count,
         "items": items,
         "issue_items": items_by_priority[:3],
+        "projected_issue_items": projected_items_by_priority[:3],
     }
 
 
@@ -1154,6 +1174,9 @@ def classify_question(question: str, context_text: str) -> str:
             "remaining budget",
             "budget limit",
             "close to the limit",
+            "budget forecast",
+            "projected to go over",
+            "projected budget",
         ]
     ):
         return "budget_status"
@@ -1424,7 +1447,7 @@ def generate_dynamic_followups(
     if intent == "budget_status":
         return [
             "Which budget is closest to the limit?",
-            "Show me the transactions behind it.",
+            "Which budget is projected to go over?",
             "How can I get back on track?",
         ]
 
@@ -1744,6 +1767,13 @@ def generate_assistant_response(
                 if focused_budget["remaining_amount"] >= 0
                 else f"{format_currency(abs(focused_budget['remaining_amount']))} over"
             )
+            projected_finish_text = (
+                f"Projected month-end: {format_currency(focused_budget['projected_spent_amount'])} spent, "
+                f"{format_currency(focused_budget['projected_remaining_amount'])} remaining"
+                if focused_budget["projected_remaining_amount"] >= 0
+                else f"Projected month-end: {format_currency(focused_budget['projected_spent_amount'])} spent, "
+                f"{format_currency(abs(focused_budget['projected_remaining_amount']))} over"
+            )
 
             if focused_budget["status"] == "over_budget":
                 if mode == "strict":
@@ -1783,11 +1813,28 @@ def generate_assistant_response(
                     f"You have used {focused_budget['usage_percent']:.1f}% of the budget so far."
                 )
 
+            if (
+                focused_budget["projected_status"] == "over_budget"
+                and focused_budget["status"] != "over_budget"
+            ):
+                answer += (
+                    f" At the current pace, it is projected to finish "
+                    f"{format_currency(abs(focused_budget['projected_remaining_amount']))} over budget."
+                )
+            elif (
+                focused_budget["projected_status"] == "at_risk"
+                and focused_budget["status"] == "on_track"
+            ):
+                answer += (
+                    f" At the current pace, it is projected to use "
+                    f"{focused_budget['projected_usage_percent']:.1f}% of the budget by month end."
+                )
+
             supporting_points = [
                 f"Budget: {format_currency(focused_budget['amount'])}",
                 f"Spent so far: {format_currency(focused_budget['spent_amount'])}",
                 remaining_text,
-                f"Usage: {focused_budget['usage_percent']:.1f}%",
+                projected_finish_text,
             ]
 
             if focus_snapshot and focus_snapshot["recent_transactions"]:
@@ -1796,6 +1843,8 @@ def generate_assistant_response(
                     for tx in focus_snapshot["recent_transactions"][:3]
                 )
                 supporting_points.append(f"Recent {focused_budget_label} transactions: {recent_text}")
+            else:
+                supporting_points.append(f"Usage: {focused_budget['usage_percent']:.1f}%")
 
             return {
                 "answer": answer,
@@ -1827,21 +1876,42 @@ def generate_assistant_response(
                 "scope_label": scope_label,
             }
 
-        lead_budget = (
-            budget_snapshot["issue_items"][0]
-            if budget_snapshot["issue_items"]
-            else None
+        use_projected_issue_view = (
+            budget_snapshot["over_budget_count"] == 0
+            and budget_snapshot["at_risk_count"] == 0
+            and (
+                budget_snapshot["projected_over_budget_count"] > 0
+                or budget_snapshot["projected_at_risk_count"] > 0
+            )
         )
+        issue_items = (
+            budget_snapshot["projected_issue_items"]
+            if use_projected_issue_view
+            else budget_snapshot["issue_items"]
+        )
+        lead_budget = issue_items[0] if issue_items else None
 
         if budget_snapshot["over_budget_count"] > 0:
             answer = (
                 f"You are tracking {budget_snapshot['budget_count']} budgets for {budget_month}, "
                 f"and {budget_snapshot['over_budget_count']} of them are already over budget."
             )
+        elif budget_snapshot["projected_over_budget_count"] > 0:
+            answer = (
+                f"Your budgets for {budget_month} are not over budget yet, but "
+                f"{budget_snapshot['projected_over_budget_count']} category budgets are projected "
+                "to finish over budget at the current pace."
+            )
         elif budget_snapshot["at_risk_count"] > 0:
             answer = (
                 f"Your budgets for {budget_month} are mostly intact, but {budget_snapshot['at_risk_count']} "
                 "category budgets are getting close to the limit."
+            )
+        elif budget_snapshot["projected_at_risk_count"] > 0:
+            answer = (
+                f"Your budgets for {budget_month} are still on track today, but "
+                f"{budget_snapshot['projected_at_risk_count']} category budgets are projected to get tight "
+                "if spending keeps this pace."
             )
         else:
             answer = (
@@ -1853,13 +1923,24 @@ def generate_assistant_response(
             f"Total budgeted: {format_currency(budget_snapshot['total_budgeted'])}",
             f"Total spent against budgets: {format_currency(budget_snapshot['total_spent'])}",
             f"Remaining budget room: {format_currency(budget_snapshot['total_remaining'])}",
+            (
+                f"Projected month-end room: {format_currency(budget_snapshot['projected_total_remaining'])}"
+                if budget_snapshot["projected_total_remaining"] >= 0
+                else f"Projected month-end overage: {format_currency(abs(budget_snapshot['projected_total_remaining']))}"
+            ),
         ]
 
-        for item in budget_snapshot["issue_items"]:
-            status_label = item["status"].replace("_", " ")
-            supporting_points.append(
-                f"{format_category_label(item['category'])}: {format_currency(item['spent_amount'])} spent vs {format_currency(item['amount'])} budget ({item['usage_percent']:.1f}% used, {status_label})"
-            )
+        for item in issue_items:
+            if use_projected_issue_view:
+                status_label = item["projected_status"].replace("_", " ")
+                supporting_points.append(
+                    f"{format_category_label(item['category'])}: projected {format_currency(item['projected_spent_amount'])} spent vs {format_currency(item['amount'])} budget ({item['projected_usage_percent']:.1f}% used, {status_label})"
+                )
+            else:
+                status_label = item["status"].replace("_", " ")
+                supporting_points.append(
+                    f"{format_category_label(item['category'])}: {format_currency(item['spent_amount'])} spent vs {format_currency(item['amount'])} budget ({item['usage_percent']:.1f}% used, {status_label})"
+                )
 
         suggested_actions = [
             {
@@ -2342,8 +2423,12 @@ def generate_assistant_suggestions(
     if budget_snapshot["budget_count"] > 0:
         if budget_snapshot["over_budget_count"] > 0:
             suggestions.append("Which category is over budget right now?")
+        elif budget_snapshot["projected_over_budget_count"] > 0:
+            suggestions.append("Which budget is projected to go over?")
         elif budget_snapshot["at_risk_count"] > 0:
             suggestions.append("Which budget is closest to the limit?")
+        elif budget_snapshot["projected_at_risk_count"] > 0:
+            suggestions.append("Which budget is projected to get tight?")
         else:
             suggestions.append("Am I on track with my budgets?")
 

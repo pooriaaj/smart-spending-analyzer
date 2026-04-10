@@ -385,7 +385,18 @@ class BudgetRouteTest(unittest.TestCase):
         )
 
         self.assertEqual(response.status_code, 200, response.text)
-        budget = response.json()["budgets"][0]
+        payload = response.json()
+        budget = payload["budgets"][0]
+        projected_spent = (155.0 / today.day) * days_total
+        projected_remaining = 310.0 - projected_spent
+        projected_usage_percent = (projected_spent / 310.0) * 100
+        expected_projected_status = (
+            "over_budget"
+            if projected_spent > 310.0
+            else "at_risk"
+            if projected_usage_percent >= 80
+            else "on_track"
+        )
 
         self.assertEqual(budget["days_total"], days_total)
         self.assertEqual(budget["days_elapsed"], today.day)
@@ -393,6 +404,20 @@ class BudgetRouteTest(unittest.TestCase):
         self.assertAlmostEqual(budget["daily_pace"], 155.0 / today.day, places=2)
         self.assertAlmostEqual(budget["daily_allowance"], 155.0 / days_remaining, places=2)
         self.assertIn("pace", budget["pace_note"].lower())
+        self.assertAlmostEqual(budget["projected_spent_amount"], projected_spent, places=2)
+        self.assertAlmostEqual(budget["projected_remaining_amount"], projected_remaining, places=2)
+        self.assertEqual(budget["projected_status"], expected_projected_status)
+        self.assertIn("projected", budget["projection_note"].lower())
+        self.assertAlmostEqual(
+            payload["summary"]["projected_total_spent"],
+            projected_spent,
+            places=2,
+        )
+        self.assertAlmostEqual(
+            payload["summary"]["projected_total_remaining"],
+            projected_remaining,
+            places=2,
+        )
 
     def test_budget_route_rejects_unknown_account(self) -> None:
         response = self.client.get(

@@ -17,6 +17,12 @@ from app.models import Account, BudgetPlan, Transaction, User
 from app.routes.analytics_routes import router as analytics_router
 
 
+class FixedBudgetDate(date):
+    @classmethod
+    def today(cls) -> "FixedBudgetDate":
+        return cls(2026, 4, 10)
+
+
 class AnalyticsRouteTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
@@ -229,6 +235,41 @@ class AnalyticsRouteTest(unittest.TestCase):
 
         self.assertIn("Which budget is closest to the limit?", suggestions)
 
+    def test_assistant_suggestions_include_projected_budget_prompt(self) -> None:
+        with patch("app.services.budget_metrics.date", FixedBudgetDate):
+            with self.session_local() as session:
+                session.add(
+                    BudgetPlan(
+                        month="2026-04",
+                        category="groceries",
+                        amount=200.0,
+                        owner_id=self.user_id,
+                        account_id=self.chequing_account_id,
+                    )
+                )
+                session.add(
+                    Transaction(
+                        amount=90.0,
+                        category="groceries",
+                        description="Large Grocery Run",
+                        date=date(2026, 4, 2),
+                        type="expense",
+                        owner_id=self.user_id,
+                        account_id=self.chequing_account_id,
+                    )
+                )
+                session.commit()
+
+            response = self.client.get(
+                "/analytics/assistant-suggestions",
+                params={"account_id": self.chequing_account_id},
+            )
+
+        self.assertEqual(response.status_code, 200, response.text)
+        suggestions = response.json()["suggestions"]
+
+        self.assertIn("Which budget is projected to go over?", suggestions)
+
     def test_assistant_response_reports_scoped_balance(self) -> None:
         self.seed_transactions()
 
@@ -305,6 +346,50 @@ class AnalyticsRouteTest(unittest.TestCase):
         self.assertEqual(payload["suggested_actions"][0]["page"], "budgets")
         self.assertEqual(payload["suggested_actions"][0]["account_id"], self.chequing_account_id)
         self.assertEqual(payload["suggested_actions"][1]["page"], "transactions")
+
+    def test_assistant_response_mentions_budget_forecast_for_focused_category(self) -> None:
+        with patch("app.services.budget_metrics.date", FixedBudgetDate):
+            with self.session_local() as session:
+                session.add(
+                    BudgetPlan(
+                        month="2026-04",
+                        category="groceries",
+                        amount=200.0,
+                        owner_id=self.user_id,
+                        account_id=self.chequing_account_id,
+                    )
+                )
+                session.add(
+                    Transaction(
+                        amount=90.0,
+                        category="groceries",
+                        description="Large Grocery Run",
+                        date=date(2026, 4, 2),
+                        type="expense",
+                        owner_id=self.user_id,
+                        account_id=self.chequing_account_id,
+                    )
+                )
+                session.commit()
+
+            with patch("app.services.analytics_service.generate_llm_assistant_response", return_value=None):
+                response = self.client.post(
+                    "/analytics/assistant-response",
+                    json={
+                        "question": "How is my groceries budget looking?",
+                        "history": [],
+                        "mode": "balanced",
+                        "account_id": self.chequing_account_id,
+                    },
+                )
+
+        self.assertEqual(response.status_code, 200, response.text)
+        payload = response.json()
+
+        self.assertIn("projected to finish", payload["answer"])
+        self.assertTrue(
+            any("Projected month-end:" in item for item in payload["supporting_points"])
+        )
 
     def test_assistant_response_shows_recent_transactions_for_focused_category(self) -> None:
         self.seed_transactions()

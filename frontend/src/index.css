@@ -1363,6 +1363,30 @@ textarea:focus,
   line-height: 1.6;
 }
 
+.budget-projection-metrics {
+  margin: 10px 0 0 0;
+  color: var(--text-main);
+  font-weight: 700;
+  line-height: 1.6;
+}
+
+.budget-projection-note {
+  margin: 8px 0 0 0;
+  color: var(--text-soft);
+  line-height: 1.6;
+}
+
+.budget-forecast-banner {
+  margin: 18px 0 0 0;
+  padding: 14px 18px;
+  border-radius: 16px;
+  background: rgba(15, 23, 42, 0.04);
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  color: var(--text-main);
+  font-weight: 600;
+  line-height: 1.6;
+}
+
 .budget-suggestion-card {
   align-self: stretch;
 }
@@ -1409,6 +1433,15 @@ textarea:focus,
 
 :root[data-theme="dark"] .budget-pace-metrics {
   color: #e2e8f0;
+}
+
+:root[data-theme="dark"] .budget-projection-metrics {
+  color: #e2e8f0;
+}
+
+:root[data-theme="dark"] .budget-forecast-banner {
+  background: rgba(59, 130, 246, 0.1);
+  border-color: rgba(96, 165, 250, 0.18);
 }
 
 :root[data-theme="dark"] .budget-status-on-track {

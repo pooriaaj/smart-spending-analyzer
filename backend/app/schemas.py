@@ -128,6 +128,11 @@ class BudgetPlanResponse(ORMBaseModel):
     daily_allowance: float | None = None
     daily_pace: float | None = None
     pace_note: str | None = None
+    projected_spent_amount: float | None = None
+    projected_remaining_amount: float | None = None
+    projected_usage_percent: float | None = None
+    projected_status: str | None = None
+    projection_note: str | None = None
 
 
 class BudgetSuggestionResponse(BaseModel):
@@ -145,6 +150,11 @@ class BudgetSummaryResponse(BaseModel):
     over_budget_count: int = 0
     at_risk_count: int = 0
     on_track_count: int = 0
+    projected_total_spent: float = 0.0
+    projected_total_remaining: float = 0.0
+    projected_over_budget_count: int = 0
+    projected_at_risk_count: int = 0
+    projected_on_track_count: int = 0
 
 
 class BudgetListResponse(BaseModel):
