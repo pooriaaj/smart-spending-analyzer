@@ -227,6 +227,7 @@ class AnalyticsRouteTest(unittest.TestCase):
             any("FreshCo ($100.00)" in item for item in payload["supporting_points"])
         )
         self.assertEqual(payload["suggested_actions"][0]["category"], "Groceries")
+        self.assertEqual(payload["suggested_actions"][0]["account_id"], self.chequing_account_id)
 
     def test_assistant_response_shows_recent_transactions_for_focused_category(self) -> None:
         self.seed_transactions()
@@ -251,6 +252,7 @@ class AnalyticsRouteTest(unittest.TestCase):
         )
         self.assertEqual(payload["suggested_actions"][0]["category"], "Groceries")
         self.assertEqual(payload["suggested_actions"][0]["page"], "transactions")
+        self.assertEqual(payload["suggested_actions"][0]["account_id"], self.chequing_account_id)
 
 
 if __name__ == "__main__":

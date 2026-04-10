@@ -2,7 +2,11 @@ import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import api, { handleApiAuthError } from "../services/api";
 import AccountSelector from "../components/AccountSelector";
-import { ALL_ACCOUNTS_VALUE, getSelectedAccountId } from "../services/accountStorage";
+import {
+  ALL_ACCOUNTS_VALUE,
+  getSelectedAccountId,
+  setSelectedAccountId as persistSelectedAccountId,
+} from "../services/accountStorage";
 
 function AssistantPage() {
   const initialAssistantMessage = {
@@ -106,6 +110,9 @@ function AssistantPage() {
 
   const handleActionNavigation = (action) => {
     if (!action) return;
+    const actionAccountValue =
+      action.account_id == null ? ALL_ACCOUNTS_VALUE : String(action.account_id);
+    persistSelectedAccountId(actionAccountValue);
 
     if (action.page === "analytics") {
       const params = new URLSearchParams();

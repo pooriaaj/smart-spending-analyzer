@@ -225,6 +225,7 @@ class AssistantAction(BaseModel):
     category: str | None = None
     transaction_type: str | None = None
     month: str | None = None
+    account_id: int | None = None
 
 
 class AssistantQueryRequest(BaseModel):

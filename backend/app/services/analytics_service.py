@@ -1010,6 +1010,7 @@ def classify_question(question: str, context_text: str) -> str:
 def build_assistant_actions(
     snapshot: dict[str, Any],
     intent: str,
+    account_id: int | None = None,
     driver_category: str | None = None,
     focus_category: str | None = None,
     focus_transaction_type: str = "expense",
@@ -1028,6 +1029,7 @@ def build_assistant_actions(
                 "page": "analytics",
                 "section": "monthly",
                 "month": current_month,
+                "account_id": account_id,
             }
         )
 
@@ -1039,6 +1041,7 @@ def build_assistant_actions(
                     "page": "transactions",
                     "category": target_category,
                     "transaction_type": target_transaction_type,
+                    "account_id": account_id,
                 }
             )
             actions.append(
@@ -1046,6 +1049,7 @@ def build_assistant_actions(
                     "label": "View category ranking",
                     "page": "analytics",
                     "section": "categories",
+                    "account_id": account_id,
                 }
             )
 
@@ -1055,6 +1059,7 @@ def build_assistant_actions(
                 "label": "Inspect overspending alerts",
                 "page": "analytics",
                 "section": "alerts",
+                "account_id": account_id,
             }
         )
         actions.append(
@@ -1062,6 +1067,7 @@ def build_assistant_actions(
                 "label": "View category trends",
                 "page": "analytics",
                 "section": "trends",
+                "account_id": account_id,
             }
         )
         if target_category:
@@ -1072,6 +1078,7 @@ def build_assistant_actions(
                     "category": target_category,
                     "transaction_type": target_transaction_type,
                     "month": current_month,
+                    "account_id": account_id,
                 }
             )
 
@@ -1081,6 +1088,7 @@ def build_assistant_actions(
                 "label": "Open spending insights",
                 "page": "analytics",
                 "section": "insights",
+                "account_id": account_id,
             }
         )
         if target_category:
@@ -1090,6 +1098,7 @@ def build_assistant_actions(
                     "page": "transactions",
                     "category": target_category,
                     "transaction_type": target_transaction_type,
+                    "account_id": account_id,
                 }
             )
 
@@ -1100,9 +1109,16 @@ def build_assistant_actions(
                 "page": "analytics",
                 "section": "monthly",
                 "month": current_month,
+                "account_id": account_id,
             }
         )
-        actions.append({"label": "View all transactions", "page": "transactions"})
+        actions.append(
+            {
+                "label": "View all transactions",
+                "page": "transactions",
+                "account_id": account_id,
+            }
+        )
 
     elif intent == "driver":
         actions.append(
@@ -1110,6 +1126,7 @@ def build_assistant_actions(
                 "label": "Open category trends",
                 "page": "analytics",
                 "section": "trends",
+                "account_id": account_id,
             }
         )
         if target_category:
@@ -1120,6 +1137,7 @@ def build_assistant_actions(
                     "category": target_category,
                     "transaction_type": target_transaction_type,
                     "month": current_month,
+                    "account_id": account_id,
                 }
             )
 
@@ -1129,6 +1147,7 @@ def build_assistant_actions(
                 "label": "Open overspending alerts",
                 "page": "analytics",
                 "section": "alerts",
+                "account_id": account_id,
             }
         )
         actions.append(
@@ -1136,6 +1155,7 @@ def build_assistant_actions(
                 "label": "Open category trends",
                 "page": "analytics",
                 "section": "trends",
+                "account_id": account_id,
             }
         )
 
@@ -1147,10 +1167,17 @@ def build_assistant_actions(
                     "page": "transactions",
                     "category": target_category,
                     "transaction_type": target_transaction_type,
+                    "account_id": account_id,
                 }
             )
         else:
-            actions.append({"label": "View all transactions", "page": "transactions"})
+            actions.append(
+                {
+                    "label": "View all transactions",
+                    "page": "transactions",
+                    "account_id": account_id,
+                }
+            )
 
     elif intent == "general" and target_category:
         actions.append(
@@ -1159,6 +1186,7 @@ def build_assistant_actions(
                 "page": "transactions",
                 "category": target_category,
                 "transaction_type": target_transaction_type,
+                "account_id": account_id,
             }
         )
         actions.append(
@@ -1166,6 +1194,7 @@ def build_assistant_actions(
                 "label": "Open category trends",
                 "page": "analytics",
                 "section": "trends",
+                "account_id": account_id,
             }
         )
 
@@ -1369,6 +1398,7 @@ def generate_assistant_response(
                         else "expense"
                     ),
                     "month": current_month,
+                    "account_id": account_id,
                 }
             )
 
@@ -1377,6 +1407,7 @@ def generate_assistant_response(
                 {
                     "label": action_label or "Open dashboard",
                     "page": "dashboard",
+                    "account_id": account_id,
                 }
             )
 
@@ -1399,6 +1430,7 @@ def generate_assistant_response(
                     "page": "analytics",
                     "section": target_section,
                     "month": current_month,
+                    "account_id": account_id,
                 }
             )
 
@@ -1408,6 +1440,7 @@ def generate_assistant_response(
                     "label": action_label or "Explore learning resources",
                     "page": "external_resource",
                     "section": action_target or "budgeting basics",
+                    "account_id": account_id,
                 }
             )
 
@@ -1497,6 +1530,7 @@ def generate_assistant_response(
             "suggested_actions": build_assistant_actions(
                 snapshot=snapshot,
                 intent="recent" if intent == "category_transactions" else intent,
+                account_id=account_id,
                 driver_category=primary_driver,
                 focus_category=focus_category,
                 focus_transaction_type=focus_snapshot["transaction_type"],
@@ -1727,6 +1761,7 @@ def generate_assistant_response(
             "suggested_actions": build_assistant_actions(
                 snapshot=snapshot,
                 intent=intent,
+                account_id=account_id,
                 driver_category=primary_driver,
                 focus_category=focus_category,
                 focus_transaction_type=focus_snapshot["transaction_type"] if focus_snapshot else "expense",
