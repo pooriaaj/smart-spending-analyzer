@@ -2069,4 +2069,9 @@ def get_dashboard_payload(
             account_id=account_id,
         ),
         "category_trends": get_category_trends(db, user_id, account_id=account_id),
+        "account_comparison": (
+            get_account_comparison_snapshot(db, user_id)
+            if account_id is None
+            else []
+        ),
     }

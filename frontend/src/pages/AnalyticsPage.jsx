@@ -293,6 +293,7 @@ function AnalyticsPage() {
   const spendingInsights = dashboardData?.spending_insights;
   const overspendingAlerts = dashboardData?.overspending_alerts;
   const categoryTrends = dashboardData?.category_trends;
+  const accountComparison = dashboardData?.account_comparison || [];
 
   const normalizedTopCategory = topCategory
     ? {
@@ -439,6 +440,53 @@ function AnalyticsPage() {
             </p>
           </div>
         </div>
+
+        {normalizedAccountId === undefined && accountComparison.length > 1 && (
+          <div className="dashboard-card account-comparison-card">
+            <div className="section-header">
+              <h2>Accounts at a Glance</h2>
+              <p>See which account is carrying the most income, expenses, and balance pressure.</p>
+            </div>
+
+            <div className="account-comparison-grid">
+              {accountComparison.map((account, index) => (
+                <div
+                  key={`account-comparison-${account.account_id}`}
+                  className={`account-comparison-item ${index === 0 ? "account-comparison-leading" : ""}`}
+                >
+                  <div className="account-comparison-header">
+                    <div>
+                      <h3>{account.name}</h3>
+                      <p>{account.type}</p>
+                    </div>
+                    {index === 0 && <span className="account-comparison-badge">Highest spend</span>}
+                  </div>
+
+                  <div className="account-comparison-metrics">
+                    <div>
+                      <span>Income</span>
+                      <strong>${account.total_income.toFixed(2)}</strong>
+                    </div>
+                    <div>
+                      <span>Expenses</span>
+                      <strong>${account.total_expenses.toFixed(2)}</strong>
+                    </div>
+                    <div>
+                      <span>Balance</span>
+                      <strong>${account.balance.toFixed(2)}</strong>
+                    </div>
+                  </div>
+
+                  <p className="account-comparison-footnote">
+                    {account.top_category
+                      ? `Top category: ${formatCategoryName(account.top_category)} ($${account.top_category_amount.toFixed(2)})`
+                      : "No category spending recorded yet."}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         <div
           ref={alertsRef}

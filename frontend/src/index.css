@@ -1096,6 +1096,95 @@ textarea:focus,
   color: var(--text-soft);
 }
 
+.account-comparison-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 16px;
+}
+
+.account-comparison-item {
+  border-radius: 20px;
+  padding: 20px;
+  background: rgba(255, 255, 255, 0.82);
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  box-shadow: var(--shadow-sm);
+}
+
+.account-comparison-leading {
+  border-color: rgba(37, 99, 235, 0.24);
+  box-shadow: 0 18px 36px rgba(37, 99, 235, 0.12);
+}
+
+.account-comparison-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+  margin-bottom: 18px;
+}
+
+.account-comparison-header h3 {
+  margin: 0;
+  font-size: 20px;
+}
+
+.account-comparison-header p {
+  margin: 6px 0 0 0;
+  color: var(--text-soft);
+  text-transform: capitalize;
+}
+
+.account-comparison-badge {
+  padding: 8px 10px;
+  border-radius: 999px;
+  background: #dbeafe;
+  color: var(--blue);
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.account-comparison-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.account-comparison-metrics span {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--text-faint);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.account-comparison-metrics strong {
+  font-size: 17px;
+}
+
+.account-comparison-footnote {
+  margin: 18px 0 0 0;
+  color: var(--text-soft);
+  line-height: 1.6;
+}
+
+:root[data-theme="dark"] .account-comparison-item {
+  background: rgba(15, 23, 42, 0.82);
+  border-color: rgba(148, 163, 184, 0.14);
+}
+
+:root[data-theme="dark"] .account-comparison-leading {
+  border-color: rgba(96, 165, 250, 0.3);
+  box-shadow: 0 18px 36px rgba(37, 99, 235, 0.18);
+}
+
+:root[data-theme="dark"] .account-comparison-badge {
+  background: rgba(37, 99, 235, 0.22);
+  color: #bfdbfe;
+}
+
 :root[data-theme="dark"] .import-filter-chip:hover {
   border-color: rgba(96, 165, 250, 0.3);
   color: var(--text-main);

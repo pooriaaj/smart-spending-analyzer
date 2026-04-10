@@ -158,9 +158,22 @@ class AnalyticsRouteTest(unittest.TestCase):
         self.assertEqual(payload["summary"]["total_expenses"], 150.0)
         self.assertEqual(payload["summary"]["balance"], 1050.0)
         self.assertEqual(payload["top_category"]["category"], "Entertainment")
+        self.assertEqual(payload["account_comparison"], [])
         self.assertTrue(
             all(item["account_id"] == self.savings_account_id for item in payload["recent_transactions"])
         )
+
+    def test_dashboard_includes_account_comparison_for_all_accounts_scope(self) -> None:
+        self.seed_transactions()
+
+        response = self.client.get("/analytics/dashboard")
+
+        self.assertEqual(response.status_code, 200, response.text)
+        payload = response.json()
+
+        self.assertEqual(len(payload["account_comparison"]), 2)
+        self.assertEqual(payload["account_comparison"][0]["name"], "Daily Spending")
+        self.assertEqual(payload["account_comparison"][0]["total_expenses"], 250.0)
 
     def test_dashboard_rejects_unknown_account_scope(self) -> None:
         response = self.client.get("/analytics/dashboard", params={"account_id": 999999})
