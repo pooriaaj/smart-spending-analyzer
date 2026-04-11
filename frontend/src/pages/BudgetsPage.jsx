@@ -489,34 +489,10 @@ function BudgetsPage() {
                   key={`${suggestion.category}-${suggestion.suggested_amount}`}
                   className="budget-card budget-suggestion-card"
                 >
-                  <div className="budget-card-top">
+                  <div className="budget-suggestion-header">
                     <div>
                       <h3>{formatBudgetCategory(suggestion.category)}</h3>
                       <p>Suggested budget ${suggestion.suggested_amount.toFixed(2)}</p>
-                    </div>
-
-                    <div className="budget-card-actions">
-                      <button
-                        type="button"
-                        className="secondary-button"
-                        onClick={() => handleUseSuggestion(suggestion)}
-                      >
-                        Use Suggestion
-                      </button>
-                      <button
-                        type="button"
-                        className="secondary-button"
-                        onClick={() => handleApplySuggestion(suggestion)}
-                        disabled={
-                          bulkApplyingKey === "suggestions" ||
-                          quickSavingKey ===
-                            buildQuickSaveKey(suggestion.category, suggestion.suggested_amount)
-                        }
-                      >
-                        {quickSavingKey === buildQuickSaveKey(suggestion.category, suggestion.suggested_amount)
-                          ? "Applying..."
-                          : "Apply Now"}
-                      </button>
                     </div>
                   </div>
 
@@ -525,6 +501,30 @@ function BudgetsPage() {
                     <span>Current month: ${suggestion.latest_month_spent.toFixed(2)}</span>
                   </div>
                   <p className="budget-inline-note">{suggestion.note}</p>
+
+                  <div className="budget-suggestion-actions">
+                    <button
+                      type="button"
+                      className="secondary-button budget-suggestion-load-button"
+                      onClick={() => handleUseSuggestion(suggestion)}
+                    >
+                      Load Form
+                    </button>
+                    <button
+                      type="button"
+                      className="budget-suggestion-apply-button"
+                      onClick={() => handleApplySuggestion(suggestion)}
+                      disabled={
+                        bulkApplyingKey === "suggestions" ||
+                        quickSavingKey ===
+                          buildQuickSaveKey(suggestion.category, suggestion.suggested_amount)
+                      }
+                    >
+                      {quickSavingKey === buildQuickSaveKey(suggestion.category, suggestion.suggested_amount)
+                        ? "Applying..."
+                        : "Save Budget"}
+                    </button>
+                  </div>
                 </div>
               ))}
             </div>

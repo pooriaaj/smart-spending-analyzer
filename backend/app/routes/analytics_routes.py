@@ -13,9 +13,12 @@ from app.schemas import (
     CategoryBreakdownItem,
     CategoryTrendsResponse,
     FutureSimulationResponse,
+    MessageResponse,
     MonthlySummaryItem,
     OverspendingAlertsResponse,
     RecentTransactionItem,
+    SavedScenarioCreate,
+    SavedScenarioResponse,
     SpendingInsights,
     TopExpenseCategory,
 )
@@ -34,6 +37,13 @@ from app.services.analytics_service import (
     get_top_expense_category,
 )
 from app.services.account_service import get_account_for_user
+from app.services.saved_scenario_service import (
+    create_saved_scenario,
+    delete_saved_scenario,
+    get_saved_scenario_for_user,
+    list_saved_scenarios,
+    update_saved_scenario,
+)
 
 router = APIRouter(prefix="/analytics", tags=["Analytics"])
 
@@ -253,6 +263,75 @@ def get_future_simulator_route(
         event_label=event_label,
         scope_label=scope_label,
     )
+
+
+@router.get("/saved-scenarios", response_model=list[SavedScenarioResponse])
+def list_saved_scenarios_route(
+    account_id: int | None = Query(default=None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    resolve_account_scope(db, current_user, account_id)
+    return list_saved_scenarios(
+        db=db,
+        owner_id=current_user.id,
+        account_id=account_id,
+    )
+
+
+@router.post("/saved-scenarios", response_model=SavedScenarioResponse)
+def create_saved_scenario_route(
+    payload: SavedScenarioCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    if payload.account_id is not None:
+        account = get_account_for_user(db, current_user.id, payload.account_id)
+        if account is None:
+            raise HTTPException(status_code=404, detail="Account not found")
+
+    return create_saved_scenario(
+        db=db,
+        owner_id=current_user.id,
+        payload=payload,
+    )
+
+
+@router.put("/saved-scenarios/{scenario_id}", response_model=SavedScenarioResponse)
+def update_saved_scenario_route(
+    scenario_id: int,
+    payload: SavedScenarioCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    if payload.account_id is not None:
+        account = get_account_for_user(db, current_user.id, payload.account_id)
+        if account is None:
+            raise HTTPException(status_code=404, detail="Account not found")
+
+    scenario = get_saved_scenario_for_user(db, current_user.id, scenario_id)
+    if scenario is None:
+        raise HTTPException(status_code=404, detail="Saved scenario not found")
+
+    return update_saved_scenario(
+        db=db,
+        scenario=scenario,
+        payload=payload,
+    )
+
+
+@router.delete("/saved-scenarios/{scenario_id}", response_model=MessageResponse)
+def delete_saved_scenario_route(
+    scenario_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    scenario = get_saved_scenario_for_user(db, current_user.id, scenario_id)
+    if scenario is None:
+        raise HTTPException(status_code=404, detail="Saved scenario not found")
+
+    delete_saved_scenario(db, scenario)
+    return MessageResponse(message="Saved scenario deleted")
 
 
 @router.post("/assistant-response", response_model=AssistantQueryResponse)

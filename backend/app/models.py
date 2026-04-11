@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from sqlalchemy import Boolean, Column, Date, DateTime, Float, ForeignKey, Index, Integer, String, UniqueConstraint
+from sqlalchemy import Boolean, Column, Date, DateTime, Float, ForeignKey, Index, Integer, String, UniqueConstraint, func
 from sqlalchemy.orm import relationship
 
 from app.database import Base
@@ -42,6 +42,12 @@ class User(Base):
         cascade="all, delete-orphan",
         passive_deletes=True,
     )
+    saved_scenarios = relationship(
+        "SavedScenario",
+        back_populates="owner",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
 
 
 class Account(Base):
@@ -62,6 +68,12 @@ class Account(Base):
     )
     budgets = relationship(
         "BudgetPlan",
+        back_populates="account",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
+    saved_scenarios = relationship(
+        "SavedScenario",
         back_populates="account",
         cascade="all, delete-orphan",
         passive_deletes=True,
@@ -133,4 +145,28 @@ class BudgetPlan(Base):
     __table_args__ = (
         Index("ix_budget_plans_owner_month", "owner_id", "month"),
         Index("ix_budget_plans_owner_account_month", "owner_id", "account_id", "month"),
+    )
+
+
+class SavedScenario(Base):
+    __tablename__ = "saved_scenarios"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(100), nullable=False)
+    months = Column(Integer, nullable=False, default=6)
+    income_adjustment = Column(Float, nullable=False, default=0.0)
+    expense_adjustment = Column(Float, nullable=False, default=0.0)
+    target_balance = Column(Float, nullable=True)
+    event_month_offset = Column(Integer, nullable=True)
+    event_amount = Column(Float, nullable=True)
+    event_label = Column(String(80), nullable=True)
+    owner_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    account_id = Column(Integer, ForeignKey("accounts.id", ondelete="CASCADE"), nullable=True, index=True)
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+    owner = relationship("User", back_populates="saved_scenarios")
+    account = relationship("Account", back_populates="saved_scenarios")
+
+    __table_args__ = (
+        Index("ix_saved_scenarios_owner_account", "owner_id", "account_id"),
     )

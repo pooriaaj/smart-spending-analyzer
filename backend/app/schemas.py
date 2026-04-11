@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
@@ -218,6 +218,28 @@ class BudgetBulkUpsertResponse(BaseModel):
     updated_count: int = 0
     unchanged_count: int = 0
     message: str
+
+
+class SavedScenarioBase(BaseModel):
+    name: str = Field(min_length=1, max_length=100)
+    months: int = Field(default=6, ge=1, le=12)
+    income_adjustment: float = 0.0
+    expense_adjustment: float = 0.0
+    target_balance: float | None = Field(default=None, gt=0)
+    event_month_offset: int | None = Field(default=None, ge=1, le=12)
+    event_amount: float | None = None
+    event_label: str | None = Field(default=None, max_length=80)
+    account_id: int | None = None
+
+
+class SavedScenarioCreate(SavedScenarioBase):
+    pass
+
+
+class SavedScenarioResponse(SavedScenarioBase, ORMBaseModel):
+    id: int
+    owner_id: int
+    created_at: datetime
 
 
 class FutureSimulationPoint(BaseModel):

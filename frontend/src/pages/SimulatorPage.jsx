@@ -105,6 +105,27 @@ function shiftMonthLabel(month, offset) {
   return `${shiftedYear.toString().padStart(4, "0")}-${shiftedMonth.toString().padStart(2, "0")}`;
 }
 
+function formatSignedScenarioAmount(value) {
+  const numericValue = Number(value) || 0;
+  return `${numericValue >= 0 ? "+" : "-"}$${Math.abs(numericValue).toFixed(2)}`;
+}
+
+function buildSavedScenarioSummary(scenario) {
+  const summaryParts = [`${scenario.months} month${scenario.months === 1 ? "" : "s"}`];
+
+  if (Number(scenario.income_adjustment) !== 0) {
+    summaryParts.push(`income ${formatSignedScenarioAmount(scenario.income_adjustment)}`);
+  }
+  if (Number(scenario.expense_adjustment) !== 0) {
+    summaryParts.push(`expenses ${formatSignedScenarioAmount(scenario.expense_adjustment)}`);
+  }
+  if (scenario.target_balance != null) {
+    summaryParts.push(`target $${Number(scenario.target_balance).toFixed(2)}`);
+  }
+
+  return summaryParts.join(" • ");
+}
+
 function SimulatorPage() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -134,6 +155,14 @@ function SimulatorPage() {
   const [reductionPlanError, setReductionPlanError] = useState("");
   const [scenarioLinkMessage, setScenarioLinkMessage] = useState("");
   const [scenarioLinkError, setScenarioLinkError] = useState("");
+  const [activeSavedScenarioId, setActiveSavedScenarioId] = useState(null);
+  const [savedScenarioName, setSavedScenarioName] = useState("");
+  const [savedScenarios, setSavedScenarios] = useState([]);
+  const [savedScenariosLoading, setSavedScenariosLoading] = useState(true);
+  const [savingScenario, setSavingScenario] = useState(false);
+  const [deletingScenarioId, setDeletingScenarioId] = useState(null);
+  const [savedScenarioMessage, setSavedScenarioMessage] = useState("");
+  const [savedScenarioError, setSavedScenarioError] = useState("");
   const [themeMode, setThemeMode] = useState(
     document.documentElement.getAttribute("data-theme") || "light"
   );
@@ -239,6 +268,29 @@ function SimulatorPage() {
     return () => observer.disconnect();
   }, []);
 
+  const fetchSavedScenarios = async () => {
+    try {
+      setSavedScenariosLoading(true);
+      setSavedScenarioError("");
+      const response = await api.get("/analytics/saved-scenarios", {
+        params: {
+          account_id: normalizedAccountId,
+        },
+      });
+      setSavedScenarios(response.data || []);
+    } catch (fetchError) {
+      if (!handleApiAuthError(fetchError, navigate)) {
+        setSavedScenarioError("Failed to load saved scenarios.");
+      }
+    } finally {
+      setSavedScenariosLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchSavedScenarios();
+  }, [navigate, normalizedAccountId]);
+
   useEffect(() => {
     const fetchSimulation = async () => {
       try {
@@ -325,6 +377,8 @@ function SimulatorPage() {
   };
 
   const applyPreset = (preset) => {
+    setActiveSavedScenarioId(null);
+    setSavedScenarioName("");
     setMonths(preset.months);
     setIncomeAdjustment(preset.incomeAdjustment);
     setExpenseAdjustment(preset.expenseAdjustment);
@@ -384,6 +438,99 @@ function SimulatorPage() {
     } catch (copyError) {
       console.error("Failed to copy scenario link:", copyError);
       setScenarioLinkError("Could not copy the scenario link from this browser.");
+    }
+  };
+
+  const handleSaveScenario = async () => {
+    const fallbackName =
+      (simulatorData?.one_time_event_label
+        ? `${simulatorData.one_time_event_label} plan`
+        : Number(targetBalance) > 0
+        ? `Target $${Number(targetBalance).toFixed(0)} plan`
+        : "Saved simulator plan");
+    const name = savedScenarioName.trim() || fallbackName;
+
+    try {
+      setSavingScenario(true);
+      setSavedScenarioError("");
+      setSavedScenarioMessage("");
+      const payload = {
+        name,
+        months: Number(months) || 6,
+        income_adjustment: Number(incomeAdjustment) || 0,
+        expense_adjustment: Number(expenseAdjustment) || 0,
+        target_balance: Number(targetBalance) > 0 ? Number(targetBalance) : null,
+        event_month_offset:
+          Number(eventAmount) !== 0 && Number(eventMonthOffset) > 0
+            ? Number(eventMonthOffset)
+            : null,
+        event_amount: Number(eventAmount) !== 0 ? Number(eventAmount) : null,
+        event_label: eventLabel.trim() || null,
+        account_id: normalizedAccountId,
+      };
+      const response = activeSavedScenarioId
+        ? await api.put(`/analytics/saved-scenarios/${activeSavedScenarioId}`, payload)
+        : await api.post("/analytics/saved-scenarios", payload);
+      setActiveSavedScenarioId(response.data.id);
+      setSavedScenarioName(response.data.name);
+      setSavedScenarioMessage(
+        activeSavedScenarioId
+          ? `Updated scenario "${response.data.name}".`
+          : `Saved scenario "${response.data.name}".`
+      );
+      await fetchSavedScenarios();
+    } catch (saveError) {
+      if (!handleApiAuthError(saveError, navigate)) {
+        setSavedScenarioError(
+          saveError?.response?.data?.detail ||
+            (activeSavedScenarioId ? "Failed to update scenario." : "Failed to save scenario.")
+        );
+      }
+    } finally {
+      setSavingScenario(false);
+    }
+  };
+
+  const handleLoadSavedScenario = (scenario) => {
+    setActiveSavedScenarioId(scenario.id);
+    setSavedScenarioName(scenario.name || "");
+    setSelectedAccountId(
+      scenario.account_id == null ? ALL_ACCOUNTS_VALUE : String(scenario.account_id)
+    );
+    setMonths(scenario.months || 6);
+    setIncomeAdjustment(String(scenario.income_adjustment || 0));
+    setExpenseAdjustment(String(scenario.expense_adjustment || 0));
+    setTargetBalance(
+      scenario.target_balance != null ? String(scenario.target_balance) : ""
+    );
+    setEventAmount(scenario.event_amount != null ? String(scenario.event_amount) : "");
+    setEventMonthOffset(scenario.event_month_offset || 1);
+    setEventLabel(scenario.event_label || "");
+    setSavedScenarioMessage(`Loaded "${scenario.name}".`);
+    setSavedScenarioError("");
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  const handleDeleteSavedScenario = async (scenarioId) => {
+    try {
+      setDeletingScenarioId(scenarioId);
+      setSavedScenarioError("");
+      setSavedScenarioMessage("");
+      await api.delete(`/analytics/saved-scenarios/${scenarioId}`);
+      if (activeSavedScenarioId === scenarioId) {
+        setActiveSavedScenarioId(null);
+        setSavedScenarioName("");
+      }
+      setSavedScenarioMessage("Saved scenario deleted.");
+      await fetchSavedScenarios();
+    } catch (deleteError) {
+      if (!handleApiAuthError(deleteError, navigate)) {
+        setSavedScenarioError(
+          deleteError?.response?.data?.detail || "Failed to delete saved scenario."
+        );
+      }
+    } finally {
+      setDeletingScenarioId(null);
     }
   };
 
@@ -547,8 +694,111 @@ function SimulatorPage() {
             Scenario links keep the simulator controls and scope together, so you can reload or
             revisit the same plan quickly.
           </p>
+
+          <div className="budget-section-actions">
+            <div className="budget-form-field">
+              <label htmlFor="saved-scenario-name">Scenario name</label>
+              <input
+                id="saved-scenario-name"
+                type="text"
+                maxLength="100"
+                value={savedScenarioName}
+                onChange={(event) => setSavedScenarioName(event.target.value)}
+                placeholder="Quarterly repair plan"
+              />
+            </div>
+            <button
+              type="button"
+              className="secondary-button"
+              onClick={handleSaveScenario}
+              disabled={savingScenario}
+            >
+              {savingScenario
+                ? activeSavedScenarioId
+                  ? "Updating..."
+                  : "Saving..."
+                : activeSavedScenarioId
+                ? "Update Scenario"
+                : "Save Scenario"}
+            </button>
+          </div>
+          {activeSavedScenarioId && (
+            <p className="budget-inline-note">
+              You&apos;re editing a loaded saved scenario. Saving now updates it instead of creating
+              a duplicate.
+            </p>
+          )}
+
           {scenarioLinkMessage && <p className="success-text">{scenarioLinkMessage}</p>}
           {scenarioLinkError && <p className="error-text">{scenarioLinkError}</p>}
+          {savedScenarioMessage && <p className="success-text">{savedScenarioMessage}</p>}
+          {savedScenarioError && <p className="error-text">{savedScenarioError}</p>}
+        </div>
+
+        <div className="dashboard-card">
+          <div className="section-header">
+            <div>
+              <h2>Saved Scenarios</h2>
+              <p>Keep a few named plans for this scope so you can revisit them quickly.</p>
+            </div>
+            <div className="budget-section-actions">
+              <button type="button" className="secondary-button" onClick={fetchSavedScenarios}>
+                Refresh
+              </button>
+            </div>
+          </div>
+
+          {savedScenariosLoading ? (
+            <div className="empty-state">
+              <p>Loading saved scenarios...</p>
+            </div>
+          ) : savedScenarios.length === 0 ? (
+            <div className="empty-state">
+              <p>No saved scenarios for this scope yet.</p>
+            </div>
+          ) : (
+            <div className="budget-list">
+              {savedScenarios.map((scenario) => (
+                <div key={`saved-scenario-${scenario.id}`} className="budget-card">
+                  <div className="budget-card-top">
+                    <div>
+                      <h3>{scenario.name}</h3>
+                      <p>{buildSavedScenarioSummary(scenario)}</p>
+                    </div>
+
+                    <div className="budget-card-actions">
+                      <button
+                        type="button"
+                        className="secondary-button"
+                        onClick={() => handleLoadSavedScenario(scenario)}
+                      >
+                        Load Scenario
+                      </button>
+                      <button
+                        type="button"
+                        className="delete-button"
+                        onClick={() => handleDeleteSavedScenario(scenario.id)}
+                        disabled={deletingScenarioId === scenario.id}
+                      >
+                        {deletingScenarioId === scenario.id ? "Deleting..." : "Delete"}
+                      </button>
+                    </div>
+                  </div>
+
+                  {scenario.event_amount != null && (
+                    <p className="budget-inline-note">
+                      Event: {scenario.event_label || "One-time event"} in month{" "}
+                      {scenario.event_month_offset || 1} at{" "}
+                      {formatSignedScenarioAmount(scenario.event_amount)}
+                    </p>
+                  )}
+                  <p className="budget-inline-note">
+                    Saved {new Date(scenario.created_at).toLocaleDateString()}
+                  </p>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
         {error && (

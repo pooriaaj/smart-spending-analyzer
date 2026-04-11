@@ -3,12 +3,7 @@ import { useNavigate } from "react-router-dom";
 import api, { handleApiAuthError } from "../services/api";
 import AccountSelector from "../components/AccountSelector";
 import { ALL_ACCOUNTS_VALUE, getSelectedAccountId } from "../services/accountStorage";
-import {
-  buildBudgetForecastSummary,
-  buildBudgetPaceLabel,
-  buildBudgetProjectionLabel,
-  getBudgetPriority,
-} from "../utils/budgetDisplay";
+import { buildBudgetForecastSummary } from "../utils/budgetDisplay";
 
 const CATEGORY_RULES = {
   groceries: ["walmart", "costco", "freshco", "nofrills", "grocery", "supermarket"],
@@ -21,17 +16,6 @@ const CATEGORY_RULES = {
   phone: ["phone", "mobile", "cell", "freedom", "telus"],
   entertainment: ["netflix", "spotify", "youtube", "cinema", "movie"],
 };
-
-function formatBudgetCategory(value) {
-  if (!value || typeof value !== "string") return "Other";
-
-  return value
-    .trim()
-    .split(" ")
-    .filter(Boolean)
-    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
-    .join(" ");
-}
 
 function DashboardPage() {
   const [dashboardData, setDashboardData] = useState(null);
@@ -145,43 +129,8 @@ function DashboardPage() {
     projected_over_budget_count: 0,
     projected_at_risk_count: 0,
   };
-  const budgetInsights = useMemo(() => (budgetData?.insights || []).slice(0, 2), [budgetData]);
-  const budgetWatchlist = useMemo(() => {
-    const items = budgetData?.budgets || [];
-
-    return [...items]
-      .sort((a, b) => {
-        const priorityDiff = getBudgetPriority(a) - getBudgetPriority(b);
-        if (priorityDiff !== 0) return priorityDiff;
-
-        const usageA = Math.max(a.usage_percent || 0, a.projected_usage_percent || 0);
-        const usageB = Math.max(b.usage_percent || 0, b.projected_usage_percent || 0);
-        return usageB - usageA;
-      })
-      .slice(0, 3);
-  }, [budgetData]);
+  const hasBudgets = (budgetData?.budgets || []).length > 0;
   const simulatorNarrative = simulatorData?.goal_note || simulatorData?.narrative || "";
-
-  const getBudgetInsightMeta = (severity) => {
-    if (severity === "action") {
-      return { label: "Act now", className: "budget-insight-badge budget-insight-badge-action" };
-    }
-    if (severity === "watch") {
-      return { label: "Watch closely", className: "budget-insight-badge budget-insight-badge-watch" };
-    }
-    return { label: "On pace", className: "budget-insight-badge budget-insight-badge-positive" };
-  };
-
-  const openBudgetInsightTarget = (insight) => {
-    const params = new URLSearchParams({ month: currentBudgetMonth });
-    if (insight?.category) {
-      params.set("category", insight.category);
-    }
-    if (insight?.recommended_amount != null) {
-      params.set("amount", String(insight.recommended_amount));
-    }
-    navigate(`/budgets?${params.toString()}`);
-  };
 
   const suggestCategory = () => {
     const text = description.trim().toLowerCase();
@@ -432,7 +381,7 @@ function DashboardPage() {
             <p>Quick budget status for {currentBudgetMonth} in the current scope.</p>
           </div>
 
-          {budgetWatchlist.length === 0 ? (
+          {!hasBudgets ? (
             <div className="empty-state">
               <p>No budgets are set for this month yet.</p>
               <button
@@ -467,116 +416,6 @@ function DashboardPage() {
               </div>
 
               <p className="budget-forecast-banner">{buildBudgetForecastSummary(budgetSummary)}</p>
-
-              {budgetInsights.length > 0 && (
-                <div className="budget-insight-list">
-                  {budgetInsights.map((insight) => {
-                    const insightMeta = getBudgetInsightMeta(insight.severity);
-
-                    return (
-                      <div
-                        key={`${insight.category}-${insight.title}`}
-                        className="budget-insight-item"
-                      >
-                        <div className="budget-insight-top">
-                          <span className={insightMeta.className}>{insightMeta.label}</span>
-                          <strong>{formatBudgetCategory(insight.category)}</strong>
-                        </div>
-                        <p className="budget-insight-title">{insight.title}</p>
-                        <p className="budget-inline-note">{insight.detail}</p>
-                        {insight.recommended_amount != null && (
-                          <div className="budget-insight-actions">
-                            <span className="budget-inline-note">
-                              Suggested target: ${Number(insight.recommended_amount).toFixed(2)}
-                            </span>
-                            <button
-                              type="button"
-                              className="secondary-button"
-                              onClick={() => openBudgetInsightTarget(insight)}
-                            >
-                              Open Target
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-
-              <div className="budget-list">
-                {budgetWatchlist.map((budget) => (
-                  <div key={`dashboard-budget-${budget.id}`} className="budget-card">
-                    <div className="budget-card-top">
-                      <div>
-                        <h3>{formatBudgetCategory(budget.category)}</h3>
-                        <p>
-                          Budget ${budget.amount.toFixed(2)} - Spent ${budget.spent_amount.toFixed(2)}
-                        </p>
-                      </div>
-
-                      <div className="budget-card-actions">
-                        <span
-                          className={`budget-status ${
-                            budget.status === "over_budget"
-                              ? "budget-status-over"
-                              : budget.status === "at_risk"
-                              ? "budget-status-risk"
-                              : "budget-status-on-track"
-                          }`}
-                        >
-                          {budget.status === "over_budget"
-                            ? "Over budget"
-                            : budget.status === "at_risk"
-                            ? "At risk"
-                            : "On track"}
-                        </span>
-                        <button
-                          className="secondary-button"
-                          onClick={() =>
-                            navigate(
-                              `/budgets?month=${currentBudgetMonth}&category=${encodeURIComponent(
-                                budget.category
-                              )}`
-                            )
-                          }
-                        >
-                          Open Budget
-                        </button>
-                      </div>
-                    </div>
-
-                    <div className="budget-progress-track">
-                      <div
-                        className={`budget-progress-fill budget-progress-${budget.status}`}
-                        style={{ width: `${Math.min(budget.usage_percent, 100)}%` }}
-                      />
-                    </div>
-
-                    <div className="budget-card-meta">
-                      <span>{budget.usage_percent.toFixed(1)}% used</span>
-                      <span>
-                        {budget.remaining_amount >= 0
-                          ? `$${budget.remaining_amount.toFixed(2)} remaining`
-                          : `$${Math.abs(budget.remaining_amount).toFixed(2)} over`}
-                      </span>
-                    </div>
-
-                    {buildBudgetPaceLabel(budget) && (
-                      <p className="budget-pace-metrics">{buildBudgetPaceLabel(budget)}</p>
-                    )}
-                    {buildBudgetProjectionLabel(budget) && (
-                      <p className="budget-projection-metrics">
-                        {buildBudgetProjectionLabel(budget)}
-                      </p>
-                    )}
-                    {budget.pace_note && <p className="budget-pace-note">{budget.pace_note}</p>}
-                    {budget.projection_note && (
-                      <p className="budget-projection-note">{budget.projection_note}</p>
-                    )}
-                  </div>
-                ))}
-              </div>
             </>
           )}
         </div>

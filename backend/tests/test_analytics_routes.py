@@ -13,7 +13,7 @@ from sqlalchemy.pool import StaticPool
 
 from app.database import Base
 from app.dependencies import get_current_user, get_db
-from app.models import Account, BudgetPlan, Transaction, User
+from app.models import Account, BudgetPlan, SavedScenario, Transaction, User
 from app.routes.analytics_routes import router as analytics_router
 
 
@@ -84,6 +84,7 @@ class AnalyticsRouteTest(unittest.TestCase):
 
     def tearDown(self) -> None:
         with self.session_local() as session:
+            session.query(SavedScenario).delete()
             session.query(Transaction).delete()
             session.query(BudgetPlan).delete()
             session.commit()
@@ -1135,6 +1136,86 @@ class AnalyticsRouteTest(unittest.TestCase):
         self.assertIn("can't compare accounts", payload["answer"])
         self.assertEqual(payload["scope_label"], "Daily Spending (chequing)")
         self.assertEqual(payload["suggested_actions"][0]["page"], "accounts")
+
+    def test_saved_scenarios_can_be_created_updated_listed_and_deleted(self) -> None:
+        create_response = self.client.post(
+            "/analytics/saved-scenarios",
+            json={
+                "name": "Trip Pressure Plan",
+                "months": 6,
+                "income_adjustment": 0,
+                "expense_adjustment": -200,
+                "target_balance": 10000,
+                "event_month_offset": 2,
+                "event_amount": -1200,
+                "event_label": "Planned trip",
+                "account_id": self.chequing_account_id,
+            },
+        )
+
+        self.assertEqual(create_response.status_code, 200, create_response.text)
+        created_payload = create_response.json()
+
+        self.assertEqual(created_payload["name"], "Trip Pressure Plan")
+        self.assertEqual(created_payload["account_id"], self.chequing_account_id)
+        self.assertEqual(created_payload["event_amount"], -1200.0)
+        self.assertEqual(created_payload["event_month_offset"], 2)
+        self.assertEqual(created_payload["event_label"], "Planned trip")
+
+        update_response = self.client.put(
+            f"/analytics/saved-scenarios/{created_payload['id']}",
+            json={
+                "name": "Updated Trip Pressure Plan",
+                "months": 4,
+                "income_adjustment": 250,
+                "expense_adjustment": -150,
+                "target_balance": 9500,
+                "event_month_offset": 1,
+                "event_amount": -800,
+                "event_label": "Repair",
+                "account_id": self.chequing_account_id,
+            },
+        )
+
+        self.assertEqual(update_response.status_code, 200, update_response.text)
+        updated_payload = update_response.json()
+
+        self.assertEqual(updated_payload["id"], created_payload["id"])
+        self.assertEqual(updated_payload["name"], "Updated Trip Pressure Plan")
+        self.assertEqual(updated_payload["months"], 4)
+        self.assertEqual(updated_payload["income_adjustment"], 250.0)
+        self.assertEqual(updated_payload["expense_adjustment"], -150.0)
+        self.assertEqual(updated_payload["target_balance"], 9500.0)
+        self.assertEqual(updated_payload["event_amount"], -800.0)
+        self.assertEqual(updated_payload["event_month_offset"], 1)
+        self.assertEqual(updated_payload["event_label"], "Repair")
+
+        list_response = self.client.get(
+            "/analytics/saved-scenarios",
+            params={"account_id": self.chequing_account_id},
+        )
+
+        self.assertEqual(list_response.status_code, 200, list_response.text)
+        listed_payload = list_response.json()
+
+        self.assertEqual(len(listed_payload), 1)
+        self.assertEqual(listed_payload[0]["id"], created_payload["id"])
+        self.assertEqual(listed_payload[0]["name"], "Updated Trip Pressure Plan")
+
+        delete_response = self.client.delete(
+            f"/analytics/saved-scenarios/{created_payload['id']}"
+        )
+
+        self.assertEqual(delete_response.status_code, 200, delete_response.text)
+        self.assertIn("deleted", delete_response.json()["message"].lower())
+
+        second_list_response = self.client.get(
+            "/analytics/saved-scenarios",
+            params={"account_id": self.chequing_account_id},
+        )
+
+        self.assertEqual(second_list_response.status_code, 200, second_list_response.text)
+        self.assertEqual(second_list_response.json(), [])
 
 
 if __name__ == "__main__":
