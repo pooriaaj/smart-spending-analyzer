@@ -354,6 +354,160 @@ class BudgetRouteTest(unittest.TestCase):
         self.assertEqual(payload["skipped_existing_count"], 0)
         self.assertIn("No budgets were found", payload["message"])
 
+    def test_build_next_month_budgets_from_pace_creates_adjusted_targets(self) -> None:
+        with patch("app.services.budget_metrics.date", FixedBudgetDate):
+            with self.session_local() as session:
+                session.add_all(
+                    [
+                        BudgetPlan(
+                            month="2026-04",
+                            category="groceries",
+                            amount=200.0,
+                            owner_id=self.user_id,
+                            account_id=self.chequing_account_id,
+                        ),
+                        BudgetPlan(
+                            month="2026-04",
+                            category="transport",
+                            amount=200.0,
+                            owner_id=self.user_id,
+                            account_id=self.chequing_account_id,
+                        ),
+                    ]
+                )
+                session.add_all(
+                    [
+                        Transaction(
+                            amount=90.0,
+                            category="groceries",
+                            description="Costco",
+                            date=date(2026, 4, 2),
+                            type="expense",
+                            owner_id=self.user_id,
+                            account_id=self.chequing_account_id,
+                        ),
+                        Transaction(
+                            amount=50.0,
+                            category="transport",
+                            description="Fuel",
+                            date=date(2026, 4, 1),
+                            type="expense",
+                            owner_id=self.user_id,
+                            account_id=self.chequing_account_id,
+                        ),
+                    ]
+                )
+                session.commit()
+
+            response = self.client.post(
+                "/budgets/build-next-month",
+                json={
+                    "month": "2026-04",
+                    "account_id": self.chequing_account_id,
+                },
+            )
+
+        self.assertEqual(response.status_code, 200, response.text)
+        payload = response.json()
+
+        self.assertEqual(payload["source_month"], "2026-04")
+        self.assertEqual(payload["target_month"], "2026-05")
+        self.assertEqual(payload["created_count"], 2)
+        self.assertEqual(payload["adjusted_count"], 2)
+        self.assertEqual(payload["skipped_existing_count"], 0)
+
+        with self.session_local() as session:
+            may_budgets = (
+                session.query(BudgetPlan)
+                .filter(
+                    BudgetPlan.owner_id == self.user_id,
+                    BudgetPlan.month == "2026-05",
+                    BudgetPlan.account_id == self.chequing_account_id,
+                )
+                .order_by(BudgetPlan.category.asc())
+                .all()
+            )
+
+        self.assertEqual([budget.category for budget in may_budgets], ["groceries", "transport"])
+        groceries_budget = next(budget for budget in may_budgets if budget.category == "groceries")
+        transport_budget = next(budget for budget in may_budgets if budget.category == "transport")
+        self.assertAlmostEqual(float(groceries_budget.amount), 270.0, places=2)
+        self.assertAlmostEqual(float(transport_budget.amount), 157.5, places=2)
+
+    def test_build_next_month_budgets_from_pace_skips_existing_target_categories(self) -> None:
+        with patch("app.services.budget_metrics.date", FixedBudgetDate):
+            with self.session_local() as session:
+                session.add_all(
+                    [
+                        BudgetPlan(
+                            month="2026-04",
+                            category="groceries",
+                            amount=200.0,
+                            owner_id=self.user_id,
+                            account_id=self.chequing_account_id,
+                        ),
+                        BudgetPlan(
+                            month="2026-04",
+                            category="restaurant",
+                            amount=120.0,
+                            owner_id=self.user_id,
+                            account_id=self.chequing_account_id,
+                        ),
+                        BudgetPlan(
+                            month="2026-05",
+                            category="groceries",
+                            amount=240.0,
+                            owner_id=self.user_id,
+                            account_id=self.chequing_account_id,
+                        ),
+                    ]
+                )
+                session.add(
+                    Transaction(
+                        amount=60.0,
+                        category="groceries",
+                        description="Grocery Run",
+                        date=date(2026, 4, 3),
+                        type="expense",
+                        owner_id=self.user_id,
+                        account_id=self.chequing_account_id,
+                    )
+                )
+                session.commit()
+
+            response = self.client.post(
+                "/budgets/build-next-month",
+                json={
+                    "month": "2026-04",
+                    "account_id": self.chequing_account_id,
+                },
+            )
+
+        self.assertEqual(response.status_code, 200, response.text)
+        payload = response.json()
+
+        self.assertEqual(payload["created_count"], 1)
+        self.assertEqual(payload["adjusted_count"], 0)
+        self.assertEqual(payload["skipped_existing_count"], 1)
+
+        with self.session_local() as session:
+            may_budgets = (
+                session.query(BudgetPlan)
+                .filter(
+                    BudgetPlan.owner_id == self.user_id,
+                    BudgetPlan.month == "2026-05",
+                    BudgetPlan.account_id == self.chequing_account_id,
+                )
+                .order_by(BudgetPlan.category.asc())
+                .all()
+            )
+
+        self.assertEqual([budget.category for budget in may_budgets], ["groceries", "restaurant"])
+        groceries_budget = next(budget for budget in may_budgets if budget.category == "groceries")
+        restaurant_budget = next(budget for budget in may_budgets if budget.category == "restaurant")
+        self.assertAlmostEqual(float(groceries_budget.amount), 240.0, places=2)
+        self.assertAlmostEqual(float(restaurant_budget.amount), 120.0, places=2)
+
     def test_list_budgets_returns_actionable_budget_insights(self) -> None:
         with patch("app.services.budget_metrics.date", FixedBudgetDate):
             with self.session_local() as session:

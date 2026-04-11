@@ -201,6 +201,197 @@ class AnalyticsRouteTest(unittest.TestCase):
         self.assertEqual(response.status_code, 404, response.text)
         self.assertEqual(response.json()["detail"], "Account not found")
 
+    def test_future_simulator_respects_account_scope_and_adjustments(self) -> None:
+        with self.session_local() as session:
+            session.add_all(
+                [
+                    Transaction(
+                        amount=2000.0,
+                        category="Salary",
+                        description="Payroll Jan",
+                        date=date(2026, 1, 3),
+                        type="income",
+                        owner_id=self.user_id,
+                        account_id=self.chequing_account_id,
+                    ),
+                    Transaction(
+                        amount=500.0,
+                        category="Rent",
+                        description="Rent Jan",
+                        date=date(2026, 1, 5),
+                        type="expense",
+                        owner_id=self.user_id,
+                        account_id=self.chequing_account_id,
+                    ),
+                    Transaction(
+                        amount=2000.0,
+                        category="Salary",
+                        description="Payroll Feb",
+                        date=date(2026, 2, 3),
+                        type="income",
+                        owner_id=self.user_id,
+                        account_id=self.chequing_account_id,
+                    ),
+                    Transaction(
+                        amount=600.0,
+                        category="Rent",
+                        description="Rent Feb",
+                        date=date(2026, 2, 5),
+                        type="expense",
+                        owner_id=self.user_id,
+                        account_id=self.chequing_account_id,
+                    ),
+                    Transaction(
+                        amount=2000.0,
+                        category="Salary",
+                        description="Payroll Mar",
+                        date=date(2026, 3, 3),
+                        type="income",
+                        owner_id=self.user_id,
+                        account_id=self.chequing_account_id,
+                    ),
+                    Transaction(
+                        amount=700.0,
+                        category="Rent",
+                        description="Rent Mar",
+                        date=date(2026, 3, 5),
+                        type="expense",
+                        owner_id=self.user_id,
+                        account_id=self.chequing_account_id,
+                    ),
+                    Transaction(
+                        amount=5000.0,
+                        category="Salary",
+                        description="Savings Payroll",
+                        date=date(2026, 3, 10),
+                        type="income",
+                        owner_id=self.user_id,
+                        account_id=self.savings_account_id,
+                    ),
+                ]
+            )
+            session.commit()
+
+        response = self.client.get(
+            "/analytics/future-simulator",
+            params={
+                "account_id": self.chequing_account_id,
+                "months": 3,
+                "income_adjustment": 100,
+                "expense_adjustment": -50,
+            },
+        )
+
+        self.assertEqual(response.status_code, 200, response.text)
+        payload = response.json()
+
+        self.assertEqual(payload["scope_label"], "Daily Spending (chequing)")
+        self.assertEqual(payload["months"], 3)
+        self.assertEqual(payload["starting_balance"], 4200.0)
+        self.assertEqual(payload["baseline_monthly_income"], 2000.0)
+        self.assertEqual(payload["baseline_monthly_expenses"], 600.0)
+        self.assertEqual(payload["adjusted_monthly_income"], 2100.0)
+        self.assertEqual(payload["adjusted_monthly_expenses"], 550.0)
+        self.assertEqual(payload["monthly_net_change"], 1550.0)
+        self.assertEqual(payload["projected_end_balance"], 8850.0)
+        self.assertEqual(payload["risk_level"], "healthy")
+        self.assertEqual(len(payload["timeline"]), 3)
+        self.assertEqual(payload["timeline"][0]["month"], "2026-05")
+
+    def test_future_simulator_uses_budget_projection_when_it_is_higher_than_history(self) -> None:
+        with patch("app.services.budget_metrics.date", FixedBudgetDate):
+            with self.session_local() as session:
+                session.add_all(
+                    [
+                        Transaction(
+                            amount=1500.0,
+                            category="Salary",
+                            description="Payroll Jan",
+                            date=date(2026, 1, 3),
+                            type="income",
+                            owner_id=self.user_id,
+                            account_id=self.chequing_account_id,
+                        ),
+                        Transaction(
+                            amount=100.0,
+                            category="Groceries",
+                            description="Groceries Jan",
+                            date=date(2026, 1, 4),
+                            type="expense",
+                            owner_id=self.user_id,
+                            account_id=self.chequing_account_id,
+                        ),
+                        Transaction(
+                            amount=1500.0,
+                            category="Salary",
+                            description="Payroll Feb",
+                            date=date(2026, 2, 3),
+                            type="income",
+                            owner_id=self.user_id,
+                            account_id=self.chequing_account_id,
+                        ),
+                        Transaction(
+                            amount=120.0,
+                            category="Groceries",
+                            description="Groceries Feb",
+                            date=date(2026, 2, 4),
+                            type="expense",
+                            owner_id=self.user_id,
+                            account_id=self.chequing_account_id,
+                        ),
+                        Transaction(
+                            amount=1500.0,
+                            category="Salary",
+                            description="Payroll Mar",
+                            date=date(2026, 3, 3),
+                            type="income",
+                            owner_id=self.user_id,
+                            account_id=self.chequing_account_id,
+                        ),
+                        Transaction(
+                            amount=80.0,
+                            category="Groceries",
+                            description="Groceries Mar",
+                            date=date(2026, 3, 4),
+                            type="expense",
+                            owner_id=self.user_id,
+                            account_id=self.chequing_account_id,
+                        ),
+                        BudgetPlan(
+                            month="2026-04",
+                            category="groceries",
+                            amount=200.0,
+                            owner_id=self.user_id,
+                            account_id=self.chequing_account_id,
+                        ),
+                        Transaction(
+                            amount=90.0,
+                            category="groceries",
+                            description="Large Grocery Run",
+                            date=date(2026, 4, 2),
+                            type="expense",
+                            owner_id=self.user_id,
+                            account_id=self.chequing_account_id,
+                        ),
+                    ]
+                )
+                session.commit()
+
+            response = self.client.get(
+                "/analytics/future-simulator",
+                params={
+                    "account_id": self.chequing_account_id,
+                    "months": 2,
+                },
+            )
+
+        self.assertEqual(response.status_code, 200, response.text)
+        payload = response.json()
+
+        self.assertEqual(payload["baseline_monthly_income"], 1500.0)
+        self.assertEqual(payload["baseline_monthly_expenses"], 270.0)
+        self.assertIn("budget projections", " ".join(payload["assumptions"]).lower())
+
     def test_assistant_suggestions_are_account_aware(self) -> None:
         self.seed_transactions()
 
@@ -214,6 +405,7 @@ class AnalyticsRouteTest(unittest.TestCase):
 
         self.assertIn("Why is Entertainment my top expense category?", suggestions)
         self.assertIn("How can I reduce Entertainment spending?", suggestions)
+        self.assertIn("What will my balance look like in 3 months?", suggestions)
         self.assertNotIn("Why is Groceries my top expense category?", suggestions)
 
     def test_assistant_suggestions_include_budget_prompt_when_budgets_exist(self) -> None:
@@ -460,6 +652,87 @@ class AnalyticsRouteTest(unittest.TestCase):
         )
         self.assertEqual(payload["suggested_actions"][0]["category"], "Groceries")
         self.assertEqual(payload["suggested_actions"][0]["page"], "transactions")
+        self.assertEqual(payload["suggested_actions"][0]["account_id"], self.chequing_account_id)
+
+    def test_assistant_can_answer_future_balance_questions(self) -> None:
+        with self.session_local() as session:
+            session.add_all(
+                [
+                    Transaction(
+                        amount=2000.0,
+                        category="Salary",
+                        description="Payroll Jan",
+                        date=date(2026, 1, 3),
+                        type="income",
+                        owner_id=self.user_id,
+                        account_id=self.chequing_account_id,
+                    ),
+                    Transaction(
+                        amount=500.0,
+                        category="Rent",
+                        description="Rent Jan",
+                        date=date(2026, 1, 5),
+                        type="expense",
+                        owner_id=self.user_id,
+                        account_id=self.chequing_account_id,
+                    ),
+                    Transaction(
+                        amount=2000.0,
+                        category="Salary",
+                        description="Payroll Feb",
+                        date=date(2026, 2, 3),
+                        type="income",
+                        owner_id=self.user_id,
+                        account_id=self.chequing_account_id,
+                    ),
+                    Transaction(
+                        amount=500.0,
+                        category="Rent",
+                        description="Rent Feb",
+                        date=date(2026, 2, 5),
+                        type="expense",
+                        owner_id=self.user_id,
+                        account_id=self.chequing_account_id,
+                    ),
+                    Transaction(
+                        amount=2000.0,
+                        category="Salary",
+                        description="Payroll Mar",
+                        date=date(2026, 3, 3),
+                        type="income",
+                        owner_id=self.user_id,
+                        account_id=self.chequing_account_id,
+                    ),
+                    Transaction(
+                        amount=500.0,
+                        category="Rent",
+                        description="Rent Mar",
+                        date=date(2026, 3, 5),
+                        type="expense",
+                        owner_id=self.user_id,
+                        account_id=self.chequing_account_id,
+                    ),
+                ]
+            )
+            session.commit()
+
+        with patch("app.services.analytics_service.generate_llm_assistant_response", return_value=None):
+            response = self.client.post(
+                "/analytics/assistant-response",
+                json={
+                    "question": "What will my balance look like in 3 months?",
+                    "history": [],
+                    "mode": "balanced",
+                    "account_id": self.chequing_account_id,
+                },
+            )
+
+        self.assertEqual(response.status_code, 200, response.text)
+        payload = response.json()
+
+        self.assertIn("$9000.00", payload["answer"])
+        self.assertIn("Starting balance: $4500.00", payload["supporting_points"])
+        self.assertEqual(payload["suggested_actions"][0]["page"], "simulator")
         self.assertEqual(payload["suggested_actions"][0]["account_id"], self.chequing_account_id)
 
     def test_assistant_can_compare_accounts_in_all_accounts_scope(self) -> None:

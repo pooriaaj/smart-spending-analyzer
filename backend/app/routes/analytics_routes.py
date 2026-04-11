@@ -12,6 +12,7 @@ from app.schemas import (
     AssistantSuggestionsResponse,
     CategoryBreakdownItem,
     CategoryTrendsResponse,
+    FutureSimulationResponse,
     MonthlySummaryItem,
     OverspendingAlertsResponse,
     RecentTransactionItem,
@@ -19,6 +20,7 @@ from app.schemas import (
     TopExpenseCategory,
 )
 from app.services.analytics_service import (
+    build_future_balance_simulation,
     generate_assistant_response,
     generate_assistant_suggestions,
     get_category_breakdown,
@@ -222,6 +224,27 @@ def get_category_trends_route(
 ):
     resolve_account_scope(db, current_user, account_id)
     return get_category_trends(db=db, user_id=current_user.id, account_id=account_id)
+
+
+@router.get("/future-simulator", response_model=FutureSimulationResponse)
+def get_future_simulator_route(
+    months: int = Query(default=6, ge=1, le=12),
+    income_adjustment: float = Query(default=0.0),
+    expense_adjustment: float = Query(default=0.0),
+    account_id: int | None = Query(default=None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    scope_label = resolve_account_scope(db, current_user, account_id)
+    return build_future_balance_simulation(
+        db=db,
+        user_id=current_user.id,
+        account_id=account_id,
+        months=months,
+        income_adjustment=income_adjustment,
+        expense_adjustment=expense_adjustment,
+        scope_label=scope_label,
+    )
 
 
 @router.post("/assistant-response", response_model=AssistantQueryResponse)

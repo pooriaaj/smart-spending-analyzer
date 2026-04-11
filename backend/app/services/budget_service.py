@@ -7,6 +7,7 @@ from sqlalchemy.orm import Query, Session
 
 from app.models import BudgetPlan, Transaction
 from app.schemas import (
+    BudgetBuildResponse,
     BudgetCopyResponse,
     BudgetInsightResponse,
     BudgetListResponse,
@@ -15,6 +16,7 @@ from app.schemas import (
     BudgetSummaryResponse,
 )
 from app.services.budget_metrics import (
+    build_next_month_budget_target,
     build_budget_action_insights,
     build_budget_pace_context,
     build_budget_projection_context,
@@ -372,6 +374,107 @@ def copy_previous_month_budgets(
         target_month=month,
         account_id=account_id,
         copied_count=copied_count,
+        skipped_existing_count=skipped_existing_count,
+        message=message,
+    )
+
+
+def build_next_month_budgets_from_pace(
+    db: Session,
+    owner_id: int,
+    month: str,
+    account_id: int | None = None,
+) -> BudgetBuildResponse:
+    target_month = shift_month_label(month, 1)
+    source_budgets = (
+        build_budget_scope_query(
+            db,
+            owner_id,
+            month=month,
+            account_id=account_id,
+        )
+        .order_by(BudgetPlan.category.asc(), BudgetPlan.id.asc())
+        .all()
+    )
+
+    if not source_budgets:
+        return BudgetBuildResponse(
+            source_month=month,
+            target_month=target_month,
+            account_id=account_id,
+            created_count=0,
+            adjusted_count=0,
+            skipped_existing_count=0,
+            message=f"No budgets were found in {month} for this scope.",
+        )
+
+    target_budgets = build_budget_scope_query(
+        db,
+        owner_id,
+        month=target_month,
+        account_id=account_id,
+    ).all()
+    existing_categories = {budget.category for budget in target_budgets}
+
+    created_count = 0
+    adjusted_count = 0
+    skipped_existing_count = 0
+
+    for source_budget in source_budgets:
+        if source_budget.category in existing_categories:
+            skipped_existing_count += 1
+            continue
+
+        source_budget_response = build_budget_response(db, source_budget)
+        target_plan = build_next_month_budget_target(source_budget_response)
+        target_amount = float(target_plan["target_amount"])
+
+        db.add(
+            BudgetPlan(
+                month=target_month,
+                category=source_budget.category,
+                amount=target_amount,
+                owner_id=owner_id,
+                account_id=account_id,
+            )
+        )
+        existing_categories.add(source_budget.category)
+        created_count += 1
+        if bool(target_plan["adjusted"]):
+            adjusted_count += 1
+
+    if created_count > 0:
+        db.commit()
+
+    if created_count == 0:
+        message = (
+            f"All {target_month} budgets already exist in this scope, so nothing new was built."
+        )
+    elif adjusted_count > 0 and skipped_existing_count > 0:
+        message = (
+            f"Built {created_count} budgets for {target_month}. "
+            f"Adjusted {adjusted_count} from the current pace and skipped "
+            f"{skipped_existing_count} existing budget(s)."
+        )
+    elif adjusted_count > 0:
+        message = (
+            f"Built {created_count} budgets for {target_month}. "
+            f"Adjusted {adjusted_count} from the current pace."
+        )
+    elif skipped_existing_count > 0:
+        message = (
+            f"Built {created_count} budgets for {target_month} and skipped "
+            f"{skipped_existing_count} existing budget(s)."
+        )
+    else:
+        message = f"Built {created_count} budgets for {target_month} from {month}."
+
+    return BudgetBuildResponse(
+        source_month=month,
+        target_month=target_month,
+        account_id=account_id,
+        created_count=created_count,
+        adjusted_count=adjusted_count,
         skipped_existing_count=skipped_existing_count,
         message=message,
     )

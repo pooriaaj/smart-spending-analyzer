@@ -550,6 +550,155 @@ def build_financial_snapshot(
     }
 
 
+def shift_month_label(month: str, offset: int) -> str:
+    year_text, month_text = month.split("-")
+    year = int(year_text)
+    month_number = int(month_text)
+    total_months = year * 12 + (month_number - 1) + offset
+    shifted_year = total_months // 12
+    shifted_month = total_months % 12 + 1
+    return f"{shifted_year:04d}-{shifted_month:02d}"
+
+
+def build_future_balance_simulation(
+    db: Session,
+    user_id: int,
+    account_id: int | None = None,
+    *,
+    months: int = 6,
+    income_adjustment: float = 0.0,
+    expense_adjustment: float = 0.0,
+    scope_label: str = "All accounts combined",
+) -> dict[str, Any]:
+    sanitized_months = max(1, min(int(months or 6), 12))
+    financial_snapshot = build_financial_snapshot(db, user_id, account_id=account_id)
+    monthly_summary = get_monthly_summary(db, user_id, account_id=account_id)
+    current_month = get_default_budget_month()
+    historical_months = [
+        item for item in monthly_summary if item["month"] != current_month
+    ] or monthly_summary
+    recent_months = (
+        historical_months[-3:] if len(historical_months) >= 3 else historical_months
+    )
+
+    if recent_months:
+        baseline_monthly_income = sum(item["income"] for item in recent_months) / len(recent_months)
+        baseline_monthly_expenses = sum(item["expenses"] for item in recent_months) / len(recent_months)
+    else:
+        baseline_monthly_income = 0.0
+        baseline_monthly_expenses = 0.0
+
+    budget_snapshot = get_budget_progress_snapshot(
+        db,
+        user_id,
+        month=current_month,
+        account_id=account_id,
+    )
+    budget_projection = float(budget_snapshot["projected_total_spent"] or 0.0)
+    use_budget_projection = budget_snapshot["budget_count"] > 0 and budget_projection > 0
+    expense_baseline = (
+        max(baseline_monthly_expenses, budget_projection)
+        if use_budget_projection
+        else baseline_monthly_expenses
+    )
+
+    adjusted_monthly_income = max(0.0, baseline_monthly_income + float(income_adjustment or 0.0))
+    adjusted_monthly_expenses = max(0.0, expense_baseline + float(expense_adjustment or 0.0))
+    monthly_net_change = adjusted_monthly_income - adjusted_monthly_expenses
+    starting_balance = float(financial_snapshot["balance"])
+    start_month = shift_month_label(current_month, 1)
+
+    timeline: list[dict[str, Any]] = []
+    running_balance = starting_balance
+    lowest_balance = starting_balance
+
+    for offset in range(sanitized_months):
+        month_label = shift_month_label(start_month, offset)
+        running_balance += monthly_net_change
+        lowest_balance = min(lowest_balance, running_balance)
+        timeline.append(
+            {
+                "month": month_label,
+                "income": round(adjusted_monthly_income, 2),
+                "expenses": round(adjusted_monthly_expenses, 2),
+                "net_change": round(monthly_net_change, 2),
+                "ending_balance": round(running_balance, 2),
+            }
+        )
+
+    projected_end_balance = round(running_balance, 2)
+    projected_change_amount = round(projected_end_balance - starting_balance, 2)
+
+    if lowest_balance < 0:
+        risk_level = "high"
+    elif monthly_net_change < 0:
+        risk_level = "watch"
+    else:
+        risk_level = "healthy"
+
+    if projected_change_amount < 0:
+        narrative = (
+            f"At this pace, your balance is projected to fall by "
+            f"{format_currency(abs(projected_change_amount))} over the next {sanitized_months} month(s) "
+            f"and land near {format_currency(projected_end_balance)}."
+        )
+    elif projected_change_amount > 0:
+        narrative = (
+            f"At this pace, your balance is projected to grow by "
+            f"{format_currency(projected_change_amount)} over the next {sanitized_months} month(s) "
+            f"and reach about {format_currency(projected_end_balance)}."
+        )
+    else:
+        narrative = (
+            f"At this pace, your balance is projected to stay roughly flat over the next "
+            f"{sanitized_months} month(s) around {format_currency(projected_end_balance)}."
+        )
+
+    assumptions = []
+    if recent_months:
+        assumptions.append(
+            f"Baseline uses the last {len(recent_months)} month(s) of scoped income and expense history."
+        )
+    else:
+        assumptions.append("No monthly history was available, so the baseline starts from zero activity.")
+
+    if use_budget_projection:
+        assumptions.append(
+            f"Current budget projections for {current_month} were used to anchor expense pace at "
+            f"{format_currency(expense_baseline)}."
+        )
+    else:
+        assumptions.append(
+            f"Expense pace is based on a historical average of {format_currency(expense_baseline)} per month."
+        )
+
+    if income_adjustment or expense_adjustment:
+        assumptions.append(
+            f"Scenario adjustments applied: income {format_currency(float(income_adjustment or 0.0))} "
+            f"and expenses {format_currency(float(expense_adjustment or 0.0))} per month."
+        )
+    else:
+        assumptions.append("No extra monthly scenario adjustments were applied.")
+
+    return {
+        "scope_label": scope_label,
+        "start_month": start_month,
+        "months": sanitized_months,
+        "starting_balance": round(starting_balance, 2),
+        "baseline_monthly_income": round(baseline_monthly_income, 2),
+        "baseline_monthly_expenses": round(expense_baseline, 2),
+        "adjusted_monthly_income": round(adjusted_monthly_income, 2),
+        "adjusted_monthly_expenses": round(adjusted_monthly_expenses, 2),
+        "monthly_net_change": round(monthly_net_change, 2),
+        "projected_change_amount": projected_change_amount,
+        "projected_end_balance": projected_end_balance,
+        "risk_level": risk_level,
+        "narrative": narrative,
+        "assumptions": assumptions,
+        "timeline": timeline,
+    }
+
+
 def get_spending_insights(
     db: Session,
     user_id: int,
@@ -1120,6 +1269,21 @@ def classify_question(question: str, context_text: str) -> str:
     if any(
         phrase in text
         for phrase in [
+            "future balance",
+            "simulate",
+            "simulation",
+            "forecast my balance",
+            "project my balance",
+            "months from now",
+            "next few months",
+            "what will my balance look like",
+        ]
+    ):
+        return "future_balance"
+
+    if any(
+        phrase in text
+        for phrase in [
             "should i review charts or transactions first",
             "charts or transactions first",
             "review charts or transactions",
@@ -1241,6 +1405,23 @@ def build_assistant_actions(
                 "page": "analytics",
                 "section": "monthly",
                 "month": current_month,
+                "account_id": account_id,
+            }
+        )
+
+    elif intent == "future_balance":
+        actions.append(
+            {
+                "label": "Open simulator",
+                "page": "simulator",
+                "account_id": account_id,
+            }
+        )
+        actions.append(
+            {
+                "label": "Open budgets",
+                "page": "budgets",
+                "month": snapshot.get("current_month") or get_default_budget_month(),
                 "account_id": account_id,
             }
         )
@@ -1451,6 +1632,13 @@ def generate_dynamic_followups(
             f"How can I improve my {focus_category} spending?",
         ]
 
+    if intent == "future_balance":
+        return [
+            "What if my monthly expenses go up by 200?",
+            "What if I increase my income by 500 a month?",
+            "Should I build next month's budgets from this pace?",
+        ]
+
     if intent == "account_comparison":
         return [
             "Which account should I review first?",
@@ -1547,6 +1735,43 @@ def build_driver_explanation(
             reasons.append(f"recent transactions such as {recent_labels} may be contributing")
 
     return reasons
+
+
+def parse_projection_months(question: str) -> int:
+    match = re.search(r"(\d+)\s+month", question.lower())
+    if not match:
+        return 3
+
+    return max(1, min(int(match.group(1)), 12))
+
+
+def parse_simulation_adjustments(question: str) -> tuple[float, float]:
+    lower_question = question.lower()
+
+    def extract_amount(keywords: list[str]) -> float:
+        keyword_group = "|".join(re.escape(keyword) for keyword in keywords)
+        match = re.search(
+            rf"(?:{keyword_group})(?:[^0-9-]{{0,24}})(\d+(?:\.\d+)?)",
+            lower_question,
+        )
+        if not match:
+            return 0.0
+
+        amount = float(match.group(1))
+        context = lower_question[max(0, match.start() - 24): match.end()]
+        negative_signals = ("down", "decrease", "less", "lower", "reduce", "cut")
+        positive_signals = ("up", "increase", "more", "higher", "raise")
+
+        if any(signal in context for signal in negative_signals) and not any(
+            signal in context for signal in positive_signals
+        ):
+            return -amount
+
+        return amount
+
+    income_adjustment = extract_amount(["income", "salary", "earn", "earning", "pay"])
+    expense_adjustment = extract_amount(["expense", "expenses", "spend", "spending", "costs"])
+    return income_adjustment, expense_adjustment
 
 
 def generate_assistant_response(
@@ -2191,6 +2416,63 @@ def generate_assistant_response(
             "scope_label": scope_label,
         }
 
+    if intent == "future_balance":
+        projection_months = parse_projection_months(question)
+        income_adjustment, expense_adjustment = parse_simulation_adjustments(question)
+        simulation = build_future_balance_simulation(
+            db,
+            user_id,
+            account_id=account_id,
+            months=projection_months,
+            income_adjustment=income_adjustment,
+            expense_adjustment=expense_adjustment,
+            scope_label=scope_label,
+        )
+
+        if mode == "strict":
+            answer = (
+                f"If nothing changes from this pace, your balance is heading toward "
+                f"{format_currency(simulation['projected_end_balance'])} in {projection_months} month(s)."
+            )
+        elif mode == "coach":
+            answer = (
+                f"If your current pace holds, your balance could land around "
+                f"{format_currency(simulation['projected_end_balance'])} in {projection_months} month(s)."
+            )
+        else:
+            answer = (
+                f"At the current pace, your balance is projected to be "
+                f"{format_currency(simulation['projected_end_balance'])} in {projection_months} month(s)."
+            )
+
+        supporting_points = [
+            f"Starting balance: {format_currency(simulation['starting_balance'])}",
+            f"Monthly income used: {format_currency(simulation['adjusted_monthly_income'])}",
+            f"Monthly expenses used: {format_currency(simulation['adjusted_monthly_expenses'])}",
+            f"Projected monthly net change: {format_currency(simulation['monthly_net_change'])}",
+            simulation["narrative"],
+        ]
+
+        return {
+            "answer": answer,
+            "supporting_points": supporting_points,
+            "suggested_followups": generate_dynamic_followups(
+                intent=intent,
+                mode=mode,
+                top_category=top_category,
+                driver_category=primary_driver,
+                focus_category=focus_category,
+            ),
+            "suggested_actions": build_assistant_actions(
+                snapshot=snapshot,
+                intent=intent,
+                account_id=account_id,
+                driver_category=primary_driver,
+                focus_category=focus_category,
+            ),
+            "scope_label": scope_label,
+        }
+
     if focus_snapshot and intent in {
         "category_transactions",
         "recent",
@@ -2523,6 +2805,7 @@ def generate_assistant_suggestions(
     if snapshot["current_month"]:
         suggestions.append(f"Summarize my finances for {snapshot['current_month']}")
 
+    suggestions.append("What will my balance look like in 3 months?")
     suggestions.append("Show my recent transactions")
     suggestions.append("Give me saving advice")
 

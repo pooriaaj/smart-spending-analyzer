@@ -411,6 +411,13 @@ function AnalyticsPage() {
             >
               Budgets
             </button>
+
+            <button
+              className="secondary-button"
+              onClick={() => navigate("/simulator")}
+            >
+              Simulator
+            </button>
           </div>
         </div>
 

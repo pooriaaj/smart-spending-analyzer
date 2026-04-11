@@ -312,3 +312,47 @@ def build_budget_action_insights(
         }
         for item in ordered[:limit]
     ]
+
+
+def build_next_month_budget_target(
+    item: Any,
+) -> dict[str, float | bool | str]:
+    current_amount = float(_read_budget_item_value(item, "amount") or 0.0)
+    spent_amount = float(_read_budget_item_value(item, "spent_amount") or 0.0)
+    projected_spent_amount = float(
+        _read_budget_item_value(item, "projected_spent_amount") or 0.0
+    )
+    projected_status = str(_read_budget_item_value(item, "projected_status") or "")
+    days_elapsed = int(_read_budget_item_value(item, "days_elapsed") or 0)
+
+    if current_amount <= 0:
+        return {
+            "target_amount": 0.0,
+            "adjusted": False,
+            "reason": "Current budget amount is invalid, so no paced target was created.",
+        }
+
+    if days_elapsed < 7 or projected_spent_amount <= 0:
+        return {
+            "target_amount": round(current_amount, 2),
+            "adjusted": False,
+            "reason": (
+                "There is not enough pace data yet, so the current budget amount was carried forward."
+            ),
+        }
+
+    if projected_status in {"over_budget", "at_risk"}:
+        target_amount = max(current_amount, projected_spent_amount)
+        reason = "Raised to reflect the current projected month-end pace."
+    else:
+        target_amount = max(spent_amount, projected_spent_amount * 1.05)
+        reason = "Tuned to the current pace with a small planning buffer."
+
+    target_amount = round(max(target_amount, 0.01), 2)
+    adjusted = abs(target_amount - current_amount) >= 0.01
+
+    return {
+        "target_amount": target_amount,
+        "adjusted": adjusted,
+        "reason": reason,
+    }

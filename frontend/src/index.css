@@ -1239,6 +1239,12 @@ textarea:focus,
   align-items: center;
 }
 
+.budget-section-actions {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
 .budget-form-field {
   display: flex;
   flex-direction: column;
@@ -1463,6 +1469,89 @@ textarea:focus,
   color: #166534;
 }
 
+.simulator-controls-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+  align-items: end;
+}
+
+.simulator-overview-top {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: flex-start;
+}
+
+.simulator-risk-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 8px 12px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.simulator-risk-healthy {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.simulator-risk-watch {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.simulator-risk-high {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.simulator-metrics-grid {
+  margin-top: 18px;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.simulator-metric-card {
+  padding: 16px;
+  border-radius: 18px;
+  background: rgba(248, 250, 252, 0.88);
+  border: 1px solid rgba(15, 23, 42, 0.08);
+}
+
+.simulator-metric-card span {
+  display: block;
+  margin-bottom: 8px;
+  color: var(--text-faint);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.simulator-metric-card strong {
+  font-size: 24px;
+  letter-spacing: -0.03em;
+}
+
+.simulator-chart-card {
+  min-height: 420px;
+}
+
+.simulator-assumptions-list {
+  margin: 0;
+  padding-left: 20px;
+  color: var(--text-soft);
+  line-height: 1.7;
+}
+
+.simulator-assumptions-list li + li {
+  margin-top: 10px;
+}
+
 :root[data-theme="dark"] .account-comparison-item {
   background: rgba(15, 23, 42, 0.82);
   border-color: rgba(148, 163, 184, 0.14);
@@ -1534,6 +1623,26 @@ textarea:focus,
 :root[data-theme="dark"] .budget-insight-badge-positive {
   background: rgba(22, 163, 74, 0.22);
   color: #bbf7d0;
+}
+
+:root[data-theme="dark"] .simulator-metric-card {
+  background: rgba(15, 23, 42, 0.82);
+  border-color: rgba(148, 163, 184, 0.14);
+}
+
+:root[data-theme="dark"] .simulator-risk-healthy {
+  background: rgba(22, 163, 74, 0.22);
+  color: #bbf7d0;
+}
+
+:root[data-theme="dark"] .simulator-risk-watch {
+  background: rgba(217, 119, 6, 0.22);
+  color: #fde68a;
+}
+
+:root[data-theme="dark"] .simulator-risk-high {
+  background: rgba(220, 38, 38, 0.22);
+  color: #fecaca;
 }
 
 :root[data-theme="dark"] .import-filter-chip:hover {
@@ -3372,10 +3481,17 @@ textarea {
   .budget-card-meta,
   .budget-insight-actions,
   .budget-insight-top,
+  .budget-section-actions,
   .budget-suggestion-meta,
-  .budget-scope-actions {
+  .budget-scope-actions,
+  .simulator-overview-top {
     flex-direction: column;
     align-items: flex-start;
+  }
+
+  .simulator-controls-grid,
+  .simulator-metrics-grid {
+    grid-template-columns: 1fr;
   }
 }
 .account-selector-block {

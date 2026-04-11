@@ -136,6 +136,11 @@ function AssistantPage() {
       return;
     }
 
+    if (action.page === "simulator") {
+      navigate("/simulator");
+      return;
+    }
+
     if (action.page === "transactions") {
       const params = new URLSearchParams();
 
@@ -256,6 +261,13 @@ function AssistantPage() {
               onClick={() => navigate("/budgets")}
             >
               Budgets
+            </button>
+
+            <button
+              className="secondary-button"
+              onClick={() => navigate("/simulator")}
+            >
+              Simulator
             </button>
           </div>
         </div>

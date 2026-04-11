@@ -308,6 +308,9 @@ function DashboardPage() {
             <button className="secondary-button" onClick={() => navigate("/budgets")}>
               Budgets
             </button>
+            <button className="secondary-button" onClick={() => navigate("/simulator")}>
+              Simulator
+            </button>
             <button className="secondary-button" onClick={() => navigate("/assistant")}>
               Assistant
             </button>

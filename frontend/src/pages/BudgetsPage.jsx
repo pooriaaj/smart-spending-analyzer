@@ -52,7 +52,9 @@ function BudgetsPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [copying, setCopying] = useState(false);
+  const [buildingNextMonth, setBuildingNextMonth] = useState(false);
   const [quickSavingKey, setQuickSavingKey] = useState("");
+  const [bulkApplyingKey, setBulkApplyingKey] = useState("");
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
 
@@ -167,6 +169,7 @@ function BudgetsPage() {
   const budgetInsights = budgetData?.insights || [];
   const suggestedBudgets = budgetData?.suggestions || [];
   const previousMonth = useMemo(() => shiftMonthLabel(month, -1), [month]);
+  const nextMonth = useMemo(() => shiftMonthLabel(month, 1), [month]);
   const categoryOptions = useMemo(
     () => budgetData?.available_categories || [],
     [budgetData]
@@ -236,6 +239,58 @@ function BudgetsPage() {
     }
   };
 
+  const saveBudgetTargets = async (targets, sourceLabel, bulkKey) => {
+    const normalizedTargets = targets
+      .map((target) => ({
+        category: formatBudgetCategory(target.category),
+        amount: Number(target.amount),
+      }))
+      .filter((target) => target.category && Number.isFinite(target.amount) && target.amount > 0);
+
+    const uniqueTargets = Array.from(
+      normalizedTargets.reduce((map, target) => {
+        map.set(target.category.toLowerCase(), target);
+        return map;
+      }, new Map()).values()
+    );
+
+    if (uniqueTargets.length === 0) {
+      return;
+    }
+
+    try {
+      setBulkApplyingKey(bulkKey);
+      setError("");
+      setMessage("");
+
+      for (const target of uniqueTargets) {
+        await api.post("/budgets/", {
+          month,
+          category: target.category,
+          amount: target.amount,
+          account_id: normalizedAccountId,
+        });
+      }
+
+      const lastTarget = uniqueTargets[uniqueTargets.length - 1];
+      setCategory(lastTarget.category);
+      setAmount(String(lastTarget.amount));
+      setMessage(
+        `${sourceLabel} saved ${uniqueTargets.length} budget target${
+          uniqueTargets.length === 1 ? "" : "s"
+        }.`
+      );
+      await fetchBudgets();
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    } catch (saveError) {
+      if (!handleApiAuthError(saveError, navigate)) {
+        setError(saveError?.response?.data?.detail || "Failed to apply budget targets.");
+      }
+    } finally {
+      setBulkApplyingKey("");
+    }
+  };
+
   const handleUseInsightTarget = (insight) => {
     if (insight.recommended_amount == null) return;
 
@@ -268,6 +323,30 @@ function BudgetsPage() {
     );
   };
 
+  const handleApplyAllSuggestions = async () => {
+    await saveBudgetTargets(
+      suggestedBudgets.map((suggestion) => ({
+        category: suggestion.category,
+        amount: suggestion.suggested_amount,
+      })),
+      "Suggested budgets",
+      "suggestions"
+    );
+  };
+
+  const handleApplyAllInsightTargets = async () => {
+    await saveBudgetTargets(
+      budgetInsights
+        .filter((insight) => insight.recommended_amount != null)
+        .map((insight) => ({
+          category: insight.category,
+          amount: insight.recommended_amount,
+        })),
+      "Budget moves",
+      "insights"
+    );
+  };
+
   const handleCopyPreviousMonth = async () => {
     setCopying(true);
     setError("");
@@ -289,6 +368,29 @@ function BudgetsPage() {
     }
   };
 
+  const handleBuildNextMonth = async () => {
+    setBuildingNextMonth(true);
+    setError("");
+    setMessage("");
+
+    try {
+      const response = await api.post("/budgets/build-next-month", {
+        month,
+        account_id: normalizedAccountId,
+      });
+      setCategory("");
+      setAmount("");
+      setMessage(response.data.message || `Built ${nextMonth} budgets from current pace.`);
+      setMonth(response.data.target_month || nextMonth);
+    } catch (buildError) {
+      if (!handleApiAuthError(buildError, navigate)) {
+        setError(buildError?.response?.data?.detail || "Failed to build next month budgets.");
+      }
+    } finally {
+      setBuildingNextMonth(false);
+    }
+  };
+
   return (
     <div className="page-container dashboard-page">
       <div className="dashboard-wrapper">
@@ -307,6 +409,9 @@ function BudgetsPage() {
             </button>
             <button className="secondary-button" onClick={() => navigate("/analytics")}>
               View Analytics
+            </button>
+            <button className="secondary-button" onClick={() => navigate("/simulator")}>
+              Simulator
             </button>
             <button className="secondary-button" onClick={() => navigate("/assistant")}>
               Assistant
@@ -336,24 +441,48 @@ function BudgetsPage() {
 
           <div className="budget-scope-actions">
             <p className="budget-inline-note">
-              Reuse last month&apos;s budget setup for this same scope. Existing budgets in {month} stay untouched.
+              Reuse the previous month for a straight rollover, or build {nextMonth} from {month}
+              &apos;s live pace when you want smarter targets. Existing budgets in the target month
+              stay untouched.
             </p>
-            <button
-              type="button"
-              className="secondary-button"
-              onClick={handleCopyPreviousMonth}
-              disabled={copying}
-            >
-              {copying ? "Copying..." : `Copy ${previousMonth} Budgets`}
-            </button>
+            <div className="budget-section-actions">
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={handleCopyPreviousMonth}
+                disabled={copying || buildingNextMonth}
+              >
+                {copying ? "Copying..." : `Copy ${previousMonth} Budgets`}
+              </button>
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={handleBuildNextMonth}
+                disabled={buildingNextMonth || copying}
+              >
+                {buildingNextMonth ? "Building..." : `Build ${nextMonth} From Pace`}
+              </button>
+            </div>
           </div>
         </div>
 
         {suggestedBudgets.length > 0 && (
           <div className="dashboard-card">
             <div className="section-header">
-              <h2>Suggested Budgets</h2>
-              <p>Quick starting points based on your recent spending in this scope.</p>
+              <div>
+                <h2>Suggested Budgets</h2>
+                <p>Quick starting points based on your recent spending in this scope.</p>
+              </div>
+              <div className="budget-section-actions">
+                <button
+                  type="button"
+                  className="secondary-button"
+                  onClick={handleApplyAllSuggestions}
+                  disabled={bulkApplyingKey === "suggestions"}
+                >
+                  {bulkApplyingKey === "suggestions" ? "Applying..." : "Apply All Suggestions"}
+                </button>
+              </div>
             </div>
 
             <div className="budget-suggestion-grid">
@@ -380,7 +509,11 @@ function BudgetsPage() {
                         type="button"
                         className="secondary-button"
                         onClick={() => handleApplySuggestion(suggestion)}
-                        disabled={quickSavingKey === buildQuickSaveKey(suggestion.category, suggestion.suggested_amount)}
+                        disabled={
+                          bulkApplyingKey === "suggestions" ||
+                          quickSavingKey ===
+                            buildQuickSaveKey(suggestion.category, suggestion.suggested_amount)
+                        }
                       >
                         {quickSavingKey === buildQuickSaveKey(suggestion.category, suggestion.suggested_amount)
                           ? "Applying..."
@@ -476,8 +609,23 @@ function BudgetsPage() {
         {budgetInsights.length > 0 && (
           <div className="dashboard-card">
             <div className="section-header">
-              <h2>Budget Moves</h2>
-              <p>Concrete next steps based on your current pace and month-end forecast.</p>
+              <div>
+                <h2>Budget Moves</h2>
+                <p>Concrete next steps based on your current pace and month-end forecast.</p>
+              </div>
+              <div className="budget-section-actions">
+                <button
+                  type="button"
+                  className="secondary-button"
+                  onClick={handleApplyAllInsightTargets}
+                  disabled={
+                    bulkApplyingKey === "insights" ||
+                    !budgetInsights.some((insight) => insight.recommended_amount != null)
+                  }
+                >
+                  {bulkApplyingKey === "insights" ? "Applying..." : "Apply All Targets"}
+                </button>
+              </div>
             </div>
 
             <div className="budget-insight-list">
@@ -511,7 +659,11 @@ function BudgetsPage() {
                           type="button"
                           className="secondary-button"
                           onClick={() => handleApplyInsightTarget(insight)}
-                          disabled={quickSavingKey === buildQuickSaveKey(insight.category, insight.recommended_amount)}
+                          disabled={
+                            bulkApplyingKey === "insights" ||
+                            quickSavingKey ===
+                              buildQuickSaveKey(insight.category, insight.recommended_amount)
+                          }
                         >
                           {quickSavingKey === buildQuickSaveKey(insight.category, insight.recommended_amount)
                             ? "Applying..."

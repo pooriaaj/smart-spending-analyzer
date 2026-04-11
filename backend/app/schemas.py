@@ -111,6 +111,11 @@ class BudgetCopyRequest(BaseModel):
     account_id: int | None = None
 
 
+class BudgetBuildRequest(BaseModel):
+    month: str = Field(pattern=r"^\d{4}-\d{2}$")
+    account_id: int | None = None
+
+
 class BudgetPlanResponse(ORMBaseModel):
     id: int
     month: str
@@ -182,6 +187,42 @@ class BudgetCopyResponse(BaseModel):
     copied_count: int = 0
     skipped_existing_count: int = 0
     message: str
+
+
+class BudgetBuildResponse(BaseModel):
+    source_month: str
+    target_month: str
+    account_id: int | None = None
+    created_count: int = 0
+    adjusted_count: int = 0
+    skipped_existing_count: int = 0
+    message: str
+
+
+class FutureSimulationPoint(BaseModel):
+    month: str
+    income: float
+    expenses: float
+    net_change: float
+    ending_balance: float
+
+
+class FutureSimulationResponse(BaseModel):
+    scope_label: str = "All accounts combined"
+    start_month: str
+    months: int
+    starting_balance: float
+    baseline_monthly_income: float
+    baseline_monthly_expenses: float
+    adjusted_monthly_income: float
+    adjusted_monthly_expenses: float
+    monthly_net_change: float
+    projected_change_amount: float
+    projected_end_balance: float
+    risk_level: str
+    narrative: str
+    assumptions: list[str] = Field(default_factory=list)
+    timeline: list[FutureSimulationPoint] = Field(default_factory=list)
 
 
 class TransactionBase(BaseModel):
