@@ -568,6 +568,7 @@ def build_future_balance_simulation(
     months: int = 6,
     income_adjustment: float = 0.0,
     expense_adjustment: float = 0.0,
+    target_balance: float | None = None,
     scope_label: str = "All accounts combined",
 ) -> dict[str, Any]:
     sanitized_months = max(1, min(int(months or 6), 12))
@@ -580,6 +581,7 @@ def build_future_balance_simulation(
     recent_months = (
         historical_months[-3:] if len(historical_months) >= 3 else historical_months
     )
+    recent_month_labels = [item["month"] for item in recent_months]
 
     if recent_months:
         baseline_monthly_income = sum(item["income"] for item in recent_months) / len(recent_months)
@@ -605,15 +607,18 @@ def build_future_balance_simulation(
     adjusted_monthly_income = max(0.0, baseline_monthly_income + float(income_adjustment or 0.0))
     adjusted_monthly_expenses = max(0.0, expense_baseline + float(expense_adjustment or 0.0))
     monthly_net_change = adjusted_monthly_income - adjusted_monthly_expenses
+    baseline_monthly_net_change = baseline_monthly_income - expense_baseline
     starting_balance = float(financial_snapshot["balance"])
     start_month = shift_month_label(current_month, 1)
 
     timeline: list[dict[str, Any]] = []
     running_balance = starting_balance
+    baseline_running_balance = starting_balance
     lowest_balance = starting_balance
 
     for offset in range(sanitized_months):
         month_label = shift_month_label(start_month, offset)
+        baseline_running_balance += baseline_monthly_net_change
         running_balance += monthly_net_change
         lowest_balance = min(lowest_balance, running_balance)
         timeline.append(
@@ -622,12 +627,24 @@ def build_future_balance_simulation(
                 "income": round(adjusted_monthly_income, 2),
                 "expenses": round(adjusted_monthly_expenses, 2),
                 "net_change": round(monthly_net_change, 2),
+                "baseline_ending_balance": round(baseline_running_balance, 2),
                 "ending_balance": round(running_balance, 2),
+                "balance_delta": round(running_balance - baseline_running_balance, 2),
             }
         )
 
     projected_end_balance = round(running_balance, 2)
+    baseline_projected_end_balance = round(baseline_running_balance, 2)
+    scenario_impact_amount = round(projected_end_balance - baseline_projected_end_balance, 2)
     projected_change_amount = round(projected_end_balance - starting_balance, 2)
+    goal_balance_value = round(float(target_balance), 2) if target_balance and target_balance > 0 else None
+    goal_gap_amount: float | None = None
+    required_monthly_net: float | None = None
+    required_income_lift: float | None = None
+    required_expense_reduction: float | None = None
+    goal_note: str | None = None
+    reduction_plan_target: float | None = None
+    reduction_plan_coverage_amount: float | None = None
 
     if lowest_balance < 0:
         risk_level = "high"
@@ -680,6 +697,50 @@ def build_future_balance_simulation(
     else:
         assumptions.append("No extra monthly scenario adjustments were applied.")
 
+    if goal_balance_value is not None:
+        required_monthly_net = round(
+            (goal_balance_value - starting_balance) / sanitized_months,
+            2,
+        )
+        monthly_improvement_needed = round(
+            max(required_monthly_net - monthly_net_change, 0.0),
+            2,
+        )
+        goal_gap_amount = round(goal_balance_value - projected_end_balance, 2)
+        required_income_lift = monthly_improvement_needed
+        required_expense_reduction = monthly_improvement_needed
+
+        if projected_end_balance >= goal_balance_value:
+            goal_note = (
+                f"At the current pace, this scenario already reaches the target balance of "
+                f"{format_currency(goal_balance_value)}."
+            )
+        else:
+            goal_note = (
+                f"To reach {format_currency(goal_balance_value)} in {sanitized_months} month(s), "
+                f"you would need about {format_currency(monthly_improvement_needed)} more net cash flow "
+                "per month. That could come from extra income, lower expenses, or a mix of both."
+            )
+
+    if required_expense_reduction and required_expense_reduction > 0:
+        reduction_plan_target = required_expense_reduction
+    elif monthly_net_change < 0:
+        reduction_plan_target = round(abs(monthly_net_change), 2)
+
+    reduction_plan = build_simulation_reduction_plan(
+        db,
+        user_id,
+        account_id=account_id,
+        target_reduction=reduction_plan_target or 0.0,
+        recent_month_labels=recent_month_labels,
+        budget_items=budget_snapshot["items"],
+    )
+    if reduction_plan:
+        reduction_plan_coverage_amount = round(
+            sum(item["suggested_monthly_reduction"] for item in reduction_plan),
+            2,
+        )
+
     return {
         "scope_label": scope_label,
         "start_month": start_month,
@@ -690,13 +751,176 @@ def build_future_balance_simulation(
         "adjusted_monthly_income": round(adjusted_monthly_income, 2),
         "adjusted_monthly_expenses": round(adjusted_monthly_expenses, 2),
         "monthly_net_change": round(monthly_net_change, 2),
+        "baseline_monthly_net_change": round(baseline_monthly_net_change, 2),
+        "baseline_projected_end_balance": baseline_projected_end_balance,
+        "scenario_impact_amount": scenario_impact_amount,
         "projected_change_amount": projected_change_amount,
         "projected_end_balance": projected_end_balance,
         "risk_level": risk_level,
         "narrative": narrative,
+        "goal_balance": goal_balance_value,
+        "goal_gap_amount": goal_gap_amount,
+        "required_monthly_net": required_monthly_net,
+        "required_income_lift": required_income_lift,
+        "required_expense_reduction": required_expense_reduction,
+        "goal_note": goal_note,
+        "reduction_plan_target": reduction_plan_target,
+        "reduction_plan_coverage_amount": reduction_plan_coverage_amount,
         "assumptions": assumptions,
         "timeline": timeline,
+        "reduction_plan": reduction_plan,
     }
+
+
+def build_simulation_reduction_plan(
+    db: Session,
+    user_id: int,
+    *,
+    account_id: int | None,
+    target_reduction: float,
+    recent_month_labels: list[str],
+    budget_items: list[dict[str, Any]],
+    limit: int = 3,
+) -> list[dict[str, Any]]:
+    if target_reduction <= 0:
+        return []
+
+    issue_lookup = {
+        normalize_text_for_matching(item["category"]): item
+        for item in budget_items
+        if item.get("status") != "on_track" or item.get("projected_status") != "on_track"
+    }
+
+    category_candidates: list[dict[str, Any]] = []
+    if recent_month_labels:
+        month_expr = month_bucket_expression(db)
+        query = db.query(
+            Transaction.category.label("category"),
+            month_expr.label("month"),
+            func.coalesce(func.sum(Transaction.amount), 0.0).label("total"),
+        ).filter(
+            Transaction.owner_id == user_id,
+            Transaction.type == "expense",
+            month_expr.in_(recent_month_labels),
+        )
+
+        if account_id is not None:
+            query = query.filter(Transaction.account_id == account_id)
+
+        rows = (
+            query.group_by(Transaction.category, month_expr)
+            .order_by(func.sum(Transaction.amount).desc())
+            .all()
+        )
+
+        totals_by_category: dict[str, dict[str, float]] = {}
+        for row in rows:
+            category_name = str(row.category or "").strip()
+            if not category_name:
+                continue
+            category_totals = totals_by_category.setdefault(category_name, {})
+            category_totals[row.month] = float(row.total or 0.0)
+
+        for category_name, month_totals in totals_by_category.items():
+            current_monthly_spend = sum(
+                month_totals.get(label, 0.0) for label in recent_month_labels
+            ) / len(recent_month_labels)
+            if current_monthly_spend <= 0:
+                continue
+
+            issue_item = issue_lookup.get(normalize_text_for_matching(category_name))
+            priority = 0 if issue_item else 1
+            if issue_item and issue_item.get("projected_status") == "over_budget":
+                priority = -1
+
+            reason = (
+                "Already showing budget pressure in the current outlook."
+                if issue_item
+                else "One of your larger recurring expense categories."
+            )
+
+            category_candidates.append(
+                {
+                    "category": category_name,
+                    "current_monthly_spend": round(current_monthly_spend, 2),
+                    "priority": priority,
+                    "reason": reason,
+                }
+            )
+
+    if not category_candidates:
+        top_categories = get_top_expense_categories(
+            db,
+            user_id,
+            account_id=account_id,
+            limit=limit,
+        )
+        for item in top_categories:
+            category_candidates.append(
+                {
+                    "category": item["category"],
+                    "current_monthly_spend": round(float(item["total"]), 2),
+                    "priority": 1,
+                    "reason": "One of your larger expense categories.",
+                }
+            )
+
+    selected = sorted(
+        category_candidates,
+        key=lambda item: (item["priority"], -item["current_monthly_spend"], item["category"].lower()),
+    )[:limit]
+
+    if not selected:
+        return []
+
+    for item in selected:
+        item["suggested_monthly_reduction"] = 0.0
+        item["max_reduction"] = round(item["current_monthly_spend"] * 0.7, 2)
+
+    remaining = round(target_reduction, 2)
+    for _ in range(5):
+        candidates = [
+            item for item in selected
+            if item["max_reduction"] - item["suggested_monthly_reduction"] > 0.01
+        ]
+        if remaining <= 0.01 or not candidates:
+            break
+
+        weight_sum = sum(item["current_monthly_spend"] for item in candidates)
+        distributed = 0.0
+        for item in candidates:
+            if weight_sum > 0:
+                proportional_share = remaining * (item["current_monthly_spend"] / weight_sum)
+            else:
+                proportional_share = remaining / len(candidates)
+
+            available = item["max_reduction"] - item["suggested_monthly_reduction"]
+            additional = min(proportional_share, available)
+            item["suggested_monthly_reduction"] += additional
+            distributed += additional
+
+        if distributed <= 0.01:
+            break
+        remaining = round(max(remaining - distributed, 0.0), 2)
+
+    total_selected_spend = sum(item["current_monthly_spend"] for item in selected)
+    return [
+        {
+            "category": item["category"],
+            "current_monthly_spend": round(item["current_monthly_spend"], 2),
+            "suggested_monthly_reduction": round(item["suggested_monthly_reduction"], 2),
+            "suggested_budget_amount": round(
+                max(item["current_monthly_spend"] - item["suggested_monthly_reduction"], 0.01),
+                2,
+            ),
+            "share_percent": round(
+                (item["current_monthly_spend"] / total_selected_spend) * 100, 1
+            ) if total_selected_spend > 0 else 0.0,
+            "reason": item["reason"],
+        }
+        for item in selected
+        if item["suggested_monthly_reduction"] > 0.01
+    ]
 
 
 def get_spending_insights(
@@ -1265,6 +1489,8 @@ def build_category_focus_answer(
 
 def classify_question(question: str, context_text: str) -> str:
     text = f"{context_text} {question}".lower().strip()
+    has_month_horizon = re.search(r"\d+\s+month", text) is not None
+    has_goal_amount = parse_target_balance(text) is not None
 
     if any(
         phrase in text
@@ -1277,6 +1503,20 @@ def classify_question(question: str, context_text: str) -> str:
             "months from now",
             "next few months",
             "what will my balance look like",
+        ]
+    ):
+        return "future_balance"
+
+    if has_month_horizon and has_goal_amount and any(
+        phrase in text
+        for phrase in [
+            "reach",
+            "get to",
+            "grow to",
+            "save each month",
+            "need to save",
+            "target balance",
+            "end with",
         ]
     ):
         return "future_balance"
@@ -1390,6 +1630,10 @@ def build_assistant_actions(
     driver_category: str | None = None,
     focus_category: str | None = None,
     focus_transaction_type: str = "expense",
+    simulation_months: int | None = None,
+    simulation_target_balance: float | None = None,
+    simulation_income_adjustment: float | None = None,
+    simulation_expense_adjustment: float | None = None,
 ) -> list[dict[str, Any]]:
     actions: list[dict[str, Any]] = []
     top_category = snapshot["top_category"]
@@ -1414,7 +1658,11 @@ def build_assistant_actions(
             {
                 "label": "Open simulator",
                 "page": "simulator",
+                "months_ahead": simulation_months,
                 "account_id": account_id,
+                "target_balance": simulation_target_balance,
+                "income_adjustment": simulation_income_adjustment,
+                "expense_adjustment": simulation_expense_adjustment,
             }
         )
         actions.append(
@@ -1743,6 +1991,21 @@ def parse_projection_months(question: str) -> int:
         return 3
 
     return max(1, min(int(match.group(1)), 12))
+
+
+def parse_target_balance(question: str) -> float | None:
+    lowered = question.lower()
+    patterns = [
+        r"(?:reach|get to|grow to|balance of|balance at|target balance(?: of)?|end with)\s+\$?(\d+(?:,\d{3})*(?:\.\d+)?)",
+        r"\$?(\d+(?:,\d{3})*(?:\.\d+)?)\s+(?:balance|saved)",
+    ]
+
+    for pattern in patterns:
+        match = re.search(pattern, lowered)
+        if match:
+            return float(match.group(1).replace(",", ""))
+
+    return None
 
 
 def parse_simulation_adjustments(question: str) -> tuple[float, float]:
@@ -2418,6 +2681,7 @@ def generate_assistant_response(
 
     if intent == "future_balance":
         projection_months = parse_projection_months(question)
+        target_balance = parse_target_balance(question)
         income_adjustment, expense_adjustment = parse_simulation_adjustments(question)
         simulation = build_future_balance_simulation(
             db,
@@ -2426,10 +2690,27 @@ def generate_assistant_response(
             months=projection_months,
             income_adjustment=income_adjustment,
             expense_adjustment=expense_adjustment,
+            target_balance=target_balance,
             scope_label=scope_label,
         )
 
-        if mode == "strict":
+        if target_balance is not None and simulation["goal_note"]:
+            if mode == "strict":
+                answer = (
+                    f"At this pace you will miss {format_currency(target_balance)}. "
+                    f"{simulation['goal_note']}"
+                )
+            elif mode == "coach":
+                answer = (
+                    f"Your current pace points to {format_currency(simulation['projected_end_balance'])} "
+                    f"in {projection_months} month(s). {simulation['goal_note']}"
+                )
+            else:
+                answer = (
+                    f"Your current pace projects {format_currency(simulation['projected_end_balance'])} "
+                    f"in {projection_months} month(s). {simulation['goal_note']}"
+                )
+        elif mode == "strict":
             answer = (
                 f"If nothing changes from this pace, your balance is heading toward "
                 f"{format_currency(simulation['projected_end_balance'])} in {projection_months} month(s)."
@@ -2450,12 +2731,15 @@ def generate_assistant_response(
             f"Monthly income used: {format_currency(simulation['adjusted_monthly_income'])}",
             f"Monthly expenses used: {format_currency(simulation['adjusted_monthly_expenses'])}",
             f"Projected monthly net change: {format_currency(simulation['monthly_net_change'])}",
-            simulation["narrative"],
         ]
+        if simulation["goal_note"]:
+            supporting_points.append(simulation["goal_note"])
+        else:
+            supporting_points.append(simulation["narrative"])
 
         return {
             "answer": answer,
-            "supporting_points": supporting_points,
+            "supporting_points": supporting_points[:5],
             "suggested_followups": generate_dynamic_followups(
                 intent=intent,
                 mode=mode,
@@ -2469,6 +2753,10 @@ def generate_assistant_response(
                 account_id=account_id,
                 driver_category=primary_driver,
                 focus_category=focus_category,
+                simulation_months=projection_months,
+                simulation_target_balance=target_balance,
+                simulation_income_adjustment=income_adjustment,
+                simulation_expense_adjustment=expense_adjustment,
             ),
             "scope_label": scope_label,
         }

@@ -137,7 +137,18 @@ function AssistantPage() {
     }
 
     if (action.page === "simulator") {
-      navigate("/simulator");
+      const params = new URLSearchParams();
+
+      if (action.months_ahead != null) params.set("months", String(action.months_ahead));
+      if (action.target_balance != null) params.set("target_balance", String(action.target_balance));
+      if (action.income_adjustment != null) {
+        params.set("income_adjustment", String(action.income_adjustment));
+      }
+      if (action.expense_adjustment != null) {
+        params.set("expense_adjustment", String(action.expense_adjustment));
+      }
+
+      navigate(`/simulator${params.toString() ? `?${params.toString()}` : ""}`);
       return;
     }
 

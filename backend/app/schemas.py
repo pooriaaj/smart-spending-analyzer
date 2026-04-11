@@ -204,7 +204,18 @@ class FutureSimulationPoint(BaseModel):
     income: float
     expenses: float
     net_change: float
+    baseline_ending_balance: float
     ending_balance: float
+    balance_delta: float
+
+
+class FutureSimulationReductionItem(BaseModel):
+    category: str
+    current_monthly_spend: float
+    suggested_monthly_reduction: float
+    suggested_budget_amount: float
+    share_percent: float
+    reason: str
 
 
 class FutureSimulationResponse(BaseModel):
@@ -217,12 +228,24 @@ class FutureSimulationResponse(BaseModel):
     adjusted_monthly_income: float
     adjusted_monthly_expenses: float
     monthly_net_change: float
+    baseline_monthly_net_change: float
+    baseline_projected_end_balance: float
+    scenario_impact_amount: float
     projected_change_amount: float
     projected_end_balance: float
     risk_level: str
     narrative: str
+    goal_balance: float | None = None
+    goal_gap_amount: float | None = None
+    required_monthly_net: float | None = None
+    required_income_lift: float | None = None
+    required_expense_reduction: float | None = None
+    goal_note: str | None = None
+    reduction_plan_target: float | None = None
+    reduction_plan_coverage_amount: float | None = None
     assumptions: list[str] = Field(default_factory=list)
     timeline: list[FutureSimulationPoint] = Field(default_factory=list)
+    reduction_plan: list[FutureSimulationReductionItem] = Field(default_factory=list)
 
 
 class TransactionBase(BaseModel):
@@ -363,8 +386,12 @@ class AssistantAction(BaseModel):
     category: str | None = None
     transaction_type: str | None = None
     month: str | None = None
+    months_ahead: int | None = None
     account_id: int | None = None
     amount: float | None = None
+    target_balance: float | None = None
+    income_adjustment: float | None = None
+    expense_adjustment: float | None = None
 
 
 class AssistantQueryRequest(BaseModel):

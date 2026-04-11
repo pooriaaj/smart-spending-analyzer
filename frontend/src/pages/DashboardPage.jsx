@@ -37,6 +37,7 @@ function DashboardPage() {
   const [dashboardData, setDashboardData] = useState(null);
   const [allTransactions, setAllTransactions] = useState([]);
   const [budgetData, setBudgetData] = useState(null);
+  const [simulatorData, setSimulatorData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [selectedAccountId, setSelectedAccountId] = useState(getSelectedAccountId());
 
@@ -61,7 +62,7 @@ function DashboardPage() {
 
   const fetchData = async () => {
     try {
-      const [dashboardRes, transactionsRes, budgetsRes] = await Promise.all([
+      const [dashboardRes, transactionsRes, budgetsRes, simulatorRes] = await Promise.all([
         api.get("/analytics/dashboard", {
           params: {
             account_id: normalizedAccountId,
@@ -78,11 +79,20 @@ function DashboardPage() {
             account_id: normalizedAccountId,
           },
         }),
+        api
+          .get("/analytics/future-simulator", {
+            params: {
+              account_id: normalizedAccountId,
+              months: 3,
+            },
+          })
+          .catch(() => null),
       ]);
 
       setDashboardData(dashboardRes.data);
       setAllTransactions(transactionsRes.data);
       setBudgetData(budgetsRes.data);
+      setSimulatorData(simulatorRes?.data || null);
     } catch (error) {
       console.error("Failed to load dashboard:", error);
       handleApiAuthError(error, navigate);
@@ -150,6 +160,7 @@ function DashboardPage() {
       })
       .slice(0, 3);
   }, [budgetData]);
+  const simulatorNarrative = simulatorData?.goal_note || simulatorData?.narrative || "";
 
   const getBudgetInsightMeta = (severity) => {
     if (severity === "action") {
@@ -372,6 +383,48 @@ function DashboardPage() {
             </div>
           </div>
         </div>
+
+        {simulatorData && (
+          <div className="dashboard-card">
+            <div className="section-header">
+              <h2>Future Outlook</h2>
+              <p>A quick 3-month projection for the current account scope.</p>
+            </div>
+
+            <div className="summary-grid">
+              <div className="summary-card balance-card">
+                <span className="card-label">Starting Balance</span>
+                <p>${simulatorData.starting_balance.toFixed(2)}</p>
+              </div>
+
+              <div className="summary-card income-card">
+                <span className="card-label">Monthly Net</span>
+                <p>${simulatorData.monthly_net_change.toFixed(2)}</p>
+              </div>
+
+              <div className="summary-card top-card">
+                <span className="card-label">3-Month Impact</span>
+                <p>${simulatorData.projected_change_amount.toFixed(2)}</p>
+              </div>
+
+              <div className="summary-card expense-card">
+                <span className="card-label">Projected Balance</span>
+                <p>${simulatorData.projected_end_balance.toFixed(2)}</p>
+              </div>
+            </div>
+
+            <p className="budget-forecast-banner">{simulatorNarrative}</p>
+
+            <div className="budget-section-actions">
+              <button
+                className="secondary-button"
+                onClick={() => navigate("/simulator")}
+              >
+                Open Full Simulator
+              </button>
+            </div>
+          </div>
+        )}
 
         <div className="dashboard-card">
           <div className="section-header">

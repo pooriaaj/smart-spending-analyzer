@@ -231,6 +231,7 @@ def get_future_simulator_route(
     months: int = Query(default=6, ge=1, le=12),
     income_adjustment: float = Query(default=0.0),
     expense_adjustment: float = Query(default=0.0),
+    target_balance: float | None = Query(default=None, gt=0),
     account_id: int | None = Query(default=None),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -243,6 +244,7 @@ def get_future_simulator_route(
         months=months,
         income_adjustment=income_adjustment,
         expense_adjustment=expense_adjustment,
+        target_balance=target_balance,
         scope_label=scope_label,
     )
 

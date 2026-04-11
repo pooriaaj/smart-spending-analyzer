@@ -1471,9 +1471,45 @@ textarea:focus,
 
 .simulator-controls-grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
   gap: 16px;
   align-items: end;
+}
+
+.simulator-preset-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 12px;
+  margin-bottom: 18px;
+}
+
+.simulator-preset-button {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  min-height: 92px;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 18px;
+  padding: 16px;
+  background: rgba(248, 250, 252, 0.88);
+  color: var(--text-main);
+  text-align: left;
+  cursor: pointer;
+}
+
+.simulator-preset-button strong {
+  font-size: 15px;
+}
+
+.simulator-preset-button span {
+  color: var(--text-soft);
+  line-height: 1.5;
+}
+
+.simulator-preset-button:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-sm);
 }
 
 .simulator-overview-top {
@@ -1511,7 +1547,7 @@ textarea:focus,
 .simulator-metrics-grid {
   margin-top: 18px;
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
   gap: 12px;
 }
 
@@ -1628,6 +1664,16 @@ textarea:focus,
 :root[data-theme="dark"] .simulator-metric-card {
   background: rgba(15, 23, 42, 0.82);
   border-color: rgba(148, 163, 184, 0.14);
+}
+
+:root[data-theme="dark"] .simulator-preset-button {
+  background: rgba(15, 23, 42, 0.82);
+  border-color: rgba(148, 163, 184, 0.14);
+  color: #e2e8f0;
+}
+
+:root[data-theme="dark"] .simulator-preset-button span {
+  color: #cbd5e1;
 }
 
 :root[data-theme="dark"] .simulator-risk-healthy {
