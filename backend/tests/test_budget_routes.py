@@ -201,6 +201,90 @@ class BudgetRouteTest(unittest.TestCase):
         self.assertEqual(len(budgets), 1)
         self.assertEqual(float(budgets[0].amount), 300.0)
 
+    def test_bulk_upsert_budgets_applies_unique_targets_in_one_request(self) -> None:
+        with self.session_local() as session:
+            session.add_all(
+                [
+                    BudgetPlan(
+                        month="2026-05",
+                        category="groceries",
+                        amount=250.0,
+                        owner_id=self.user_id,
+                        account_id=self.chequing_account_id,
+                    ),
+                    BudgetPlan(
+                        month="2026-05",
+                        category="transport",
+                        amount=90.0,
+                        owner_id=self.user_id,
+                        account_id=self.chequing_account_id,
+                    ),
+                ]
+            )
+            session.commit()
+
+        response = self.client.post(
+            "/budgets/bulk-upsert",
+            json={
+                "month": "2026-05",
+                "account_id": self.chequing_account_id,
+                "items": [
+                    {"category": "Groceries", "amount": 300.0},
+                    {"category": "Restaurant", "amount": 140.0},
+                    {"category": "Grocery", "amount": 310.0},
+                    {"category": "Transport", "amount": 90.0},
+                ],
+            },
+        )
+
+        self.assertEqual(response.status_code, 200, response.text)
+        payload = response.json()
+
+        self.assertEqual(payload["month"], "2026-05")
+        self.assertEqual(payload["applied_count"], 3)
+        self.assertEqual(payload["created_count"], 1)
+        self.assertEqual(payload["updated_count"], 1)
+        self.assertEqual(payload["unchanged_count"], 1)
+
+        with self.session_local() as session:
+            budgets = (
+                session.query(BudgetPlan)
+                .filter(
+                    BudgetPlan.owner_id == self.user_id,
+                    BudgetPlan.month == "2026-05",
+                    BudgetPlan.account_id == self.chequing_account_id,
+                )
+                .order_by(BudgetPlan.category.asc())
+                .all()
+            )
+
+        self.assertEqual([budget.category for budget in budgets], ["groceries", "restaurant", "transport"])
+        groceries_budget = next(budget for budget in budgets if budget.category == "groceries")
+        restaurant_budget = next(budget for budget in budgets if budget.category == "restaurant")
+        transport_budget = next(budget for budget in budgets if budget.category == "transport")
+        self.assertEqual(float(groceries_budget.amount), 310.0)
+        self.assertEqual(float(restaurant_budget.amount), 140.0)
+        self.assertEqual(float(transport_budget.amount), 90.0)
+
+    def test_bulk_upsert_budgets_handles_empty_target_list(self) -> None:
+        response = self.client.post(
+            "/budgets/bulk-upsert",
+            json={
+                "month": "2026-05",
+                "account_id": self.chequing_account_id,
+                "items": [],
+            },
+        )
+
+        self.assertEqual(response.status_code, 200, response.text)
+        payload = response.json()
+
+        self.assertEqual(payload["applied_count"], 0)
+        self.assertEqual(payload["created_count"], 0)
+        self.assertEqual(payload["updated_count"], 0)
+        self.assertEqual(payload["unchanged_count"], 0)
+        self.assertIn("No valid budget targets", payload["message"])
+
     def test_list_budgets_returns_smart_suggestions_for_unbudgeted_categories(self) -> None:
         with self.session_local() as session:
             session.add(

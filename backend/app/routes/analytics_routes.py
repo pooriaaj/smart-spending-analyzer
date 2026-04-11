@@ -232,6 +232,9 @@ def get_future_simulator_route(
     income_adjustment: float = Query(default=0.0),
     expense_adjustment: float = Query(default=0.0),
     target_balance: float | None = Query(default=None, gt=0),
+    event_month_offset: int | None = Query(default=None, ge=1, le=12),
+    event_amount: float = Query(default=0.0),
+    event_label: str | None = Query(default=None, min_length=1, max_length=80),
     account_id: int | None = Query(default=None),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -245,6 +248,9 @@ def get_future_simulator_route(
         income_adjustment=income_adjustment,
         expense_adjustment=expense_adjustment,
         target_balance=target_balance,
+        event_month_offset=event_month_offset,
+        event_amount=event_amount,
+        event_label=event_label,
         scope_label=scope_label,
     )
 

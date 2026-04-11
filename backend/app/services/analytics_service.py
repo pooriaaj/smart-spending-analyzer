@@ -569,6 +569,9 @@ def build_future_balance_simulation(
     income_adjustment: float = 0.0,
     expense_adjustment: float = 0.0,
     target_balance: float | None = None,
+    event_month_offset: int | None = None,
+    event_amount: float = 0.0,
+    event_label: str | None = None,
     scope_label: str = "All accounts combined",
 ) -> dict[str, Any]:
     sanitized_months = max(1, min(int(months or 6), 12))
@@ -610,6 +613,19 @@ def build_future_balance_simulation(
     baseline_monthly_net_change = baseline_monthly_income - expense_baseline
     starting_balance = float(financial_snapshot["balance"])
     start_month = shift_month_label(current_month, 1)
+    planned_event_amount = round(float(event_amount or 0.0), 2)
+    normalized_event_offset = (
+        int(event_month_offset)
+        if event_month_offset is not None and 1 <= int(event_month_offset) <= sanitized_months
+        else None
+    )
+    default_event_label = "One-time income" if planned_event_amount > 0 else "One-time expense"
+    normalized_event_label = str(event_label or "").strip() or default_event_label
+    event_month_label = (
+        shift_month_label(start_month, normalized_event_offset - 1)
+        if normalized_event_offset is not None and abs(planned_event_amount) > 0
+        else None
+    )
 
     timeline: list[dict[str, Any]] = []
     running_balance = starting_balance
@@ -618,18 +634,28 @@ def build_future_balance_simulation(
 
     for offset in range(sanitized_months):
         month_label = shift_month_label(start_month, offset)
+        month_event_amount = (
+            planned_event_amount
+            if normalized_event_offset is not None
+            and abs(planned_event_amount) > 0
+            and normalized_event_offset == offset + 1
+            else 0.0
+        )
+        scenario_net_change = monthly_net_change + month_event_amount
         baseline_running_balance += baseline_monthly_net_change
-        running_balance += monthly_net_change
+        running_balance += scenario_net_change
         lowest_balance = min(lowest_balance, running_balance)
         timeline.append(
             {
                 "month": month_label,
                 "income": round(adjusted_monthly_income, 2),
                 "expenses": round(adjusted_monthly_expenses, 2),
-                "net_change": round(monthly_net_change, 2),
+                "net_change": round(scenario_net_change, 2),
                 "baseline_ending_balance": round(baseline_running_balance, 2),
                 "ending_balance": round(running_balance, 2),
                 "balance_delta": round(running_balance - baseline_running_balance, 2),
+                "one_time_event_amount": round(month_event_amount, 2),
+                "one_time_event_label": normalized_event_label if month_event_amount else None,
             }
         )
 
@@ -671,6 +697,13 @@ def build_future_balance_simulation(
             f"{sanitized_months} month(s) around {format_currency(projected_end_balance)}."
         )
 
+    if event_month_label and abs(planned_event_amount) > 0:
+        event_direction = "boost" if planned_event_amount > 0 else "expense"
+        narrative = (
+            f"{narrative} This includes a planned {format_currency(abs(planned_event_amount))} "
+            f"{event_direction} in {event_month_label} for {normalized_event_label}."
+        )
+
     assumptions = []
     if recent_months:
         assumptions.append(
@@ -697,16 +730,21 @@ def build_future_balance_simulation(
     else:
         assumptions.append("No extra monthly scenario adjustments were applied.")
 
+    if event_month_label and abs(planned_event_amount) > 0:
+        assumptions.append(
+            f"One-time event: {normalized_event_label} in {event_month_label} for "
+            f"{format_signed_currency(planned_event_amount)}."
+        )
+    elif event_month_offset is not None and abs(planned_event_amount) > 0:
+        assumptions.append("The one-time event was outside the simulated window, so it was ignored.")
+
     if goal_balance_value is not None:
-        required_monthly_net = round(
-            (goal_balance_value - starting_balance) / sanitized_months,
-            2,
-        )
-        monthly_improvement_needed = round(
-            max(required_monthly_net - monthly_net_change, 0.0),
-            2,
-        )
         goal_gap_amount = round(goal_balance_value - projected_end_balance, 2)
+        monthly_improvement_needed = round(
+            max(goal_gap_amount / sanitized_months, 0.0),
+            2,
+        )
+        required_monthly_net = round(monthly_net_change + monthly_improvement_needed, 2)
         required_income_lift = monthly_improvement_needed
         required_expense_reduction = monthly_improvement_needed
 
@@ -758,6 +796,9 @@ def build_future_balance_simulation(
         "projected_end_balance": projected_end_balance,
         "risk_level": risk_level,
         "narrative": narrative,
+        "one_time_event_month": event_month_label,
+        "one_time_event_amount": planned_event_amount if event_month_label else None,
+        "one_time_event_label": normalized_event_label if event_month_label else None,
         "goal_balance": goal_balance_value,
         "goal_gap_amount": goal_gap_amount,
         "required_monthly_net": required_monthly_net,
@@ -1228,6 +1269,11 @@ def format_currency(value: float) -> str:
     return f"${value:.2f}"
 
 
+def format_signed_currency(value: float) -> str:
+    prefix = "+" if value >= 0 else "-"
+    return f"{prefix}${abs(value):.2f}"
+
+
 def format_category_label(value: str | None) -> str:
     if not value:
         return "Unknown"
@@ -1491,6 +1537,10 @@ def classify_question(question: str, context_text: str) -> str:
     text = f"{context_text} {question}".lower().strip()
     has_month_horizon = re.search(r"\d+\s+month", text) is not None
     has_goal_amount = parse_target_balance(text) is not None
+    has_one_time_event = (
+        parse_one_time_event_amount(text) is not None
+        and parse_one_time_event_offset(text) is not None
+    )
 
     if any(
         phrase in text
@@ -1517,6 +1567,21 @@ def classify_question(question: str, context_text: str) -> str:
             "need to save",
             "target balance",
             "end with",
+        ]
+    ):
+        return "future_balance"
+
+    if has_one_time_event and any(
+        phrase in text
+        for phrase in [
+            "what if",
+            "happen",
+            "look like",
+            "forecast",
+            "project",
+            "affect",
+            "impact",
+            "balance",
         ]
     ):
         return "future_balance"
@@ -1634,6 +1699,9 @@ def build_assistant_actions(
     simulation_target_balance: float | None = None,
     simulation_income_adjustment: float | None = None,
     simulation_expense_adjustment: float | None = None,
+    simulation_event_month_offset: int | None = None,
+    simulation_event_amount: float | None = None,
+    simulation_event_label: str | None = None,
 ) -> list[dict[str, Any]]:
     actions: list[dict[str, Any]] = []
     top_category = snapshot["top_category"]
@@ -1663,6 +1731,9 @@ def build_assistant_actions(
                 "target_balance": simulation_target_balance,
                 "income_adjustment": simulation_income_adjustment,
                 "expense_adjustment": simulation_expense_adjustment,
+                "event_month_offset": simulation_event_month_offset,
+                "event_amount": simulation_event_amount,
+                "event_label": simulation_event_label,
             }
         )
         actions.append(
@@ -1884,6 +1955,7 @@ def generate_dynamic_followups(
         return [
             "What if my monthly expenses go up by 200?",
             "What if I increase my income by 500 a month?",
+            "What if I have a 1200 repair in 2 months?",
             "Should I build next month's budgets from this pace?",
         ]
 
@@ -2006,6 +2078,113 @@ def parse_target_balance(question: str) -> float | None:
             return float(match.group(1).replace(",", ""))
 
     return None
+
+
+def parse_one_time_event_amount(question: str) -> float | None:
+    lowered = question.lower()
+    expense_keywords = [
+        "trip",
+        "vacation",
+        "repair",
+        "car repair",
+        "purchase",
+        "buy",
+        "bill",
+        "payment",
+        "expense",
+        "cost",
+        "tuition",
+        "wedding",
+        "medical",
+    ]
+    income_keywords = [
+        "bonus",
+        "refund",
+        "tax refund",
+        "windfall",
+        "sale",
+        "sell",
+        "rebate",
+        "gift",
+        "payout",
+    ]
+    keyword_group = "|".join(
+        sorted(
+            [re.escape(keyword) for keyword in expense_keywords + income_keywords],
+            key=len,
+            reverse=True,
+        )
+    )
+    patterns = [
+        rf"\$?(\d+(?:,\d{{3}})*(?:\.\d+)?)(?:[^a-z0-9]{{0,24}})(?:{keyword_group})",
+        rf"(?:{keyword_group})(?:[^0-9$]{{0,24}})\$?(\d+(?:,\d{{3}})*(?:\.\d+)?)",
+    ]
+
+    for pattern in patterns:
+        match = re.search(pattern, lowered)
+        if not match:
+            continue
+
+        trailing_context = lowered[match.end(): min(len(lowered), match.end() + 16)]
+        if re.match(r"\s*months?\b", trailing_context):
+            continue
+
+        amount = float(match.group(1).replace(",", ""))
+        context = lowered[max(0, match.start() - 32): min(len(lowered), match.end() + 32)]
+        if any(keyword in context for keyword in income_keywords):
+            return amount
+        if any(keyword in context for keyword in expense_keywords):
+            return -amount
+
+    return None
+
+
+def parse_one_time_event_offset(question: str) -> int | None:
+    lowered = question.lower()
+    if "next month" in lowered:
+        return 1
+
+    patterns = [
+        r"in\s+(\d+)\s+month",
+        r"(\d+)\s+months?\s+from\s+now",
+        r"month\s+(\d+)",
+    ]
+    for pattern in patterns:
+        match = re.search(pattern, lowered)
+        if match:
+            return max(1, min(int(match.group(1)), 12))
+
+    return None
+
+
+def derive_one_time_event_label(question: str, event_amount: float | None) -> str | None:
+    if event_amount is None:
+        return None
+
+    lowered = question.lower()
+    label_map = [
+        ("tax refund", "Tax refund"),
+        ("car repair", "Car repair"),
+        ("repair", "Repair"),
+        ("trip", "Planned trip"),
+        ("vacation", "Vacation"),
+        ("bonus", "Bonus"),
+        ("refund", "Refund"),
+        ("purchase", "Planned purchase"),
+        ("bill", "Bill"),
+        ("payment", "Payment"),
+        ("tuition", "Tuition"),
+        ("wedding", "Wedding"),
+        ("medical", "Medical expense"),
+        ("gift", "Gift"),
+        ("sale", "Sale"),
+    ]
+
+    for keyword, label in label_map:
+        if keyword in lowered:
+            return label
+
+    return "One-time income" if event_amount > 0 else "One-time expense"
 
 
 def parse_simulation_adjustments(question: str) -> tuple[float, float]:
@@ -2683,6 +2862,9 @@ def generate_assistant_response(
         projection_months = parse_projection_months(question)
         target_balance = parse_target_balance(question)
         income_adjustment, expense_adjustment = parse_simulation_adjustments(question)
+        one_time_event_amount = parse_one_time_event_amount(question)
+        one_time_event_offset = parse_one_time_event_offset(question)
+        one_time_event_label = derive_one_time_event_label(question, one_time_event_amount)
         simulation = build_future_balance_simulation(
             db,
             user_id,
@@ -2691,6 +2873,9 @@ def generate_assistant_response(
             income_adjustment=income_adjustment,
             expense_adjustment=expense_adjustment,
             target_balance=target_balance,
+            event_month_offset=one_time_event_offset,
+            event_amount=one_time_event_amount or 0.0,
+            event_label=one_time_event_label,
             scope_label=scope_label,
         )
 
@@ -2732,6 +2917,10 @@ def generate_assistant_response(
             f"Monthly expenses used: {format_currency(simulation['adjusted_monthly_expenses'])}",
             f"Projected monthly net change: {format_currency(simulation['monthly_net_change'])}",
         ]
+        if simulation["one_time_event_amount"] is not None and simulation["one_time_event_month"]:
+            supporting_points.append(
+                f"One-time event: {simulation['one_time_event_label']} in {simulation['one_time_event_month']} for {format_signed_currency(simulation['one_time_event_amount'])}"
+            )
         if simulation["goal_note"]:
             supporting_points.append(simulation["goal_note"])
         else:
@@ -2757,6 +2946,9 @@ def generate_assistant_response(
                 simulation_target_balance=target_balance,
                 simulation_income_adjustment=income_adjustment,
                 simulation_expense_adjustment=expense_adjustment,
+                simulation_event_month_offset=one_time_event_offset,
+                simulation_event_amount=one_time_event_amount,
+                simulation_event_label=one_time_event_label,
             ),
             "scope_label": scope_label,
         }

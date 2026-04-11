@@ -397,6 +397,95 @@ class AnalyticsRouteTest(unittest.TestCase):
         self.assertEqual(payload["baseline_monthly_expenses"], 270.0)
         self.assertIn("budget projections", " ".join(payload["assumptions"]).lower())
 
+    def test_future_simulator_supports_one_time_events(self) -> None:
+        with self.session_local() as session:
+            session.add_all(
+                [
+                    Transaction(
+                        amount=2000.0,
+                        category="Salary",
+                        description="Payroll Jan",
+                        date=date(2026, 1, 3),
+                        type="income",
+                        owner_id=self.user_id,
+                        account_id=self.chequing_account_id,
+                    ),
+                    Transaction(
+                        amount=600.0,
+                        category="Rent",
+                        description="Rent Jan",
+                        date=date(2026, 1, 5),
+                        type="expense",
+                        owner_id=self.user_id,
+                        account_id=self.chequing_account_id,
+                    ),
+                    Transaction(
+                        amount=2000.0,
+                        category="Salary",
+                        description="Payroll Feb",
+                        date=date(2026, 2, 3),
+                        type="income",
+                        owner_id=self.user_id,
+                        account_id=self.chequing_account_id,
+                    ),
+                    Transaction(
+                        amount=600.0,
+                        category="Rent",
+                        description="Rent Feb",
+                        date=date(2026, 2, 5),
+                        type="expense",
+                        owner_id=self.user_id,
+                        account_id=self.chequing_account_id,
+                    ),
+                    Transaction(
+                        amount=2000.0,
+                        category="Salary",
+                        description="Payroll Mar",
+                        date=date(2026, 3, 3),
+                        type="income",
+                        owner_id=self.user_id,
+                        account_id=self.chequing_account_id,
+                    ),
+                    Transaction(
+                        amount=600.0,
+                        category="Rent",
+                        description="Rent Mar",
+                        date=date(2026, 3, 5),
+                        type="expense",
+                        owner_id=self.user_id,
+                        account_id=self.chequing_account_id,
+                    ),
+                ]
+            )
+            session.commit()
+
+        response = self.client.get(
+            "/analytics/future-simulator",
+            params={
+                "account_id": self.chequing_account_id,
+                "months": 3,
+                "event_amount": -1200,
+                "event_month_offset": 2,
+                "event_label": "Planned Trip",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200, response.text)
+        payload = response.json()
+
+        self.assertEqual(payload["one_time_event_month"], "2026-06")
+        self.assertEqual(payload["one_time_event_amount"], -1200.0)
+        self.assertEqual(payload["one_time_event_label"], "Planned Trip")
+        self.assertEqual(payload["scenario_impact_amount"], -1200.0)
+        self.assertEqual(payload["projected_end_balance"], 7200.0)
+        self.assertIn("planned trip", payload["narrative"].lower())
+        self.assertIn("2026-06", " ".join(payload["assumptions"]))
+        self.assertEqual(payload["timeline"][1]["month"], "2026-06")
+        self.assertEqual(payload["timeline"][1]["one_time_event_amount"], -1200.0)
+        self.assertEqual(payload["timeline"][1]["one_time_event_label"], "Planned Trip")
+        self.assertEqual(payload["timeline"][1]["net_change"], 200.0)
+        self.assertEqual(payload["timeline"][2]["ending_balance"], 7200.0)
+
     def test_future_simulator_returns_goal_guidance(self) -> None:
         with self.session_local() as session:
             session.add_all(
@@ -920,6 +1009,92 @@ class AnalyticsRouteTest(unittest.TestCase):
         self.assertEqual(payload["suggested_actions"][0]["months_ahead"], 3)
         self.assertEqual(payload["suggested_actions"][0]["target_balance"], 10000.0)
         self.assertEqual(payload["suggested_actions"][0]["account_id"], self.chequing_account_id)
+
+    def test_assistant_can_answer_one_time_event_simulator_questions(self) -> None:
+        with self.session_local() as session:
+            session.add_all(
+                [
+                    Transaction(
+                        amount=2000.0,
+                        category="Salary",
+                        description="Payroll Jan",
+                        date=date(2026, 1, 3),
+                        type="income",
+                        owner_id=self.user_id,
+                        account_id=self.chequing_account_id,
+                    ),
+                    Transaction(
+                        amount=500.0,
+                        category="Rent",
+                        description="Rent Jan",
+                        date=date(2026, 1, 5),
+                        type="expense",
+                        owner_id=self.user_id,
+                        account_id=self.chequing_account_id,
+                    ),
+                    Transaction(
+                        amount=2000.0,
+                        category="Salary",
+                        description="Payroll Feb",
+                        date=date(2026, 2, 3),
+                        type="income",
+                        owner_id=self.user_id,
+                        account_id=self.chequing_account_id,
+                    ),
+                    Transaction(
+                        amount=500.0,
+                        category="Rent",
+                        description="Rent Feb",
+                        date=date(2026, 2, 5),
+                        type="expense",
+                        owner_id=self.user_id,
+                        account_id=self.chequing_account_id,
+                    ),
+                    Transaction(
+                        amount=2000.0,
+                        category="Salary",
+                        description="Payroll Mar",
+                        date=date(2026, 3, 3),
+                        type="income",
+                        owner_id=self.user_id,
+                        account_id=self.chequing_account_id,
+                    ),
+                    Transaction(
+                        amount=500.0,
+                        category="Rent",
+                        description="Rent Mar",
+                        date=date(2026, 3, 5),
+                        type="expense",
+                        owner_id=self.user_id,
+                        account_id=self.chequing_account_id,
+                    ),
+                ]
+            )
+            session.commit()
+
+        with patch("app.services.analytics_service.generate_llm_assistant_response", return_value=None):
+            response = self.client.post(
+                "/analytics/assistant-response",
+                json={
+                    "question": "What happens if I have a 1200 repair in 2 months?",
+                    "history": [],
+                    "mode": "balanced",
+                    "account_id": self.chequing_account_id,
+                },
+            )
+
+        self.assertEqual(response.status_code, 200, response.text)
+        payload = response.json()
+
+        self.assertIn("$6300.00", payload["answer"])
+        self.assertTrue(
+            any("Repair in 2026-06 for -$1200.00" in item for item in payload["supporting_points"])
+        )
+        self.assertEqual(payload["suggested_actions"][0]["page"], "simulator")
+        self.assertEqual(payload["suggested_actions"][0]["months_ahead"], 2)
+        self.assertEqual(payload["suggested_actions"][0]["event_amount"], -1200.0)
+        self.assertEqual(payload["suggested_actions"][0]["event_month_offset"], 2)
+        self.assertEqual(payload["suggested_actions"][0]["event_label"], "Repair")
 
     def test_assistant_can_compare_accounts_in_all_accounts_scope(self) -> None:
         self.seed_transactions()

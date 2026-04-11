@@ -263,22 +263,20 @@ function BudgetsPage() {
       setError("");
       setMessage("");
 
-      for (const target of uniqueTargets) {
-        await api.post("/budgets/", {
-          month,
-          category: target.category,
-          amount: target.amount,
-          account_id: normalizedAccountId,
-        });
-      }
+      const response = await api.post("/budgets/bulk-upsert", {
+        month,
+        account_id: normalizedAccountId,
+        items: uniqueTargets,
+      });
 
       const lastTarget = uniqueTargets[uniqueTargets.length - 1];
       setCategory(lastTarget.category);
       setAmount(String(lastTarget.amount));
       setMessage(
-        `${sourceLabel} saved ${uniqueTargets.length} budget target${
-          uniqueTargets.length === 1 ? "" : "s"
-        }.`
+        response.data?.message ||
+          `${sourceLabel} saved ${uniqueTargets.length} budget target${
+            uniqueTargets.length === 1 ? "" : "s"
+          }.`
       );
       await fetchBudgets();
       window.scrollTo({ top: 0, behavior: "smooth" });

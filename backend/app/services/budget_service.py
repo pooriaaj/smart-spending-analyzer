@@ -9,6 +9,7 @@ from app.models import BudgetPlan, Transaction
 from app.schemas import (
     BudgetBuildResponse,
     BudgetCopyResponse,
+    BudgetBulkUpsertResponse,
     BudgetInsightResponse,
     BudgetListResponse,
     BudgetPlanResponse,
@@ -299,6 +300,113 @@ def upsert_budget_plan(
     db.commit()
     db.refresh(budget)
     return budget
+
+
+def upsert_budget_targets(
+    db: Session,
+    owner_id: int,
+    month: str,
+    items: list[dict[str, float | str]],
+    account_id: int | None = None,
+) -> BudgetBulkUpsertResponse:
+    normalized_targets: dict[str, float] = {}
+    for item in items:
+        normalized_category = normalize_category_name(str(item.get("category") or ""))
+        amount = float(item.get("amount") or 0.0)
+        if not normalized_category or amount <= 0:
+            continue
+        normalized_targets[normalized_category] = round(amount, 2)
+
+    if not normalized_targets:
+        return BudgetBulkUpsertResponse(
+            month=month,
+            account_id=account_id,
+            applied_count=0,
+            created_count=0,
+            updated_count=0,
+            unchanged_count=0,
+            message="No valid budget targets were provided.",
+        )
+
+    existing_budgets = (
+        build_budget_scope_query(
+            db,
+            owner_id,
+            month=month,
+            account_id=account_id,
+        )
+        .filter(BudgetPlan.category.in_(normalized_targets.keys()))
+        .all()
+    )
+    budgets_by_category = {budget.category: budget for budget in existing_budgets}
+
+    created_count = 0
+    updated_count = 0
+    unchanged_count = 0
+
+    for category, amount in normalized_targets.items():
+        existing_budget = budgets_by_category.get(category)
+        if existing_budget is None:
+            db.add(
+                BudgetPlan(
+                    month=month,
+                    category=category,
+                    amount=amount,
+                    owner_id=owner_id,
+                    account_id=account_id,
+                )
+            )
+            created_count += 1
+            continue
+
+        current_amount = round(float(existing_budget.amount), 2)
+        if current_amount == amount:
+            unchanged_count += 1
+            continue
+
+        existing_budget.amount = amount
+        updated_count += 1
+
+    if created_count > 0 or updated_count > 0:
+        db.commit()
+
+    applied_count = len(normalized_targets)
+    if created_count > 0 and updated_count > 0 and unchanged_count > 0:
+        message = (
+            f"Applied {applied_count} budget targets for {month}: "
+            f"{created_count} created, {updated_count} updated, {unchanged_count} unchanged."
+        )
+    elif created_count > 0 and updated_count > 0:
+        message = (
+            f"Applied {applied_count} budget targets for {month}: "
+            f"{created_count} created and {updated_count} updated."
+        )
+    elif created_count > 0 and unchanged_count > 0:
+        message = (
+            f"Applied {applied_count} budget targets for {month}: "
+            f"{created_count} created and {unchanged_count} already matched."
+        )
+    elif updated_count > 0 and unchanged_count > 0:
+        message = (
+            f"Applied {applied_count} budget targets for {month}: "
+            f"{updated_count} updated and {unchanged_count} already matched."
+        )
+    elif created_count > 0:
+        message = f"Applied {applied_count} budget targets for {month}. Created {created_count}."
+    elif updated_count > 0:
+        message = f"Applied {applied_count} budget targets for {month}. Updated {updated_count}."
+    else:
+        message = f"All {applied_count} budget targets already matched {month}."
+
+    return BudgetBulkUpsertResponse(
+        month=month,
+        account_id=account_id,
+        applied_count=applied_count,
+        created_count=created_count,
+        updated_count=updated_count,
+        unchanged_count=unchanged_count,
+        message=message,
+    )
 
 
 def copy_previous_month_budgets(

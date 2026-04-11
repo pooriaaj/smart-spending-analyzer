@@ -10,6 +10,8 @@ from app.schemas import (
     BudgetBuildResponse,
     BudgetCopyRequest,
     BudgetCopyResponse,
+    BudgetBulkUpsertRequest,
+    BudgetBulkUpsertResponse,
     BudgetListResponse,
     BudgetPlanCreate,
     BudgetPlanResponse,
@@ -24,6 +26,7 @@ from app.services.budget_service import (
     get_default_budget_month,
     list_budget_plans,
     build_budget_response,
+    upsert_budget_targets,
     upsert_budget_plan,
 )
 
@@ -84,6 +87,26 @@ def build_next_month_budgets_route(
         db=db,
         owner_id=current_user.id,
         month=payload.month,
+        account_id=payload.account_id,
+    )
+
+
+@router.post("/bulk-upsert", response_model=BudgetBulkUpsertResponse)
+def bulk_upsert_budgets_route(
+    payload: BudgetBulkUpsertRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    if payload.account_id is not None:
+        account = get_account_for_user(db, current_user.id, payload.account_id)
+        if account is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Account not found")
+
+    return upsert_budget_targets(
+        db=db,
+        owner_id=current_user.id,
+        month=payload.month,
+        items=[item.model_dump() for item in payload.items],
         account_id=payload.account_id,
     )
 

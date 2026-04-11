@@ -11,7 +11,11 @@ import {
 } from "recharts";
 import api, { handleApiAuthError } from "../services/api";
 import AccountSelector from "../components/AccountSelector";
-import { ALL_ACCOUNTS_VALUE, getSelectedAccountId } from "../services/accountStorage";
+import {
+  ALL_ACCOUNTS_VALUE,
+  getSelectedAccountId,
+  setSelectedAccountId as persistSelectedAccountId,
+} from "../services/accountStorage";
 
 const SCENARIO_PRESETS = [
   {
@@ -21,6 +25,9 @@ const SCENARIO_PRESETS = [
     incomeAdjustment: 0,
     expenseAdjustment: -200,
     targetBalance: "",
+    eventAmount: "",
+    eventMonthOffset: 1,
+    eventLabel: "",
   },
   {
     label: "Add $500 Income",
@@ -29,6 +36,9 @@ const SCENARIO_PRESETS = [
     incomeAdjustment: 500,
     expenseAdjustment: 0,
     targetBalance: "",
+    eventAmount: "",
+    eventMonthOffset: 1,
+    eventLabel: "",
   },
   {
     label: "Reach $10,000",
@@ -37,6 +47,20 @@ const SCENARIO_PRESETS = [
     incomeAdjustment: 0,
     expenseAdjustment: 0,
     targetBalance: 10000,
+    eventAmount: "",
+    eventMonthOffset: 1,
+    eventLabel: "",
+  },
+  {
+    label: "Plan $1,200 Purchase",
+    description: "Drop a one-time expense into the second month.",
+    months: 6,
+    incomeAdjustment: 0,
+    expenseAdjustment: 0,
+    targetBalance: "",
+    eventAmount: -1200,
+    eventMonthOffset: 2,
+    eventLabel: "Planned purchase",
   },
   {
     label: "Reset Scenario",
@@ -45,12 +69,45 @@ const SCENARIO_PRESETS = [
     incomeAdjustment: 0,
     expenseAdjustment: 0,
     targetBalance: "",
+    eventAmount: "",
+    eventMonthOffset: 1,
+    eventLabel: "",
   },
 ];
 
+function buildReductionBudgetTargets(items) {
+  return Array.from(
+    (items || [])
+      .map((item) => ({
+        category: String(item?.category || "").trim(),
+        amount: Number(item?.suggested_budget_amount),
+      }))
+      .filter((item) => item.category && Number.isFinite(item.amount) && item.amount > 0)
+      .reduce((map, item) => {
+        map.set(item.category.toLowerCase(), item);
+        return map;
+      }, new Map()).values()
+  );
+}
+
+function shiftMonthLabel(month, offset) {
+  const [yearText, monthText] = String(month || "").split("-");
+  const year = Number(yearText);
+  const monthNumber = Number(monthText);
+
+  if (!year || !monthNumber) {
+    return `Month ${offset + 1}`;
+  }
+
+  const totalMonths = year * 12 + (monthNumber - 1) + offset;
+  const shiftedYear = Math.floor(totalMonths / 12);
+  const shiftedMonth = (totalMonths % 12) + 1;
+  return `${shiftedYear.toString().padStart(4, "0")}-${shiftedMonth.toString().padStart(2, "0")}`;
+}
+
 function SimulatorPage() {
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [selectedAccountId, setSelectedAccountId] = useState(getSelectedAccountId());
   const [months, setMonths] = useState(
     Number(searchParams.get("months")) > 0 ? Number(searchParams.get("months")) : 6
@@ -62,21 +119,42 @@ function SimulatorPage() {
     searchParams.get("expense_adjustment") || 0
   );
   const [targetBalance, setTargetBalance] = useState(searchParams.get("target_balance") || "");
+  const [eventAmount, setEventAmount] = useState(searchParams.get("event_amount") || "");
+  const [eventMonthOffset, setEventMonthOffset] = useState(
+    Number(searchParams.get("event_month_offset")) > 0
+      ? Number(searchParams.get("event_month_offset"))
+      : 1
+  );
+  const [eventLabel, setEventLabel] = useState(searchParams.get("event_label") || "");
   const [simulatorData, setSimulatorData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [applyingReductionPlan, setApplyingReductionPlan] = useState(false);
+  const [reductionPlanMessage, setReductionPlanMessage] = useState("");
+  const [reductionPlanError, setReductionPlanError] = useState("");
+  const [scenarioLinkMessage, setScenarioLinkMessage] = useState("");
+  const [scenarioLinkError, setScenarioLinkError] = useState("");
   const [themeMode, setThemeMode] = useState(
     document.documentElement.getAttribute("data-theme") || "light"
   );
 
   const normalizedAccountId =
     selectedAccountId === ALL_ACCOUNTS_VALUE ? undefined : Number(selectedAccountId);
+  const searchParamString = searchParams.toString();
+
+  useEffect(() => {
+    persistSelectedAccountId(String(selectedAccountId || ALL_ACCOUNTS_VALUE));
+  }, [selectedAccountId]);
 
   useEffect(() => {
     const monthsParam = Number(searchParams.get("months"));
     const incomeParam = searchParams.get("income_adjustment");
     const expenseParam = searchParams.get("expense_adjustment");
     const targetParam = searchParams.get("target_balance");
+    const accountParam = searchParams.get("account_id");
+    const eventAmountParam = searchParams.get("event_amount");
+    const eventMonthParam = Number(searchParams.get("event_month_offset"));
+    const eventLabelParam = searchParams.get("event_label");
 
     if (monthsParam > 0) {
       setMonths(monthsParam);
@@ -90,7 +168,63 @@ function SimulatorPage() {
     if (targetParam !== null) {
       setTargetBalance(targetParam);
     }
+    if (accountParam === ALL_ACCOUNTS_VALUE) {
+      setSelectedAccountId(ALL_ACCOUNTS_VALUE);
+    } else if (Number(accountParam) > 0) {
+      setSelectedAccountId(String(Number(accountParam)));
+    }
+    if (eventAmountParam !== null) {
+      setEventAmount(eventAmountParam);
+    }
+    if (eventMonthParam > 0) {
+      setEventMonthOffset(eventMonthParam);
+    }
+    if (eventLabelParam !== null) {
+      setEventLabel(eventLabelParam);
+    }
   }, [searchParams]);
+
+  useEffect(() => {
+    const params = new URLSearchParams();
+    params.set(
+      "account_id",
+      selectedAccountId === ALL_ACCOUNTS_VALUE ? ALL_ACCOUNTS_VALUE : String(selectedAccountId)
+    );
+    params.set("months", String(Math.max(1, Math.min(Number(months) || 6, 12))));
+
+    if (Number(incomeAdjustment) !== 0) {
+      params.set("income_adjustment", String(Number(incomeAdjustment)));
+    }
+    if (Number(expenseAdjustment) !== 0) {
+      params.set("expense_adjustment", String(Number(expenseAdjustment)));
+    }
+    if (Number(targetBalance) > 0) {
+      params.set("target_balance", String(Number(targetBalance)));
+    }
+    if (Number(eventAmount) !== 0) {
+      params.set("event_amount", String(Number(eventAmount)));
+      params.set("event_month_offset", String(Math.max(1, Number(eventMonthOffset) || 1)));
+      if (eventLabel.trim()) {
+        params.set("event_label", eventLabel.trim());
+      }
+    }
+
+    const nextParamString = params.toString();
+    if (nextParamString !== searchParamString) {
+      setSearchParams(params, { replace: true });
+    }
+  }, [
+    selectedAccountId,
+    months,
+    incomeAdjustment,
+    expenseAdjustment,
+    targetBalance,
+    eventAmount,
+    eventMonthOffset,
+    eventLabel,
+    searchParamString,
+    setSearchParams,
+  ]);
 
   useEffect(() => {
     const observer = new MutationObserver(() => {
@@ -110,6 +244,8 @@ function SimulatorPage() {
       try {
         setLoading(true);
         setError("");
+        setReductionPlanMessage("");
+        setReductionPlanError("");
         const response = await api.get("/analytics/future-simulator", {
           params: {
             account_id: normalizedAccountId,
@@ -117,6 +253,12 @@ function SimulatorPage() {
             income_adjustment: Number(incomeAdjustment) || 0,
             expense_adjustment: Number(expenseAdjustment) || 0,
             target_balance: Number(targetBalance) > 0 ? Number(targetBalance) : undefined,
+            event_amount: Number(eventAmount) || 0,
+            event_month_offset:
+              Number(eventAmount) !== 0 && Number(eventMonthOffset) > 0
+                ? Number(eventMonthOffset)
+                : undefined,
+            event_label: eventLabel.trim() || undefined,
           },
         });
         setSimulatorData(response.data);
@@ -130,7 +272,17 @@ function SimulatorPage() {
     };
 
     fetchSimulation();
-  }, [navigate, normalizedAccountId, months, incomeAdjustment, expenseAdjustment, targetBalance]);
+  }, [
+    navigate,
+    normalizedAccountId,
+    months,
+    incomeAdjustment,
+    expenseAdjustment,
+    targetBalance,
+    eventAmount,
+    eventMonthOffset,
+    eventLabel,
+  ]);
 
   const chartTheme = useMemo(() => {
     const isDark = themeMode === "dark";
@@ -179,6 +331,60 @@ function SimulatorPage() {
     setTargetBalance(
       preset.targetBalance === "" ? "" : String(preset.targetBalance)
     );
+    setEventAmount(preset.eventAmount === "" ? "" : String(preset.eventAmount));
+    setEventMonthOffset(preset.eventMonthOffset || 1);
+    setEventLabel(preset.eventLabel || "");
+  };
+
+  const eventMonthOptions = useMemo(() => {
+    const optionCount = Math.max(1, Math.min(Number(months) || 1, 12));
+    const startMonth = simulatorData?.start_month;
+    return Array.from({ length: optionCount }, (_, index) => ({
+      value: index + 1,
+      label: startMonth ? shiftMonthLabel(startMonth, index) : `Month ${index + 1}`,
+    }));
+  }, [months, simulatorData?.start_month]);
+
+  const handleApplyReductionPlan = async () => {
+    const targets = buildReductionBudgetTargets(simulatorData?.reduction_plan);
+    if (!simulatorData?.start_month || targets.length === 0) {
+      return;
+    }
+
+    try {
+      setApplyingReductionPlan(true);
+      setReductionPlanError("");
+      setReductionPlanMessage("");
+      const response = await api.post("/budgets/bulk-upsert", {
+        month: simulatorData.start_month,
+        account_id: normalizedAccountId,
+        items: targets,
+      });
+      setReductionPlanMessage(
+        response.data?.message ||
+          `Applied ${targets.length} budget target${targets.length === 1 ? "" : "s"} to ${simulatorData.start_month}.`
+      );
+    } catch (applyError) {
+      if (!handleApiAuthError(applyError, navigate)) {
+        setReductionPlanError(
+          applyError?.response?.data?.detail || "Failed to apply reduction plan to budgets."
+        );
+      }
+    } finally {
+      setApplyingReductionPlan(false);
+    }
+  };
+
+  const handleCopyScenarioLink = async () => {
+    try {
+      setScenarioLinkError("");
+      setScenarioLinkMessage("");
+      await navigator.clipboard.writeText(window.location.href);
+      setScenarioLinkMessage("Scenario link copied.");
+    } catch (copyError) {
+      console.error("Failed to copy scenario link:", copyError);
+      setScenarioLinkError("Could not copy the scenario link from this browser.");
+    }
   };
 
   return (
@@ -212,8 +418,15 @@ function SimulatorPage() {
 
         <div className="dashboard-card">
           <div className="section-header">
-            <h2>Scenario Controls</h2>
-            <p>{scopeDescription}</p>
+            <div>
+              <h2>Scenario Controls</h2>
+              <p>{scopeDescription}</p>
+            </div>
+            <div className="budget-section-actions">
+              <button type="button" className="secondary-button" onClick={handleCopyScenarioLink}>
+                Copy Scenario Link
+              </button>
+            </div>
           </div>
 
           <div className="simulator-preset-grid">
@@ -281,12 +494,61 @@ function SimulatorPage() {
                 placeholder="Optional"
               />
             </div>
+
+            <div className="budget-form-field">
+              <label htmlFor="simulator-event-amount">One-time event amount</label>
+              <input
+                id="simulator-event-amount"
+                type="number"
+                step="0.01"
+                value={eventAmount}
+                onChange={(event) => setEventAmount(event.target.value)}
+                placeholder="-1200"
+              />
+            </div>
+
+            <div className="budget-form-field">
+              <label htmlFor="simulator-event-month">Event month</label>
+              <select
+                id="simulator-event-month"
+                value={eventMonthOffset}
+                onChange={(event) => setEventMonthOffset(Number(event.target.value))}
+              >
+                {eventMonthOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="budget-form-field">
+              <label htmlFor="simulator-event-label">Event label</label>
+              <input
+                id="simulator-event-label"
+                type="text"
+                maxLength="80"
+                value={eventLabel}
+                onChange={(event) => setEventLabel(event.target.value)}
+                placeholder="Planned trip"
+              />
+            </div>
           </div>
 
           <p className="budget-inline-note">
             Positive expense values simulate extra spending. Negative expense values simulate
             savings or cuts.
           </p>
+          <p className="budget-inline-note">
+            One-time events use positive values for windfalls like bonuses and negative values for
+            planned expenses like travel or repairs.
+          </p>
+          <p className="budget-inline-note">
+            Scenario links keep the simulator controls and scope together, so you can reload or
+            revisit the same plan quickly.
+          </p>
+          {scenarioLinkMessage && <p className="success-text">{scenarioLinkMessage}</p>}
+          {scenarioLinkError && <p className="error-text">{scenarioLinkError}</p>}
         </div>
 
         {error && (
@@ -322,6 +584,17 @@ function SimulatorPage() {
               <div className="summary-card expense-card">
                 <span className="card-label">Projected End Balance</span>
                 <p>${simulatorData?.projected_end_balance?.toFixed(2) || "0.00"}</p>
+              </div>
+
+              <div className="summary-card top-card">
+                <span className="card-label">One-Time Event</span>
+                <p>
+                  {simulatorData?.one_time_event_amount != null
+                    ? `${simulatorData.one_time_event_label || "Planned event"} ${
+                        simulatorData.one_time_event_amount > 0 ? "+" : "-"
+                      }$${Math.abs(simulatorData.one_time_event_amount).toFixed(2)}`
+                    : "None"}
+                </p>
               </div>
             </div>
 
@@ -362,6 +635,16 @@ function SimulatorPage() {
                   <span>Scenario end balance</span>
                   <strong>${simulatorData?.projected_end_balance?.toFixed(2) || "0.00"}</strong>
                 </div>
+                {simulatorData?.one_time_event_amount != null && (
+                  <div className="simulator-metric-card">
+                    <span>{simulatorData.one_time_event_month || "Planned event"}</span>
+                    <strong>
+                      {(simulatorData.one_time_event_label || "One-time event")}:{" "}
+                      {simulatorData.one_time_event_amount > 0 ? "+" : "-"}$
+                      {Math.abs(simulatorData.one_time_event_amount).toFixed(2)}
+                    </strong>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -449,8 +732,36 @@ function SimulatorPage() {
               {(simulatorData?.reduction_plan || []).length > 0 && (
                 <div className="dashboard-card">
                   <div className="section-header">
-                    <h2>Reduction Plan</h2>
-                    <p>Category-level places to look first if you want to close the gap through spending cuts.</p>
+                    <div>
+                      <h2>Reduction Plan</h2>
+                      <p>
+                        Category-level places to look first if you want to close the gap through
+                        spending cuts.
+                      </p>
+                    </div>
+                    <div className="budget-section-actions">
+                      <button
+                        type="button"
+                        className="secondary-button"
+                        onClick={handleApplyReductionPlan}
+                        disabled={applyingReductionPlan}
+                      >
+                        {applyingReductionPlan
+                          ? "Applying..."
+                          : `Apply To ${simulatorData.start_month} Budgets`}
+                      </button>
+                      <button
+                        type="button"
+                        className="secondary-button"
+                        onClick={() =>
+                          navigate(
+                            `/budgets?month=${encodeURIComponent(simulatorData.start_month)}`
+                          )
+                        }
+                      >
+                        Open {simulatorData.start_month} Budgets
+                      </button>
+                    </div>
                   </div>
 
                   <div className="simulator-metrics-grid">
@@ -463,6 +774,9 @@ function SimulatorPage() {
                       <strong>${(simulatorData.reduction_plan_coverage_amount || 0).toFixed(2)}</strong>
                     </div>
                   </div>
+
+                  {reductionPlanMessage && <p className="success-text">{reductionPlanMessage}</p>}
+                  {reductionPlanError && <p className="error-text">{reductionPlanError}</p>}
 
                   <div className="budget-insight-list">
                     {simulatorData.reduction_plan.map((item) => (
@@ -547,6 +861,7 @@ function SimulatorPage() {
                         <th>Month</th>
                         <th>Income</th>
                         <th>Expenses</th>
+                        <th>One-Time Event</th>
                         <th>Net</th>
                         <th>Baseline Balance</th>
                         <th>Ending Balance</th>
@@ -559,6 +874,13 @@ function SimulatorPage() {
                           <td>{row.month}</td>
                           <td>${row.income.toFixed(2)}</td>
                           <td>${row.expenses.toFixed(2)}</td>
+                          <td>
+                            {row.one_time_event_amount
+                              ? `${row.one_time_event_label || "Planned event"} ${
+                                  row.one_time_event_amount > 0 ? "+" : "-"
+                                }$${Math.abs(row.one_time_event_amount).toFixed(2)}`
+                              : "None"}
+                          </td>
                           <td>${row.net_change.toFixed(2)}</td>
                           <td>${row.baseline_ending_balance.toFixed(2)}</td>
                           <td>${row.ending_balance.toFixed(2)}</td>

@@ -147,6 +147,15 @@ function AssistantPage() {
       if (action.expense_adjustment != null) {
         params.set("expense_adjustment", String(action.expense_adjustment));
       }
+      if (action.event_month_offset != null) {
+        params.set("event_month_offset", String(action.event_month_offset));
+      }
+      if (action.event_amount != null) {
+        params.set("event_amount", String(action.event_amount));
+      }
+      if (action.event_label) {
+        params.set("event_label", action.event_label);
+      }
 
       navigate(`/simulator${params.toString() ? `?${params.toString()}` : ""}`);
       return;

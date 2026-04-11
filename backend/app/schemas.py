@@ -106,6 +106,11 @@ class BudgetPlanCreate(BudgetPlanBase):
     pass
 
 
+class BudgetPlanTarget(BaseModel):
+    category: str = Field(min_length=1, max_length=100)
+    amount: float = Field(gt=0)
+
+
 class BudgetCopyRequest(BaseModel):
     month: str = Field(pattern=r"^\d{4}-\d{2}$")
     account_id: int | None = None
@@ -114,6 +119,12 @@ class BudgetCopyRequest(BaseModel):
 class BudgetBuildRequest(BaseModel):
     month: str = Field(pattern=r"^\d{4}-\d{2}$")
     account_id: int | None = None
+
+
+class BudgetBulkUpsertRequest(BaseModel):
+    month: str = Field(pattern=r"^\d{4}-\d{2}$")
+    account_id: int | None = None
+    items: list[BudgetPlanTarget] = Field(default_factory=list)
 
 
 class BudgetPlanResponse(ORMBaseModel):
@@ -199,6 +210,16 @@ class BudgetBuildResponse(BaseModel):
     message: str
 
 
+class BudgetBulkUpsertResponse(BaseModel):
+    month: str
+    account_id: int | None = None
+    applied_count: int = 0
+    created_count: int = 0
+    updated_count: int = 0
+    unchanged_count: int = 0
+    message: str
+
+
 class FutureSimulationPoint(BaseModel):
     month: str
     income: float
@@ -207,6 +228,8 @@ class FutureSimulationPoint(BaseModel):
     baseline_ending_balance: float
     ending_balance: float
     balance_delta: float
+    one_time_event_amount: float = 0.0
+    one_time_event_label: str | None = None
 
 
 class FutureSimulationReductionItem(BaseModel):
@@ -235,6 +258,9 @@ class FutureSimulationResponse(BaseModel):
     projected_end_balance: float
     risk_level: str
     narrative: str
+    one_time_event_month: str | None = None
+    one_time_event_amount: float | None = None
+    one_time_event_label: str | None = None
     goal_balance: float | None = None
     goal_gap_amount: float | None = None
     required_monthly_net: float | None = None
@@ -392,6 +418,9 @@ class AssistantAction(BaseModel):
     target_balance: float | None = None
     income_adjustment: float | None = None
     expense_adjustment: float | None = None
+    event_month_offset: int | None = None
+    event_amount: float | None = None
+    event_label: str | None = None
 
 
 class AssistantQueryRequest(BaseModel):
