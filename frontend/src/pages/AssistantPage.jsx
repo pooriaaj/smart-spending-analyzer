@@ -130,6 +130,7 @@ function AssistantPage() {
 
       if (action.month) params.set("month", action.month);
       if (action.category) params.set("category", action.category);
+      if (action.amount != null) params.set("amount", String(action.amount));
 
       navigate(`/budgets${params.toString() ? `?${params.toString()}` : ""}`);
       return;

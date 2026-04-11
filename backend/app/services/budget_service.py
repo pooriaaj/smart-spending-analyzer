@@ -8,12 +8,14 @@ from sqlalchemy.orm import Query, Session
 from app.models import BudgetPlan, Transaction
 from app.schemas import (
     BudgetCopyResponse,
+    BudgetInsightResponse,
     BudgetListResponse,
     BudgetPlanResponse,
     BudgetSuggestionResponse,
     BudgetSummaryResponse,
 )
 from app.services.budget_metrics import (
+    build_budget_action_insights,
     build_budget_pace_context,
     build_budget_projection_context,
     compute_budget_status,
@@ -253,6 +255,10 @@ def list_budget_plans(
             account_id=account_id,
             existing_categories=existing_categories,
         ),
+        insights=[
+            BudgetInsightResponse(**item)
+            for item in build_budget_action_insights(budget_responses)
+        ],
     )
 
 

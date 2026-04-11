@@ -391,6 +391,52 @@ class AnalyticsRouteTest(unittest.TestCase):
             any("Projected month-end:" in item for item in payload["supporting_points"])
         )
 
+    def test_assistant_saving_advice_uses_budget_action_insights(self) -> None:
+        with patch("app.services.budget_metrics.date", FixedBudgetDate):
+            with self.session_local() as session:
+                session.add(
+                    BudgetPlan(
+                        month="2026-04",
+                        category="groceries",
+                        amount=200.0,
+                        owner_id=self.user_id,
+                        account_id=self.chequing_account_id,
+                    )
+                )
+                session.add(
+                    Transaction(
+                        amount=90.0,
+                        category="groceries",
+                        description="Large Grocery Run",
+                        date=date(2026, 4, 2),
+                        type="expense",
+                        owner_id=self.user_id,
+                        account_id=self.chequing_account_id,
+                    )
+                )
+                session.commit()
+
+            with patch("app.services.analytics_service.generate_llm_assistant_response", return_value=None):
+                response = self.client.post(
+                    "/analytics/assistant-response",
+                    json={
+                        "question": "Give me saving advice",
+                        "history": [],
+                        "mode": "balanced",
+                        "account_id": self.chequing_account_id,
+                    },
+                )
+
+        self.assertEqual(response.status_code, 200, response.text)
+        payload = response.json()
+
+        self.assertIn("Groceries", payload["answer"])
+        self.assertIn("projected to finish", payload["answer"].lower())
+        self.assertEqual(payload["suggested_actions"][0]["page"], "budgets")
+        self.assertEqual(payload["suggested_actions"][0]["category"], "groceries")
+        self.assertGreater(payload["suggested_actions"][0]["amount"], 200.0)
+        self.assertEqual(payload["suggested_actions"][1]["page"], "transactions")
+
     def test_assistant_response_shows_recent_transactions_for_focused_category(self) -> None:
         self.seed_transactions()
 

@@ -1406,6 +1406,63 @@ textarea:focus,
   line-height: 1.6;
 }
 
+.budget-insight-list {
+  display: grid;
+  gap: 14px;
+  margin-top: 18px;
+}
+
+.budget-insight-item {
+  border-radius: 18px;
+  padding: 18px;
+  background: rgba(248, 250, 252, 0.9);
+  border: 1px solid rgba(15, 23, 42, 0.08);
+}
+
+.budget-insight-top {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+}
+
+.budget-insight-title {
+  margin: 12px 0 0 0;
+  color: var(--text-main);
+  font-weight: 700;
+}
+
+.budget-insight-actions {
+  margin-top: 14px;
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+}
+
+.budget-insight-badge {
+  padding: 7px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.budget-insight-badge-action {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.budget-insight-badge-watch {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.budget-insight-badge-positive {
+  background: #dcfce7;
+  color: #166534;
+}
+
 :root[data-theme="dark"] .account-comparison-item {
   background: rgba(15, 23, 42, 0.82);
   border-color: rgba(148, 163, 184, 0.14);
@@ -1427,6 +1484,11 @@ textarea:focus,
 }
 
 :root[data-theme="dark"] .budget-card {
+  background: rgba(15, 23, 42, 0.82);
+  border-color: rgba(148, 163, 184, 0.14);
+}
+
+:root[data-theme="dark"] .budget-insight-item {
   background: rgba(15, 23, 42, 0.82);
   border-color: rgba(148, 163, 184, 0.14);
 }
@@ -1457,6 +1519,21 @@ textarea:focus,
 :root[data-theme="dark"] .budget-status-over {
   background: rgba(220, 38, 38, 0.22);
   color: #fecaca;
+}
+
+:root[data-theme="dark"] .budget-insight-badge-action {
+  background: rgba(220, 38, 38, 0.22);
+  color: #fecaca;
+}
+
+:root[data-theme="dark"] .budget-insight-badge-watch {
+  background: rgba(217, 119, 6, 0.22);
+  color: #fde68a;
+}
+
+:root[data-theme="dark"] .budget-insight-badge-positive {
+  background: rgba(22, 163, 74, 0.22);
+  color: #bbf7d0;
 }
 
 :root[data-theme="dark"] .import-filter-chip:hover {
@@ -3293,6 +3370,8 @@ textarea {
   .budget-card-top,
   .budget-card-actions,
   .budget-card-meta,
+  .budget-insight-actions,
+  .budget-insight-top,
   .budget-suggestion-meta,
   .budget-scope-actions {
     flex-direction: column;

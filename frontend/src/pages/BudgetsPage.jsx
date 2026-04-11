@@ -33,6 +33,10 @@ function shiftMonthLabel(month, offset) {
   return `${shiftedYear.toString().padStart(4, "0")}-${shiftedMonth.toString().padStart(2, "0")}`;
 }
 
+function buildQuickSaveKey(category, amount) {
+  return `${formatBudgetCategory(category)}-${Number(amount || 0).toFixed(2)}`;
+}
+
 function BudgetsPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -44,10 +48,11 @@ function BudgetsPage() {
   const [category, setCategory] = useState(
     formatBudgetCategory(searchParams.get("category") || "")
   );
-  const [amount, setAmount] = useState("");
+  const [amount, setAmount] = useState(searchParams.get("amount") || "");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [copying, setCopying] = useState(false);
+  const [quickSavingKey, setQuickSavingKey] = useState("");
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
 
@@ -81,6 +86,7 @@ function BudgetsPage() {
   useEffect(() => {
     const urlMonth = searchParams.get("month");
     const urlCategory = searchParams.get("category");
+    const urlAmount = searchParams.get("amount");
 
     if (urlMonth && /^\d{4}-\d{2}$/.test(urlMonth)) {
       setMonth(urlMonth);
@@ -88,6 +94,12 @@ function BudgetsPage() {
 
     if (urlCategory) {
       setCategory(formatBudgetCategory(urlCategory));
+    }
+
+    if (searchParams.has("amount")) {
+      setAmount(urlAmount || "");
+    } else if (urlMonth || urlCategory) {
+      setAmount("");
     }
   }, [searchParams]);
 
@@ -152,6 +164,7 @@ function BudgetsPage() {
   };
 
   const budgetCards = budgetData?.budgets || [];
+  const budgetInsights = budgetData?.insights || [];
   const suggestedBudgets = budgetData?.suggestions || [];
   const previousMonth = useMemo(() => shiftMonthLabel(month, -1), [month]);
   const categoryOptions = useMemo(
@@ -173,12 +186,86 @@ function BudgetsPage() {
     return { label: "On track", className: "budget-status budget-status-on-track" };
   };
 
+  const getBudgetInsightMeta = (severity) => {
+    if (severity === "action") {
+      return { label: "Act now", className: "budget-insight-badge budget-insight-badge-action" };
+    }
+    if (severity === "watch") {
+      return { label: "Watch closely", className: "budget-insight-badge budget-insight-badge-watch" };
+    }
+    return { label: "On pace", className: "budget-insight-badge budget-insight-badge-positive" };
+  };
+
   const handleUseSuggestion = (suggestion) => {
     setCategory(formatBudgetCategory(suggestion.category));
     setAmount(String(suggestion.suggested_amount));
     setMessage(`Loaded ${formatBudgetCategory(suggestion.category)} into the form.`);
     setError("");
     window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  const saveBudgetTarget = async (targetCategory, targetAmount, sourceLabel) => {
+    const normalizedCategory = formatBudgetCategory(targetCategory);
+    const quickKey = buildQuickSaveKey(normalizedCategory, targetAmount);
+
+    try {
+      setQuickSavingKey(quickKey);
+      setError("");
+      setMessage("");
+
+      await api.post("/budgets/", {
+        month,
+        category: normalizedCategory,
+        amount: Number(targetAmount),
+        account_id: normalizedAccountId,
+      });
+
+      setCategory(normalizedCategory);
+      setAmount(String(targetAmount));
+      setMessage(
+        `${sourceLabel} saved ${normalizedCategory} at $${Number(targetAmount).toFixed(2)}.`
+      );
+      await fetchBudgets();
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    } catch (saveError) {
+      if (!handleApiAuthError(saveError, navigate)) {
+        setError(saveError?.response?.data?.detail || "Failed to save budget target.");
+      }
+    } finally {
+      setQuickSavingKey("");
+    }
+  };
+
+  const handleUseInsightTarget = (insight) => {
+    if (insight.recommended_amount == null) return;
+
+    setCategory(formatBudgetCategory(insight.category));
+    setAmount(String(insight.recommended_amount));
+    setMessage(
+      `Loaded ${formatBudgetCategory(insight.category)} target ${Number(
+        insight.recommended_amount
+      ).toFixed(2)} into the form.`
+    );
+    setError("");
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  const handleApplySuggestion = async (suggestion) => {
+    await saveBudgetTarget(
+      suggestion.category,
+      suggestion.suggested_amount,
+      "Suggested budget"
+    );
+  };
+
+  const handleApplyInsightTarget = async (insight) => {
+    if (insight.recommended_amount == null) return;
+
+    await saveBudgetTarget(
+      insight.category,
+      insight.recommended_amount,
+      "Budget move"
+    );
   };
 
   const handleCopyPreviousMonth = async () => {
@@ -289,6 +376,16 @@ function BudgetsPage() {
                       >
                         Use Suggestion
                       </button>
+                      <button
+                        type="button"
+                        className="secondary-button"
+                        onClick={() => handleApplySuggestion(suggestion)}
+                        disabled={quickSavingKey === buildQuickSaveKey(suggestion.category, suggestion.suggested_amount)}
+                      >
+                        {quickSavingKey === buildQuickSaveKey(suggestion.category, suggestion.suggested_amount)
+                          ? "Applying..."
+                          : "Apply Now"}
+                      </button>
                     </div>
                   </div>
 
@@ -374,6 +471,59 @@ function BudgetsPage() {
 
         {budgetCards.length > 0 && (
           <p className="budget-forecast-banner">{buildBudgetForecastSummary(budgetSummary)}</p>
+        )}
+
+        {budgetInsights.length > 0 && (
+          <div className="dashboard-card">
+            <div className="section-header">
+              <h2>Budget Moves</h2>
+              <p>Concrete next steps based on your current pace and month-end forecast.</p>
+            </div>
+
+            <div className="budget-insight-list">
+              {budgetInsights.map((insight) => {
+                const insightMeta = getBudgetInsightMeta(insight.severity);
+
+                return (
+                  <div
+                    key={`${insight.category}-${insight.title}`}
+                    className="budget-insight-item"
+                  >
+                    <div className="budget-insight-top">
+                      <span className={insightMeta.className}>{insightMeta.label}</span>
+                      <strong>{formatBudgetCategory(insight.category)}</strong>
+                    </div>
+                    <p className="budget-insight-title">{insight.title}</p>
+                    <p className="budget-inline-note">{insight.detail}</p>
+                    {insight.recommended_amount != null && (
+                      <div className="budget-insight-actions">
+                        <span className="budget-inline-note">
+                          Suggested target: ${Number(insight.recommended_amount).toFixed(2)}
+                        </span>
+                        <button
+                          type="button"
+                          className="secondary-button"
+                          onClick={() => handleUseInsightTarget(insight)}
+                        >
+                          Load Target
+                        </button>
+                        <button
+                          type="button"
+                          className="secondary-button"
+                          onClick={() => handleApplyInsightTarget(insight)}
+                          disabled={quickSavingKey === buildQuickSaveKey(insight.category, insight.recommended_amount)}
+                        >
+                          {quickSavingKey === buildQuickSaveKey(insight.category, insight.recommended_amount)
+                            ? "Applying..."
+                            : "Apply Target"}
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
         )}
 
         <div className="dashboard-card">

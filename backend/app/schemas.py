@@ -143,6 +143,14 @@ class BudgetSuggestionResponse(BaseModel):
     note: str
 
 
+class BudgetInsightResponse(BaseModel):
+    category: str
+    severity: str
+    title: str
+    detail: str
+    recommended_amount: float | None = None
+
+
 class BudgetSummaryResponse(BaseModel):
     total_budgeted: float = 0.0
     total_spent: float = 0.0
@@ -164,6 +172,7 @@ class BudgetListResponse(BaseModel):
     summary: BudgetSummaryResponse
     available_categories: list[str] = Field(default_factory=list)
     suggestions: list[BudgetSuggestionResponse] = Field(default_factory=list)
+    insights: list[BudgetInsightResponse] = Field(default_factory=list)
 
 
 class BudgetCopyResponse(BaseModel):
@@ -314,6 +323,7 @@ class AssistantAction(BaseModel):
     transaction_type: str | None = None
     month: str | None = None
     account_id: int | None = None
+    amount: float | None = None
 
 
 class AssistantQueryRequest(BaseModel):

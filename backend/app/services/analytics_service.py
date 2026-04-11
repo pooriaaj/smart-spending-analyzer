@@ -9,6 +9,8 @@ from sqlalchemy.orm import Query, Session
 
 from app.models import Account, BudgetPlan, Transaction
 from app.services.budget_metrics import (
+    build_budget_action_insights,
+    build_budget_pace_context,
     build_budget_projection_context,
     compute_budget_status,
     get_default_budget_month,
@@ -411,6 +413,12 @@ def get_budget_progress_snapshot(
             float(budget.amount),
             spent_amount,
         )
+        pace_context = build_budget_pace_context(
+            month=budget.month,
+            amount=float(budget.amount),
+            spent_amount=spent_amount,
+            remaining_amount=remaining_amount,
+        )
         projection_context = build_budget_projection_context(
             month=budget.month,
             amount=float(budget.amount),
@@ -425,6 +433,12 @@ def get_budget_progress_snapshot(
                 "remaining_amount": remaining_amount,
                 "usage_percent": usage_percent,
                 "status": status,
+                "days_total": pace_context["days_total"],
+                "days_elapsed": pace_context["days_elapsed"],
+                "days_remaining": pace_context["days_remaining"],
+                "daily_allowance": pace_context["daily_allowance"],
+                "daily_pace": pace_context["daily_pace"],
+                "pace_note": pace_context["pace_note"],
                 "projected_spent_amount": projection_context["projected_spent_amount"],
                 "projected_remaining_amount": projection_context["projected_remaining_amount"],
                 "projected_usage_percent": projection_context["projected_usage_percent"],
@@ -1566,6 +1580,7 @@ def generate_assistant_response(
         month=current_month or get_default_budget_month(),
         account_id=account_id,
     )
+    budget_action_insights = build_budget_action_insights(budget_snapshot["items"])
     budget_categories = [item["category"] for item in budget_snapshot["items"]]
     focus_categories = get_distinct_categories(db, user_id, account_id=account_id)
     seen_focus_categories = {
@@ -1962,6 +1977,68 @@ def generate_assistant_response(
                     "account_id": account_id,
                 }
             )
+
+        return {
+            "answer": answer,
+            "supporting_points": supporting_points[:5],
+            "suggested_followups": generate_dynamic_followups(
+                intent=intent,
+                mode=mode,
+                top_category=top_category,
+                driver_category=primary_driver,
+                focus_category=focus_category,
+            ),
+            "suggested_actions": suggested_actions,
+            "scope_label": scope_label,
+        }
+
+    actionable_budget_insights = [
+        item for item in budget_action_insights if item["severity"] in {"action", "watch"}
+    ]
+    if intent == "saving_advice" and actionable_budget_insights:
+        lead_budget_insight = actionable_budget_insights[0]
+        lead_budget_label = format_category_label(lead_budget_insight["category"])
+
+        if mode == "strict":
+            answer = (
+                f"{lead_budget_insight['title']}. {lead_budget_insight['detail']} "
+                "That is the first place to tighten up."
+            )
+        elif mode == "coach":
+            answer = (
+                f"{lead_budget_insight['title']}. {lead_budget_insight['detail']} "
+                "A small change there would have the clearest payoff."
+            )
+        else:
+            answer = f"{lead_budget_insight['title']}. {lead_budget_insight['detail']}"
+
+        supporting_points = [
+            f"{item['title']}: {item['detail']}"
+            for item in actionable_budget_insights[:3]
+        ]
+        supporting_points.append(f"Current scope: {scope_label}")
+
+        suggested_actions = [
+            {
+                "label": "Open budgets",
+                "page": "budgets",
+                "month": budget_snapshot["month"],
+                "account_id": account_id,
+                "amount": lead_budget_insight.get("recommended_amount"),
+            }
+        ]
+        if lead_budget_insight["category"]:
+            suggested_actions.append(
+                {
+                    "label": f"Review {lead_budget_label} transactions",
+                    "page": "transactions",
+                    "category": lead_budget_insight["category"],
+                    "transaction_type": "expense",
+                    "month": budget_snapshot["month"],
+                    "account_id": account_id,
+                }
+            )
+            suggested_actions[0]["category"] = lead_budget_insight["category"]
 
         return {
             "answer": answer,

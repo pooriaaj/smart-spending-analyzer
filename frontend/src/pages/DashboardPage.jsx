@@ -135,6 +135,7 @@ function DashboardPage() {
     projected_over_budget_count: 0,
     projected_at_risk_count: 0,
   };
+  const budgetInsights = useMemo(() => (budgetData?.insights || []).slice(0, 2), [budgetData]);
   const budgetWatchlist = useMemo(() => {
     const items = budgetData?.budgets || [];
 
@@ -149,6 +150,27 @@ function DashboardPage() {
       })
       .slice(0, 3);
   }, [budgetData]);
+
+  const getBudgetInsightMeta = (severity) => {
+    if (severity === "action") {
+      return { label: "Act now", className: "budget-insight-badge budget-insight-badge-action" };
+    }
+    if (severity === "watch") {
+      return { label: "Watch closely", className: "budget-insight-badge budget-insight-badge-watch" };
+    }
+    return { label: "On pace", className: "budget-insight-badge budget-insight-badge-positive" };
+  };
+
+  const openBudgetInsightTarget = (insight) => {
+    const params = new URLSearchParams({ month: currentBudgetMonth });
+    if (insight?.category) {
+      params.set("category", insight.category);
+    }
+    if (insight?.recommended_amount != null) {
+      params.set("amount", String(insight.recommended_amount));
+    }
+    navigate(`/budgets?${params.toString()}`);
+  };
 
   const suggestCategory = () => {
     const text = description.trim().toLowerCase();
@@ -389,6 +411,42 @@ function DashboardPage() {
               </div>
 
               <p className="budget-forecast-banner">{buildBudgetForecastSummary(budgetSummary)}</p>
+
+              {budgetInsights.length > 0 && (
+                <div className="budget-insight-list">
+                  {budgetInsights.map((insight) => {
+                    const insightMeta = getBudgetInsightMeta(insight.severity);
+
+                    return (
+                      <div
+                        key={`${insight.category}-${insight.title}`}
+                        className="budget-insight-item"
+                      >
+                        <div className="budget-insight-top">
+                          <span className={insightMeta.className}>{insightMeta.label}</span>
+                          <strong>{formatBudgetCategory(insight.category)}</strong>
+                        </div>
+                        <p className="budget-insight-title">{insight.title}</p>
+                        <p className="budget-inline-note">{insight.detail}</p>
+                        {insight.recommended_amount != null && (
+                          <div className="budget-insight-actions">
+                            <span className="budget-inline-note">
+                              Suggested target: ${Number(insight.recommended_amount).toFixed(2)}
+                            </span>
+                            <button
+                              type="button"
+                              className="secondary-button"
+                              onClick={() => openBudgetInsightTarget(insight)}
+                            >
+                              Open Target
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
 
               <div className="budget-list">
                 {budgetWatchlist.map((budget) => (

@@ -4,6 +4,7 @@ import calendar
 import unittest
 from collections.abc import Generator
 from datetime import date
+from unittest.mock import patch
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -15,6 +16,12 @@ from app.database import Base
 from app.dependencies import get_current_user, get_db
 from app.models import Account, BudgetPlan, Transaction, User
 from app.routes.budget_routes import router as budget_router
+
+
+class FixedBudgetDate(date):
+    @classmethod
+    def today(cls) -> "FixedBudgetDate":
+        return cls(2026, 4, 10)
 
 
 class BudgetRouteTest(unittest.TestCase):
@@ -346,6 +353,48 @@ class BudgetRouteTest(unittest.TestCase):
         self.assertEqual(payload["copied_count"], 0)
         self.assertEqual(payload["skipped_existing_count"], 0)
         self.assertIn("No budgets were found", payload["message"])
+
+    def test_list_budgets_returns_actionable_budget_insights(self) -> None:
+        with patch("app.services.budget_metrics.date", FixedBudgetDate):
+            with self.session_local() as session:
+                session.add(
+                    BudgetPlan(
+                        month="2026-04",
+                        category="groceries",
+                        amount=200.0,
+                        owner_id=self.user_id,
+                        account_id=self.chequing_account_id,
+                    )
+                )
+                session.add(
+                    Transaction(
+                        amount=90.0,
+                        category="groceries",
+                        description="Large Grocery Run",
+                        date=date(2026, 4, 2),
+                        type="expense",
+                        owner_id=self.user_id,
+                        account_id=self.chequing_account_id,
+                    )
+                )
+                session.commit()
+
+            response = self.client.get(
+                "/budgets/",
+                params={
+                    "month": "2026-04",
+                    "account_id": self.chequing_account_id,
+                },
+            )
+
+        self.assertEqual(response.status_code, 200, response.text)
+        insights = response.json()["insights"]
+
+        self.assertGreaterEqual(len(insights), 1)
+        self.assertEqual(insights[0]["category"], "groceries")
+        self.assertEqual(insights[0]["severity"], "action")
+        self.assertIn("projected to finish", insights[0]["detail"].lower())
+        self.assertGreater(insights[0]["recommended_amount"], 200.0)
 
     def test_list_budgets_includes_current_month_pacing_guidance(self) -> None:
         today = date.today()

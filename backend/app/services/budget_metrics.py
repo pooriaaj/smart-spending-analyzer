@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import calendar
 from datetime import date, datetime
+from typing import Any
 
 
 def get_default_budget_month() -> str:
@@ -170,3 +171,144 @@ def build_budget_projection_context(
         "projected_status": projected_status,
         "projection_note": projection_note,
     }
+
+
+def format_budget_category_label(category: str | None) -> str:
+    if not category:
+        return "This budget"
+    return " ".join(word.capitalize() for word in str(category).replace("_", " ").split())
+
+
+def _read_budget_item_value(item: Any, key: str) -> Any:
+    if isinstance(item, dict):
+        return item.get(key)
+    return getattr(item, key, None)
+
+
+def build_budget_action_insights(
+    items: list[Any],
+    limit: int = 3,
+) -> list[dict[str, Any]]:
+    insights: list[dict[str, Any]] = []
+
+    for item in items:
+        category = str(_read_budget_item_value(item, "category") or "")
+        label = format_budget_category_label(category)
+        status = str(_read_budget_item_value(item, "status") or "on_track")
+        projected_status = str(
+            _read_budget_item_value(item, "projected_status") or status
+        )
+        projected_remaining_amount = float(
+            _read_budget_item_value(item, "projected_remaining_amount") or 0.0
+        )
+        projected_usage_percent = float(
+            _read_budget_item_value(item, "projected_usage_percent") or 0.0
+        )
+        days_remaining = int(_read_budget_item_value(item, "days_remaining") or 0)
+        daily_allowance = _read_budget_item_value(item, "daily_allowance")
+
+        if projected_status == "over_budget":
+            over_amount = abs(projected_remaining_amount)
+            recommended_amount = round(
+                max(
+                    float(_read_budget_item_value(item, "amount") or 0.0),
+                    float(_read_budget_item_value(item, "projected_spent_amount") or 0.0),
+                ),
+                2,
+            )
+            detail = f"Projected to finish {format_budget_currency(over_amount)} over budget."
+            if days_remaining > 0:
+                daily_gap = over_amount / days_remaining
+                detail += (
+                    f" To recover this month, trim about {format_budget_currency(daily_gap)} "
+                    "per day from the current pace."
+                )
+            detail += (
+                f" If you want next month to reflect the current pace, start around "
+                f"{format_budget_currency(recommended_amount)}."
+            )
+            insights.append(
+                {
+                    "category": category,
+                    "severity": "action",
+                    "title": f"{label} needs attention now",
+                    "detail": detail,
+                    "recommended_amount": recommended_amount,
+                    "impact": over_amount,
+                }
+            )
+            continue
+
+        if projected_status == "at_risk":
+            recommended_amount = round(
+                max(
+                    float(_read_budget_item_value(item, "amount") or 0.0),
+                    float(_read_budget_item_value(item, "projected_spent_amount") or 0.0),
+                ),
+                2,
+            )
+            detail = (
+                f"Projected to use {projected_usage_percent:.1f}% of the budget by month end."
+            )
+            if daily_allowance is not None:
+                allowance_value = abs(float(daily_allowance))
+                if float(daily_allowance) >= 0:
+                    detail += (
+                        f" Staying near {format_budget_currency(allowance_value)} per day or less "
+                        "should keep it manageable."
+                    )
+                else:
+                    detail += (
+                        f" It is already running about {format_budget_currency(allowance_value)} "
+                        "per day over the safe pace."
+                    )
+            detail += (
+                f" If you want a more realistic target for next month, start around "
+                f"{format_budget_currency(recommended_amount)}."
+            )
+            insights.append(
+                {
+                    "category": category,
+                    "severity": "watch",
+                    "title": f"{label} is getting tight",
+                    "detail": detail,
+                    "recommended_amount": recommended_amount,
+                    "impact": projected_usage_percent,
+                }
+            )
+            continue
+
+        if status == "on_track" and projected_remaining_amount > 0:
+            insights.append(
+                {
+                    "category": category,
+                    "severity": "positive",
+                    "title": f"{label} is creating room",
+                    "detail": (
+                        f"Projected to finish with {format_budget_currency(projected_remaining_amount)} "
+                        "remaining if the current pace holds."
+                    ),
+                    "impact": projected_remaining_amount,
+                }
+            )
+
+    severity_order = {"action": 0, "watch": 1, "positive": 2}
+    ordered = sorted(
+        insights,
+        key=lambda item: (
+            severity_order.get(str(item["severity"]), 3),
+            -float(item.get("impact", 0.0)),
+            str(item["category"]).lower(),
+        ),
+    )
+
+    return [
+        {
+            "category": item["category"],
+            "severity": item["severity"],
+            "title": item["title"],
+            "detail": item["detail"],
+            "recommended_amount": item.get("recommended_amount"),
+        }
+        for item in ordered[:limit]
+    ]
