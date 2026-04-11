@@ -431,6 +431,7 @@ class AssistantAction(BaseModel):
     label: str
     page: str
     section: str | None = None
+    saved_scenario_id: int | None = None
     category: str | None = None
     transaction_type: str | None = None
     month: str | None = None

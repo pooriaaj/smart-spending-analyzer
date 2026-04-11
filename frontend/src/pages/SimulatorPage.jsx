@@ -110,6 +110,10 @@ function formatSignedScenarioAmount(value) {
   return `${numericValue >= 0 ? "+" : "-"}$${Math.abs(numericValue).toFixed(2)}`;
 }
 
+function formatScenarioCurrency(value) {
+  return `$${(Number(value) || 0).toFixed(2)}`;
+}
+
 function buildSavedScenarioSummary(scenario) {
   const summaryParts = [`${scenario.months} month${scenario.months === 1 ? "" : "s"}`];
 
@@ -123,7 +127,225 @@ function buildSavedScenarioSummary(scenario) {
     summaryParts.push(`target $${Number(scenario.target_balance).toFixed(2)}`);
   }
 
-  return summaryParts.join(" • ");
+  return summaryParts.join(" | ");
+}
+
+function buildSimulationRequestParams({
+  accountId,
+  months,
+  incomeAdjustment,
+  expenseAdjustment,
+  targetBalance,
+  eventAmount,
+  eventMonthOffset,
+  eventLabel,
+}) {
+  const normalizedEventAmount = Number(eventAmount) || 0;
+
+  return {
+    account_id: accountId,
+    months: Math.max(1, Math.min(Number(months) || 6, 12)),
+    income_adjustment: Number(incomeAdjustment) || 0,
+    expense_adjustment: Number(expenseAdjustment) || 0,
+    target_balance: Number(targetBalance) > 0 ? Number(targetBalance) : undefined,
+    event_amount: normalizedEventAmount,
+    event_month_offset:
+      normalizedEventAmount !== 0 && Number(eventMonthOffset) > 0
+        ? Number(eventMonthOffset)
+        : undefined,
+    event_label:
+      normalizedEventAmount !== 0 ? String(eventLabel || "").trim() || undefined : undefined,
+  };
+}
+
+function getScenarioRiskLabel(riskLevel) {
+  if (riskLevel === "high") {
+    return "High risk";
+  }
+  if (riskLevel === "watch") {
+    return "Watch closely";
+  }
+  return "Healthy pace";
+}
+
+function buildScenarioComparisonNote(currentData, comparedData, comparedName) {
+  if (!currentData || !comparedData || !comparedName) {
+    return "";
+  }
+
+  const difference =
+    Number(currentData.projected_end_balance || 0) -
+    Number(comparedData.projected_end_balance || 0);
+
+  if (Math.abs(difference) < 0.01) {
+    return `The current draft and "${comparedName}" finish in nearly the same place by month end.`;
+  }
+
+  if (difference > 0) {
+    return `The current draft finishes ${formatScenarioCurrency(difference)} ahead of "${comparedName}" by month end.`;
+  }
+
+  return `"${comparedName}" finishes ${formatScenarioCurrency(Math.abs(difference))} ahead of the current draft by month end.`;
+}
+
+function buildScenarioComparisonTimeline(currentData, comparedData) {
+  const currentTimeline = currentData?.timeline || [];
+  const comparedTimeline = comparedData?.timeline || [];
+
+  const allMonths = Array.from(
+    new Set([
+      ...currentTimeline.map((item) => item.month),
+      ...comparedTimeline.map((item) => item.month),
+    ])
+  ).sort();
+
+  const currentMap = new Map(currentTimeline.map((item) => [item.month, item]));
+  const comparedMap = new Map(comparedTimeline.map((item) => [item.month, item]));
+
+  return allMonths.map((month) => {
+    const currentItem = currentMap.get(month);
+    const comparedItem = comparedMap.get(month);
+    const currentEndingBalance =
+      currentItem?.ending_balance != null ? Number(currentItem.ending_balance) : null;
+    const comparedEndingBalance =
+      comparedItem?.ending_balance != null ? Number(comparedItem.ending_balance) : null;
+
+    return {
+      month,
+      current_ending_balance: currentEndingBalance,
+      compared_ending_balance: comparedEndingBalance,
+      current_net_change: currentItem?.net_change != null ? Number(currentItem.net_change) : null,
+      compared_net_change:
+        comparedItem?.net_change != null ? Number(comparedItem.net_change) : null,
+      ending_balance_gap:
+        currentEndingBalance != null && comparedEndingBalance != null
+          ? currentEndingBalance - comparedEndingBalance
+          : null,
+    };
+  });
+}
+
+function buildScenarioComparisonHighlights(currentData, comparedData, comparedName) {
+  if (!currentData || !comparedData || !comparedName) {
+    return [];
+  }
+
+  const currentLowest = (currentData.timeline || []).reduce(
+    (lowest, item) =>
+      Number(item.ending_balance) < Number(lowest.ending_balance) ? item : lowest,
+    currentData.timeline?.[0] || null
+  );
+  const comparedLowest = (comparedData.timeline || []).reduce(
+    (lowest, item) =>
+      Number(item.ending_balance) < Number(lowest.ending_balance) ? item : lowest,
+    comparedData.timeline?.[0] || null
+  );
+
+  const endDifference =
+    Number(currentData.projected_end_balance || 0) -
+    Number(comparedData.projected_end_balance || 0);
+  const netDifference =
+    Number(currentData.monthly_net_change || 0) - Number(comparedData.monthly_net_change || 0);
+  const cashFloorDifference =
+    currentLowest && comparedLowest
+      ? Number(currentLowest.ending_balance || 0) - Number(comparedLowest.ending_balance || 0)
+      : null;
+
+  return [
+    {
+      title: "Better finish",
+      value:
+        endDifference >= 0
+          ? `Current draft by ${formatScenarioCurrency(endDifference)}`
+          : `${comparedName} by ${formatScenarioCurrency(Math.abs(endDifference))}`,
+      detail: "Projected end balance advantage over the full scenario window.",
+    },
+    {
+      title: "Monthly pace edge",
+      value:
+        netDifference >= 0
+          ? `Current draft ${formatSignedScenarioAmount(netDifference)}`
+          : `${comparedName} ${formatSignedScenarioAmount(Math.abs(netDifference))}`,
+      detail: "Difference in monthly net cash flow between the two paths.",
+    },
+    {
+      title: "Safer cash floor",
+      value:
+        cashFloorDifference == null
+          ? "Not enough data"
+          : cashFloorDifference >= 0
+          ? `Current draft by ${formatScenarioCurrency(cashFloorDifference)}`
+          : `${comparedName} by ${formatScenarioCurrency(Math.abs(cashFloorDifference))}`,
+      detail:
+        currentLowest && comparedLowest
+          ? `Lowest balance months: ${currentLowest.month} vs ${comparedLowest.month}.`
+          : "Compares the lowest point each plan hits.",
+    },
+  ];
+}
+
+function buildScenarioCheckpoints(simulationData) {
+  const timeline = simulationData?.timeline || [];
+  if (timeline.length === 0) {
+    return [];
+  }
+
+  const lowestPoint = timeline.reduce((lowest, item) =>
+    Number(item.ending_balance) < Number(lowest.ending_balance) ? item : lowest
+  );
+  const firstNegativePoint = timeline.find((item) => Number(item.ending_balance) < 0);
+  const goalPoint =
+    simulationData?.goal_balance != null
+      ? timeline.find((item) => Number(item.ending_balance) >= Number(simulationData.goal_balance))
+      : null;
+
+  const checkpoints = [
+    {
+      title: "Lowest balance point",
+      value: `${lowestPoint.month} | ${formatScenarioCurrency(lowestPoint.ending_balance)}`,
+      detail: "This is the tightest month in the current path.",
+    },
+  ];
+
+  if (goalPoint && simulationData?.goal_balance != null) {
+    checkpoints.push({
+      title: "Goal reached",
+      value: `${goalPoint.month} | ${formatScenarioCurrency(simulationData.goal_balance)}`,
+      detail: `This path reaches your target by ${goalPoint.month}.`,
+    });
+  } else if (simulationData?.goal_balance != null) {
+    checkpoints.push({
+      title: "Goal status",
+      value: "Not reached",
+      detail: simulationData.goal_note || "This scenario does not hit the target in the selected window.",
+    });
+  }
+
+  if (firstNegativePoint) {
+    checkpoints.push({
+      title: "First negative month",
+      value: `${firstNegativePoint.month} | ${formatScenarioCurrency(firstNegativePoint.ending_balance)}`,
+      detail: "This is where the scenario drops below zero and needs intervention.",
+    });
+  } else {
+    checkpoints.push({
+      title: "Cash floor",
+      value: formatScenarioCurrency(lowestPoint.ending_balance),
+      detail: `The plan stays above zero throughout the ${simulationData?.months || timeline.length}-month window.`,
+    });
+  }
+
+  if (simulationData?.one_time_event_amount != null) {
+    checkpoints.push({
+      title: "Planned event month",
+      value: `${simulationData.one_time_event_month} | ${formatSignedScenarioAmount(
+        simulationData.one_time_event_amount
+      )}`,
+      detail: simulationData.one_time_event_label || "One-time event",
+    });
+  }
+
+  return checkpoints;
 }
 
 function SimulatorPage() {
@@ -156,13 +378,23 @@ function SimulatorPage() {
   const [scenarioLinkMessage, setScenarioLinkMessage] = useState("");
   const [scenarioLinkError, setScenarioLinkError] = useState("");
   const [activeSavedScenarioId, setActiveSavedScenarioId] = useState(null);
+  const [linkedSavedScenarioId, setLinkedSavedScenarioId] = useState(
+    Number(searchParams.get("saved_scenario_id")) > 0
+      ? Number(searchParams.get("saved_scenario_id"))
+      : null
+  );
   const [savedScenarioName, setSavedScenarioName] = useState("");
   const [savedScenarios, setSavedScenarios] = useState([]);
   const [savedScenariosLoading, setSavedScenariosLoading] = useState(true);
   const [savingScenario, setSavingScenario] = useState(false);
+  const [savingScenarioMode, setSavingScenarioMode] = useState(null);
   const [deletingScenarioId, setDeletingScenarioId] = useState(null);
   const [savedScenarioMessage, setSavedScenarioMessage] = useState("");
   const [savedScenarioError, setSavedScenarioError] = useState("");
+  const [comparisonScenarioId, setComparisonScenarioId] = useState(null);
+  const [comparisonData, setComparisonData] = useState(null);
+  const [comparisonLoading, setComparisonLoading] = useState(false);
+  const [comparisonError, setComparisonError] = useState("");
   const [themeMode, setThemeMode] = useState(
     document.documentElement.getAttribute("data-theme") || "light"
   );
@@ -220,6 +452,10 @@ function SimulatorPage() {
       selectedAccountId === ALL_ACCOUNTS_VALUE ? ALL_ACCOUNTS_VALUE : String(selectedAccountId)
     );
     params.set("months", String(Math.max(1, Math.min(Number(months) || 6, 12))));
+    const savedScenarioParamId = activeSavedScenarioId || linkedSavedScenarioId;
+    if (savedScenarioParamId) {
+      params.set("saved_scenario_id", String(savedScenarioParamId));
+    }
 
     if (Number(incomeAdjustment) !== 0) {
       params.set("income_adjustment", String(Number(incomeAdjustment)));
@@ -245,6 +481,8 @@ function SimulatorPage() {
   }, [
     selectedAccountId,
     months,
+    activeSavedScenarioId,
+    linkedSavedScenarioId,
     incomeAdjustment,
     expenseAdjustment,
     targetBalance,
@@ -299,19 +537,16 @@ function SimulatorPage() {
         setReductionPlanMessage("");
         setReductionPlanError("");
         const response = await api.get("/analytics/future-simulator", {
-          params: {
-            account_id: normalizedAccountId,
+          params: buildSimulationRequestParams({
+            accountId: normalizedAccountId,
             months,
-            income_adjustment: Number(incomeAdjustment) || 0,
-            expense_adjustment: Number(expenseAdjustment) || 0,
-            target_balance: Number(targetBalance) > 0 ? Number(targetBalance) : undefined,
-            event_amount: Number(eventAmount) || 0,
-            event_month_offset:
-              Number(eventAmount) !== 0 && Number(eventMonthOffset) > 0
-                ? Number(eventMonthOffset)
-                : undefined,
-            event_label: eventLabel.trim() || undefined,
-          },
+            incomeAdjustment,
+            expenseAdjustment,
+            targetBalance,
+            eventAmount,
+            eventMonthOffset,
+            eventLabel,
+          }),
         });
         setSimulatorData(response.data);
       } catch (fetchError) {
@@ -336,6 +571,59 @@ function SimulatorPage() {
     eventLabel,
   ]);
 
+  const comparedScenario = useMemo(
+    () => savedScenarios.find((scenario) => scenario.id === comparisonScenarioId) || null,
+    [savedScenarios, comparisonScenarioId]
+  );
+
+  useEffect(() => {
+    if (
+      activeSavedScenarioId &&
+      !savedScenarios.some((scenario) => scenario.id === activeSavedScenarioId)
+    ) {
+      setActiveSavedScenarioId(null);
+      setLinkedSavedScenarioId(null);
+    }
+  }, [savedScenarios, activeSavedScenarioId]);
+
+  useEffect(() => {
+    if (!comparedScenario) {
+      setComparisonData(null);
+      setComparisonError("");
+      setComparisonLoading(false);
+      return;
+    }
+
+    const fetchComparison = async () => {
+      try {
+        setComparisonLoading(true);
+        setComparisonError("");
+        const response = await api.get("/analytics/future-simulator", {
+          params: buildSimulationRequestParams({
+            accountId:
+              comparedScenario.account_id == null ? undefined : Number(comparedScenario.account_id),
+            months: comparedScenario.months,
+            incomeAdjustment: comparedScenario.income_adjustment,
+            expenseAdjustment: comparedScenario.expense_adjustment,
+            targetBalance: comparedScenario.target_balance,
+            eventAmount: comparedScenario.event_amount,
+            eventMonthOffset: comparedScenario.event_month_offset,
+            eventLabel: comparedScenario.event_label,
+          }),
+        });
+        setComparisonData(response.data);
+      } catch (fetchError) {
+        if (!handleApiAuthError(fetchError, navigate)) {
+          setComparisonError(`Failed to compare against "${comparedScenario.name}".`);
+        }
+      } finally {
+        setComparisonLoading(false);
+      }
+    };
+
+    fetchComparison();
+  }, [comparedScenario, navigate]);
+
   const chartTheme = useMemo(() => {
     const isDark = themeMode === "dark";
     return {
@@ -344,6 +632,7 @@ function SimulatorPage() {
       tooltipBg: isDark ? "rgba(15, 23, 42, 0.96)" : "rgba(255, 255, 255, 0.96)",
       tooltipBorder: isDark ? "rgba(148, 163, 184, 0.16)" : "rgba(15, 23, 42, 0.08)",
       balanceLine: isDark ? "#60a5fa" : "#2563eb",
+      compareLine: isDark ? "#fbbf24" : "#d97706",
       baselineLine: isDark ? "#a78bfa" : "#7c3aed",
       netLine: isDark ? "#4ade80" : "#16a34a",
     };
@@ -365,6 +654,36 @@ function SimulatorPage() {
     return { label: "Healthy pace", className: "simulator-risk-pill simulator-risk-healthy" };
   }, [simulatorData]);
 
+  const comparisonNote = useMemo(
+    () => buildScenarioComparisonNote(simulatorData, comparisonData, comparedScenario?.name),
+    [simulatorData, comparisonData, comparedScenario]
+  );
+  const comparisonTimeline = useMemo(
+    () => buildScenarioComparisonTimeline(simulatorData, comparisonData),
+    [simulatorData, comparisonData]
+  );
+  const comparisonHighlights = useMemo(
+    () => buildScenarioComparisonHighlights(simulatorData, comparisonData, comparedScenario?.name),
+    [simulatorData, comparisonData, comparedScenario]
+  );
+
+  const scenarioCheckpoints = useMemo(
+    () => buildScenarioCheckpoints(simulatorData),
+    [simulatorData]
+  );
+
+  const comparisonBalanceDelta =
+    simulatorData && comparisonData
+      ? Number(simulatorData.projected_end_balance || 0) -
+        Number(comparisonData.projected_end_balance || 0)
+      : null;
+
+  const comparisonMonthlyNetDelta =
+    simulatorData && comparisonData
+      ? Number(simulatorData.monthly_net_change || 0) -
+        Number(comparisonData.monthly_net_change || 0)
+      : null;
+
   const customTooltipStyle = {
     backgroundColor: chartTheme.tooltipBg,
     border: `1px solid ${chartTheme.tooltipBorder}`,
@@ -378,6 +697,7 @@ function SimulatorPage() {
 
   const applyPreset = (preset) => {
     setActiveSavedScenarioId(null);
+    setLinkedSavedScenarioId(null);
     setSavedScenarioName("");
     setMonths(preset.months);
     setIncomeAdjustment(preset.incomeAdjustment);
@@ -441,7 +761,7 @@ function SimulatorPage() {
     }
   };
 
-  const handleSaveScenario = async () => {
+  const handleSaveScenario = async (forceCreate = false) => {
     const fallbackName =
       (simulatorData?.one_time_event_label
         ? `${simulatorData.one_time_event_label} plan`
@@ -449,9 +769,11 @@ function SimulatorPage() {
         ? `Target $${Number(targetBalance).toFixed(0)} plan`
         : "Saved simulator plan");
     const name = savedScenarioName.trim() || fallbackName;
+    const isUpdatingExisting = Boolean(activeSavedScenarioId) && !forceCreate;
 
     try {
       setSavingScenario(true);
+      setSavingScenarioMode(forceCreate ? "copy" : isUpdatingExisting ? "update" : "save");
       setSavedScenarioError("");
       setSavedScenarioMessage("");
       const payload = {
@@ -468,13 +790,16 @@ function SimulatorPage() {
         event_label: eventLabel.trim() || null,
         account_id: normalizedAccountId,
       };
-      const response = activeSavedScenarioId
+      const response = isUpdatingExisting
         ? await api.put(`/analytics/saved-scenarios/${activeSavedScenarioId}`, payload)
         : await api.post("/analytics/saved-scenarios", payload);
       setActiveSavedScenarioId(response.data.id);
+      setLinkedSavedScenarioId(response.data.id);
       setSavedScenarioName(response.data.name);
       setSavedScenarioMessage(
-        activeSavedScenarioId
+        forceCreate
+          ? `Saved new scenario "${response.data.name}".`
+          : isUpdatingExisting
           ? `Updated scenario "${response.data.name}".`
           : `Saved scenario "${response.data.name}".`
       );
@@ -483,16 +808,29 @@ function SimulatorPage() {
       if (!handleApiAuthError(saveError, navigate)) {
         setSavedScenarioError(
           saveError?.response?.data?.detail ||
-            (activeSavedScenarioId ? "Failed to update scenario." : "Failed to save scenario.")
+            (isUpdatingExisting ? "Failed to update scenario." : "Failed to save scenario.")
         );
       }
     } finally {
       setSavingScenario(false);
+      setSavingScenarioMode(null);
     }
+  };
+
+  const handleCompareSavedScenario = (scenario) => {
+    setComparisonScenarioId(scenario.id);
+    setComparisonError("");
+  };
+
+  const handleClearScenarioComparison = () => {
+    setComparisonScenarioId(null);
+    setComparisonData(null);
+    setComparisonError("");
   };
 
   const handleLoadSavedScenario = (scenario) => {
     setActiveSavedScenarioId(scenario.id);
+    setLinkedSavedScenarioId(scenario.id);
     setSavedScenarioName(scenario.name || "");
     setSelectedAccountId(
       scenario.account_id == null ? ALL_ACCOUNTS_VALUE : String(scenario.account_id)
@@ -506,10 +844,29 @@ function SimulatorPage() {
     setEventAmount(scenario.event_amount != null ? String(scenario.event_amount) : "");
     setEventMonthOffset(scenario.event_month_offset || 1);
     setEventLabel(scenario.event_label || "");
+    if (comparisonScenarioId === scenario.id) {
+      handleClearScenarioComparison();
+    }
     setSavedScenarioMessage(`Loaded "${scenario.name}".`);
     setSavedScenarioError("");
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
+
+  useEffect(() => {
+    if (!linkedSavedScenarioId || savedScenariosLoading || activeSavedScenarioId === linkedSavedScenarioId) {
+      return;
+    }
+
+    const matchedScenario = savedScenarios.find((scenario) => scenario.id === linkedSavedScenarioId);
+    if (matchedScenario) {
+      handleLoadSavedScenario(matchedScenario);
+    }
+  }, [
+    linkedSavedScenarioId,
+    savedScenariosLoading,
+    savedScenarios,
+    activeSavedScenarioId,
+  ]);
 
   const handleDeleteSavedScenario = async (scenarioId) => {
     try {
@@ -519,7 +876,11 @@ function SimulatorPage() {
       await api.delete(`/analytics/saved-scenarios/${scenarioId}`);
       if (activeSavedScenarioId === scenarioId) {
         setActiveSavedScenarioId(null);
+        setLinkedSavedScenarioId(null);
         setSavedScenarioName("");
+      }
+      if (comparisonScenarioId === scenarioId) {
+        handleClearScenarioComparison();
       }
       setSavedScenarioMessage("Saved scenario deleted.");
       await fetchSavedScenarios();
@@ -710,22 +1071,34 @@ function SimulatorPage() {
             <button
               type="button"
               className="secondary-button"
-              onClick={handleSaveScenario}
+              onClick={() => handleSaveScenario(false)}
               disabled={savingScenario}
             >
               {savingScenario
-                ? activeSavedScenarioId
+                ? savingScenarioMode === "copy"
+                  ? "Save Scenario"
+                  : savingScenarioMode === "update"
                   ? "Updating..."
                   : "Saving..."
                 : activeSavedScenarioId
                 ? "Update Scenario"
                 : "Save Scenario"}
             </button>
+            {activeSavedScenarioId && (
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={() => handleSaveScenario(true)}
+                disabled={savingScenario}
+              >
+                {savingScenario && savingScenarioMode === "copy" ? "Saving Copy..." : "Save As New"}
+              </button>
+            )}
           </div>
           {activeSavedScenarioId && (
             <p className="budget-inline-note">
-              You&apos;re editing a loaded saved scenario. Saving now updates it instead of creating
-              a duplicate.
+              You&apos;re editing a loaded saved scenario. Saving updates it in place, and Save As
+              New branches the current draft into a separate plan.
             </p>
           )}
 
@@ -759,29 +1132,26 @@ function SimulatorPage() {
           ) : (
             <div className="budget-list">
               {savedScenarios.map((scenario) => (
-                <div key={`saved-scenario-${scenario.id}`} className="budget-card">
-                  <div className="budget-card-top">
+                <div
+                  key={`saved-scenario-${scenario.id}`}
+                  className={`budget-card simulator-saved-scenario-card${
+                    activeSavedScenarioId === scenario.id ? " simulator-saved-scenario-active" : ""
+                  }${
+                    comparisonScenarioId === scenario.id ? " simulator-saved-scenario-compared" : ""
+                  }`}
+                >
+                  <div className="simulator-saved-scenario-top">
                     <div>
                       <h3>{scenario.name}</h3>
                       <p>{buildSavedScenarioSummary(scenario)}</p>
                     </div>
-
-                    <div className="budget-card-actions">
-                      <button
-                        type="button"
-                        className="secondary-button"
-                        onClick={() => handleLoadSavedScenario(scenario)}
-                      >
-                        Load Scenario
-                      </button>
-                      <button
-                        type="button"
-                        className="delete-button"
-                        onClick={() => handleDeleteSavedScenario(scenario.id)}
-                        disabled={deletingScenarioId === scenario.id}
-                      >
-                        {deletingScenarioId === scenario.id ? "Deleting..." : "Delete"}
-                      </button>
+                    <div className="simulator-saved-scenario-badges">
+                      {activeSavedScenarioId === scenario.id && (
+                        <span className="budget-status budget-status-on-track">Loaded</span>
+                      )}
+                      {comparisonScenarioId === scenario.id && (
+                        <span className="budget-status budget-status-risk">Comparing</span>
+                      )}
                     </div>
                   </div>
 
@@ -795,11 +1165,209 @@ function SimulatorPage() {
                   <p className="budget-inline-note">
                     Saved {new Date(scenario.created_at).toLocaleDateString()}
                   </p>
+                  <div className="simulator-saved-scenario-actions">
+                    <button
+                      type="button"
+                      className="secondary-button"
+                      onClick={() => handleLoadSavedScenario(scenario)}
+                    >
+                      Load Scenario
+                    </button>
+                    <button
+                      type="button"
+                      className="secondary-button"
+                      onClick={() => handleCompareSavedScenario(scenario)}
+                      disabled={comparisonLoading && comparisonScenarioId === scenario.id}
+                    >
+                      {comparisonLoading && comparisonScenarioId === scenario.id
+                        ? "Comparing..."
+                        : comparisonScenarioId === scenario.id
+                        ? "Refresh Compare"
+                        : "Compare"}
+                    </button>
+                    <button
+                      type="button"
+                      className="delete-button"
+                      onClick={() => handleDeleteSavedScenario(scenario.id)}
+                      disabled={deletingScenarioId === scenario.id}
+                    >
+                      {deletingScenarioId === scenario.id ? "Deleting..." : "Delete"}
+                    </button>
+                  </div>
                 </div>
               ))}
             </div>
           )}
         </div>
+
+        {comparedScenario && !loading && (
+          <div className="dashboard-card">
+            <div className="section-header">
+              <div>
+                <h2>Scenario Comparison</h2>
+                <p>Current draft vs "{comparedScenario.name}".</p>
+              </div>
+              <div className="budget-section-actions">
+                <button
+                  type="button"
+                  className="secondary-button"
+                  onClick={() => handleLoadSavedScenario(comparedScenario)}
+                >
+                  Load Compared Scenario
+                </button>
+                <button
+                  type="button"
+                  className="secondary-button"
+                  onClick={handleClearScenarioComparison}
+                >
+                  Clear Comparison
+                </button>
+              </div>
+            </div>
+
+            {comparisonLoading ? (
+              <div className="empty-state">
+                <p>Comparing scenarios...</p>
+              </div>
+            ) : comparisonError ? (
+              <p className="error-text">{comparisonError}</p>
+            ) : comparisonData && simulatorData ? (
+              <>
+                <p className="budget-forecast-banner">{comparisonNote}</p>
+                <div className="simulator-checkpoint-grid">
+                  {comparisonHighlights.map((item) => (
+                    <div
+                      key={`${item.title}-${item.value}`}
+                      className="simulator-checkpoint-card"
+                    >
+                      <span>{item.title}</span>
+                      <strong>{item.value}</strong>
+                      <p>{item.detail}</p>
+                    </div>
+                  ))}
+                </div>
+                <div className="simulator-metrics-grid">
+                  <div className="simulator-metric-card">
+                    <span>Current end balance</span>
+                    <strong>{formatScenarioCurrency(simulatorData.projected_end_balance)}</strong>
+                  </div>
+                  <div className="simulator-metric-card">
+                    <span>{comparedScenario.name} end balance</span>
+                    <strong>{formatScenarioCurrency(comparisonData.projected_end_balance)}</strong>
+                  </div>
+                  <div className="simulator-metric-card">
+                    <span>End balance gap</span>
+                    <strong>{formatSignedScenarioAmount(comparisonBalanceDelta)}</strong>
+                  </div>
+                  <div className="simulator-metric-card">
+                    <span>Monthly net gap</span>
+                    <strong>{formatSignedScenarioAmount(comparisonMonthlyNetDelta)}</strong>
+                  </div>
+                </div>
+
+                <p className="budget-inline-note">
+                  Current risk: {getScenarioRiskLabel(simulatorData.risk_level)}. Compared risk:{" "}
+                  {getScenarioRiskLabel(comparisonData.risk_level)}.
+                </p>
+                {comparisonData.one_time_event_amount != null && (
+                  <p className="budget-inline-note">
+                    Compared plan event: {comparisonData.one_time_event_label || "One-time event"}{" "}
+                    in {comparisonData.one_time_event_month} at{" "}
+                    {formatSignedScenarioAmount(comparisonData.one_time_event_amount)}.
+                  </p>
+                )}
+
+                <div className="simulator-comparison-section simulator-chart-card">
+                  <div className="section-header">
+                    <h2>Comparison Balance Path</h2>
+                    <p>Track how the current draft and the compared plan separate over time.</p>
+                  </div>
+
+                  <ResponsiveContainer width="100%" height={300}>
+                    <LineChart data={comparisonTimeline}>
+                      <CartesianGrid strokeDasharray="3 3" stroke={chartTheme.grid} />
+                      <XAxis dataKey="month" tick={{ fill: chartTheme.text, fontSize: 12 }} />
+                      <YAxis tick={{ fill: chartTheme.text, fontSize: 12 }} />
+                      <Tooltip contentStyle={customTooltipStyle} />
+                      <Line
+                        type="monotone"
+                        dataKey="current_ending_balance"
+                        stroke={chartTheme.balanceLine}
+                        strokeWidth={3}
+                        dot={{ r: 4 }}
+                        connectNulls={false}
+                        name="Current draft"
+                      />
+                      <Line
+                        type="monotone"
+                        dataKey="compared_ending_balance"
+                        stroke={chartTheme.compareLine}
+                        strokeWidth={3}
+                        dot={{ r: 4 }}
+                        connectNulls={false}
+                        name={comparedScenario.name}
+                      />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
+
+                <div className="simulator-comparison-section">
+                  <div className="section-header">
+                    <h2>Monthly Comparison</h2>
+                    <p>See the balance gap month by month.</p>
+                  </div>
+
+                  <div className="transactions-table-wrapper">
+                    <table className="transactions-table">
+                      <thead>
+                        <tr>
+                          <th>Month</th>
+                          <th>Current Balance</th>
+                          <th>{comparedScenario.name}</th>
+                          <th>Gap</th>
+                          <th>Current Net</th>
+                          <th>{comparedScenario.name} Net</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {comparisonTimeline.map((row) => (
+                          <tr key={`comparison-row-${row.month}`}>
+                            <td>{row.month}</td>
+                            <td>
+                              {row.current_ending_balance == null
+                                ? "N/A"
+                                : formatScenarioCurrency(row.current_ending_balance)}
+                            </td>
+                            <td>
+                              {row.compared_ending_balance == null
+                                ? "N/A"
+                                : formatScenarioCurrency(row.compared_ending_balance)}
+                            </td>
+                            <td>
+                              {row.ending_balance_gap == null
+                                ? "N/A"
+                                : formatSignedScenarioAmount(row.ending_balance_gap)}
+                            </td>
+                            <td>
+                              {row.current_net_change == null
+                                ? "N/A"
+                                : formatSignedScenarioAmount(row.current_net_change)}
+                            </td>
+                            <td>
+                              {row.compared_net_change == null
+                                ? "N/A"
+                                : formatSignedScenarioAmount(row.compared_net_change)}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </>
+            ) : null}
+          </div>
+        )}
 
         {error && (
           <div className="dashboard-card">
@@ -943,6 +1511,28 @@ function SimulatorPage() {
             </div>
 
             <div className="chart-grid">
+              {scenarioCheckpoints.length > 0 && (
+                <div className="dashboard-card">
+                  <div className="section-header">
+                    <h2>Scenario Checkpoints</h2>
+                    <p>Key moments to watch in the current path.</p>
+                  </div>
+
+                  <div className="simulator-checkpoint-grid">
+                    {scenarioCheckpoints.map((checkpoint) => (
+                      <div
+                        key={`${checkpoint.title}-${checkpoint.value}`}
+                        className="simulator-checkpoint-card"
+                      >
+                        <span>{checkpoint.title}</span>
+                        <strong>{checkpoint.value}</strong>
+                        <p>{checkpoint.detail}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {simulatorData?.goal_balance != null && (
                 <div className="dashboard-card">
                   <div className="section-header">

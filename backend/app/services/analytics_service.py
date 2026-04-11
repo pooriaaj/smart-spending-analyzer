@@ -16,6 +16,7 @@ from app.services.budget_metrics import (
     get_default_budget_month,
 )
 from app.services.llm_service import generate_llm_assistant_response
+from app.services.saved_scenario_service import list_saved_scenarios
 
 
 def parse_iso_date(value: str | None) -> date | None:
@@ -1274,6 +1275,62 @@ def format_signed_currency(value: float) -> str:
     return f"{prefix}${abs(value):.2f}"
 
 
+def build_saved_scenario_projection_snapshots(
+    db: Session,
+    user_id: int,
+    account_id: int | None,
+    scope_label: str,
+) -> list[dict[str, Any]]:
+    saved_scenarios = list_saved_scenarios(
+        db=db,
+        owner_id=user_id,
+        account_id=account_id,
+    )
+    snapshots: list[dict[str, Any]] = []
+
+    for scenario in saved_scenarios:
+        simulation = build_future_balance_simulation(
+            db=db,
+            user_id=user_id,
+            account_id=account_id,
+            months=scenario.months,
+            income_adjustment=scenario.income_adjustment,
+            expense_adjustment=scenario.expense_adjustment,
+            target_balance=scenario.target_balance,
+            event_month_offset=scenario.event_month_offset,
+            event_amount=scenario.event_amount or 0.0,
+            event_label=scenario.event_label,
+            scope_label=scope_label,
+        )
+        snapshots.append(
+            {
+                "id": scenario.id,
+                "name": scenario.name,
+                "months": scenario.months,
+                "projected_end_balance": simulation["projected_end_balance"],
+                "monthly_net_change": simulation["monthly_net_change"],
+                "risk_level": simulation["risk_level"],
+                "goal_note": simulation["goal_note"],
+                "one_time_event_month": simulation["one_time_event_month"],
+                "one_time_event_amount": simulation["one_time_event_amount"],
+                "one_time_event_label": simulation["one_time_event_label"],
+                "income_adjustment": scenario.income_adjustment,
+                "expense_adjustment": scenario.expense_adjustment,
+                "target_balance": scenario.target_balance,
+            }
+        )
+
+    return sorted(
+        snapshots,
+        key=lambda item: (
+            float(item["projected_end_balance"]),
+            float(item["monthly_net_change"]),
+            item["name"].lower(),
+        ),
+        reverse=True,
+    )
+
+
 def format_category_label(value: str | None) -> str:
     if not value:
         return "Unknown"
@@ -1333,6 +1390,33 @@ def detect_focus_category(
             return category
 
     return None
+
+
+def detect_named_saved_scenarios(
+    question: str,
+    context_text: str,
+    saved_scenarios: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    normalized_text = f" {normalize_text_for_matching(f'{context_text} {question}')} "
+    matches: list[dict[str, Any]] = []
+
+    for scenario in sorted(saved_scenarios, key=lambda item: len(item["name"]), reverse=True):
+        normalized_name = normalize_text_for_matching(scenario["name"])
+        if not normalized_name:
+            continue
+
+        if f" {normalized_name} " in normalized_text:
+            matches.append(scenario)
+
+    deduped: list[dict[str, Any]] = []
+    seen_ids: set[int] = set()
+    for scenario in matches:
+        if scenario["id"] in seen_ids:
+            continue
+        deduped.append(scenario)
+        seen_ids.add(scenario["id"])
+
+    return deduped
 
 
 def build_category_focus_snapshot(
@@ -1600,6 +1684,24 @@ def classify_question(question: str, context_text: str) -> str:
 
     if "compare" in text and "account" in text:
         return "account_comparison"
+
+    if any(
+        phrase in text
+        for phrase in [
+            "saved scenario",
+            "saved scenarios",
+            "saved plan",
+            "saved plans",
+            "saved simulator",
+            "saved simulation",
+        ]
+    ):
+        if any(
+            phrase in text
+            for phrase in ["compare", "best", "better", "strongest", "which one", "which plan"]
+        ):
+            return "saved_scenario_compare"
+        return "saved_scenario_list"
 
     if any(
         phrase in text
@@ -2240,6 +2342,40 @@ def generate_assistant_response(
     q = (question or "").strip().lower()
     context_text = extract_recent_context(history)
     intent = classify_question(q, context_text)
+    likely_saved_scenario_question = any(
+        phrase in q
+        for phrase in [
+            "compare",
+            "better",
+            "best",
+            "strongest",
+            "plan",
+            "scenario",
+        ]
+    )
+    saved_scenario_name_candidates = (
+        [
+            {
+                "id": item.id,
+                "name": item.name,
+            }
+            for item in list_saved_scenarios(
+                db=db,
+                owner_id=user_id,
+                account_id=account_id,
+            )
+        ]
+        if likely_saved_scenario_question
+        else []
+    )
+    named_saved_scenarios_in_question = detect_named_saved_scenarios(
+        question=question,
+        context_text=context_text,
+        saved_scenarios=saved_scenario_name_candidates,
+    )
+    if len(named_saved_scenarios_in_question) >= 2:
+        intent = "saved_scenario_compare"
+
     current_month = snapshot["current_month"]
     budget_snapshot = get_budget_progress_snapshot(
         db,
@@ -2302,6 +2438,182 @@ def generate_assistant_response(
         ),
         None,
     )
+    saved_scenario_snapshots = (
+        build_saved_scenario_projection_snapshots(
+            db=db,
+            user_id=user_id,
+            account_id=account_id,
+            scope_label=scope_label,
+        )
+        if intent in {"saved_scenario_list", "saved_scenario_compare"}
+        else []
+    )
+
+    if intent == "saved_scenario_list":
+        if not saved_scenario_snapshots:
+            return {
+                "answer": (
+                    f"You do not have any saved simulator scenarios in {scope_label} yet. "
+                    "Save a few plans in the simulator first and I can help compare them."
+                ),
+                "supporting_points": [
+                    f"Current scope: {scope_label}",
+                    "Saved scenarios found: 0",
+                ],
+                "suggested_followups": [
+                    "What will my balance look like in 3 months?",
+                    "How much do I need to save each month to hit my target?",
+                ],
+                "suggested_actions": [
+                    {
+                        "label": "Open simulator",
+                        "page": "simulator",
+                        "account_id": account_id,
+                    }
+                ],
+                "scope_label": scope_label,
+            }
+
+        supporting_points = [
+            (
+                f"{item['name']}: ends at {format_currency(item['projected_end_balance'])}, "
+                f"net {format_currency(item['monthly_net_change'])}/month, "
+                f"risk {item['risk_level']}"
+            )
+            for item in saved_scenario_snapshots[:4]
+        ]
+
+        return {
+            "answer": (
+                f"You have {len(saved_scenario_snapshots)} saved simulator plan"
+                f"{'' if len(saved_scenario_snapshots) == 1 else 's'} in {scope_label}. "
+                "I listed the strongest ones first based on projected end balance."
+            ),
+            "supporting_points": supporting_points,
+            "suggested_followups": [
+                "Which saved scenario looks strongest?",
+                "What will my balance look like in 3 months?",
+            ],
+            "suggested_actions": [
+                {
+                    "label": f"Open {saved_scenario_snapshots[0]['name']}",
+                    "page": "simulator",
+                    "account_id": account_id,
+                    "saved_scenario_id": saved_scenario_snapshots[0]["id"],
+                },
+                {
+                    "label": "Open simulator",
+                    "page": "simulator",
+                    "account_id": account_id,
+                },
+            ],
+            "scope_label": scope_label,
+        }
+
+    if intent == "saved_scenario_compare":
+        if len(saved_scenario_snapshots) < 2:
+            return {
+                "answer": (
+                    f"I need at least two saved scenarios in {scope_label} before I can compare them."
+                ),
+                "supporting_points": [
+                    f"Saved scenarios found: {len(saved_scenario_snapshots)}",
+                ],
+                "suggested_followups": [
+                    "What will my balance look like in 3 months?",
+                    "How much do I need to save each month to hit my target?",
+                ],
+                "suggested_actions": [
+                    {
+                        "label": "Open simulator",
+                        "page": "simulator",
+                        "account_id": account_id,
+                    }
+                ],
+                "scope_label": scope_label,
+            }
+
+        named_scenarios = detect_named_saved_scenarios(
+            question=question,
+            context_text=context_text,
+            saved_scenarios=saved_scenario_snapshots,
+        )
+        comparison_set = named_scenarios[:2] if len(named_scenarios) >= 2 else saved_scenario_snapshots[:2]
+        comparison_set = sorted(
+            comparison_set,
+            key=lambda item: (
+                float(item["projected_end_balance"]),
+                float(item["monthly_net_change"]),
+                item["name"].lower(),
+            ),
+            reverse=True,
+        )
+
+        best_scenario = comparison_set[0]
+        runner_up = comparison_set[1]
+        projected_gap = (
+            float(best_scenario["projected_end_balance"])
+            - float(runner_up["projected_end_balance"])
+        )
+
+        if mode == "strict":
+            answer = (
+                f"{best_scenario['name']} is the strongest saved plan right now. "
+                f"It finishes {format_currency(projected_gap)} ahead of {runner_up['name']}."
+            )
+        elif mode == "coach":
+            answer = (
+                f"{best_scenario['name']} looks like your strongest saved path so far. "
+                f"It gives you the most room by the end of the scenario window."
+            )
+        else:
+            answer = (
+                f"{best_scenario['name']} currently projects the highest ending balance, "
+                f"finishing {format_currency(projected_gap)} ahead of {runner_up['name']}."
+            )
+
+        supporting_points = []
+        for item in comparison_set:
+            point = (
+                f"{item['name']}: ends at {format_currency(item['projected_end_balance'])}, "
+                f"net {format_currency(item['monthly_net_change'])}/month, risk {item['risk_level']}"
+            )
+            if item["goal_note"]:
+                point += f". {item['goal_note']}"
+            if item["one_time_event_amount"] is not None and item["one_time_event_month"]:
+                point += (
+                    f". Event: {item['one_time_event_label']} in {item['one_time_event_month']} "
+                    f"for {format_signed_currency(item['one_time_event_amount'])}"
+                )
+            supporting_points.append(point)
+
+        if len(named_scenarios) < 2:
+            supporting_points.append(
+                "Tip: mention two saved plan names if you want a direct head-to-head comparison."
+            )
+
+        return {
+            "answer": answer,
+            "supporting_points": supporting_points[:4],
+            "suggested_followups": [
+                f"Open {best_scenario['name']}",
+                "What will my balance look like in 3 months?",
+            ],
+            "suggested_actions": [
+                {
+                    "label": f"Open {best_scenario['name']}",
+                    "page": "simulator",
+                    "account_id": account_id,
+                    "saved_scenario_id": best_scenario["id"],
+                },
+                {
+                    "label": "Open simulator",
+                    "page": "simulator",
+                    "account_id": account_id,
+                },
+            ],
+            "scope_label": scope_label,
+        }
 
     if intent == "account_comparison":
         if account_id is not None:
@@ -3252,6 +3564,11 @@ def generate_assistant_suggestions(
         month=snapshot["current_month"] or get_default_budget_month(),
         account_id=account_id,
     )
+    saved_scenarios = list_saved_scenarios(
+        db=db,
+        owner_id=user_id,
+        account_id=account_id,
+    )
 
     suggestions: list[str] = ["What is my balance?"]
 
@@ -3284,6 +3601,11 @@ def generate_assistant_suggestions(
 
     if snapshot["current_month"]:
         suggestions.append(f"Summarize my finances for {snapshot['current_month']}")
+
+    if saved_scenarios:
+        suggestions.append("Which saved scenario looks strongest?")
+        if len(saved_scenarios) > 1:
+            suggestions.append("Compare my saved scenarios")
 
     suggestions.append("What will my balance look like in 3 months?")
     suggestions.append("Show my recent transactions")

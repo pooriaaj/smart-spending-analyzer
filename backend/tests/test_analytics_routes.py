@@ -1217,6 +1217,268 @@ class AnalyticsRouteTest(unittest.TestCase):
         self.assertEqual(second_list_response.status_code, 200, second_list_response.text)
         self.assertEqual(second_list_response.json(), [])
 
+    def test_assistant_can_compare_saved_scenarios(self) -> None:
+        with self.session_local() as session:
+            session.add_all(
+                [
+                    Transaction(
+                        amount=2000.0,
+                        category="Salary",
+                        description="Payroll Jan",
+                        date=date(2026, 1, 3),
+                        type="income",
+                        owner_id=self.user_id,
+                        account_id=self.chequing_account_id,
+                    ),
+                    Transaction(
+                        amount=500.0,
+                        category="Rent",
+                        description="Rent Jan",
+                        date=date(2026, 1, 5),
+                        type="expense",
+                        owner_id=self.user_id,
+                        account_id=self.chequing_account_id,
+                    ),
+                    Transaction(
+                        amount=2000.0,
+                        category="Salary",
+                        description="Payroll Feb",
+                        date=date(2026, 2, 3),
+                        type="income",
+                        owner_id=self.user_id,
+                        account_id=self.chequing_account_id,
+                    ),
+                    Transaction(
+                        amount=500.0,
+                        category="Rent",
+                        description="Rent Feb",
+                        date=date(2026, 2, 5),
+                        type="expense",
+                        owner_id=self.user_id,
+                        account_id=self.chequing_account_id,
+                    ),
+                    Transaction(
+                        amount=2000.0,
+                        category="Salary",
+                        description="Payroll Mar",
+                        date=date(2026, 3, 3),
+                        type="income",
+                        owner_id=self.user_id,
+                        account_id=self.chequing_account_id,
+                    ),
+                    Transaction(
+                        amount=500.0,
+                        category="Rent",
+                        description="Rent Mar",
+                        date=date(2026, 3, 5),
+                        type="expense",
+                        owner_id=self.user_id,
+                        account_id=self.chequing_account_id,
+                    ),
+                ]
+            )
+            session.add_all(
+                [
+                    SavedScenario(
+                        name="Aggressive Cut Plan",
+                        months=3,
+                        income_adjustment=0.0,
+                        expense_adjustment=-200.0,
+                        target_balance=None,
+                        event_month_offset=None,
+                        event_amount=None,
+                        event_label=None,
+                        owner_id=self.user_id,
+                        account_id=self.chequing_account_id,
+                    ),
+                    SavedScenario(
+                        name="Repair Shock Plan",
+                        months=3,
+                        income_adjustment=0.0,
+                        expense_adjustment=0.0,
+                        target_balance=None,
+                        event_month_offset=2,
+                        event_amount=-1200.0,
+                        event_label="Repair",
+                        owner_id=self.user_id,
+                        account_id=self.chequing_account_id,
+                    ),
+                ]
+            )
+            session.commit()
+
+        response = self.client.post(
+            "/analytics/assistant-response",
+            json={
+                "question": "Which saved scenario looks strongest?",
+                "history": [],
+                "mode": "balanced",
+                "account_id": self.chequing_account_id,
+            },
+        )
+
+        self.assertEqual(response.status_code, 200, response.text)
+        payload = response.json()
+
+        self.assertIn("Aggressive Cut Plan", payload["answer"])
+        self.assertTrue(
+            any("Aggressive Cut Plan" in item for item in payload["supporting_points"])
+        )
+        self.assertTrue(
+            any("Repair Shock Plan" in item for item in payload["supporting_points"])
+        )
+        self.assertEqual(payload["suggested_actions"][0]["page"], "simulator")
+        self.assertIsNotNone(payload["suggested_actions"][0]["saved_scenario_id"])
+
+    def test_assistant_can_compare_named_saved_scenarios(self) -> None:
+        with self.session_local() as session:
+            session.add_all(
+                [
+                    Transaction(
+                        amount=2000.0,
+                        category="Salary",
+                        description="Payroll Jan",
+                        date=date(2026, 1, 3),
+                        type="income",
+                        owner_id=self.user_id,
+                        account_id=self.chequing_account_id,
+                    ),
+                    Transaction(
+                        amount=500.0,
+                        category="Rent",
+                        description="Rent Jan",
+                        date=date(2026, 1, 5),
+                        type="expense",
+                        owner_id=self.user_id,
+                        account_id=self.chequing_account_id,
+                    ),
+                    Transaction(
+                        amount=2000.0,
+                        category="Salary",
+                        description="Payroll Feb",
+                        date=date(2026, 2, 3),
+                        type="income",
+                        owner_id=self.user_id,
+                        account_id=self.chequing_account_id,
+                    ),
+                    Transaction(
+                        amount=500.0,
+                        category="Rent",
+                        description="Rent Feb",
+                        date=date(2026, 2, 5),
+                        type="expense",
+                        owner_id=self.user_id,
+                        account_id=self.chequing_account_id,
+                    ),
+                    Transaction(
+                        amount=2000.0,
+                        category="Salary",
+                        description="Payroll Mar",
+                        date=date(2026, 3, 3),
+                        type="income",
+                        owner_id=self.user_id,
+                        account_id=self.chequing_account_id,
+                    ),
+                    Transaction(
+                        amount=500.0,
+                        category="Rent",
+                        description="Rent Mar",
+                        date=date(2026, 3, 5),
+                        type="expense",
+                        owner_id=self.user_id,
+                        account_id=self.chequing_account_id,
+                    ),
+                ]
+            )
+            session.add_all(
+                [
+                    SavedScenario(
+                        name="Aggressive Cut Plan",
+                        months=3,
+                        income_adjustment=0.0,
+                        expense_adjustment=-200.0,
+                        target_balance=None,
+                        event_month_offset=None,
+                        event_amount=None,
+                        event_label=None,
+                        owner_id=self.user_id,
+                        account_id=self.chequing_account_id,
+                    ),
+                    SavedScenario(
+                        name="Repair Shock Plan",
+                        months=3,
+                        income_adjustment=0.0,
+                        expense_adjustment=0.0,
+                        target_balance=None,
+                        event_month_offset=2,
+                        event_amount=-1200.0,
+                        event_label="Repair",
+                        owner_id=self.user_id,
+                        account_id=self.chequing_account_id,
+                    ),
+                    SavedScenario(
+                        name="Bonus Lift Plan",
+                        months=3,
+                        income_adjustment=500.0,
+                        expense_adjustment=0.0,
+                        target_balance=None,
+                        event_month_offset=None,
+                        event_amount=None,
+                        event_label=None,
+                        owner_id=self.user_id,
+                        account_id=self.chequing_account_id,
+                    ),
+                ]
+            )
+            session.commit()
+
+        response = self.client.post(
+            "/analytics/assistant-response",
+            json={
+                "question": "Compare Aggressive Cut Plan and Repair Shock Plan",
+                "history": [],
+                "mode": "balanced",
+                "account_id": self.chequing_account_id,
+            },
+        )
+
+        self.assertEqual(response.status_code, 200, response.text)
+        payload = response.json()
+
+        self.assertIn("Aggressive Cut Plan", payload["answer"])
+        self.assertNotIn("Bonus Lift Plan", " ".join(payload["supporting_points"]))
+        self.assertTrue(
+            any("Repair Shock Plan" in item for item in payload["supporting_points"])
+        )
+
+    def test_assistant_suggestions_include_saved_scenario_prompt(self) -> None:
+        with self.session_local() as session:
+            session.add(
+                SavedScenario(
+                    name="Base Plan",
+                    months=3,
+                    income_adjustment=100.0,
+                    expense_adjustment=0.0,
+                    target_balance=None,
+                    event_month_offset=None,
+                    event_amount=None,
+                    event_label=None,
+                    owner_id=self.user_id,
+                    account_id=self.chequing_account_id,
+                )
+            )
+            session.commit()
+
+        response = self.client.get(
+            "/analytics/assistant-suggestions",
+            params={"account_id": self.chequing_account_id},
+        )
+
+        self.assertEqual(response.status_code, 200, response.text)
+        suggestions = response.json()["suggestions"]
+
+        self.assertIn("Which saved scenario looks strongest?", suggestions)
+
 
 if __name__ == "__main__":
     unittest.main()
