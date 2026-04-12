@@ -1614,6 +1614,15 @@ textarea:focus,
   flex-wrap: wrap;
 }
 
+.simulator-saved-search-field {
+  flex: 1 1 260px;
+  min-width: min(260px, 100%);
+}
+
+.simulator-saved-search-field input {
+  min-width: 0;
+}
+
 .simulator-overview-top {
   display: flex;
   justify-content: space-between;

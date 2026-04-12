@@ -384,6 +384,7 @@ function SimulatorPage() {
       : null
   );
   const [savedScenarioName, setSavedScenarioName] = useState("");
+  const [savedScenarioQuery, setSavedScenarioQuery] = useState("");
   const [savedScenarios, setSavedScenarios] = useState([]);
   const [savedScenariosLoading, setSavedScenariosLoading] = useState(true);
   const [savingScenario, setSavingScenario] = useState(false);
@@ -575,6 +576,25 @@ function SimulatorPage() {
     () => savedScenarios.find((scenario) => scenario.id === comparisonScenarioId) || null,
     [savedScenarios, comparisonScenarioId]
   );
+  const filteredSavedScenarios = useMemo(() => {
+    const normalizedQuery = savedScenarioQuery.trim().toLowerCase();
+    if (!normalizedQuery) {
+      return savedScenarios;
+    }
+
+    return savedScenarios.filter((scenario) => {
+      const searchableText = [
+        scenario.name,
+        scenario.event_label,
+        buildSavedScenarioSummary(scenario),
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+
+      return searchableText.includes(normalizedQuery);
+    });
+  }, [savedScenarios, savedScenarioQuery]);
 
   useEffect(() => {
     if (
@@ -1112,9 +1132,24 @@ function SimulatorPage() {
           <div className="section-header">
             <div>
               <h2>Saved Scenarios</h2>
-              <p>Keep a few named plans for this scope so you can revisit them quickly.</p>
+              <p>
+                Keep a few named plans for this scope so you can revisit them quickly.
+                {savedScenarios.length > 0
+                  ? ` ${filteredSavedScenarios.length} of ${savedScenarios.length} shown.`
+                  : ""}
+              </p>
             </div>
             <div className="budget-section-actions">
+              <div className="budget-form-field simulator-saved-search-field">
+                <label htmlFor="saved-scenario-search">Search plans</label>
+                <input
+                  id="saved-scenario-search"
+                  type="text"
+                  value={savedScenarioQuery}
+                  onChange={(event) => setSavedScenarioQuery(event.target.value)}
+                  placeholder="Trip, repair, target..."
+                />
+              </div>
               <button type="button" className="secondary-button" onClick={fetchSavedScenarios}>
                 Refresh
               </button>
@@ -1129,9 +1164,13 @@ function SimulatorPage() {
             <div className="empty-state">
               <p>No saved scenarios for this scope yet.</p>
             </div>
+          ) : filteredSavedScenarios.length === 0 ? (
+            <div className="empty-state">
+              <p>No saved scenarios match that search yet.</p>
+            </div>
           ) : (
             <div className="budget-list">
-              {savedScenarios.map((scenario) => (
+              {filteredSavedScenarios.map((scenario) => (
                 <div
                   key={`saved-scenario-${scenario.id}`}
                   className={`budget-card simulator-saved-scenario-card${

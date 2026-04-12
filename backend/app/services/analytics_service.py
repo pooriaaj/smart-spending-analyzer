@@ -1310,7 +1310,16 @@ def build_saved_scenario_projection_snapshots(
                 "projected_end_balance": simulation["projected_end_balance"],
                 "monthly_net_change": simulation["monthly_net_change"],
                 "risk_level": simulation["risk_level"],
+                "lowest_balance": min(
+                    [
+                        float(item["ending_balance"])
+                        for item in simulation["timeline"]
+                    ]
+                    or [float(simulation["starting_balance"])]
+                ),
                 "goal_note": simulation["goal_note"],
+                "goal_balance": simulation["goal_balance"],
+                "goal_gap_amount": simulation["goal_gap_amount"],
                 "one_time_event_month": simulation["one_time_event_month"],
                 "one_time_event_amount": simulation["one_time_event_amount"],
                 "one_time_event_label": simulation["one_time_event_label"],
@@ -1329,6 +1338,145 @@ def build_saved_scenario_projection_snapshots(
         ),
         reverse=True,
     )
+
+
+def get_saved_scenario_risk_rank(risk_level: str | None) -> int:
+    if risk_level == "healthy":
+        return 2
+    if risk_level == "watch":
+        return 1
+    return 0
+
+
+def detect_saved_scenario_comparison_focus(question: str, context_text: str) -> str:
+    normalized_text = normalize_text_for_matching(f"{context_text} {question}")
+
+    if any(
+        phrase in normalized_text
+        for phrase in [
+            "safest",
+            "safe plan",
+            "safer",
+            "lowest risk",
+            "least risky",
+            "most stable",
+            "risk",
+        ]
+    ):
+        return "risk"
+
+    if any(
+        phrase in normalized_text
+        for phrase in [
+            "monthly net",
+            "cash flow",
+            "net change",
+            "per month",
+        ]
+    ):
+        return "monthly_net"
+
+    if any(
+        phrase in normalized_text
+        for phrase in [
+            "target",
+            "goal",
+            "reach",
+            "hit",
+        ]
+    ):
+        return "goal"
+
+    return "end_balance"
+
+
+def build_saved_scenario_comparison_key(
+    scenario: dict[str, Any],
+    comparison_focus: str,
+) -> tuple[Any, ...]:
+    projected_end_balance = float(scenario["projected_end_balance"])
+    monthly_net_change = float(scenario["monthly_net_change"])
+    risk_rank = get_saved_scenario_risk_rank(scenario.get("risk_level"))
+    lowest_balance = float(scenario.get("lowest_balance") or 0.0)
+    goal_balance = scenario.get("goal_balance")
+    goal_gap_amount = scenario.get("goal_gap_amount")
+    has_goal = goal_balance is not None
+    goal_achieved = bool(has_goal and goal_gap_amount is not None and goal_gap_amount <= 0)
+    goal_progress_key = (
+        -float(goal_gap_amount)
+        if goal_gap_amount is not None
+        else float("-inf")
+    )
+
+    if comparison_focus == "risk":
+        return (
+            risk_rank,
+            lowest_balance,
+            projected_end_balance,
+            monthly_net_change,
+            scenario["name"].lower(),
+        )
+
+    if comparison_focus == "monthly_net":
+        return (
+            monthly_net_change,
+            risk_rank,
+            projected_end_balance,
+            scenario["name"].lower(),
+        )
+
+    if comparison_focus == "goal":
+        return (
+            1 if has_goal else 0,
+            1 if goal_achieved else 0,
+            goal_progress_key,
+            projected_end_balance,
+            monthly_net_change,
+            scenario["name"].lower(),
+        )
+
+    return (
+        projected_end_balance,
+        monthly_net_change,
+        risk_rank,
+        scenario["name"].lower(),
+    )
+
+
+def build_saved_scenario_supporting_point(
+    scenario: dict[str, Any],
+    comparison_focus: str = "end_balance",
+) -> str:
+    point = (
+        f"{scenario['name']}: ends at {format_currency(scenario['projected_end_balance'])}, "
+        f"net {format_currency(scenario['monthly_net_change'])}/month, risk {scenario['risk_level']}"
+    )
+
+    if comparison_focus == "risk":
+        point += f", floor {format_currency(scenario.get('lowest_balance') or 0.0)}"
+
+    if scenario.get("goal_balance") is not None:
+        goal_balance = float(scenario["goal_balance"])
+        goal_gap_amount = scenario.get("goal_gap_amount")
+        if goal_gap_amount is not None and goal_gap_amount <= 0:
+            point += f". Goal met: target {format_currency(goal_balance)}"
+        elif goal_gap_amount is not None:
+            point += (
+                f". Goal gap: {format_currency(float(goal_gap_amount))} short of "
+                f"{format_currency(goal_balance)}"
+            )
+        else:
+            point += f". Target: {format_currency(goal_balance)}"
+
+    if scenario["goal_note"]:
+        point += f". {scenario['goal_note']}"
+    if scenario["one_time_event_amount"] is not None and scenario["one_time_event_month"]:
+        point += (
+            f". Event: {scenario['one_time_event_label']} in {scenario['one_time_event_month']} "
+            f"for {format_signed_currency(scenario['one_time_event_amount'])}"
+        )
+
+    return point
 
 
 def format_category_label(value: str | None) -> str:
@@ -1698,7 +1846,22 @@ def classify_question(question: str, context_text: str) -> str:
     ):
         if any(
             phrase in text
-            for phrase in ["compare", "best", "better", "strongest", "which one", "which plan"]
+            for phrase in [
+                "compare",
+                "best",
+                "better",
+                "strongest",
+                "which one",
+                "which plan",
+                "safest",
+                "lowest risk",
+                "least risky",
+                "most stable",
+                "goal",
+                "target",
+                "cash flow",
+                "monthly net",
+            ]
         ):
             return "saved_scenario_compare"
         return "saved_scenario_list"
@@ -2351,6 +2514,12 @@ def generate_assistant_response(
             "strongest",
             "plan",
             "scenario",
+            "safest",
+            "risk",
+            "goal",
+            "target",
+            "cash flow",
+            "monthly net",
         ]
     )
     saved_scenario_name_candidates = (
@@ -2475,11 +2644,7 @@ def generate_assistant_response(
             }
 
         supporting_points = [
-            (
-                f"{item['name']}: ends at {format_currency(item['projected_end_balance'])}, "
-                f"net {format_currency(item['monthly_net_change'])}/month, "
-                f"risk {item['risk_level']}"
-            )
+            build_saved_scenario_supporting_point(item)
             for item in saved_scenario_snapshots[:4]
         ]
 
@@ -2539,13 +2704,10 @@ def generate_assistant_response(
             saved_scenarios=saved_scenario_snapshots,
         )
         comparison_set = named_scenarios[:2] if len(named_scenarios) >= 2 else saved_scenario_snapshots[:2]
+        comparison_focus = detect_saved_scenario_comparison_focus(question, context_text)
         comparison_set = sorted(
             comparison_set,
-            key=lambda item: (
-                float(item["projected_end_balance"]),
-                float(item["monthly_net_change"]),
-                item["name"].lower(),
-            ),
+            key=lambda item: build_saved_scenario_comparison_key(item, comparison_focus),
             reverse=True,
         )
 
@@ -2555,8 +2717,68 @@ def generate_assistant_response(
             float(best_scenario["projected_end_balance"])
             - float(runner_up["projected_end_balance"])
         )
+        monthly_net_gap = (
+            float(best_scenario["monthly_net_change"])
+            - float(runner_up["monthly_net_change"])
+        )
+        safer_floor_gap = (
+            float(best_scenario.get("lowest_balance") or 0.0)
+            - float(runner_up.get("lowest_balance") or 0.0)
+        )
+        goal_balance = best_scenario.get("goal_balance")
+        goal_gap_amount = best_scenario.get("goal_gap_amount")
 
-        if mode == "strict":
+        if comparison_focus == "risk":
+            if mode == "strict":
+                answer = (
+                    f"{best_scenario['name']} is the safest saved plan right now. "
+                    f"It carries {best_scenario['risk_level']} risk and keeps the balance floor "
+                    f"{format_currency(safer_floor_gap)} higher than {runner_up['name']}."
+                )
+            elif mode == "coach":
+                answer = (
+                    f"{best_scenario['name']} looks like the safest path to lean on right now. "
+                    f"It gives you the steadiest balance cushion through the scenario window."
+                )
+            else:
+                answer = (
+                    f"{best_scenario['name']} currently looks like the safest saved scenario. "
+                    f"It keeps a stronger balance floor than {runner_up['name']} while staying "
+                    f"at {best_scenario['risk_level']} risk."
+                )
+        elif comparison_focus == "monthly_net":
+            if mode == "strict":
+                answer = (
+                    f"{best_scenario['name']} has the strongest monthly cash flow. "
+                    f"It runs {format_currency(monthly_net_gap)} per month ahead of {runner_up['name']}."
+                )
+            elif mode == "coach":
+                answer = (
+                    f"{best_scenario['name']} gives you the cleanest month-to-month breathing room. "
+                    f"It improves your ongoing cash flow the most."
+                )
+            else:
+                answer = (
+                    f"{best_scenario['name']} currently has the strongest monthly net change, "
+                    f"running {format_currency(monthly_net_gap)} per month ahead of {runner_up['name']}."
+                )
+        elif comparison_focus == "goal" and goal_balance is not None:
+            if goal_gap_amount is not None and goal_gap_amount <= 0:
+                answer = (
+                    f"{best_scenario['name']} is your strongest goal-focused saved plan right now. "
+                    f"It already reaches its target balance of {format_currency(goal_balance)}."
+                )
+            else:
+                answer = (
+                    f"{best_scenario['name']} is currently the closest saved plan to its target balance. "
+                    f"It still needs about {format_currency(float(goal_gap_amount or 0.0))} to get there."
+                )
+        elif comparison_focus == "goal":
+            answer = (
+                f"None of these saved scenarios has a target balance attached yet, "
+                f"so {best_scenario['name']} is leading on ending balance instead."
+            )
+        elif mode == "strict":
             answer = (
                 f"{best_scenario['name']} is the strongest saved plan right now. "
                 f"It finishes {format_currency(projected_gap)} ahead of {runner_up['name']}."
@@ -2574,18 +2796,9 @@ def generate_assistant_response(
 
         supporting_points = []
         for item in comparison_set:
-            point = (
-                f"{item['name']}: ends at {format_currency(item['projected_end_balance'])}, "
-                f"net {format_currency(item['monthly_net_change'])}/month, risk {item['risk_level']}"
+            supporting_points.append(
+                build_saved_scenario_supporting_point(item, comparison_focus=comparison_focus)
             )
-            if item["goal_note"]:
-                point += f". {item['goal_note']}"
-            if item["one_time_event_amount"] is not None and item["one_time_event_month"]:
-                point += (
-                    f". Event: {item['one_time_event_label']} in {item['one_time_event_month']} "
-                    f"for {format_signed_currency(item['one_time_event_amount'])}"
-                )
-            supporting_points.append(point)
 
         if len(named_scenarios) < 2:
             supporting_points.append(
@@ -3605,6 +3818,7 @@ def generate_assistant_suggestions(
     if saved_scenarios:
         suggestions.append("Which saved scenario looks strongest?")
         if len(saved_scenarios) > 1:
+            suggestions.append("Which saved scenario is safest?")
             suggestions.append("Compare my saved scenarios")
 
     suggestions.append("What will my balance look like in 3 months?")

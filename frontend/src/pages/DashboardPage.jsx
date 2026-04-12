@@ -20,6 +20,7 @@ const CATEGORY_RULES = {
 function DashboardPage() {
   const [dashboardData, setDashboardData] = useState(null);
   const [allTransactions, setAllTransactions] = useState([]);
+  const [accounts, setAccounts] = useState([]);
   const [budgetData, setBudgetData] = useState(null);
   const [simulatorData, setSimulatorData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -32,6 +33,7 @@ function DashboardPage() {
   const [category, setCategory] = useState("Other");
   const [description, setDescription] = useState("");
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
+  const [transactionAccountId, setTransactionAccountId] = useState("");
   const [transactionType, setTransactionType] = useState("expense");
   const [formError, setFormError] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -46,7 +48,7 @@ function DashboardPage() {
 
   const fetchData = async () => {
     try {
-      const [dashboardRes, transactionsRes, budgetsRes, simulatorRes] = await Promise.all([
+      const [dashboardRes, transactionsRes, budgetsRes, simulatorRes, accountsRes] = await Promise.all([
         api.get("/analytics/dashboard", {
           params: {
             account_id: normalizedAccountId,
@@ -71,12 +73,14 @@ function DashboardPage() {
             },
           })
           .catch(() => null),
+        api.get("/accounts/"),
       ]);
 
       setDashboardData(dashboardRes.data);
       setAllTransactions(transactionsRes.data);
       setBudgetData(budgetsRes.data);
       setSimulatorData(simulatorRes?.data || null);
+      setAccounts(accountsRes.data || []);
     } catch (error) {
       console.error("Failed to load dashboard:", error);
       handleApiAuthError(error, navigate);
@@ -88,6 +92,28 @@ function DashboardPage() {
   useEffect(() => {
     fetchData();
   }, [selectedAccountId]);
+
+  useEffect(() => {
+    if (!accounts.length) {
+      setTransactionAccountId("");
+      return;
+    }
+
+    if (selectedAccountId !== ALL_ACCOUNTS_VALUE) {
+      const scopedAccountId = String(selectedAccountId);
+      if (accounts.some((account) => String(account.id) === scopedAccountId)) {
+        setTransactionAccountId(scopedAccountId);
+        return;
+      }
+    }
+
+    setTransactionAccountId((currentValue) => {
+      if (currentValue && accounts.some((account) => String(account.id) === String(currentValue))) {
+        return currentValue;
+      }
+      return String(accounts[0].id);
+    });
+  }, [accounts, selectedAccountId]);
 
   const filteredRecentTransactions = useMemo(() => {
     const transactions = [...allTransactions]
@@ -194,8 +220,8 @@ function DashboardPage() {
     e.preventDefault();
     setFormError("");
 
-    if (!normalizedAccountId) {
-      setFormError("Please select a specific account before adding a transaction.");
+    if (!transactionAccountId) {
+      setFormError("Please choose an account for this transaction.");
       return;
     }
 
@@ -213,7 +239,7 @@ function DashboardPage() {
         description,
         date,
         type: transactionType,
-        account_id: normalizedAccountId,
+        account_id: Number(transactionAccountId),
       });
 
       setAmount("");
@@ -423,8 +449,14 @@ function DashboardPage() {
         <div className="dashboard-card large-card">
           <div className="section-header">
             <h2>Add Transaction</h2>
-            <p>Add new income or expense into the currently selected account.</p>
+            <p>Add new income or expense into the account chosen in this form.</p>
           </div>
+
+          <p className="budget-inline-note">
+            {selectedAccountId === ALL_ACCOUNTS_VALUE
+              ? "You are viewing all accounts right now. This form saves into the account selected below."
+              : "This form is prefilled with the account from your current dashboard view, but you can change it here if needed."}
+          </p>
 
           <form className="transaction-form" onSubmit={handleAddTransaction}>
             <input
@@ -447,6 +479,19 @@ function DashboardPage() {
               onChange={(e) => setDescription(e.target.value)}
             />
             <input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+            <select
+              value={transactionAccountId}
+              onChange={(e) => setTransactionAccountId(e.target.value)}
+            >
+              <option value="" disabled>
+                Select account
+              </option>
+              {accounts.map((account) => (
+                <option key={account.id} value={String(account.id)}>
+                  {account.name} ({account.type})
+                </option>
+              ))}
+            </select>
             <select value={transactionType} onChange={(e) => setTransactionType(e.target.value)}>
               <option value="expense">Expense</option>
               <option value="income">Income</option>
