@@ -1138,6 +1138,8 @@ class AnalyticsRouteTest(unittest.TestCase):
         self.assertEqual(payload["suggested_actions"][0]["page"], "accounts")
 
     def test_saved_scenarios_can_be_created_updated_listed_and_deleted(self) -> None:
+        self.seed_transactions()
+
         create_response = self.client.post(
             "/analytics/saved-scenarios",
             json={
@@ -1201,6 +1203,11 @@ class AnalyticsRouteTest(unittest.TestCase):
         self.assertEqual(len(listed_payload), 1)
         self.assertEqual(listed_payload[0]["id"], created_payload["id"])
         self.assertEqual(listed_payload[0]["name"], "Updated Trip Pressure Plan")
+        self.assertIsNotNone(listed_payload[0]["projected_end_balance"])
+        self.assertIsNotNone(listed_payload[0]["monthly_net_change"])
+        self.assertIn(listed_payload[0]["risk_level"], {"healthy", "watch", "high"})
+        self.assertIsNotNone(listed_payload[0]["lowest_balance"])
+        self.assertIsNotNone(listed_payload[0]["goal_gap_amount"])
 
         delete_response = self.client.delete(
             f"/analytics/saved-scenarios/{created_payload['id']}"
@@ -1329,6 +1336,7 @@ class AnalyticsRouteTest(unittest.TestCase):
         )
         self.assertEqual(payload["suggested_actions"][0]["page"], "simulator")
         self.assertIsNotNone(payload["suggested_actions"][0]["saved_scenario_id"])
+        self.assertIsNotNone(payload["suggested_actions"][0]["compare_saved_scenario_id"])
 
     def test_assistant_can_compare_named_saved_scenarios(self) -> None:
         with self.session_local() as session:
@@ -1561,6 +1569,241 @@ class AnalyticsRouteTest(unittest.TestCase):
         self.assertEqual(payload["suggested_actions"][0]["page"], "simulator")
         self.assertIsNotNone(payload["suggested_actions"][0]["saved_scenario_id"])
 
+    def test_assistant_understands_natural_saved_plan_questions(self) -> None:
+        with self.session_local() as session:
+            session.add_all(
+                [
+                    Transaction(
+                        amount=2000.0,
+                        category="Salary",
+                        description="Payroll Jan",
+                        date=date(2026, 1, 3),
+                        type="income",
+                        owner_id=self.user_id,
+                        account_id=self.chequing_account_id,
+                    ),
+                    Transaction(
+                        amount=500.0,
+                        category="Rent",
+                        description="Rent Jan",
+                        date=date(2026, 1, 5),
+                        type="expense",
+                        owner_id=self.user_id,
+                        account_id=self.chequing_account_id,
+                    ),
+                    Transaction(
+                        amount=2000.0,
+                        category="Salary",
+                        description="Payroll Feb",
+                        date=date(2026, 2, 3),
+                        type="income",
+                        owner_id=self.user_id,
+                        account_id=self.chequing_account_id,
+                    ),
+                    Transaction(
+                        amount=500.0,
+                        category="Rent",
+                        description="Rent Feb",
+                        date=date(2026, 2, 5),
+                        type="expense",
+                        owner_id=self.user_id,
+                        account_id=self.chequing_account_id,
+                    ),
+                    Transaction(
+                        amount=2000.0,
+                        category="Salary",
+                        description="Payroll Mar",
+                        date=date(2026, 3, 3),
+                        type="income",
+                        owner_id=self.user_id,
+                        account_id=self.chequing_account_id,
+                    ),
+                    Transaction(
+                        amount=500.0,
+                        category="Rent",
+                        description="Rent Mar",
+                        date=date(2026, 3, 5),
+                        type="expense",
+                        owner_id=self.user_id,
+                        account_id=self.chequing_account_id,
+                    ),
+                ]
+            )
+            session.add_all(
+                [
+                    SavedScenario(
+                        name="Goal Stretch Plan",
+                        months=3,
+                        income_adjustment=500.0,
+                        expense_adjustment=0.0,
+                        target_balance=9500.0,
+                        event_month_offset=None,
+                        event_amount=None,
+                        event_label=None,
+                        owner_id=self.user_id,
+                        account_id=self.chequing_account_id,
+                    ),
+                    SavedScenario(
+                        name="Repair Shock Plan",
+                        months=3,
+                        income_adjustment=0.0,
+                        expense_adjustment=0.0,
+                        target_balance=None,
+                        event_month_offset=2,
+                        event_amount=-1200.0,
+                        event_label="Repair",
+                        owner_id=self.user_id,
+                        account_id=self.chequing_account_id,
+                    ),
+                ]
+            )
+            session.commit()
+
+        response = self.client.post(
+            "/analytics/assistant-response",
+            json={
+                "question": "Which plan gets me closest to my goal?",
+                "history": [],
+                "mode": "balanced",
+                "account_id": self.chequing_account_id,
+            },
+        )
+
+        self.assertEqual(response.status_code, 200, response.text)
+        payload = response.json()
+
+        self.assertIn("Goal Stretch Plan", payload["answer"])
+        self.assertEqual(payload["suggested_actions"][0]["page"], "simulator")
+        self.assertIsNotNone(payload["suggested_actions"][0]["saved_scenario_id"])
+
+    def test_assistant_can_summarize_saved_plan_portfolio(self) -> None:
+        with self.session_local() as session:
+            session.add_all(
+                [
+                    Transaction(
+                        amount=2000.0,
+                        category="Salary",
+                        description="Payroll Jan",
+                        date=date(2026, 1, 3),
+                        type="income",
+                        owner_id=self.user_id,
+                        account_id=self.chequing_account_id,
+                    ),
+                    Transaction(
+                        amount=500.0,
+                        category="Rent",
+                        description="Rent Jan",
+                        date=date(2026, 1, 5),
+                        type="expense",
+                        owner_id=self.user_id,
+                        account_id=self.chequing_account_id,
+                    ),
+                    Transaction(
+                        amount=2000.0,
+                        category="Salary",
+                        description="Payroll Feb",
+                        date=date(2026, 2, 3),
+                        type="income",
+                        owner_id=self.user_id,
+                        account_id=self.chequing_account_id,
+                    ),
+                    Transaction(
+                        amount=500.0,
+                        category="Rent",
+                        description="Rent Feb",
+                        date=date(2026, 2, 5),
+                        type="expense",
+                        owner_id=self.user_id,
+                        account_id=self.chequing_account_id,
+                    ),
+                    Transaction(
+                        amount=2000.0,
+                        category="Salary",
+                        description="Payroll Mar",
+                        date=date(2026, 3, 3),
+                        type="income",
+                        owner_id=self.user_id,
+                        account_id=self.chequing_account_id,
+                    ),
+                    Transaction(
+                        amount=500.0,
+                        category="Rent",
+                        description="Rent Mar",
+                        date=date(2026, 3, 5),
+                        type="expense",
+                        owner_id=self.user_id,
+                        account_id=self.chequing_account_id,
+                    ),
+                ]
+            )
+            session.add_all(
+                [
+                    SavedScenario(
+                        name="Steady Plan",
+                        months=3,
+                        income_adjustment=0.0,
+                        expense_adjustment=0.0,
+                        target_balance=None,
+                        event_month_offset=None,
+                        event_amount=None,
+                        event_label=None,
+                        owner_id=self.user_id,
+                        account_id=self.chequing_account_id,
+                    ),
+                    SavedScenario(
+                        name="Stretch Goal Plan",
+                        months=3,
+                        income_adjustment=500.0,
+                        expense_adjustment=0.0,
+                        target_balance=9500.0,
+                        event_month_offset=None,
+                        event_amount=None,
+                        event_label=None,
+                        owner_id=self.user_id,
+                        account_id=self.chequing_account_id,
+                    ),
+                    SavedScenario(
+                        name="Trip Event Plan",
+                        months=3,
+                        income_adjustment=0.0,
+                        expense_adjustment=0.0,
+                        target_balance=None,
+                        event_month_offset=2,
+                        event_amount=-1200.0,
+                        event_label="Trip",
+                        owner_id=self.user_id,
+                        account_id=self.chequing_account_id,
+                    ),
+                ]
+            )
+            session.commit()
+
+        response = self.client.post(
+            "/analytics/assistant-response",
+            json={
+                "question": "Show my saved plans",
+                "history": [],
+                "mode": "balanced",
+                "account_id": self.chequing_account_id,
+            },
+        )
+
+        self.assertEqual(response.status_code, 200, response.text)
+        payload = response.json()
+
+        self.assertIn("saved simulator plan", payload["answer"])
+        self.assertTrue(any("Portfolio:" in item for item in payload["supporting_points"]))
+        self.assertEqual(payload["suggested_actions"][0]["page"], "simulator")
+        self.assertIn(
+            payload["suggested_followups"][0],
+            {
+                "Which saved scenario looks strongest?",
+                "Which saved scenario is safest?",
+                "Which saved scenario has the best monthly cash flow?",
+                "Which saved scenario gets me closest to my goal?",
+            },
+        )
+
     def test_assistant_suggestions_include_saved_scenario_prompt(self) -> None:
         with self.session_local() as session:
             session.add_all(
@@ -1603,6 +1846,8 @@ class AnalyticsRouteTest(unittest.TestCase):
 
         self.assertIn("Which saved scenario looks strongest?", suggestions)
         self.assertIn("Which saved scenario is safest?", suggestions)
+        self.assertIn("Which saved scenario has the best monthly cash flow?", suggestions)
+        self.assertIn("Which saved scenario gets me closest to my goal?", suggestions)
 
 
 if __name__ == "__main__":

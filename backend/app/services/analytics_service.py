@@ -1390,6 +1390,29 @@ def detect_saved_scenario_comparison_focus(question: str, context_text: str) -> 
     return "end_balance"
 
 
+def is_saved_scenario_plan_comparison_question(question: str, context_text: str) -> bool:
+    normalized_text = normalize_text_for_matching(f"{context_text} {question}")
+
+    return any(
+        phrase in normalized_text
+        for phrase in [
+            "which plan",
+            "best plan",
+            "better plan",
+            "strongest plan",
+            "safest plan",
+            "which one is safest",
+            "which one is stronger",
+            "which one is best",
+            "best cash flow plan",
+            "best monthly net plan",
+            "closest to my goal",
+            "closest to my target",
+            "goal leader",
+        ]
+    )
+
+
 def build_saved_scenario_comparison_key(
     scenario: dict[str, Any],
     comparison_focus: str,
@@ -1477,6 +1500,62 @@ def build_saved_scenario_supporting_point(
         )
 
     return point
+
+
+def build_saved_scenario_portfolio_summary(
+    saved_scenarios: list[dict[str, Any]],
+) -> dict[str, Any]:
+    strongest = (
+        sorted(
+            saved_scenarios,
+            key=lambda item: build_saved_scenario_comparison_key(item, "end_balance"),
+            reverse=True,
+        )[0]
+        if saved_scenarios
+        else None
+    )
+    safest = (
+        sorted(
+            saved_scenarios,
+            key=lambda item: build_saved_scenario_comparison_key(item, "risk"),
+            reverse=True,
+        )[0]
+        if saved_scenarios
+        else None
+    )
+    monthly_net_leader = (
+        sorted(
+            saved_scenarios,
+            key=lambda item: build_saved_scenario_comparison_key(item, "monthly_net"),
+            reverse=True,
+        )[0]
+        if saved_scenarios
+        else None
+    )
+    goal_candidates = [item for item in saved_scenarios if item.get("goal_balance") is not None]
+    goal_leader = (
+        sorted(
+            goal_candidates,
+            key=lambda item: build_saved_scenario_comparison_key(item, "goal"),
+            reverse=True,
+        )[0]
+        if goal_candidates
+        else None
+    )
+
+    return {
+        "total": len(saved_scenarios),
+        "healthy_count": sum(1 for item in saved_scenarios if item.get("risk_level") == "healthy"),
+        "attention_count": sum(
+            1 for item in saved_scenarios if item.get("risk_level") in {"watch", "high"}
+        ),
+        "goal_count": len(goal_candidates),
+        "event_count": sum(1 for item in saved_scenarios if item.get("one_time_event_amount") is not None),
+        "strongest": strongest,
+        "safest": safest,
+        "monthly_net_leader": monthly_net_leader,
+        "goal_leader": goal_leader,
+    }
 
 
 def format_category_label(value: str | None) -> str:
@@ -2614,9 +2693,15 @@ def generate_assistant_response(
             account_id=account_id,
             scope_label=scope_label,
         )
-        if intent in {"saved_scenario_list", "saved_scenario_compare"}
+        if intent in {"saved_scenario_list", "saved_scenario_compare"} or likely_saved_scenario_question
         else []
     )
+    if (
+        intent not in {"saved_scenario_list", "saved_scenario_compare"}
+        and saved_scenario_snapshots
+        and is_saved_scenario_plan_comparison_question(question, context_text)
+    ):
+        intent = "saved_scenario_compare"
 
     if intent == "saved_scenario_list":
         if not saved_scenario_snapshots:
@@ -2643,29 +2728,75 @@ def generate_assistant_response(
                 "scope_label": scope_label,
             }
 
+        portfolio_summary = build_saved_scenario_portfolio_summary(saved_scenario_snapshots)
         supporting_points = [
-            build_saved_scenario_supporting_point(item)
-            for item in saved_scenario_snapshots[:4]
+            (
+                f"Portfolio: {portfolio_summary['healthy_count']} healthy, "
+                f"{portfolio_summary['attention_count']} need attention, "
+                f"{portfolio_summary['goal_count']} goal-based, "
+                f"{portfolio_summary['event_count']} event-driven"
+            )
         ]
+        if portfolio_summary["strongest"] is not None:
+            supporting_points.append(
+                f"Strongest finish: {build_saved_scenario_supporting_point(portfolio_summary['strongest'])}"
+            )
+        if (
+            portfolio_summary["safest"] is not None
+            and portfolio_summary["safest"]["id"] != portfolio_summary["strongest"]["id"]
+        ):
+            supporting_points.append(
+                f"Safest cushion: {build_saved_scenario_supporting_point(portfolio_summary['safest'], comparison_focus='risk')}"
+            )
+        if portfolio_summary["goal_leader"] is not None:
+            supporting_points.append(
+                f"Goal leader: {build_saved_scenario_supporting_point(portfolio_summary['goal_leader'], comparison_focus='goal')}"
+            )
 
         return {
             "answer": (
                 f"You have {len(saved_scenario_snapshots)} saved simulator plan"
                 f"{'' if len(saved_scenario_snapshots) == 1 else 's'} in {scope_label}. "
-                "I listed the strongest ones first based on projected end balance."
+                f"{portfolio_summary['healthy_count']} look healthy right now and "
+                f"{portfolio_summary['attention_count']} need attention. "
+                f"{portfolio_summary['strongest']['name']} currently has the strongest projected finish."
             ),
             "supporting_points": supporting_points,
             "suggested_followups": [
                 "Which saved scenario looks strongest?",
+                "Which saved scenario is safest?",
+                "Which saved scenario has the best monthly cash flow?",
+                "Which saved scenario gets me closest to my goal?",
                 "What will my balance look like in 3 months?",
             ],
             "suggested_actions": [
-                {
-                    "label": f"Open {saved_scenario_snapshots[0]['name']}",
-                    "page": "simulator",
-                    "account_id": account_id,
-                    "saved_scenario_id": saved_scenario_snapshots[0]["id"],
-                },
+                *(
+                    [
+                        {
+                            "label": f"Compare {portfolio_summary['strongest']['name']} vs {portfolio_summary['safest']['name']}",
+                            "page": "simulator",
+                            "account_id": account_id,
+                            "saved_scenario_id": portfolio_summary["strongest"]["id"],
+                            "compare_saved_scenario_id": portfolio_summary["safest"]["id"],
+                        }
+                    ]
+                    if portfolio_summary["strongest"] is not None
+                    and portfolio_summary["safest"] is not None
+                    and portfolio_summary["strongest"]["id"] != portfolio_summary["safest"]["id"]
+                    else []
+                ),
+                *(
+                    [
+                        {
+                            "label": f"Open {portfolio_summary['strongest']['name']}",
+                            "page": "simulator",
+                            "account_id": account_id,
+                            "saved_scenario_id": portfolio_summary["strongest"]["id"],
+                        }
+                    ]
+                    if portfolio_summary["strongest"] is not None
+                    else []
+                ),
                 {
                     "label": "Open simulator",
                     "page": "simulator",
@@ -2810,9 +2941,18 @@ def generate_assistant_response(
             "supporting_points": supporting_points[:4],
             "suggested_followups": [
                 f"Open {best_scenario['name']}",
+                "Which saved scenario is safest?",
+                "Which saved scenario has the best monthly cash flow?",
                 "What will my balance look like in 3 months?",
             ],
             "suggested_actions": [
+                {
+                    "label": f"Compare {best_scenario['name']} vs {runner_up['name']}",
+                    "page": "simulator",
+                    "account_id": account_id,
+                    "saved_scenario_id": best_scenario["id"],
+                    "compare_saved_scenario_id": runner_up["id"],
+                },
                 {
                     "label": f"Open {best_scenario['name']}",
                     "page": "simulator",
@@ -3819,6 +3959,8 @@ def generate_assistant_suggestions(
         suggestions.append("Which saved scenario looks strongest?")
         if len(saved_scenarios) > 1:
             suggestions.append("Which saved scenario is safest?")
+            suggestions.append("Which saved scenario has the best monthly cash flow?")
+            suggestions.append("Which saved scenario gets me closest to my goal?")
             suggestions.append("Compare my saved scenarios")
 
     suggestions.append("What will my balance look like in 3 months?")

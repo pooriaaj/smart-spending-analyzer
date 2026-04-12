@@ -23,6 +23,7 @@ from app.schemas import (
     TopExpenseCategory,
 )
 from app.services.analytics_service import (
+    build_saved_scenario_projection_snapshots,
     build_future_balance_simulation,
     generate_assistant_response,
     generate_assistant_suggestions,
@@ -271,12 +272,32 @@ def list_saved_scenarios_route(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    resolve_account_scope(db, current_user, account_id)
-    return list_saved_scenarios(
+    scope_label = resolve_account_scope(db, current_user, account_id)
+    saved_scenarios = list_saved_scenarios(
         db=db,
         owner_id=current_user.id,
         account_id=account_id,
     )
+    snapshots = build_saved_scenario_projection_snapshots(
+        db=db,
+        user_id=current_user.id,
+        account_id=account_id,
+        scope_label=scope_label,
+    )
+    snapshot_by_id = {item["id"]: item for item in snapshots}
+
+    return [
+        scenario.model_copy(
+            update={
+                "projected_end_balance": snapshot_by_id.get(scenario.id, {}).get("projected_end_balance"),
+                "monthly_net_change": snapshot_by_id.get(scenario.id, {}).get("monthly_net_change"),
+                "risk_level": snapshot_by_id.get(scenario.id, {}).get("risk_level"),
+                "lowest_balance": snapshot_by_id.get(scenario.id, {}).get("lowest_balance"),
+                "goal_gap_amount": snapshot_by_id.get(scenario.id, {}).get("goal_gap_amount"),
+            }
+        )
+        for scenario in saved_scenarios
+    ]
 
 
 @router.post("/saved-scenarios", response_model=SavedScenarioResponse)

@@ -1623,6 +1623,77 @@ textarea:focus,
   min-width: 0;
 }
 
+.simulator-saved-sort-field {
+  flex: 0 0 180px;
+  min-width: min(180px, 100%);
+}
+
+.simulator-saved-highlight-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+  margin-bottom: 18px;
+}
+
+.simulator-saved-highlight-card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.simulator-saved-highlight-top {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: flex-start;
+}
+
+.simulator-saved-highlight-top h3 {
+  margin: 8px 0 0 0;
+  font-size: 20px;
+}
+
+.simulator-saved-highlight-top strong {
+  font-size: 20px;
+  color: var(--text-main);
+}
+
+.simulator-saved-highlight-card p {
+  margin: 0;
+}
+
+.simulator-saved-quick-actions {
+  margin-bottom: 18px;
+}
+
+.simulator-saved-scenario-metrics {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 10px;
+}
+
+.simulator-saved-scenario-metric {
+  padding: 14px;
+  border-radius: 16px;
+  background: rgba(248, 250, 252, 0.88);
+  border: 1px solid rgba(15, 23, 42, 0.08);
+}
+
+.simulator-saved-scenario-metric span {
+  display: block;
+  margin-bottom: 8px;
+  color: var(--text-faint);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.simulator-saved-scenario-metric strong {
+  font-size: 18px;
+  color: var(--text-main);
+}
+
 .simulator-overview-top {
   display: flex;
   justify-content: space-between;

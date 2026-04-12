@@ -240,6 +240,11 @@ class SavedScenarioResponse(SavedScenarioBase, ORMBaseModel):
     id: int
     owner_id: int
     created_at: datetime
+    projected_end_balance: float | None = None
+    monthly_net_change: float | None = None
+    risk_level: str | None = None
+    lowest_balance: float | None = None
+    goal_gap_amount: float | None = None
 
 
 class FutureSimulationPoint(BaseModel):
@@ -432,6 +437,7 @@ class AssistantAction(BaseModel):
     page: str
     section: str | None = None
     saved_scenario_id: int | None = None
+    compare_saved_scenario_id: int | None = None
     category: str | None = None
     transaction_type: str | None = None
     month: str | None = None

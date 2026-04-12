@@ -114,6 +114,21 @@ function formatScenarioCurrency(value) {
   return `$${(Number(value) || 0).toFixed(2)}`;
 }
 
+const SAVED_SCENARIO_SORT_OPTIONS = [
+  { value: "newest", label: "Newest" },
+  { value: "strongest", label: "Strongest" },
+  { value: "safest", label: "Safest" },
+  { value: "goal", label: "Goal Progress" },
+];
+
+const SAVED_SCENARIO_FILTER_OPTIONS = [
+  { value: "all", label: "All Plans" },
+  { value: "healthy", label: "Healthy" },
+  { value: "attention", label: "Needs Attention" },
+  { value: "goal", label: "Goal Plans" },
+  { value: "event", label: "Event Plans" },
+];
+
 function buildSavedScenarioSummary(scenario) {
   const summaryParts = [`${scenario.months} month${scenario.months === 1 ? "" : "s"}`];
 
@@ -166,6 +181,89 @@ function getScenarioRiskLabel(riskLevel) {
     return "Watch closely";
   }
   return "Healthy pace";
+}
+
+function getScenarioRiskRank(riskLevel) {
+  if (riskLevel === "healthy") {
+    return 2;
+  }
+  if (riskLevel === "watch") {
+    return 1;
+  }
+  return 0;
+}
+
+function sortSavedScenarios(scenarios, sortMode) {
+  const items = [...scenarios];
+
+  items.sort((left, right) => {
+    if (sortMode === "strongest") {
+      return (
+        (Number(right.projected_end_balance) || 0) - (Number(left.projected_end_balance) || 0) ||
+        (Number(right.monthly_net_change) || 0) - (Number(left.monthly_net_change) || 0) ||
+        new Date(right.created_at) - new Date(left.created_at)
+      );
+    }
+
+    if (sortMode === "safest") {
+      return (
+        getScenarioRiskRank(right.risk_level) - getScenarioRiskRank(left.risk_level) ||
+        (Number(right.lowest_balance) || 0) - (Number(left.lowest_balance) || 0) ||
+        (Number(right.projected_end_balance) || 0) - (Number(left.projected_end_balance) || 0) ||
+        new Date(right.created_at) - new Date(left.created_at)
+      );
+    }
+
+    if (sortMode === "goal") {
+      const leftHasGoal = left.target_balance != null ? 1 : 0;
+      const rightHasGoal = right.target_balance != null ? 1 : 0;
+      const leftGap =
+        left.goal_gap_amount != null ? Number(left.goal_gap_amount) : Number.POSITIVE_INFINITY;
+      const rightGap =
+        right.goal_gap_amount != null ? Number(right.goal_gap_amount) : Number.POSITIVE_INFINITY;
+      const leftGoalScore =
+        leftHasGoal === 0
+          ? Number.NEGATIVE_INFINITY
+          : leftGap <= 0
+          ? Number.POSITIVE_INFINITY
+          : -leftGap;
+      const rightGoalScore =
+        rightHasGoal === 0
+          ? Number.NEGATIVE_INFINITY
+          : rightGap <= 0
+          ? Number.POSITIVE_INFINITY
+          : -rightGap;
+
+      return (
+        rightHasGoal - leftHasGoal ||
+        rightGoalScore - leftGoalScore ||
+        (Number(right.projected_end_balance) || 0) - (Number(left.projected_end_balance) || 0) ||
+        new Date(right.created_at) - new Date(left.created_at)
+      );
+    }
+
+    return new Date(right.created_at) - new Date(left.created_at) || right.id - left.id;
+  });
+
+  return items;
+}
+
+function filterSavedScenarios(scenarios, filterMode) {
+  if (filterMode === "healthy") {
+    return scenarios.filter((scenario) => scenario.risk_level === "healthy");
+  }
+  if (filterMode === "attention") {
+    return scenarios.filter((scenario) =>
+      ["watch", "high"].includes(String(scenario.risk_level || ""))
+    );
+  }
+  if (filterMode === "goal") {
+    return scenarios.filter((scenario) => scenario.target_balance != null);
+  }
+  if (filterMode === "event") {
+    return scenarios.filter((scenario) => scenario.event_amount != null);
+  }
+  return scenarios;
 }
 
 function buildScenarioComparisonNote(currentData, comparedData, comparedName) {
@@ -383,8 +481,15 @@ function SimulatorPage() {
       ? Number(searchParams.get("saved_scenario_id"))
       : null
   );
+  const [linkedComparisonScenarioId, setLinkedComparisonScenarioId] = useState(
+    Number(searchParams.get("compare_saved_scenario_id")) > 0
+      ? Number(searchParams.get("compare_saved_scenario_id"))
+      : null
+  );
   const [savedScenarioName, setSavedScenarioName] = useState("");
   const [savedScenarioQuery, setSavedScenarioQuery] = useState("");
+  const [savedScenarioFilter, setSavedScenarioFilter] = useState("all");
+  const [savedScenarioSort, setSavedScenarioSort] = useState("newest");
   const [savedScenarios, setSavedScenarios] = useState([]);
   const [savedScenariosLoading, setSavedScenariosLoading] = useState(true);
   const [savingScenario, setSavingScenario] = useState(false);
@@ -392,7 +497,11 @@ function SimulatorPage() {
   const [deletingScenarioId, setDeletingScenarioId] = useState(null);
   const [savedScenarioMessage, setSavedScenarioMessage] = useState("");
   const [savedScenarioError, setSavedScenarioError] = useState("");
-  const [comparisonScenarioId, setComparisonScenarioId] = useState(null);
+  const [comparisonScenarioId, setComparisonScenarioId] = useState(
+    Number(searchParams.get("compare_saved_scenario_id")) > 0
+      ? Number(searchParams.get("compare_saved_scenario_id"))
+      : null
+  );
   const [comparisonData, setComparisonData] = useState(null);
   const [comparisonLoading, setComparisonLoading] = useState(false);
   const [comparisonError, setComparisonError] = useState("");
@@ -417,6 +526,7 @@ function SimulatorPage() {
     const eventAmountParam = searchParams.get("event_amount");
     const eventMonthParam = Number(searchParams.get("event_month_offset"));
     const eventLabelParam = searchParams.get("event_label");
+    const compareScenarioParam = Number(searchParams.get("compare_saved_scenario_id"));
 
     if (monthsParam > 0) {
       setMonths(monthsParam);
@@ -444,6 +554,13 @@ function SimulatorPage() {
     if (eventLabelParam !== null) {
       setEventLabel(eventLabelParam);
     }
+    if (compareScenarioParam > 0) {
+      setLinkedComparisonScenarioId(compareScenarioParam);
+      setComparisonScenarioId(compareScenarioParam);
+    } else {
+      setLinkedComparisonScenarioId(null);
+      setComparisonScenarioId(null);
+    }
   }, [searchParams]);
 
   useEffect(() => {
@@ -456,6 +573,9 @@ function SimulatorPage() {
     const savedScenarioParamId = activeSavedScenarioId || linkedSavedScenarioId;
     if (savedScenarioParamId) {
       params.set("saved_scenario_id", String(savedScenarioParamId));
+    }
+    if (comparisonScenarioId) {
+      params.set("compare_saved_scenario_id", String(comparisonScenarioId));
     }
 
     if (Number(incomeAdjustment) !== 0) {
@@ -484,6 +604,7 @@ function SimulatorPage() {
     months,
     activeSavedScenarioId,
     linkedSavedScenarioId,
+    comparisonScenarioId,
     incomeAdjustment,
     expenseAdjustment,
     targetBalance,
@@ -576,13 +697,49 @@ function SimulatorPage() {
     () => savedScenarios.find((scenario) => scenario.id === comparisonScenarioId) || null,
     [savedScenarios, comparisonScenarioId]
   );
+  const savedScenarioPortfolioSummary = useMemo(() => {
+    const strongestScenario = sortSavedScenarios(savedScenarios, "strongest")[0] || null;
+    const safestScenario = sortSavedScenarios(savedScenarios, "safest")[0] || null;
+    const goalLeader =
+      sortSavedScenarios(
+        savedScenarios.filter((scenario) => scenario.target_balance != null),
+        "goal"
+      )[0] || null;
+
+    return {
+      total: savedScenarios.length,
+      healthyCount: savedScenarios.filter((scenario) => scenario.risk_level === "healthy").length,
+      attentionCount: savedScenarios.filter((scenario) =>
+        ["watch", "high"].includes(String(scenario.risk_level || ""))
+      ).length,
+      goalCount: savedScenarios.filter((scenario) => scenario.target_balance != null).length,
+      eventCount: savedScenarios.filter((scenario) => scenario.event_amount != null).length,
+      strongestScenario,
+      safestScenario,
+      goalLeader,
+    };
+  }, [savedScenarios]);
+  const filterCountByMode = useMemo(
+    () =>
+      Object.fromEntries(
+        SAVED_SCENARIO_FILTER_OPTIONS.map((option) => [
+          option.value,
+          filterSavedScenarios(savedScenarios, option.value).length,
+        ])
+      ),
+    [savedScenarios]
+  );
+  const quickFilteredSavedScenarios = useMemo(
+    () => filterSavedScenarios(savedScenarios, savedScenarioFilter),
+    [savedScenarios, savedScenarioFilter]
+  );
   const filteredSavedScenarios = useMemo(() => {
     const normalizedQuery = savedScenarioQuery.trim().toLowerCase();
     if (!normalizedQuery) {
-      return savedScenarios;
+      return quickFilteredSavedScenarios;
     }
 
-    return savedScenarios.filter((scenario) => {
+    return quickFilteredSavedScenarios.filter((scenario) => {
       const searchableText = [
         scenario.name,
         scenario.event_label,
@@ -594,7 +751,91 @@ function SimulatorPage() {
 
       return searchableText.includes(normalizedQuery);
     });
-  }, [savedScenarios, savedScenarioQuery]);
+  }, [quickFilteredSavedScenarios, savedScenarioQuery]);
+  const displayedSavedScenarios = useMemo(
+    () => sortSavedScenarios(filteredSavedScenarios, savedScenarioSort),
+    [filteredSavedScenarios, savedScenarioSort]
+  );
+  const hasSavedScenarioControlOverrides =
+    savedScenarioFilter !== "all" ||
+    savedScenarioSort !== "newest" ||
+    savedScenarioQuery.trim().length > 0;
+  const savedScenarioHighlights = useMemo(() => {
+    const highlights = [];
+    const seenScenarioIds = new Set();
+
+    const strongestScenario = sortSavedScenarios(displayedSavedScenarios, "strongest")[0];
+    if (strongestScenario) {
+      highlights.push({
+        key: "strongest",
+        title: "Strongest finish",
+        description: "Highest projected ending balance in this view.",
+        scenario: strongestScenario,
+        value: formatScenarioCurrency(strongestScenario.projected_end_balance),
+      });
+      seenScenarioIds.add(strongestScenario.id);
+    }
+
+    const safestScenario = sortSavedScenarios(displayedSavedScenarios, "safest").find(
+      (scenario) => !seenScenarioIds.has(scenario.id)
+    );
+    if (safestScenario) {
+      highlights.push({
+        key: "safest",
+        title: "Safest cushion",
+        description: "Best balance floor with the healthiest risk profile.",
+        scenario: safestScenario,
+        value: getScenarioRiskLabel(safestScenario.risk_level),
+      });
+      seenScenarioIds.add(safestScenario.id);
+    }
+
+    const goalScenario = sortSavedScenarios(
+      displayedSavedScenarios.filter((scenario) => scenario.target_balance != null),
+      "goal"
+    ).find((scenario) => !seenScenarioIds.has(scenario.id));
+    if (goalScenario) {
+      highlights.push({
+        key: "goal",
+        title: "Goal leader",
+        description:
+          Number(goalScenario.goal_gap_amount) <= 0
+            ? "Already on track to hit its saved target."
+            : "Closest saved plan to its target balance.",
+        scenario: goalScenario,
+        value:
+          Number(goalScenario.goal_gap_amount) <= 0
+            ? "On track"
+            : formatScenarioCurrency(goalScenario.goal_gap_amount),
+      });
+    }
+
+    return highlights;
+  }, [displayedSavedScenarios]);
+
+  const handleResetSavedScenarioControls = () => {
+    setSavedScenarioFilter("all");
+    setSavedScenarioSort("newest");
+    setSavedScenarioQuery("");
+  };
+
+  const handleOpenSavedScenario = (scenario) => {
+    if (!scenario) {
+      return;
+    }
+    handleLoadSavedScenario(scenario);
+    handleClearScenarioComparison();
+  };
+
+  const handleCompareSavedScenarioPair = (primaryScenario, secondaryScenario) => {
+    if (!primaryScenario || !secondaryScenario || primaryScenario.id === secondaryScenario.id) {
+      return;
+    }
+    handleLoadSavedScenario(primaryScenario);
+    setLinkedComparisonScenarioId(secondaryScenario.id);
+    setComparisonScenarioId(secondaryScenario.id);
+    setComparisonError("");
+  };
 
   useEffect(() => {
     if (
@@ -838,11 +1079,13 @@ function SimulatorPage() {
   };
 
   const handleCompareSavedScenario = (scenario) => {
+    setLinkedComparisonScenarioId(scenario.id);
     setComparisonScenarioId(scenario.id);
     setComparisonError("");
   };
 
   const handleClearScenarioComparison = () => {
+    setLinkedComparisonScenarioId(null);
     setComparisonScenarioId(null);
     setComparisonData(null);
     setComparisonError("");
@@ -886,6 +1129,23 @@ function SimulatorPage() {
     savedScenariosLoading,
     savedScenarios,
     activeSavedScenarioId,
+  ]);
+
+  useEffect(() => {
+    if (!linkedComparisonScenarioId || savedScenariosLoading) {
+      return;
+    }
+
+    const matchedScenario = savedScenarios.find(
+      (scenario) => scenario.id === linkedComparisonScenarioId
+    );
+    if (matchedScenario) {
+      setComparisonScenarioId(matchedScenario.id);
+    }
+  }, [
+    linkedComparisonScenarioId,
+    savedScenariosLoading,
+    savedScenarios,
   ]);
 
   const handleDeleteSavedScenario = async (scenarioId) => {
@@ -1135,11 +1395,25 @@ function SimulatorPage() {
               <p>
                 Keep a few named plans for this scope so you can revisit them quickly.
                 {savedScenarios.length > 0
-                  ? ` ${filteredSavedScenarios.length} of ${savedScenarios.length} shown.`
+                  ? ` ${displayedSavedScenarios.length} of ${savedScenarios.length} shown.`
                   : ""}
               </p>
             </div>
             <div className="budget-section-actions">
+              <div className="budget-form-field simulator-saved-sort-field">
+                <label htmlFor="saved-scenario-sort">Sort plans</label>
+                <select
+                  id="saved-scenario-sort"
+                  value={savedScenarioSort}
+                  onChange={(event) => setSavedScenarioSort(event.target.value)}
+                >
+                  {SAVED_SCENARIO_SORT_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
               <div className="budget-form-field simulator-saved-search-field">
                 <label htmlFor="saved-scenario-search">Search plans</label>
                 <input
@@ -1164,78 +1438,251 @@ function SimulatorPage() {
             <div className="empty-state">
               <p>No saved scenarios for this scope yet.</p>
             </div>
-          ) : filteredSavedScenarios.length === 0 ? (
-            <div className="empty-state">
-              <p>No saved scenarios match that search yet.</p>
-            </div>
           ) : (
-            <div className="budget-list">
-              {filteredSavedScenarios.map((scenario) => (
-                <div
-                  key={`saved-scenario-${scenario.id}`}
-                  className={`budget-card simulator-saved-scenario-card${
-                    activeSavedScenarioId === scenario.id ? " simulator-saved-scenario-active" : ""
-                  }${
-                    comparisonScenarioId === scenario.id ? " simulator-saved-scenario-compared" : ""
-                  }`}
-                >
-                  <div className="simulator-saved-scenario-top">
-                    <div>
-                      <h3>{scenario.name}</h3>
-                      <p>{buildSavedScenarioSummary(scenario)}</p>
-                    </div>
-                    <div className="simulator-saved-scenario-badges">
-                      {activeSavedScenarioId === scenario.id && (
-                        <span className="budget-status budget-status-on-track">Loaded</span>
-                      )}
-                      {comparisonScenarioId === scenario.id && (
-                        <span className="budget-status budget-status-risk">Comparing</span>
-                      )}
-                    </div>
-                  </div>
-
-                  {scenario.event_amount != null && (
-                    <p className="budget-inline-note">
-                      Event: {scenario.event_label || "One-time event"} in month{" "}
-                      {scenario.event_month_offset || 1} at{" "}
-                      {formatSignedScenarioAmount(scenario.event_amount)}
-                    </p>
-                  )}
-                  <p className="budget-inline-note">
-                    Saved {new Date(scenario.created_at).toLocaleDateString()}
-                  </p>
-                  <div className="simulator-saved-scenario-actions">
-                    <button
-                      type="button"
-                      className="secondary-button"
-                      onClick={() => handleLoadSavedScenario(scenario)}
-                    >
-                      Load Scenario
-                    </button>
-                    <button
-                      type="button"
-                      className="secondary-button"
-                      onClick={() => handleCompareSavedScenario(scenario)}
-                      disabled={comparisonLoading && comparisonScenarioId === scenario.id}
-                    >
-                      {comparisonLoading && comparisonScenarioId === scenario.id
-                        ? "Comparing..."
-                        : comparisonScenarioId === scenario.id
-                        ? "Refresh Compare"
-                        : "Compare"}
-                    </button>
-                    <button
-                      type="button"
-                      className="delete-button"
-                      onClick={() => handleDeleteSavedScenario(scenario.id)}
-                      disabled={deletingScenarioId === scenario.id}
-                    >
-                      {deletingScenarioId === scenario.id ? "Deleting..." : "Delete"}
-                    </button>
-                  </div>
+            <>
+              <div className="summary-grid">
+                <div className="summary-card balance-card">
+                  <span className="card-label">Saved Plans</span>
+                  <p>{savedScenarioPortfolioSummary.total}</p>
                 </div>
-              ))}
-            </div>
+                <div className="summary-card income-card">
+                  <span className="card-label">Healthy</span>
+                  <p>{savedScenarioPortfolioSummary.healthyCount}</p>
+                </div>
+                <div className="summary-card expense-card">
+                  <span className="card-label">Needs Attention</span>
+                  <p>{savedScenarioPortfolioSummary.attentionCount}</p>
+                </div>
+                <div className="summary-card top-card">
+                  <span className="card-label">Best Finish</span>
+                  <p>
+                    {savedScenarioPortfolioSummary.strongestScenario
+                      ? formatScenarioCurrency(
+                          savedScenarioPortfolioSummary.strongestScenario.projected_end_balance
+                        )
+                      : "$0.00"}
+                  </p>
+                </div>
+              </div>
+
+              <div className="import-preview-filters simulator-saved-filters">
+                {SAVED_SCENARIO_FILTER_OPTIONS.map((option) => (
+                  <button
+                    key={`saved-filter-${option.value}`}
+                    type="button"
+                    className={`import-filter-chip${
+                      savedScenarioFilter === option.value ? " import-filter-chip-active" : ""
+                    }`}
+                    onClick={() => setSavedScenarioFilter(option.value)}
+                  >
+                    {option.label} ({filterCountByMode[option.value] || 0})
+                  </button>
+                ))}
+              </div>
+
+              <div className="budget-section-actions simulator-saved-quick-actions">
+                {savedScenarioPortfolioSummary.strongestScenario && (
+                  <button
+                    type="button"
+                    className="secondary-button"
+                    onClick={() => handleOpenSavedScenario(savedScenarioPortfolioSummary.strongestScenario)}
+                  >
+                    Open Strongest
+                  </button>
+                )}
+                {savedScenarioPortfolioSummary.strongestScenario &&
+                  savedScenarioPortfolioSummary.safestScenario &&
+                  savedScenarioPortfolioSummary.strongestScenario.id !==
+                    savedScenarioPortfolioSummary.safestScenario.id && (
+                    <button
+                      type="button"
+                      className="secondary-button"
+                      onClick={() =>
+                        handleCompareSavedScenarioPair(
+                          savedScenarioPortfolioSummary.strongestScenario,
+                          savedScenarioPortfolioSummary.safestScenario
+                        )
+                      }
+                    >
+                      Compare Strongest vs Safest
+                    </button>
+                  )}
+                {savedScenarioPortfolioSummary.goalLeader && (
+                  <button
+                    type="button"
+                    className="secondary-button"
+                    onClick={() => handleOpenSavedScenario(savedScenarioPortfolioSummary.goalLeader)}
+                  >
+                    Open Goal Leader
+                  </button>
+                )}
+                {hasSavedScenarioControlOverrides && (
+                  <button
+                    type="button"
+                    className="clear-filter-button"
+                    onClick={handleResetSavedScenarioControls}
+                  >
+                    Reset Saved Plan View
+                  </button>
+                )}
+              </div>
+
+              {displayedSavedScenarios.length === 0 ? (
+                <div className="empty-state">
+                  <p>No saved scenarios match that search or filter yet.</p>
+                </div>
+              ) : (
+                <>
+                  {savedScenarioHighlights.length > 0 && (
+                    <div className="simulator-saved-highlight-grid">
+                      {savedScenarioHighlights.map((highlight) => (
+                        <div
+                          key={`saved-highlight-${highlight.key}`}
+                          className="budget-card simulator-saved-highlight-card"
+                        >
+                          <div className="simulator-saved-highlight-top">
+                            <div>
+                              <span className="card-label">{highlight.title}</span>
+                              <h3>{highlight.scenario.name}</h3>
+                            </div>
+                            <strong>{highlight.value}</strong>
+                          </div>
+                          <p>{highlight.description}</p>
+                          <p className="budget-inline-note">
+                            {buildSavedScenarioSummary(highlight.scenario)}
+                          </p>
+                          <div className="simulator-saved-scenario-actions">
+                            <button
+                              type="button"
+                              className="secondary-button"
+                              onClick={() => handleLoadSavedScenario(highlight.scenario)}
+                            >
+                              Load Scenario
+                            </button>
+                            <button
+                              type="button"
+                              className="secondary-button"
+                              onClick={() => handleCompareSavedScenario(highlight.scenario)}
+                            >
+                              Compare
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  <div className="budget-list">
+                    {displayedSavedScenarios.map((scenario) => (
+                      <div
+                        key={`saved-scenario-${scenario.id}`}
+                        className={`budget-card simulator-saved-scenario-card${
+                          activeSavedScenarioId === scenario.id ? " simulator-saved-scenario-active" : ""
+                        }${
+                          comparisonScenarioId === scenario.id ? " simulator-saved-scenario-compared" : ""
+                        }`}
+                      >
+                        <div className="simulator-saved-scenario-top">
+                          <div>
+                            <h3>{scenario.name}</h3>
+                            <p>{buildSavedScenarioSummary(scenario)}</p>
+                          </div>
+                          <div className="simulator-saved-scenario-badges">
+                            {activeSavedScenarioId === scenario.id && (
+                              <span className="budget-status budget-status-on-track">Loaded</span>
+                            )}
+                            {comparisonScenarioId === scenario.id && (
+                              <span className="budget-status budget-status-risk">Comparing</span>
+                            )}
+                          </div>
+                        </div>
+
+                        {scenario.event_amount != null && (
+                          <p className="budget-inline-note">
+                            Event: {scenario.event_label || "One-time event"} in month{" "}
+                            {scenario.event_month_offset || 1} at{" "}
+                            {formatSignedScenarioAmount(scenario.event_amount)}
+                          </p>
+                        )}
+                        {(scenario.projected_end_balance != null ||
+                          scenario.monthly_net_change != null ||
+                          scenario.risk_level ||
+                          scenario.lowest_balance != null ||
+                          scenario.goal_gap_amount != null) && (
+                          <div className="simulator-saved-scenario-metrics">
+                            {scenario.projected_end_balance != null && (
+                              <div className="simulator-saved-scenario-metric">
+                                <span>Projected end</span>
+                                <strong>{formatScenarioCurrency(scenario.projected_end_balance)}</strong>
+                              </div>
+                            )}
+                            {scenario.monthly_net_change != null && (
+                              <div className="simulator-saved-scenario-metric">
+                                <span>Monthly net</span>
+                                <strong>{formatSignedScenarioAmount(scenario.monthly_net_change)}</strong>
+                              </div>
+                            )}
+                            {scenario.risk_level && (
+                              <div className="simulator-saved-scenario-metric">
+                                <span>Risk</span>
+                                <strong>{getScenarioRiskLabel(scenario.risk_level)}</strong>
+                              </div>
+                            )}
+                            {scenario.target_balance != null && scenario.goal_gap_amount != null ? (
+                              <div className="simulator-saved-scenario-metric">
+                                <span>{Number(scenario.goal_gap_amount) <= 0 ? "Target" : "Goal gap"}</span>
+                                <strong>
+                                  {Number(scenario.goal_gap_amount) <= 0
+                                    ? "On track"
+                                    : formatScenarioCurrency(scenario.goal_gap_amount)}
+                                </strong>
+                              </div>
+                            ) : scenario.lowest_balance != null ? (
+                              <div className="simulator-saved-scenario-metric">
+                                <span>Balance floor</span>
+                                <strong>{formatScenarioCurrency(scenario.lowest_balance)}</strong>
+                              </div>
+                            ) : null}
+                          </div>
+                        )}
+                        <p className="budget-inline-note">
+                          Saved {new Date(scenario.created_at).toLocaleDateString()}
+                        </p>
+                        <div className="simulator-saved-scenario-actions">
+                          <button
+                            type="button"
+                            className="secondary-button"
+                            onClick={() => handleLoadSavedScenario(scenario)}
+                          >
+                            Load Scenario
+                          </button>
+                          <button
+                            type="button"
+                            className="secondary-button"
+                            onClick={() => handleCompareSavedScenario(scenario)}
+                            disabled={comparisonLoading && comparisonScenarioId === scenario.id}
+                          >
+                            {comparisonLoading && comparisonScenarioId === scenario.id
+                              ? "Comparing..."
+                              : comparisonScenarioId === scenario.id
+                              ? "Refresh Compare"
+                              : "Compare"}
+                          </button>
+                          <button
+                            type="button"
+                            className="delete-button"
+                            onClick={() => handleDeleteSavedScenario(scenario.id)}
+                            disabled={deletingScenarioId === scenario.id}
+                          >
+                            {deletingScenarioId === scenario.id ? "Deleting..." : "Delete"}
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
+            </>
           )}
         </div>
 
