@@ -301,6 +301,30 @@ class FutureSimulationResponse(BaseModel):
     reduction_plan: list[FutureSimulationReductionItem] = Field(default_factory=list)
 
 
+class FutureSimulationRecommendationItem(BaseModel):
+    key: str
+    label: str
+    description: str
+    reason: str
+    source: str
+    months: int
+    income_adjustment: float = 0.0
+    expense_adjustment: float = 0.0
+    target_balance: float | None = None
+    event_month_offset: int | None = None
+    event_amount: float | None = None
+    event_label: str | None = None
+    projected_end_balance: float
+    scenario_impact_amount: float
+    monthly_net_change: float
+    risk_level: str
+
+
+class FutureSimulationRecommendationsResponse(BaseModel):
+    scope_label: str = "All accounts combined"
+    items: list[FutureSimulationRecommendationItem] = Field(default_factory=list)
+
+
 class TransactionBase(BaseModel):
     amount: float
     category: str = Field(min_length=1, max_length=100)
@@ -427,6 +451,27 @@ class CategoryTrendsResponse(BaseModel):
     summary: list[str]
 
 
+class RecurringExpenseItem(BaseModel):
+    description: str
+    category: str
+    occurrences: int
+    cadence: str
+    average_amount: float
+    latest_amount: float
+    latest_date: date
+    average_interval_days: int | None = None
+    next_expected_date: date | None = None
+    annualized_amount: float
+    latest_change_percent: float | None = None
+    review_priority: str = "low"
+    review_reason: str | None = None
+    confidence: float
+
+
+class RecurringExpensesResponse(BaseModel):
+    items: list[RecurringExpenseItem]
+
+
 class AssistantMessage(BaseModel):
     role: str
     content: str
@@ -439,6 +484,7 @@ class AssistantAction(BaseModel):
     saved_scenario_id: int | None = None
     compare_saved_scenario_id: int | None = None
     category: str | None = None
+    description: str | None = None
     transaction_type: str | None = None
     month: str | None = None
     months_ahead: int | None = None

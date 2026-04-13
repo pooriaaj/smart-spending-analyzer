@@ -923,6 +923,91 @@ textarea:focus,
   color: #9a3412;
 }
 
+.recurring-charges-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 14px;
+}
+
+.recurring-charge-card {
+  border-radius: 18px;
+  padding: 18px;
+  background: rgba(248, 250, 252, 0.9);
+  border: 1px solid rgba(15, 23, 42, 0.08);
+}
+
+.recurring-charge-top {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.recurring-charge-badges {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.recurring-charge-top h3 {
+  margin: 0;
+  font-size: 20px;
+}
+
+.recurring-charge-top p {
+  margin: 8px 0 0 0;
+  color: var(--text-soft);
+}
+
+.recurring-charge-metrics {
+  margin-top: 16px;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.recurring-charge-metrics span {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--text-faint);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.recurring-charge-metrics strong {
+  color: var(--text-main);
+  font-size: 18px;
+}
+
+.recurring-charge-reason {
+  margin: 12px 0 0 0;
+  color: var(--text-main);
+  line-height: 1.6;
+}
+
+.recurring-charge-actions {
+  margin-top: 14px;
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.recurring-charge-action {
+  width: auto;
+  min-width: 0;
+}
+
+.recurring-filter-actions {
+  margin-top: 16px;
+}
+
+.recurring-filter-note {
+  margin-top: 12px;
+}
+
 .bulk-suggestion-meta {
   margin: 8px 0 0 0;
   color: var(--text-faint);
@@ -1532,6 +1617,73 @@ textarea:focus,
   align-items: end;
 }
 
+.simulator-recommendations-header {
+  margin-top: 10px;
+}
+
+.simulator-recommendation-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 12px;
+  margin-bottom: 18px;
+}
+
+.simulator-recommendation-card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 18px;
+  border-radius: 18px;
+  background: rgba(248, 250, 252, 0.92);
+  border: 1px solid rgba(15, 23, 42, 0.08);
+}
+
+.simulator-recommendation-top {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  align-items: flex-start;
+}
+
+.simulator-recommendation-top h3 {
+  margin: 0;
+  font-size: 20px;
+}
+
+.simulator-recommendation-top p {
+  margin: 8px 0 0 0;
+  color: var(--text-soft);
+  line-height: 1.6;
+}
+
+.simulator-recommendation-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.simulator-recommendation-metrics div {
+  padding: 12px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.78);
+  border: 1px solid rgba(15, 23, 42, 0.06);
+}
+
+.simulator-recommendation-metrics span {
+  display: block;
+  margin-bottom: 8px;
+  color: var(--text-faint);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.simulator-recommendation-metrics strong {
+  font-size: 18px;
+  color: var(--text-main);
+}
+
 .simulator-preset-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
@@ -1566,6 +1718,96 @@ textarea:focus,
 .simulator-preset-button:hover {
   transform: translateY(-1px);
   box-shadow: var(--shadow-sm);
+}
+
+.simulator-recurring-header {
+  margin-top: 8px;
+}
+
+.simulator-recurring-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+  margin-bottom: 18px;
+}
+
+.simulator-recurring-card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+  border-radius: 18px;
+  background: rgba(248, 250, 252, 0.88);
+  border: 1px solid rgba(15, 23, 42, 0.08);
+}
+
+.simulator-recurring-top {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  align-items: flex-start;
+}
+
+.simulator-recurring-top h3 {
+  margin: 0;
+  font-size: 19px;
+}
+
+.simulator-recurring-top p,
+.simulator-recurring-card p {
+  margin: 8px 0 0 0;
+  color: var(--text-soft);
+  line-height: 1.6;
+}
+
+.simulator-recurring-metrics {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.simulator-recurring-metrics div {
+  padding: 12px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid rgba(15, 23, 42, 0.06);
+}
+
+.simulator-recurring-metrics span {
+  display: block;
+  margin-bottom: 8px;
+  color: var(--text-faint);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.simulator-recurring-metrics strong {
+  font-size: 20px;
+  color: var(--text-main);
+}
+
+.simulator-recurring-bundle {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: center;
+  padding: 16px 18px;
+  margin-bottom: 18px;
+  border-radius: 18px;
+  background: rgba(59, 130, 246, 0.08);
+  border: 1px solid rgba(59, 130, 246, 0.14);
+}
+
+.simulator-recurring-bundle h3 {
+  margin: 0 0 6px 0;
+}
+
+.simulator-recurring-bundle p {
+  margin: 0;
+  color: var(--text-soft);
+  line-height: 1.6;
 }
 
 .simulator-saved-scenario-card {
@@ -1891,6 +2133,11 @@ textarea:focus,
   border-color: rgba(148, 163, 184, 0.14);
 }
 
+:root[data-theme="dark"] .simulator-recurring-card,
+:root[data-theme="dark"] .simulator-recurring-metrics div,
+:root[data-theme="dark"] .simulator-recurring-bundle,
+:root[data-theme="dark"] .simulator-recommendation-card,
+:root[data-theme="dark"] .simulator-recommendation-metrics div,
 :root[data-theme="dark"] .simulator-checkpoint-card {
   background: rgba(15, 23, 42, 0.82);
   border-color: rgba(148, 163, 184, 0.14);

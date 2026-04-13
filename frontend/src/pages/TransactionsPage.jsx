@@ -4,13 +4,31 @@ import api, { handleApiAuthError } from "../services/api";
 import AccountSelector from "../components/AccountSelector";
 import { ALL_ACCOUNTS_VALUE } from "../services/accountStorage";
 
+const normalizeTextForMatching = (value = "") =>
+  value.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+
+const normalizeRecurringDescription = (value = "") => {
+  let normalized = normalizeTextForMatching(value);
+  if (!normalized) return "";
+
+  normalized = normalized.replace(
+    /\b(?:jan|january|feb|february|mar|march|apr|april|may|jun|june|jul|july|aug|august|sep|sept|september|oct|october|nov|november|dec|december)\b/g,
+    " "
+  );
+  normalized = normalized.replace(/\b\d+\b/g, " ");
+  return normalized.replace(/\s+/g, " ").trim();
+};
+
 function TransactionsPage() {
   const [transactions, setTransactions] = useState([]);
   const [typeFilter, setTypeFilter] = useState("");
   const [monthFilter, setMonthFilter] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("");
+  const [searchFilter, setSearchFilter] = useState("");
+  const [recurringOnlyFilter, setRecurringOnlyFilter] = useState(false);
   const [selectedAccountId, setSelectedAccountId] = useState(ALL_ACCOUNTS_VALUE);
   const [loading, setLoading] = useState(true);
+  const [recurringExpenses, setRecurringExpenses] = useState([]);
 
   const [bulkSuggestions, setBulkSuggestions] = useState([]);
   const [bulkLoading, setBulkLoading] = useState(false);
@@ -48,16 +66,28 @@ function TransactionsPage() {
     setTypeFilter(searchParams.get("type") || "");
     setMonthFilter(searchParams.get("month") || "");
     setCategoryFilter(searchParams.get("category") || "");
+    setSearchFilter(searchParams.get("description") || "");
+    setRecurringOnlyFilter(searchParams.get("section") === "recurring");
   }, [searchParams]);
 
   const fetchTransactions = async () => {
     try {
-      const response = await api.get("/transactions/", {
-        params: {
-          account_id: normalizedAccountId,
-        },
-      });
-      setTransactions(response.data);
+      const [transactionsResponse, recurringResponse] = await Promise.all([
+        api.get("/transactions/", {
+          params: {
+            account_id: normalizedAccountId,
+          },
+        }),
+        api
+          .get("/analytics/recurring-expenses", {
+            params: {
+              account_id: normalizedAccountId,
+            },
+          })
+          .catch(() => null),
+      ]);
+      setTransactions(transactionsResponse.data);
+      setRecurringExpenses(recurringResponse?.data?.items || []);
     } catch (error) {
       handleApiAuthError(error, navigate);
     } finally {
@@ -80,19 +110,70 @@ function TransactionsPage() {
     return Array.from(new Set(transactions.map((transaction) => transaction.category))).sort();
   }, [transactions]);
 
+  const recurringDescriptionKeys = useMemo(
+    () =>
+      new Set(
+        recurringExpenses
+          .map((item) => normalizeRecurringDescription(item.description))
+          .filter(Boolean)
+      ),
+    [recurringExpenses]
+  );
+
   const filteredTransactions = useMemo(() => {
     return transactions
       .filter((transaction) => {
         const transactionMonth = new Date(transaction.date).toISOString().slice(0, 7);
+        const normalizedDescription = normalizeTextForMatching(transaction.description);
+        const recurringDescription = normalizeRecurringDescription(transaction.description);
+        const normalizedSearch = normalizeTextForMatching(searchFilter);
+        const recurringSearch = normalizeRecurringDescription(searchFilter);
 
         if (typeFilter && transaction.type !== typeFilter) return false;
         if (monthFilter && transactionMonth !== monthFilter) return false;
         if (categoryFilter && transaction.category !== categoryFilter) return false;
+        if (
+          searchFilter &&
+          !normalizedDescription.includes(normalizedSearch) &&
+          recurringDescription !== recurringSearch
+        ) {
+          return false;
+        }
+        if (recurringOnlyFilter && !recurringDescriptionKeys.has(recurringDescription)) return false;
 
         return true;
       })
       .sort((a, b) => new Date(b.date) - new Date(a.date));
-  }, [transactions, typeFilter, monthFilter, categoryFilter]);
+  }, [
+    transactions,
+    typeFilter,
+    monthFilter,
+    categoryFilter,
+    searchFilter,
+    recurringOnlyFilter,
+    recurringDescriptionKeys,
+  ]);
+
+  const applyRecurringFilter = (item) => {
+    setSearchFilter(item.description || "");
+    setRecurringOnlyFilter(true);
+    setTypeFilter("expense");
+    setCategoryFilter(item.category || "");
+  };
+
+  const clearFilters = () => {
+    setTypeFilter("");
+    setMonthFilter("");
+    setCategoryFilter("");
+    setSearchFilter("");
+    setRecurringOnlyFilter(false);
+  };
+
+  const getRecurringPriorityClass = (priority) => {
+    if (priority === "high") return "budget-status budget-status-over";
+    if (priority === "medium") return "budget-status budget-status-risk";
+    return "budget-status budget-status-on-track";
+  };
 
   const handleDelete = async (transactionId) => {
     try {
@@ -261,6 +342,86 @@ function TransactionsPage() {
 
         <div className="filter-card">
           <div className="section-header">
+            <h2>Likely Recurring Charges</h2>
+            <p>Monthly subscriptions and repeat bills detected from your transaction history in this scope.</p>
+          </div>
+
+          {recurringExpenses.length === 0 ? (
+            <div className="empty-state">
+              <p>No strong recurring charge patterns were detected yet.</p>
+            </div>
+          ) : (
+            <div className="recurring-charges-grid">
+              {recurringExpenses.map((item) => (
+                <div key={`${item.description}-${item.latest_date}`} className="recurring-charge-card">
+                  <div className="recurring-charge-top">
+                    <div>
+                      <h3>{item.description}</h3>
+                      <p>{item.category}</p>
+                    </div>
+                    <div className="recurring-charge-badges">
+                      <span className={getRecurringPriorityClass(item.review_priority)}>
+                        {item.review_priority === "high"
+                          ? "Review first"
+                          : item.review_priority === "medium"
+                            ? "Worth reviewing"
+                            : "Stable"}
+                      </span>
+                      <span className="budget-status budget-status-risk">
+                        {Math.round(Number(item.confidence || 0) * 100)}% match
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="recurring-charge-metrics">
+                    <div>
+                      <span>Average</span>
+                      <strong>${Number(item.average_amount || 0).toFixed(2)}</strong>
+                    </div>
+                    <div>
+                      <span>Annualized</span>
+                      <strong>${Number(item.annualized_amount || 0).toFixed(2)}</strong>
+                    </div>
+                    <div>
+                      <span>Occurrences</span>
+                      <strong>{item.occurrences}</strong>
+                    </div>
+                  </div>
+
+                  <p className="budget-inline-note">
+                    Latest charge: ${Number(item.latest_amount || 0).toFixed(2)} on {item.latest_date}
+                  </p>
+                  {item.next_expected_date && (
+                    <p className="budget-inline-note">
+                      Next expected around {item.next_expected_date}
+                    </p>
+                  )}
+                  {item.latest_change_percent != null && (
+                    <p className="budget-inline-note">
+                      Latest change: {item.latest_change_percent > 0 ? "+" : ""}
+                      {Number(item.latest_change_percent).toFixed(1)}% vs usual amount
+                    </p>
+                  )}
+                  {item.review_reason && (
+                    <p className="recurring-charge-reason">{item.review_reason}</p>
+                  )}
+                  <div className="recurring-charge-actions">
+                    <button
+                      type="button"
+                      className="secondary-button recurring-charge-action"
+                      onClick={() => applyRecurringFilter(item)}
+                    >
+                      Show matching transactions
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div className="filter-card">
+          <div className="section-header">
             <h2>Smart Categorization</h2>
             <p>Analyze uncategorized rows and clean up legacy category labels so future suggestions stay consistent.</p>
           </div>
@@ -376,7 +537,41 @@ function TransactionsPage() {
                 ))}
               </select>
             </div>
+
+            <div>
+              <label>Description</label>
+              <input
+                type="text"
+                value={searchFilter}
+                onChange={(e) => setSearchFilter(e.target.value)}
+                placeholder="Search merchant or note"
+              />
+            </div>
           </div>
+
+          <div className="smart-actions-row recurring-filter-actions">
+            <button
+              type="button"
+              className={recurringOnlyFilter ? "smart-action-button" : "secondary-button"}
+              onClick={() => setRecurringOnlyFilter((current) => !current)}
+            >
+              {recurringOnlyFilter ? "Showing Recurring Matches" : "Only Recurring Matches"}
+            </button>
+
+            {(typeFilter || monthFilter || categoryFilter || searchFilter || recurringOnlyFilter) && (
+              <button type="button" className="secondary-button" onClick={clearFilters}>
+                Clear Filters
+              </button>
+            )}
+          </div>
+
+          {(searchFilter || recurringOnlyFilter) && (
+            <p className="budget-inline-note recurring-filter-note">
+              {recurringOnlyFilter
+                ? `Showing likely recurring charges${searchFilter ? ` matching "${searchFilter}".` : "."}`
+                : `Filtering descriptions for "${searchFilter}".`}
+            </p>
+          )}
         </div>
 
         <div className="dashboard-card">

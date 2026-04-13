@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, timedelta
 import re
 from typing import Any
 
@@ -1286,6 +1286,23 @@ def build_saved_scenario_projection_snapshots(
         owner_id=user_id,
         account_id=account_id,
     )
+    recurring_expenses = get_recurring_expense_patterns(
+        db=db,
+        user_id=user_id,
+        account_id=account_id,
+        limit=3,
+    )
+    simulation_recommendations = build_future_simulation_recommendations(
+        db=db,
+        user_id=user_id,
+        account_id=account_id,
+        months=6,
+        scope_label=(
+            "All accounts combined"
+            if account_id is None
+            else f"Account {account_id}"
+        ),
+    )
     snapshots: list[dict[str, Any]] = []
 
     for scenario in saved_scenarios:
@@ -1571,6 +1588,357 @@ def format_category_label(value: str | None) -> str:
 
 def normalize_text_for_matching(value: str) -> str:
     return re.sub(r"[^a-z0-9]+", " ", (value or "").lower()).strip()
+
+
+def normalize_recurring_description(value: str) -> str:
+    normalized = normalize_text_for_matching(value)
+    if not normalized:
+        return ""
+
+    normalized = re.sub(
+        r"\b(?:jan|january|feb|february|mar|march|apr|april|may|jun|june|jul|july|aug|august|sep|sept|september|oct|october|nov|november|dec|december)\b",
+        " ",
+        normalized,
+    )
+    normalized = re.sub(r"\b\d+\b", " ", normalized)
+    return " ".join(normalized.split())
+
+
+def get_recurring_review_priority(
+    *,
+    annualized_amount: float,
+    latest_change_percent: float | None,
+    occurrences: int,
+    confidence: float,
+) -> tuple[str, str]:
+    if latest_change_percent is not None and latest_change_percent >= 8:
+        return (
+            "high",
+            f"Latest charge came in about {latest_change_percent:.0f}% above its usual amount.",
+        )
+
+    if annualized_amount >= 500:
+        return (
+            "high",
+            "This is one of your larger recurring costs over a full year.",
+        )
+
+    if annualized_amount >= 250 or (occurrences >= 4 and confidence >= 0.9):
+        return (
+            "medium",
+            "This looks consistent enough to review as part of your regular monthly costs.",
+        )
+
+    return (
+        "low",
+        "This looks like a recurring charge, but it is a smaller cost right now.",
+    )
+
+
+def get_recurring_expense_patterns(
+    db: Session,
+    user_id: int,
+    account_id: int | None = None,
+    *,
+    limit: int = 5,
+) -> list[dict[str, Any]]:
+    transactions = (
+        build_filtered_query(
+            db=db,
+            user_id=user_id,
+            transaction_type="expense",
+            account_id=account_id,
+        )
+        .order_by(Transaction.date.asc(), Transaction.id.asc())
+        .all()
+    )
+
+    groups: dict[tuple[str, str], list[Transaction]] = {}
+    for transaction in transactions:
+        normalized_description = normalize_recurring_description(transaction.description)
+        if len(normalized_description) < 3:
+            continue
+        groups.setdefault((normalized_description, transaction.category), []).append(transaction)
+
+    recurring_items: list[dict[str, Any]] = []
+    for (_, category), items in groups.items():
+        if len(items) < 2:
+            continue
+
+        unique_months = {item.date.strftime("%Y-%m") for item in items}
+        if len(unique_months) < 2:
+            continue
+
+        intervals = [
+            (items[index].date - items[index - 1].date).days
+            for index in range(1, len(items))
+        ]
+        if not intervals:
+            continue
+
+        average_interval = sum(intervals) / len(intervals)
+        monthly_like = 20 <= average_interval <= 40
+        if not monthly_like:
+            continue
+
+        amounts = [float(item.amount) for item in items]
+        average_amount = sum(amounts) / len(amounts)
+        amount_variation = max(amounts) - min(amounts)
+        variance_ratio = amount_variation / average_amount if average_amount > 0 else 0.0
+        if variance_ratio > 0.25 and amount_variation > 5:
+            continue
+
+        latest_item = items[-1]
+        latest_amount = float(latest_item.amount)
+        day_of_month_range = max(item.date.day for item in items) - min(item.date.day for item in items)
+        average_interval_days = max(int(round(average_interval)), 1)
+        next_expected_date = latest_item.date + timedelta(days=average_interval_days)
+        prior_amounts = amounts[:-1] or amounts
+        prior_average_amount = (
+            sum(prior_amounts) / len(prior_amounts)
+            if prior_amounts
+            else average_amount
+        )
+        latest_change_percent = None
+        if prior_average_amount > 0:
+            latest_change_percent = ((latest_amount - prior_average_amount) / prior_average_amount) * 100
+        confidence = min(
+            0.99,
+            0.6
+            + 0.06 * min(len(items), 4)
+            + (0.1 if variance_ratio <= 0.1 else 0.0)
+            + (0.1 if day_of_month_range <= 3 else 0.0),
+        )
+        annualized_amount = round(average_amount * 12, 2)
+        review_priority, review_reason = get_recurring_review_priority(
+            annualized_amount=annualized_amount,
+            latest_change_percent=latest_change_percent,
+            occurrences=len(items),
+            confidence=confidence,
+        )
+
+        recurring_items.append(
+            {
+                "description": latest_item.description,
+                "category": category,
+                "occurrences": len(items),
+                "cadence": "monthly",
+                "average_amount": round(average_amount, 2),
+                "latest_amount": round(latest_amount, 2),
+                "latest_date": latest_item.date,
+                "average_interval_days": average_interval_days,
+                "next_expected_date": next_expected_date,
+                "annualized_amount": annualized_amount,
+                "latest_change_percent": round(latest_change_percent, 1)
+                if latest_change_percent is not None
+                else None,
+                "review_priority": review_priority,
+                "review_reason": review_reason,
+                "confidence": round(confidence, 2),
+            }
+        )
+
+    priority_rank = {"high": 2, "medium": 1, "low": 0}
+    recurring_items.sort(
+        key=lambda item: (
+            priority_rank.get(str(item["review_priority"]), 0),
+            float(item["annualized_amount"]),
+            float(item["average_amount"]),
+            float(item["confidence"]),
+            item["description"].lower(),
+        ),
+        reverse=True,
+    )
+    return recurring_items[:limit]
+
+
+def build_recurring_savings_opportunities(
+    recurring_expenses: list[dict[str, Any]],
+    *,
+    limit: int = 3,
+) -> list[dict[str, Any]]:
+    opportunities = [
+        item
+        for item in recurring_expenses
+        if (item.get("average_amount") or 0.0) > 0
+    ]
+    priority_rank = {"high": 2, "medium": 1, "low": 0}
+    opportunities.sort(
+        key=lambda item: (
+            priority_rank.get(str(item.get("review_priority")), 0),
+            float(item.get("annualized_amount") or 0.0),
+            float(item.get("confidence") or 0.0),
+        ),
+        reverse=True,
+    )
+    return opportunities[:limit]
+
+
+def build_future_simulation_recommendations(
+    db: Session,
+    user_id: int,
+    account_id: int | None = None,
+    *,
+    months: int = 6,
+    scope_label: str = "All accounts combined",
+) -> dict[str, Any]:
+    sanitized_months = max(1, min(int(months or 6), 12))
+    recurring_expenses = get_recurring_expense_patterns(
+        db=db,
+        user_id=user_id,
+        account_id=account_id,
+        limit=5,
+    )
+    recurring_opportunities = build_recurring_savings_opportunities(recurring_expenses, limit=3)
+    baseline_simulation = build_future_balance_simulation(
+        db=db,
+        user_id=user_id,
+        account_id=account_id,
+        months=sanitized_months,
+        scope_label=scope_label,
+    )
+    budget_snapshot = get_budget_progress_snapshot(
+        db,
+        user_id,
+        month=get_default_budget_month(),
+        account_id=account_id,
+    )
+    projected_budget_gap = round(
+        sum(
+            max(float(item.get("projected_spent_amount") or 0.0) - float(item.get("amount") or 0.0), 0.0)
+            for item in budget_snapshot["items"]
+        ),
+        2,
+    )
+
+    recommendations: list[dict[str, Any]] = []
+    seen_keys: set[str] = set()
+
+    def add_recommendation(
+        *,
+        key: str,
+        label: str,
+        description: str,
+        reason: str,
+        source: str,
+        income_adjustment: float = 0.0,
+        expense_adjustment: float = 0.0,
+        target_balance: float | None = None,
+        event_month_offset: int | None = None,
+        event_amount: float = 0.0,
+        event_label: str | None = None,
+    ) -> None:
+        if key in seen_keys:
+            return
+
+        simulation = build_future_balance_simulation(
+            db=db,
+            user_id=user_id,
+            account_id=account_id,
+            months=sanitized_months,
+            income_adjustment=income_adjustment,
+            expense_adjustment=expense_adjustment,
+            target_balance=target_balance,
+            event_month_offset=event_month_offset,
+            event_amount=event_amount,
+            event_label=event_label,
+            scope_label=scope_label,
+        )
+        recommendations.append(
+            {
+                "key": key,
+                "label": label,
+                "description": description,
+                "reason": reason,
+                "source": source,
+                "months": sanitized_months,
+                "income_adjustment": round(float(income_adjustment or 0.0), 2),
+                "expense_adjustment": round(float(expense_adjustment or 0.0), 2),
+                "target_balance": round(float(target_balance), 2) if target_balance else None,
+                "event_month_offset": event_month_offset,
+                "event_amount": round(float(event_amount or 0.0), 2) if event_amount else None,
+                "event_label": event_label,
+                "projected_end_balance": simulation["projected_end_balance"],
+                "scenario_impact_amount": simulation["scenario_impact_amount"],
+                "monthly_net_change": simulation["monthly_net_change"],
+                "risk_level": simulation["risk_level"],
+            }
+        )
+        seen_keys.add(key)
+
+    if baseline_simulation.get("reduction_plan_target"):
+        required_cut = round(float(baseline_simulation["reduction_plan_target"]), 2)
+        add_recommendation(
+            key="stabilize-cash-flow",
+            label="Stabilize monthly cash flow",
+            description=(
+                f"Model a {format_currency(required_cut)} monthly expense cut to steady the current balance path."
+            ),
+            reason=(
+                baseline_simulation.get("goal_note")
+                or "This is the monthly improvement needed to stop the current projected slide."
+            ),
+            source="cash_flow",
+            expense_adjustment=-required_cut,
+        )
+
+    if recurring_opportunities:
+        top_item = recurring_opportunities[0]
+        add_recommendation(
+            key=f"cancel-{normalize_text_for_matching(top_item['description']).replace(' ', '-')}",
+            label=f"Cancel {top_item['description']}",
+            description=(
+                f"Free about {format_currency(top_item['average_amount'])} per month by cutting this recurring charge."
+            ),
+            reason=top_item["review_reason"],
+            source="recurring",
+            expense_adjustment=-float(top_item["average_amount"]),
+        )
+
+        if len(recurring_opportunities) > 1:
+            bundle_amount = round(
+                sum(float(item["average_amount"]) for item in recurring_opportunities[:2]),
+                2,
+            )
+            bundle_names = ", ".join(item["description"] for item in recurring_opportunities[:2])
+            add_recommendation(
+                key="bundle-top-recurring-cuts",
+                label="Trim top recurring costs",
+                description=(
+                    f"Model your two strongest recurring review candidates as a {format_currency(bundle_amount)} monthly cut."
+                ),
+                reason=f"Bundles {bundle_names} into one cleaner savings scenario.",
+                source="recurring_bundle",
+                expense_adjustment=-bundle_amount,
+            )
+
+    if projected_budget_gap > 0:
+        add_recommendation(
+            key="reset-budget-pressure",
+            label="Reset budget pressure",
+            description=(
+                f"Cut about {format_currency(projected_budget_gap)} per month to absorb current budget overages."
+            ),
+            reason=(
+                f"Current budget projections are running about {format_currency(projected_budget_gap)} over plan."
+            ),
+            source="budget_pressure",
+            expense_adjustment=-projected_budget_gap,
+        )
+
+    recommendations.sort(
+        key=lambda item: (
+            {"cash_flow": 3, "recurring": 2, "recurring_bundle": 1, "budget_pressure": 0}.get(item["source"], 0),
+            float(item["scenario_impact_amount"]),
+            float(item["projected_end_balance"]),
+        ),
+        reverse=True,
+    )
+
+    return {
+        "scope_label": scope_label,
+        "items": recommendations[:4],
+    }
 
 
 def get_distinct_categories(
@@ -1948,6 +2316,36 @@ def classify_question(question: str, context_text: str) -> str:
     if any(
         phrase in text
         for phrase in [
+            "savings scenario",
+            "saving scenario",
+            "simulator plan",
+            "scenario should i try",
+            "which plan should i try",
+            "best plan to try",
+            "best savings plan",
+            "best scenario to try",
+        ]
+    ):
+        return "savings_scenario"
+
+    if any(
+        phrase in text
+        for phrase in [
+            "subscription",
+            "subscriptions",
+            "recurring charge",
+            "recurring charges",
+            "recurring expense",
+            "recurring expenses",
+            "monthly charges",
+            "memberships",
+        ]
+    ):
+        return "recurring_expenses"
+
+    if any(
+        phrase in text
+        for phrase in [
             "compare accounts",
             "which account",
             "account is driving",
@@ -2315,6 +2713,22 @@ def generate_dynamic_followups(
             "Which budget is closest to the limit?",
             "Which budget is projected to go over?",
             "How can I get back on track?",
+        ]
+
+    if intent == "recurring_expenses":
+        return [
+            "Which recurring charge costs me the most each year?",
+            "Which subscriptions should I review first?",
+            "Did any recurring charge increase lately?",
+            "What happens if I cancel my biggest subscription?",
+            "Open my transactions",
+        ]
+
+    if intent == "savings_scenario":
+        return [
+            "Which savings scenario should I try first?",
+            "Open the strongest simulator plan",
+            "What happens if I cancel my biggest subscription?",
         ]
 
     if mode == "strict":
@@ -2696,6 +3110,27 @@ def generate_assistant_response(
         if intent in {"saved_scenario_list", "saved_scenario_compare"} or likely_saved_scenario_question
         else []
     )
+    recurring_expenses = (
+        get_recurring_expense_patterns(
+            db=db,
+            user_id=user_id,
+            account_id=account_id,
+            limit=5,
+        )
+        if intent in {"recurring_expenses", "saving_advice"}
+        else []
+    )
+    simulation_recommendations = (
+        build_future_simulation_recommendations(
+            db=db,
+            user_id=user_id,
+            account_id=account_id,
+            months=6,
+            scope_label=scope_label,
+        )
+        if intent == "savings_scenario"
+        else {"items": []}
+    )
     if (
         intent not in {"saved_scenario_list", "saved_scenario_compare"}
         and saved_scenario_snapshots
@@ -2964,6 +3399,274 @@ def generate_assistant_response(
                     "page": "simulator",
                     "account_id": account_id,
                 },
+            ],
+            "scope_label": scope_label,
+        }
+
+    if intent == "savings_scenario":
+        recommendation_items = simulation_recommendations.get("items", [])
+        if not recommendation_items:
+            return {
+                "answer": (
+                    f"I do not have a strong simulator recommendation for {scope_label} yet. "
+                    "A little more recurring, budget, or monthly history would help me rank the best plan."
+                ),
+                "supporting_points": [
+                    f"Current scope: {scope_label}",
+                    "Recommended plans found: 0",
+                ],
+                "suggested_followups": [
+                    "What subscriptions or recurring charges do I have?",
+                    "Give me saving advice",
+                ],
+                "suggested_actions": [
+                    {
+                        "label": "Open simulator",
+                        "page": "simulator",
+                        "account_id": account_id,
+                    }
+                ],
+                "scope_label": scope_label,
+            }
+
+        lead_recommendation = recommendation_items[0]
+        runner_up = recommendation_items[1] if len(recommendation_items) > 1 else None
+
+        if mode == "strict":
+            answer = (
+                f"{lead_recommendation['label']} is the strongest simulator plan to try first in {scope_label}. "
+                f"It improves the projection by {format_currency(lead_recommendation['scenario_impact_amount'])}."
+            )
+        elif mode == "coach":
+            answer = (
+                f"{lead_recommendation['label']} looks like the most practical scenario to try first in {scope_label}. "
+                f"It gives you the clearest upside without overcomplicating the plan."
+            )
+        else:
+            answer = (
+                f"{lead_recommendation['label']} is the strongest simulator recommendation I see for {scope_label}. "
+                f"It projects about {format_currency(lead_recommendation['projected_end_balance'])} at the end of the window."
+            )
+
+        supporting_points = [
+            (
+                f"{item['label']}: {item['description']} "
+                f"Projected end {format_currency(item['projected_end_balance'])}, "
+                f"impact {format_currency(item['scenario_impact_amount'])}, "
+                f"risk {item['risk_level']}."
+            )
+            for item in recommendation_items[:3]
+        ]
+
+        suggested_actions = [
+            {
+                "label": f"Apply {lead_recommendation['label']}",
+                "page": "simulator",
+                "account_id": account_id,
+                "months_ahead": lead_recommendation["months"],
+                "income_adjustment": lead_recommendation["income_adjustment"],
+                "expense_adjustment": lead_recommendation["expense_adjustment"],
+                "target_balance": lead_recommendation.get("target_balance"),
+                "event_month_offset": lead_recommendation.get("event_month_offset"),
+                "event_amount": lead_recommendation.get("event_amount"),
+                "event_label": lead_recommendation.get("event_label"),
+            }
+        ]
+        if runner_up is not None:
+            suggested_actions.append(
+                {
+                    "label": f"Try {runner_up['label']}",
+                    "page": "simulator",
+                    "account_id": account_id,
+                    "months_ahead": runner_up["months"],
+                    "income_adjustment": runner_up["income_adjustment"],
+                    "expense_adjustment": runner_up["expense_adjustment"],
+                    "target_balance": runner_up.get("target_balance"),
+                    "event_month_offset": runner_up.get("event_month_offset"),
+                    "event_amount": runner_up.get("event_amount"),
+                    "event_label": runner_up.get("event_label"),
+                }
+            )
+
+        suggested_actions.append(
+            {
+                "label": "Open simulator",
+                "page": "simulator",
+                "account_id": account_id,
+            }
+        )
+
+        return {
+            "answer": answer,
+            "supporting_points": supporting_points,
+            "suggested_followups": generate_dynamic_followups(
+                intent=intent,
+                mode=mode,
+                top_category=top_category,
+                driver_category=primary_driver,
+                focus_category=focus_category,
+            ),
+            "suggested_actions": suggested_actions,
+            "scope_label": scope_label,
+        }
+
+    if intent == "recurring_expenses":
+        if not recurring_expenses:
+            return {
+                "answer": (
+                    f"I do not see any strong recurring expense patterns in {scope_label} yet. "
+                    "If you track a couple more months of subscription or bill activity, I can flag them more reliably."
+                ),
+                "supporting_points": [
+                    f"Current scope: {scope_label}",
+                    "Recurring patterns found: 0",
+                ],
+                "suggested_followups": [
+                    "Show my recent transactions",
+                    "What category is driving my spending most?",
+                ],
+                "suggested_actions": [
+                    {
+                        "label": "Open transactions",
+                        "page": "transactions",
+                    }
+                ],
+                "scope_label": scope_label,
+            }
+
+        recurring_total = round(sum(item["average_amount"] for item in recurring_expenses), 2)
+        annualized_total = round(sum(item["annualized_amount"] for item in recurring_expenses), 2)
+        savings_opportunities = build_recurring_savings_opportunities(recurring_expenses)
+        review_candidate = savings_opportunities[0]
+        increased_items = [
+            item
+            for item in recurring_expenses
+            if (item.get("latest_change_percent") or 0.0) >= 8
+        ]
+        combined_review_cut = round(
+            sum(float(item.get("average_amount") or 0.0) for item in savings_opportunities[:2]),
+            2,
+        )
+        review_words = ("review", "cancel", "cut", "first", "trim")
+        wants_review = any(word in q for word in review_words)
+        wants_savings_model = any(
+            phrase in q
+            for phrase in [
+                "cancel",
+                "cut",
+                "drop",
+                "remove",
+                "save if",
+                "what happens if",
+                "what if i cancel",
+            ]
+        )
+        wants_increase_focus = any(
+            phrase in q
+            for phrase in [
+                "increase",
+                "increased",
+                "went up",
+                "higher",
+                "price change",
+                "price increase",
+            ]
+        )
+
+        if wants_increase_focus and increased_items:
+            leading_item = increased_items[0]
+            answer = (
+                f"{leading_item['description']} is the clearest recurring charge increase in {scope_label}. "
+                f"Its latest charge landed about {leading_item['latest_change_percent']:.0f}% above its usual amount."
+            )
+        elif wants_savings_model:
+            answer = (
+                f"If you cancel {review_candidate['description']}, you would free up about "
+                f"{format_currency(review_candidate['average_amount'])} per month or "
+                f"{format_currency(review_candidate['annualized_amount'])} per year in {scope_label}. "
+                "I can open that as a simulator cut so you can see the balance impact."
+            )
+        elif wants_review:
+            answer = (
+                f"{review_candidate['description']} is the first recurring charge I would review in {scope_label}. "
+                f"{review_candidate['review_reason']}"
+            )
+        elif mode == "strict":
+            answer = (
+                f"I found {len(recurring_expenses)} likely recurring expense pattern"
+                f"{'' if len(recurring_expenses) == 1 else 's'} in {scope_label}, worth about "
+                f"{format_currency(recurring_total)} per month. {review_candidate['description']} is the first one to review."
+            )
+        elif mode == "coach":
+            answer = (
+                f"You have {len(recurring_expenses)} likely recurring charge"
+                f"{'' if len(recurring_expenses) == 1 else 's'} in {scope_label}, adding up to about "
+                f"{format_currency(recurring_total)} a month. {review_candidate['description']} looks like the first one to review."
+            )
+        else:
+            answer = (
+                f"I found {len(recurring_expenses)} likely recurring expense pattern"
+                f"{'' if len(recurring_expenses) == 1 else 's'} in {scope_label}. "
+                f"Together they add up to about {format_currency(recurring_total)} a month "
+                f"or {format_currency(annualized_total)} a year."
+            )
+
+        supporting_points = [
+            (
+                f"{item['description']}: {item['cadence']}, avg {format_currency(item['average_amount'])}, "
+                f"latest {format_currency(item['latest_amount'])} on {item['latest_date'].isoformat()}, "
+                f"about {format_currency(item['annualized_amount'])}/year. "
+                f"{item['review_reason']}"
+                f"{' Next expected around ' + item['next_expected_date'].isoformat() + '.' if item.get('next_expected_date') else ''}"
+            )
+            for item in recurring_expenses
+        ]
+
+        return {
+            "answer": answer,
+            "supporting_points": supporting_points,
+            "suggested_followups": generate_dynamic_followups(
+                intent=intent,
+                mode=mode,
+                top_category=top_category,
+                driver_category=primary_driver,
+                focus_category=focus_category,
+            ),
+            "suggested_actions": [
+                {
+                    "label": f"Review {review_candidate['description']}",
+                    "page": "transactions",
+                    "section": "recurring",
+                    "description": review_candidate["description"],
+                    "category": review_candidate["category"],
+                    "transaction_type": "expense",
+                    "account_id": account_id,
+                },
+                {
+                    "label": f"Model cancelling {review_candidate['description']}",
+                    "page": "simulator",
+                    "account_id": account_id,
+                    "expense_adjustment": -float(review_candidate["average_amount"]),
+                },
+                *(
+                    [
+                        {
+                            "label": "Model review-first recurring cuts",
+                            "page": "simulator",
+                            "account_id": account_id,
+                            "expense_adjustment": -combined_review_cut,
+                        }
+                    ]
+                    if combined_review_cut > float(review_candidate["average_amount"])
+                    else []
+                ),
+                {
+                    "label": "Open all recurring charges",
+                    "page": "transactions",
+                    "section": "recurring",
+                    "transaction_type": "expense",
+                    "account_id": account_id,
+                }
             ],
             "scope_label": scope_label,
         }
@@ -3382,6 +4085,79 @@ def generate_assistant_response(
                 driver_category=primary_driver,
                 focus_category=focus_category,
             ),
+            "suggested_actions": suggested_actions,
+            "scope_label": scope_label,
+        }
+
+    recurring_savings_opportunities = build_recurring_savings_opportunities(recurring_expenses)
+    if intent == "saving_advice" and recurring_savings_opportunities:
+        lead_recurring = recurring_savings_opportunities[0]
+        combined_recurring_cut = round(
+            sum(float(item.get("average_amount") or 0.0) for item in recurring_savings_opportunities[:2]),
+            2,
+        )
+
+        if mode == "strict":
+            answer = (
+                f"{lead_recurring['description']} is the cleanest recurring cost to pressure-test first. "
+                f"Cutting it would free about {format_currency(lead_recurring['average_amount'])} per month."
+            )
+        elif mode == "coach":
+            answer = (
+                f"{lead_recurring['description']} looks like the easiest recurring place to create breathing room. "
+                f"It is worth about {format_currency(lead_recurring['average_amount'])} per month."
+            )
+        else:
+            answer = (
+                f"{lead_recurring['description']} is the strongest recurring savings lever I see in {scope_label}. "
+                f"It is worth about {format_currency(lead_recurring['average_amount'])} per month "
+                f"or {format_currency(lead_recurring['annualized_amount'])} per year."
+            )
+
+        supporting_points = [
+            (
+                f"{item['description']}: {format_currency(item['average_amount'])}/month, "
+                f"{format_currency(item['annualized_amount'])}/year. {item['review_reason']}"
+            )
+            for item in recurring_savings_opportunities[:3]
+        ]
+        supporting_points.append(f"Current scope: {scope_label}")
+
+        suggested_actions = [
+            {
+                "label": f"Review {lead_recurring['description']}",
+                "page": "transactions",
+                "section": "recurring",
+                "description": lead_recurring["description"],
+                "category": lead_recurring["category"],
+                "transaction_type": "expense",
+                "account_id": account_id,
+            },
+            {
+                "label": f"Model cancelling {lead_recurring['description']}",
+                "page": "simulator",
+                "account_id": account_id,
+                "expense_adjustment": -float(lead_recurring["average_amount"]),
+            },
+        ]
+        if combined_recurring_cut > float(lead_recurring["average_amount"]):
+            suggested_actions.append(
+                {
+                    "label": "Model top recurring cuts",
+                    "page": "simulator",
+                    "account_id": account_id,
+                    "expense_adjustment": -combined_recurring_cut,
+                }
+            )
+
+        return {
+            "answer": answer,
+            "supporting_points": supporting_points[:5],
+            "suggested_followups": [
+                "Which subscriptions should I review first?",
+                "What happens if I cancel my biggest subscription?",
+                "Open my transactions",
+            ],
             "suggested_actions": suggested_actions,
             "scope_label": scope_label,
         }
@@ -3922,12 +4698,32 @@ def generate_assistant_suggestions(
         owner_id=user_id,
         account_id=account_id,
     )
+    recurring_expenses = get_recurring_expense_patterns(
+        db=db,
+        user_id=user_id,
+        account_id=account_id,
+        limit=3,
+    )
+    simulation_recommendations = build_future_simulation_recommendations(
+        db=db,
+        user_id=user_id,
+        account_id=account_id,
+        months=6,
+        scope_label=(
+            "All accounts combined"
+            if account_id is None
+            else f"Account {account_id}"
+        ),
+    )
 
     suggestions: list[str] = ["What is my balance?"]
 
     if snapshot["top_category"]:
         suggestions.append(f"Why is {snapshot['top_category']} my top expense category?")
         suggestions.append(f"How can I reduce {snapshot['top_category']} spending?")
+
+    if simulation_recommendations.get("items"):
+        suggestions.append("Which savings scenario should I try first?")
 
     if budget_snapshot["budget_count"] > 0:
         if budget_snapshot["over_budget_count"] > 0:
@@ -3963,6 +4759,18 @@ def generate_assistant_suggestions(
             suggestions.append("Which saved scenario gets me closest to my goal?")
             suggestions.append("Compare my saved scenarios")
 
+    if recurring_expenses:
+        suggestions.append("What subscriptions or recurring charges do I have?")
+        if any(item.get("review_priority") == "high" for item in recurring_expenses):
+            suggestions.append("Which subscriptions should I review first?")
+            suggestions.append("What happens if I cancel my biggest subscription?")
+            if simulation_recommendations.get("items"):
+                suggestions.append("Which savings scenario should I try first?")
+        suggestions.append("Which recurring charge costs me the most each year?")
+
+    if simulation_recommendations.get("items"):
+        suggestions.append("Which savings scenario should I try first?")
+
     suggestions.append("What will my balance look like in 3 months?")
     suggestions.append("Show my recent transactions")
     suggestions.append("Give me saving advice")
@@ -3972,7 +4780,7 @@ def generate_assistant_suggestions(
         if item not in unique_suggestions:
             unique_suggestions.append(item)
 
-    return unique_suggestions[:7]
+    return unique_suggestions[:8]
 
 
 def get_dashboard_payload(

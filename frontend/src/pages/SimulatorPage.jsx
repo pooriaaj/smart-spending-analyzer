@@ -470,6 +470,14 @@ function SimulatorPage() {
   const [simulatorData, setSimulatorData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [strategyRecommendations, setStrategyRecommendations] = useState([]);
+  const [recommendationsLoading, setRecommendationsLoading] = useState(true);
+  const [recommendationsError, setRecommendationsError] = useState("");
+  const [recommendationMessage, setRecommendationMessage] = useState("");
+  const [recurringExpenses, setRecurringExpenses] = useState([]);
+  const [recurringLoading, setRecurringLoading] = useState(true);
+  const [recurringError, setRecurringError] = useState("");
+  const [recurringLeverMessage, setRecurringLeverMessage] = useState("");
   const [applyingReductionPlan, setApplyingReductionPlan] = useState(false);
   const [reductionPlanMessage, setReductionPlanMessage] = useState("");
   const [reductionPlanError, setReductionPlanError] = useState("");
@@ -652,6 +660,55 @@ function SimulatorPage() {
   }, [navigate, normalizedAccountId]);
 
   useEffect(() => {
+    const fetchRecommendations = async () => {
+      try {
+        setRecommendationsLoading(true);
+        setRecommendationsError("");
+        const response = await api.get("/analytics/future-simulator-recommendations", {
+          params: {
+            account_id: normalizedAccountId,
+            months: Math.max(1, Math.min(Number(months) || 6, 12)),
+          },
+        });
+        setStrategyRecommendations(response.data?.items || []);
+      } catch (fetchError) {
+        if (!handleApiAuthError(fetchError, navigate)) {
+          setStrategyRecommendations([]);
+          setRecommendationsError("Failed to load recommended plans.");
+        }
+      } finally {
+        setRecommendationsLoading(false);
+      }
+    };
+
+    fetchRecommendations();
+  }, [navigate, normalizedAccountId, months]);
+
+  useEffect(() => {
+    const fetchRecurringExpenses = async () => {
+      try {
+        setRecurringLoading(true);
+        setRecurringError("");
+        const response = await api.get("/analytics/recurring-expenses", {
+          params: {
+            account_id: normalizedAccountId,
+          },
+        });
+        setRecurringExpenses(response.data?.items || []);
+      } catch (fetchError) {
+        if (!handleApiAuthError(fetchError, navigate)) {
+          setRecurringExpenses([]);
+          setRecurringError("Failed to load recurring cost levers.");
+        }
+      } finally {
+        setRecurringLoading(false);
+      }
+    };
+
+    fetchRecurringExpenses();
+  }, [navigate, normalizedAccountId]);
+
+  useEffect(() => {
     const fetchSimulation = async () => {
       try {
         setLoading(true);
@@ -812,6 +869,35 @@ function SimulatorPage() {
 
     return highlights;
   }, [displayedSavedScenarios]);
+  const recurringLeverCandidates = useMemo(() => {
+    const priorityRank = { high: 2, medium: 1, low: 0 };
+
+    return [...recurringExpenses]
+      .sort(
+        (left, right) =>
+          (priorityRank[String(right.review_priority || "low")] || 0) -
+            (priorityRank[String(left.review_priority || "low")] || 0) ||
+          (Number(right.annualized_amount) || 0) - (Number(left.annualized_amount) || 0) ||
+          (Number(right.average_amount) || 0) - (Number(left.average_amount) || 0)
+      )
+      .slice(0, 3);
+  }, [recurringExpenses]);
+  const combinedRecurringLever = useMemo(() => {
+    const prioritizedItems = recurringLeverCandidates.filter((item) =>
+      ["high", "medium"].includes(String(item.review_priority || ""))
+    );
+    const selectedItems = prioritizedItems.length > 0 ? prioritizedItems : recurringLeverCandidates;
+    const totalMonthlyCut = selectedItems.reduce(
+      (sum, item) => sum + (Number(item.average_amount) || 0),
+      0
+    );
+
+    return {
+      items: selectedItems,
+      totalMonthlyCut,
+      totalAnnualizedCut: totalMonthlyCut * 12,
+    };
+  }, [recurringLeverCandidates]);
 
   const handleResetSavedScenarioControls = () => {
     setSavedScenarioFilter("all");
@@ -960,6 +1046,8 @@ function SimulatorPage() {
     setActiveSavedScenarioId(null);
     setLinkedSavedScenarioId(null);
     setSavedScenarioName("");
+    setRecurringLeverMessage("");
+    setRecommendationMessage("");
     setMonths(preset.months);
     setIncomeAdjustment(preset.incomeAdjustment);
     setExpenseAdjustment(preset.expenseAdjustment);
@@ -969,6 +1057,45 @@ function SimulatorPage() {
     setEventAmount(preset.eventAmount === "" ? "" : String(preset.eventAmount));
     setEventMonthOffset(preset.eventMonthOffset || 1);
     setEventLabel(preset.eventLabel || "");
+  };
+
+  const applyRecommendation = (recommendation) => {
+    if (!recommendation) {
+      return;
+    }
+
+    setActiveSavedScenarioId(null);
+    setLinkedSavedScenarioId(null);
+    setSavedScenarioName("");
+    setRecurringLeverMessage("");
+    setMonths(recommendation.months || 6);
+    setIncomeAdjustment(String(recommendation.income_adjustment || 0));
+    setExpenseAdjustment(String(recommendation.expense_adjustment || 0));
+    setTargetBalance(
+      recommendation.target_balance != null ? String(recommendation.target_balance) : ""
+    );
+    setEventAmount(
+      recommendation.event_amount != null ? String(recommendation.event_amount) : ""
+    );
+    setEventMonthOffset(recommendation.event_month_offset || 1);
+    setEventLabel(recommendation.event_label || "");
+    setRecommendationMessage(`Applied "${recommendation.label}" to the simulator controls.`);
+  };
+
+  const handleApplyRecurringLever = ({ amount, label }) => {
+    const monthlyCut = Math.max(Number(amount) || 0, 0);
+    if (monthlyCut <= 0) {
+      return;
+    }
+
+    setActiveSavedScenarioId(null);
+    setLinkedSavedScenarioId(null);
+    setSavedScenarioName("");
+    setRecommendationMessage("");
+    setExpenseAdjustment(String(-monthlyCut));
+    setRecurringLeverMessage(
+      `Now modeling ${label} as ${formatSignedScenarioAmount(-monthlyCut)} in monthly expenses.`
+    );
   };
 
   const eventMonthOptions = useMemo(() => {
@@ -1217,6 +1344,80 @@ function SimulatorPage() {
             </div>
           </div>
 
+          <div className="section-header simulator-recommendations-header">
+            <div>
+              <h2>Recommended Plans</h2>
+              <p>Backend-ranked simulator ideas based on recurring costs, cash-flow pressure, and current budget risk.</p>
+            </div>
+          </div>
+
+          {recommendationsLoading ? (
+            <div className="empty-state">
+              <p>Loading recommended plans...</p>
+            </div>
+          ) : recommendationsError ? (
+            <div className="empty-state">
+              <p>{recommendationsError}</p>
+            </div>
+          ) : strategyRecommendations.length === 0 ? (
+            <div className="empty-state">
+              <p>No recommendation-ready plans yet for this scope.</p>
+            </div>
+          ) : (
+            <div className="simulator-recommendation-grid">
+              {strategyRecommendations.map((recommendation) => (
+                <div
+                  key={`simulator-recommendation-${recommendation.key}`}
+                  className="simulator-recommendation-card"
+                >
+                  <div className="simulator-recommendation-top">
+                    <div>
+                      <h3>{recommendation.label}</h3>
+                      <p>{recommendation.description}</p>
+                    </div>
+                    <span
+                      className={`simulator-risk-pill ${
+                        recommendation.risk_level === "high"
+                          ? "simulator-risk-high"
+                          : recommendation.risk_level === "watch"
+                            ? "simulator-risk-watch"
+                            : "simulator-risk-healthy"
+                      }`}
+                    >
+                      {getScenarioRiskLabel(recommendation.risk_level)}
+                    </span>
+                  </div>
+
+                  <div className="simulator-recommendation-metrics">
+                    <div>
+                      <span>Impact</span>
+                      <strong>{formatScenarioCurrency(recommendation.scenario_impact_amount)}</strong>
+                    </div>
+                    <div>
+                      <span>Projected end</span>
+                      <strong>{formatScenarioCurrency(recommendation.projected_end_balance)}</strong>
+                    </div>
+                    <div>
+                      <span>Monthly net</span>
+                      <strong>{formatSignedScenarioAmount(recommendation.monthly_net_change)}</strong>
+                    </div>
+                  </div>
+
+                  <p className="budget-inline-note">{recommendation.reason}</p>
+                  <div className="simulator-saved-scenario-actions">
+                    <button
+                      type="button"
+                      className="secondary-button"
+                      onClick={() => applyRecommendation(recommendation)}
+                    >
+                      Apply Plan
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
           <div className="simulator-preset-grid">
             {SCENARIO_PRESETS.map((preset) => (
               <button
@@ -1230,6 +1431,112 @@ function SimulatorPage() {
               </button>
             ))}
           </div>
+
+          <div className="section-header simulator-recurring-header">
+            <div>
+              <h2>Recurring Cost Levers</h2>
+              <p>Turn likely subscriptions and repeat charges into savings scenarios with one click.</p>
+            </div>
+          </div>
+
+          {recurringLoading ? (
+            <div className="empty-state">
+              <p>Loading recurring cost levers...</p>
+            </div>
+          ) : recurringError ? (
+            <div className="empty-state">
+              <p>{recurringError}</p>
+            </div>
+          ) : recurringLeverCandidates.length === 0 ? (
+            <div className="empty-state">
+              <p>No strong recurring levers detected for this scope yet.</p>
+            </div>
+          ) : (
+            <>
+              <div className="simulator-recurring-grid">
+                {recurringLeverCandidates.map((item) => (
+                  <div
+                    key={`sim-recurring-${item.description}-${item.latest_date}`}
+                    className="simulator-recurring-card"
+                  >
+                    <div className="simulator-recurring-top">
+                      <div>
+                        <h3>{item.description}</h3>
+                        <p>{item.category}</p>
+                      </div>
+                      <span
+                        className={`budget-status ${
+                          item.review_priority === "high"
+                            ? "budget-status-over"
+                            : item.review_priority === "medium"
+                              ? "budget-status-risk"
+                              : "budget-status-on-track"
+                        }`}
+                      >
+                        {item.review_priority === "high"
+                          ? "Review first"
+                          : item.review_priority === "medium"
+                            ? "Worth reviewing"
+                            : "Stable"}
+                      </span>
+                    </div>
+
+                    <div className="simulator-recurring-metrics">
+                      <div>
+                        <span>Monthly cut</span>
+                        <strong>{formatScenarioCurrency(item.average_amount)}</strong>
+                      </div>
+                      <div>
+                        <span>Annual impact</span>
+                        <strong>{formatScenarioCurrency(item.annualized_amount)}</strong>
+                      </div>
+                    </div>
+
+                    <p>{item.review_reason}</p>
+                    <div className="simulator-saved-scenario-actions">
+                      <button
+                        type="button"
+                        className="secondary-button"
+                        onClick={() =>
+                          handleApplyRecurringLever({
+                            amount: item.average_amount,
+                            label: item.description,
+                          })
+                        }
+                      >
+                        Model This Cut
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {combinedRecurringLever.items.length > 1 && (
+                <div className="simulator-recurring-bundle">
+                  <div>
+                    <h3>Bundle the top recurring cuts</h3>
+                    <p>
+                      Model {combinedRecurringLever.items.length} review-first recurring charges as a
+                      combined {formatSignedScenarioAmount(-combinedRecurringLever.totalMonthlyCut)} monthly
+                      expense change.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    className="secondary-button"
+                    onClick={() =>
+                      handleApplyRecurringLever({
+                        amount: combinedRecurringLever.totalMonthlyCut,
+                        label: "top recurring cuts",
+                      })
+                    }
+                  >
+                    Model Bundle
+                  </button>
+                </div>
+              )}
+            </>
+          )}
 
           <div className="simulator-controls-grid">
             <AccountSelector label="Simulator scope" onChange={setSelectedAccountId} />
@@ -1384,6 +1691,8 @@ function SimulatorPage() {
 
           {scenarioLinkMessage && <p className="success-text">{scenarioLinkMessage}</p>}
           {scenarioLinkError && <p className="error-text">{scenarioLinkError}</p>}
+          {recommendationMessage && <p className="success-text">{recommendationMessage}</p>}
+          {recurringLeverMessage && <p className="success-text">{recurringLeverMessage}</p>}
           {savedScenarioMessage && <p className="success-text">{savedScenarioMessage}</p>}
           {savedScenarioError && <p className="error-text">{savedScenarioError}</p>}
         </div>

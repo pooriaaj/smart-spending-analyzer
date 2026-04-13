@@ -202,6 +202,66 @@ class AnalyticsRouteTest(unittest.TestCase):
         self.assertEqual(response.status_code, 404, response.text)
         self.assertEqual(response.json()["detail"], "Account not found")
 
+    def test_recurring_expenses_route_detects_monthly_patterns(self) -> None:
+        with self.session_local() as session:
+            session.add_all(
+                [
+                    Transaction(
+                        amount=15.99,
+                        category="Entertainment",
+                        description="Spotify Premium",
+                        date=date(2026, 1, 8),
+                        type="expense",
+                        owner_id=self.user_id,
+                        account_id=self.chequing_account_id,
+                    ),
+                    Transaction(
+                        amount=15.99,
+                        category="Entertainment",
+                        description="Spotify Premium",
+                        date=date(2026, 2, 8),
+                        type="expense",
+                        owner_id=self.user_id,
+                        account_id=self.chequing_account_id,
+                    ),
+                    Transaction(
+                        amount=18.99,
+                        category="Entertainment",
+                        description="Spotify Premium",
+                        date=date(2026, 3, 8),
+                        type="expense",
+                        owner_id=self.user_id,
+                        account_id=self.chequing_account_id,
+                    ),
+                    Transaction(
+                        amount=120.0,
+                        category="Groceries",
+                        description="FreshCo",
+                        date=date(2026, 3, 10),
+                        type="expense",
+                        owner_id=self.user_id,
+                        account_id=self.chequing_account_id,
+                    ),
+                ]
+            )
+            session.commit()
+
+        response = self.client.get(
+            "/analytics/recurring-expenses",
+            params={"account_id": self.chequing_account_id},
+        )
+
+        self.assertEqual(response.status_code, 200, response.text)
+        payload = response.json()
+
+        self.assertEqual(len(payload["items"]), 1)
+        self.assertEqual(payload["items"][0]["description"], "Spotify Premium")
+        self.assertEqual(payload["items"][0]["occurrences"], 3)
+        self.assertEqual(payload["items"][0]["cadence"], "monthly")
+        self.assertEqual(payload["items"][0]["review_priority"], "high")
+        self.assertEqual(payload["items"][0]["next_expected_date"], "2026-04-07")
+        self.assertGreater(payload["items"][0]["latest_change_percent"], 0)
+
     def test_future_simulator_respects_account_scope_and_adjustments(self) -> None:
         with self.session_local() as session:
             session.add_all(
@@ -303,6 +363,82 @@ class AnalyticsRouteTest(unittest.TestCase):
         self.assertEqual(payload["timeline"][0]["month"], "2026-05")
         self.assertEqual(payload["timeline"][0]["baseline_ending_balance"], 5600.0)
         self.assertEqual(payload["timeline"][0]["balance_delta"], 150.0)
+
+    def test_future_simulator_recommendations_include_recurring_plan(self) -> None:
+        with self.session_local() as session:
+            session.add_all(
+                [
+                    Transaction(
+                        amount=2200.0,
+                        category="Salary",
+                        description="Payroll Jan",
+                        date=date(2026, 1, 3),
+                        type="income",
+                        owner_id=self.user_id,
+                        account_id=self.chequing_account_id,
+                    ),
+                    Transaction(
+                        amount=50.0,
+                        category="Health",
+                        description="Gym Membership",
+                        date=date(2026, 1, 5),
+                        type="expense",
+                        owner_id=self.user_id,
+                        account_id=self.chequing_account_id,
+                    ),
+                    Transaction(
+                        amount=2200.0,
+                        category="Salary",
+                        description="Payroll Feb",
+                        date=date(2026, 2, 3),
+                        type="income",
+                        owner_id=self.user_id,
+                        account_id=self.chequing_account_id,
+                    ),
+                    Transaction(
+                        amount=50.0,
+                        category="Health",
+                        description="Gym Membership",
+                        date=date(2026, 2, 5),
+                        type="expense",
+                        owner_id=self.user_id,
+                        account_id=self.chequing_account_id,
+                    ),
+                    Transaction(
+                        amount=2200.0,
+                        category="Salary",
+                        description="Payroll Mar",
+                        date=date(2026, 3, 3),
+                        type="income",
+                        owner_id=self.user_id,
+                        account_id=self.chequing_account_id,
+                    ),
+                    Transaction(
+                        amount=50.0,
+                        category="Health",
+                        description="Gym Membership",
+                        date=date(2026, 3, 5),
+                        type="expense",
+                        owner_id=self.user_id,
+                        account_id=self.chequing_account_id,
+                    ),
+                ]
+            )
+            session.commit()
+
+        response = self.client.get(
+            "/analytics/future-simulator-recommendations",
+            params={"account_id": self.chequing_account_id, "months": 6},
+        )
+
+        self.assertEqual(response.status_code, 200, response.text)
+        payload = response.json()
+
+        self.assertEqual(payload["scope_label"], "Daily Spending (chequing)")
+        self.assertTrue(any(item["source"] == "recurring" for item in payload["items"]))
+        recurring_plan = next(item for item in payload["items"] if item["source"] == "recurring")
+        self.assertIn("Gym Membership", recurring_plan["label"])
+        self.assertEqual(recurring_plan["expense_adjustment"], -50.0)
 
     def test_future_simulator_uses_budget_projection_when_it_is_higher_than_history(self) -> None:
         with patch("app.services.budget_metrics.date", FixedBudgetDate):
@@ -818,6 +954,61 @@ class AnalyticsRouteTest(unittest.TestCase):
         self.assertEqual(payload["suggested_actions"][0]["category"], "groceries")
         self.assertGreater(payload["suggested_actions"][0]["amount"], 200.0)
         self.assertEqual(payload["suggested_actions"][1]["page"], "transactions")
+
+    def test_assistant_saving_advice_can_use_recurring_savings_levers(self) -> None:
+        with self.session_local() as session:
+            session.add_all(
+                [
+                    Transaction(
+                        amount=50.0,
+                        category="Health",
+                        description="Gym Membership",
+                        date=date(2026, 1, 5),
+                        type="expense",
+                        owner_id=self.user_id,
+                        account_id=self.chequing_account_id,
+                    ),
+                    Transaction(
+                        amount=50.0,
+                        category="Health",
+                        description="Gym Membership",
+                        date=date(2026, 2, 5),
+                        type="expense",
+                        owner_id=self.user_id,
+                        account_id=self.chequing_account_id,
+                    ),
+                    Transaction(
+                        amount=50.0,
+                        category="Health",
+                        description="Gym Membership",
+                        date=date(2026, 3, 5),
+                        type="expense",
+                        owner_id=self.user_id,
+                        account_id=self.chequing_account_id,
+                    ),
+                ]
+            )
+            session.commit()
+
+        with patch("app.services.analytics_service.generate_llm_assistant_response", return_value=None):
+            response = self.client.post(
+                "/analytics/assistant-response",
+                json={
+                    "question": "Give me saving advice",
+                    "history": [],
+                    "mode": "balanced",
+                    "account_id": self.chequing_account_id,
+                },
+            )
+
+        self.assertEqual(response.status_code, 200, response.text)
+        payload = response.json()
+
+        self.assertIn("Gym Membership", payload["answer"])
+        self.assertEqual(payload["suggested_actions"][0]["page"], "transactions")
+        self.assertEqual(payload["suggested_actions"][0]["section"], "recurring")
+        self.assertEqual(payload["suggested_actions"][1]["page"], "simulator")
+        self.assertEqual(payload["suggested_actions"][1]["expense_adjustment"], -50.0)
 
     def test_assistant_response_shows_recent_transactions_for_focused_category(self) -> None:
         self.seed_transactions()
@@ -1803,6 +1994,241 @@ class AnalyticsRouteTest(unittest.TestCase):
                 "Which saved scenario gets me closest to my goal?",
             },
         )
+
+    def test_assistant_can_answer_recurring_expense_questions(self) -> None:
+        with self.session_local() as session:
+            session.add_all(
+                [
+                    Transaction(
+                        amount=14.99,
+                        category="Entertainment",
+                        description="Netflix Subscription",
+                        date=date(2026, 1, 12),
+                        type="expense",
+                        owner_id=self.user_id,
+                        account_id=self.chequing_account_id,
+                    ),
+                    Transaction(
+                        amount=14.99,
+                        category="Entertainment",
+                        description="Netflix Subscription",
+                        date=date(2026, 2, 12),
+                        type="expense",
+                        owner_id=self.user_id,
+                        account_id=self.chequing_account_id,
+                    ),
+                    Transaction(
+                        amount=17.99,
+                        category="Entertainment",
+                        description="Netflix Subscription",
+                        date=date(2026, 3, 12),
+                        type="expense",
+                        owner_id=self.user_id,
+                        account_id=self.chequing_account_id,
+                    ),
+                ]
+            )
+            session.commit()
+
+        response = self.client.post(
+            "/analytics/assistant-response",
+            json={
+                "question": "Which subscriptions should I review first?",
+                "history": [],
+                "mode": "balanced",
+                "account_id": self.chequing_account_id,
+            },
+        )
+
+        self.assertEqual(response.status_code, 200, response.text)
+        payload = response.json()
+
+        self.assertIn("recurring", payload["answer"].lower())
+        self.assertIn("Netflix Subscription", payload["answer"])
+        self.assertTrue(any("Netflix Subscription" in item for item in payload["supporting_points"]))
+        self.assertEqual(payload["suggested_actions"][0]["page"], "transactions")
+        self.assertEqual(payload["suggested_actions"][0]["section"], "recurring")
+        self.assertEqual(payload["suggested_actions"][0]["description"], "Netflix Subscription")
+
+    def test_assistant_can_model_cancelling_biggest_subscription(self) -> None:
+        with self.session_local() as session:
+            session.add_all(
+                [
+                    Transaction(
+                        amount=50.0,
+                        category="Health",
+                        description="Gym Membership",
+                        date=date(2026, 1, 5),
+                        type="expense",
+                        owner_id=self.user_id,
+                        account_id=self.chequing_account_id,
+                    ),
+                    Transaction(
+                        amount=50.0,
+                        category="Health",
+                        description="Gym Membership",
+                        date=date(2026, 2, 5),
+                        type="expense",
+                        owner_id=self.user_id,
+                        account_id=self.chequing_account_id,
+                    ),
+                    Transaction(
+                        amount=50.0,
+                        category="Health",
+                        description="Gym Membership",
+                        date=date(2026, 3, 5),
+                        type="expense",
+                        owner_id=self.user_id,
+                        account_id=self.chequing_account_id,
+                    ),
+                ]
+            )
+            session.commit()
+
+        response = self.client.post(
+            "/analytics/assistant-response",
+            json={
+                "question": "What happens if I cancel my biggest subscription?",
+                "history": [],
+                "mode": "balanced",
+                "account_id": self.chequing_account_id,
+            },
+        )
+
+        self.assertEqual(response.status_code, 200, response.text)
+        payload = response.json()
+
+        self.assertIn("Gym Membership", payload["answer"])
+        self.assertIn("$50.00 per month", payload["answer"])
+        self.assertTrue(
+            any(action["page"] == "simulator" and action["expense_adjustment"] == -50.0 for action in payload["suggested_actions"])
+        )
+
+    def test_assistant_can_recommend_a_savings_scenario(self) -> None:
+        with self.session_local() as session:
+            session.add_all(
+                [
+                    Transaction(
+                        amount=2200.0,
+                        category="Salary",
+                        description="Payroll Jan",
+                        date=date(2026, 1, 3),
+                        type="income",
+                        owner_id=self.user_id,
+                        account_id=self.chequing_account_id,
+                    ),
+                    Transaction(
+                        amount=50.0,
+                        category="Health",
+                        description="Gym Membership",
+                        date=date(2026, 1, 5),
+                        type="expense",
+                        owner_id=self.user_id,
+                        account_id=self.chequing_account_id,
+                    ),
+                    Transaction(
+                        amount=2200.0,
+                        category="Salary",
+                        description="Payroll Feb",
+                        date=date(2026, 2, 3),
+                        type="income",
+                        owner_id=self.user_id,
+                        account_id=self.chequing_account_id,
+                    ),
+                    Transaction(
+                        amount=50.0,
+                        category="Health",
+                        description="Gym Membership",
+                        date=date(2026, 2, 5),
+                        type="expense",
+                        owner_id=self.user_id,
+                        account_id=self.chequing_account_id,
+                    ),
+                    Transaction(
+                        amount=2200.0,
+                        category="Salary",
+                        description="Payroll Mar",
+                        date=date(2026, 3, 3),
+                        type="income",
+                        owner_id=self.user_id,
+                        account_id=self.chequing_account_id,
+                    ),
+                    Transaction(
+                        amount=50.0,
+                        category="Health",
+                        description="Gym Membership",
+                        date=date(2026, 3, 5),
+                        type="expense",
+                        owner_id=self.user_id,
+                        account_id=self.chequing_account_id,
+                    ),
+                ]
+            )
+            session.commit()
+
+        response = self.client.post(
+            "/analytics/assistant-response",
+            json={
+                "question": "Which savings scenario should I try first?",
+                "history": [],
+                "mode": "balanced",
+                "account_id": self.chequing_account_id,
+            },
+        )
+
+        self.assertEqual(response.status_code, 200, response.text)
+        payload = response.json()
+
+        self.assertIn("simulator recommendation", payload["answer"].lower())
+        self.assertEqual(payload["suggested_actions"][0]["page"], "simulator")
+        self.assertLess(payload["suggested_actions"][0]["expense_adjustment"], 0)
+
+    def test_assistant_suggestions_include_recurring_prompt_when_patterns_exist(self) -> None:
+        with self.session_local() as session:
+            session.add_all(
+                [
+                    Transaction(
+                        amount=50.0,
+                        category="Entertainment",
+                        description="Spotify Premium",
+                        date=date(2026, 1, 9),
+                        type="expense",
+                        owner_id=self.user_id,
+                        account_id=self.chequing_account_id,
+                    ),
+                    Transaction(
+                        amount=50.0,
+                        category="Entertainment",
+                        description="Spotify Premium",
+                        date=date(2026, 2, 9),
+                        type="expense",
+                        owner_id=self.user_id,
+                        account_id=self.chequing_account_id,
+                    ),
+                    Transaction(
+                        amount=50.0,
+                        category="Entertainment",
+                        description="Spotify Premium",
+                        date=date(2026, 3, 9),
+                        type="expense",
+                        owner_id=self.user_id,
+                        account_id=self.chequing_account_id,
+                    ),
+                ]
+            )
+            session.commit()
+
+        response = self.client.get(
+            "/analytics/assistant-suggestions",
+            params={"account_id": self.chequing_account_id},
+        )
+
+        self.assertEqual(response.status_code, 200, response.text)
+        suggestions = response.json()["suggestions"]
+
+        self.assertIn("What subscriptions or recurring charges do I have?", suggestions)
+        self.assertIn("What happens if I cancel my biggest subscription?", suggestions)
+        self.assertIn("Which savings scenario should I try first?", suggestions)
 
     def test_assistant_suggestions_include_saved_scenario_prompt(self) -> None:
         with self.session_local() as session:

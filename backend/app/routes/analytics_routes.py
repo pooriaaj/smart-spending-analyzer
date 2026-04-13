@@ -12,10 +12,12 @@ from app.schemas import (
     AssistantSuggestionsResponse,
     CategoryBreakdownItem,
     CategoryTrendsResponse,
+    FutureSimulationRecommendationsResponse,
     FutureSimulationResponse,
     MessageResponse,
     MonthlySummaryItem,
     OverspendingAlertsResponse,
+    RecurringExpensesResponse,
     RecentTransactionItem,
     SavedScenarioCreate,
     SavedScenarioResponse,
@@ -24,6 +26,7 @@ from app.schemas import (
 )
 from app.services.analytics_service import (
     build_saved_scenario_projection_snapshots,
+    build_future_simulation_recommendations,
     build_future_balance_simulation,
     generate_assistant_response,
     generate_assistant_suggestions,
@@ -33,6 +36,7 @@ from app.services.analytics_service import (
     get_monthly_summary,
     get_overspending_alerts,
     get_recent_transactions,
+    get_recurring_expense_patterns,
     get_spending_insights,
     get_summary,
     get_top_expense_category,
@@ -183,6 +187,22 @@ def get_recent_transactions_route(
     )
 
 
+@router.get("/recurring-expenses", response_model=RecurringExpensesResponse)
+def get_recurring_expenses_route(
+    account_id: int | None = Query(default=None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    resolve_account_scope(db, current_user, account_id)
+    return {
+        "items": get_recurring_expense_patterns(
+            db=db,
+            user_id=current_user.id,
+            account_id=account_id,
+        )
+    }
+
+
 @router.get("/top-expense-category", response_model=TopExpenseCategory | None)
 def get_top_expense_category_route(
     month: str | None = Query(default=None),
@@ -262,6 +282,23 @@ def get_future_simulator_route(
         event_month_offset=event_month_offset,
         event_amount=event_amount,
         event_label=event_label,
+        scope_label=scope_label,
+    )
+
+
+@router.get("/future-simulator-recommendations", response_model=FutureSimulationRecommendationsResponse)
+def get_future_simulator_recommendations_route(
+    months: int = Query(default=6, ge=1, le=12),
+    account_id: int | None = Query(default=None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    scope_label = resolve_account_scope(db, current_user, account_id)
+    return build_future_simulation_recommendations(
+        db=db,
+        user_id=current_user.id,
+        account_id=account_id,
+        months=months,
         scope_label=scope_label,
     )
 

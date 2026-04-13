@@ -170,7 +170,9 @@ function AssistantPage() {
     if (action.page === "transactions") {
       const params = new URLSearchParams();
 
+      if (action.section) params.set("section", action.section);
       if (action.category) params.set("category", action.category);
+      if (action.description) params.set("description", action.description);
       if (action.transaction_type) params.set("type", action.transaction_type);
       if (action.month) params.set("month", action.month);
 
