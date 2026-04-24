@@ -145,6 +145,9 @@ function AssistantPage() {
       if (action.compare_saved_scenario_id != null) {
         params.set("compare_saved_scenario_id", String(action.compare_saved_scenario_id));
       }
+      if (action.scenario_name) {
+        params.set("scenario_name", action.scenario_name);
+      }
       if (action.months_ahead != null) params.set("months", String(action.months_ahead));
       if (action.target_balance != null) params.set("target_balance", String(action.target_balance));
       if (action.income_adjustment != null) {

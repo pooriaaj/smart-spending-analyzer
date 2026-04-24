@@ -149,6 +149,8 @@ class SmartImportRouteTest(unittest.TestCase):
         self.assertEqual(payload["status"], "table_review")
         self.assertEqual(len(payload["preview_rows"]), 2)
         self.assertEqual(payload["preview_rows"][0]["date"], "2024-12-15")
+        self.assertIn("confidence", payload["preview_rows"][0])
+        self.assertIn("review_reason", payload["preview_rows"][0])
         self.assertEqual(payload["preview_rows"][1]["date"], "2025-01-02")
         self.assertEqual(payload["preview_rows"][1]["type"], "income")
 

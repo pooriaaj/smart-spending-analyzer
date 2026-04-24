@@ -843,6 +843,25 @@ textarea:focus,
   line-height: 1.6;
 }
 
+.import-confidence-box {
+  margin-bottom: 18px;
+  padding: 16px 18px;
+  border-radius: 18px;
+  background: rgba(16, 185, 129, 0.1);
+  border: 1px solid rgba(16, 185, 129, 0.22);
+  color: #047857;
+}
+
+.import-confidence-box strong {
+  display: block;
+  margin-bottom: 6px;
+}
+
+.import-confidence-box p {
+  margin: 0;
+  line-height: 1.6;
+}
+
 .smart-action-button {
   background: linear-gradient(135deg, var(--purple) 0%, #8b5cf6 100%);
   color: white;
@@ -1107,6 +1126,11 @@ textarea:focus,
   color: #047857;
 }
 
+.import-row-status-confidence {
+  background: rgba(16, 185, 129, 0.14);
+  color: #047857;
+}
+
 .import-preview-empty {
   display: grid;
   gap: 12px;
@@ -1144,6 +1168,28 @@ textarea:focus,
   line-height: 1.5;
 }
 
+.import-confidence-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: rgba(16, 185, 129, 0.1);
+  color: #047857;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.import-confidence-row span {
+  color: inherit;
+  opacity: 0.78;
+}
+
+.import-confidence-row strong {
+  color: inherit;
+}
+
 .import-row-issues {
   margin-top: 10px;
   color: #9a3412;
@@ -1155,6 +1201,14 @@ textarea:focus,
 .import-duplicate-note {
   margin-top: 10px;
   color: #1d4ed8;
+  font-size: 12px;
+  line-height: 1.5;
+  font-weight: 600;
+}
+
+.import-confidence-note {
+  margin-top: 10px;
+  color: #047857;
   font-size: 12px;
   line-height: 1.5;
   font-weight: 600;
@@ -1626,6 +1680,56 @@ textarea:focus,
   grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
   gap: 12px;
   margin-bottom: 18px;
+}
+
+.simulator-recommendation-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.simulator-recommendation-summary-card {
+  padding: 14px;
+  border-radius: 16px;
+  background: rgba(248, 250, 252, 0.92);
+  border: 1px solid rgba(15, 23, 42, 0.08);
+}
+
+.simulator-recommendation-summary-card span {
+  display: block;
+  margin-bottom: 8px;
+  color: var(--text-faint);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.simulator-recommendation-summary-card strong {
+  color: var(--text-main);
+  font-size: 22px;
+}
+
+.simulator-recommendation-filter-row {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+
+.simulator-recommendation-filter-active {
+  width: auto;
+  min-width: 0;
+}
+
+.simulator-recommendation-preview {
+  margin-top: 18px;
+  margin-bottom: 18px;
+  padding: 18px;
+  border-radius: 18px;
+  background: rgba(248, 250, 252, 0.72);
+  border: 1px solid rgba(15, 23, 42, 0.08);
 }
 
 .simulator-recommendation-card {
@@ -2138,6 +2242,8 @@ textarea:focus,
 :root[data-theme="dark"] .simulator-recurring-bundle,
 :root[data-theme="dark"] .simulator-recommendation-card,
 :root[data-theme="dark"] .simulator-recommendation-metrics div,
+:root[data-theme="dark"] .simulator-recommendation-summary-card,
+:root[data-theme="dark"] .simulator-recommendation-preview,
 :root[data-theme="dark"] .simulator-checkpoint-card {
   background: rgba(15, 23, 42, 0.82);
   border-color: rgba(148, 163, 184, 0.14);
@@ -2196,6 +2302,12 @@ textarea:focus,
   color: #93c5fd;
 }
 
+:root[data-theme="dark"] .import-confidence-box {
+  background: rgba(16, 185, 129, 0.12);
+  border-color: rgba(52, 211, 153, 0.22);
+  color: #6ee7b7;
+}
+
 :root[data-theme="dark"] .import-error-guidance {
   border-top-color: rgba(248, 113, 113, 0.22);
 }
@@ -2215,12 +2327,22 @@ textarea:focus,
   background: rgba(16, 185, 129, 0.14);
 }
 
+:root[data-theme="dark"] .import-row-status-confidence,
+:root[data-theme="dark"] .import-confidence-row {
+  color: #6ee7b7;
+  background: rgba(16, 185, 129, 0.14);
+}
+
 :root[data-theme="dark"] .import-row-status-warning {
   background: rgba(251, 191, 36, 0.14);
 }
 
 :root[data-theme="dark"] .import-row-status-duplicate {
   background: rgba(96, 165, 250, 0.16);
+}
+
+:root[data-theme="dark"] .import-confidence-note {
+  color: #6ee7b7;
 }
 
 :root[data-theme="dark"] .import-invalid-input {

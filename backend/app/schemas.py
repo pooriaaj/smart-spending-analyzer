@@ -307,6 +307,8 @@ class FutureSimulationRecommendationItem(BaseModel):
     description: str
     reason: str
     source: str
+    saved_scenario_id: int | None = None
+    is_saved: bool = False
     months: int
     income_adjustment: float = 0.0
     expense_adjustment: float = 0.0
@@ -481,6 +483,7 @@ class AssistantAction(BaseModel):
     label: str
     page: str
     section: str | None = None
+    scenario_name: str | None = None
     saved_scenario_id: int | None = None
     compare_saved_scenario_id: int | None = None
     category: str | None = None
@@ -552,6 +555,8 @@ class StatementPreviewRow(BaseModel):
     type: TransactionType
     category: str
     source_line: str | None = None
+    confidence: float = 0.0
+    review_reason: str | None = None
     is_duplicate: bool = False
     duplicate_reason: str | None = None
 

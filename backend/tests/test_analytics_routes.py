@@ -422,6 +422,18 @@ class AnalyticsRouteTest(unittest.TestCase):
                         owner_id=self.user_id,
                         account_id=self.chequing_account_id,
                     ),
+                    SavedScenario(
+                        name="Cancel Gym Membership",
+                        months=6,
+                        income_adjustment=0.0,
+                        expense_adjustment=-50.0,
+                        target_balance=None,
+                        event_month_offset=None,
+                        event_amount=None,
+                        event_label=None,
+                        owner_id=self.user_id,
+                        account_id=self.chequing_account_id,
+                    ),
                 ]
             )
             session.commit()
@@ -439,6 +451,8 @@ class AnalyticsRouteTest(unittest.TestCase):
         recurring_plan = next(item for item in payload["items"] if item["source"] == "recurring")
         self.assertIn("Gym Membership", recurring_plan["label"])
         self.assertEqual(recurring_plan["expense_adjustment"], -50.0)
+        self.assertTrue(recurring_plan["is_saved"])
+        self.assertIsNotNone(recurring_plan["saved_scenario_id"])
 
     def test_future_simulator_uses_budget_projection_when_it_is_higher_than_history(self) -> None:
         with patch("app.services.budget_metrics.date", FixedBudgetDate):

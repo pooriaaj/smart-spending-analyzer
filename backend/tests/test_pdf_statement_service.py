@@ -290,9 +290,13 @@ Jan 03 Jan 04 MONTHLY FEE 15.99 0.00 1,684.01
         self.assertEqual(preview_rows[0].date, "2025-01-02")
         self.assertEqual(preview_rows[0].description, "PAYROLL")
         self.assertEqual(preview_rows[0].type, "income")
+        self.assertGreaterEqual(preview_rows[0].confidence, 0.9)
+        self.assertIsNone(preview_rows[0].review_reason)
         self.assertEqual(preview_rows[1].date, "2025-01-03")
         self.assertEqual(preview_rows[1].description, "MONTHLY FEE")
         self.assertEqual(preview_rows[1].type, "expense")
+        self.assertGreaterEqual(preview_rows[1].confidence, 0.9)
+        self.assertIsNone(preview_rows[1].review_reason)
 
     def test_parse_pdf_statement_preview_supports_numeric_transaction_and_posted_dates(self) -> None:
         text = """
@@ -379,9 +383,37 @@ Jan 03 MONTHLY FEE 15.99 0.00 1,684.01
         self.assertEqual(preview_rows[0].type, "income")
         self.assertEqual(preview_rows[0].amount, 1500.00)
         self.assertIn("balance=1,700.00", preview_rows[0].source_line or "")
+        self.assertGreaterEqual(preview_rows[0].confidence, 0.9)
         self.assertEqual(preview_rows[1].type, "expense")
         self.assertEqual(preview_rows[1].amount, 15.99)
         self.assertIn("balance=1,684.01", preview_rows[1].source_line or "")
+        self.assertGreaterEqual(preview_rows[1].confidence, 0.9)
+
+    def test_parse_pdf_statement_preview_flags_amount_balance_without_direction(self) -> None:
+        text = """
+Account Statement
+Statement period 12/28/2024 - 01/10/2025
+Jan 03 FARMERS MARKET $12.34 $1,684.01
+        """.strip()
+
+        with (
+            patch.object(
+                service,
+                "extract_pdf_text_result",
+                return_value=self.extraction_result(text),
+            ),
+            patch.object(service, "categorize_transaction", side_effect=self.categorize),
+        ):
+            result = service.parse_pdf_statement_preview(
+                db=self.db,
+                owner_id=123,
+                file_bytes=b"fake-pdf",
+            )
+
+        preview_row = result["preview_rows"][0]
+        self.assertEqual(preview_row.type, "expense")
+        self.assertLess(preview_row.confidence, 0.75)
+        self.assertIn("no debit or credit marker", preview_row.review_reason or "")
 
     def test_parse_pdf_statement_preview_supports_placeholder_debit_credit_columns(self) -> None:
         text = """

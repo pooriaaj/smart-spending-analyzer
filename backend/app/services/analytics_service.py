@@ -1783,6 +1783,11 @@ def build_future_simulation_recommendations(
     scope_label: str = "All accounts combined",
 ) -> dict[str, Any]:
     sanitized_months = max(1, min(int(months or 6), 12))
+    saved_scenarios = list_saved_scenarios(
+        db=db,
+        owner_id=user_id,
+        account_id=account_id,
+    )
     recurring_expenses = get_recurring_expense_patterns(
         db=db,
         user_id=user_id,
@@ -1813,6 +1818,28 @@ def build_future_simulation_recommendations(
 
     recommendations: list[dict[str, Any]] = []
     seen_keys: set[str] = set()
+
+    def amounts_match(left: float | None, right: float | None) -> bool:
+        return round(float(left or 0.0), 2) == round(float(right or 0.0), 2)
+
+    def find_saved_match(item: dict[str, Any]) -> int | None:
+        for scenario in saved_scenarios:
+            if int(scenario.months or 0) != int(item["months"]):
+                continue
+            if not amounts_match(scenario.income_adjustment, item["income_adjustment"]):
+                continue
+            if not amounts_match(scenario.expense_adjustment, item["expense_adjustment"]):
+                continue
+            if not amounts_match(scenario.target_balance, item.get("target_balance")):
+                continue
+            if int(scenario.event_month_offset or 0) != int(item.get("event_month_offset") or 0):
+                continue
+            if not amounts_match(scenario.event_amount, item.get("event_amount")):
+                continue
+            if (scenario.event_label or "").strip() != (item.get("event_label") or "").strip():
+                continue
+            return scenario.id
+        return None
 
     def add_recommendation(
         *,
@@ -1851,6 +1878,8 @@ def build_future_simulation_recommendations(
                 "description": description,
                 "reason": reason,
                 "source": source,
+                "saved_scenario_id": None,
+                "is_saved": False,
                 "months": sanitized_months,
                 "income_adjustment": round(float(income_adjustment or 0.0), 2),
                 "expense_adjustment": round(float(expense_adjustment or 0.0), 2),
@@ -1934,6 +1963,11 @@ def build_future_simulation_recommendations(
         ),
         reverse=True,
     )
+    for recommendation in recommendations:
+        saved_match_id = find_saved_match(recommendation)
+        if saved_match_id is not None:
+            recommendation["saved_scenario_id"] = saved_match_id
+            recommendation["is_saved"] = True
 
     return {
         "scope_label": scope_label,
@@ -3463,6 +3497,7 @@ def generate_assistant_response(
                 "label": f"Apply {lead_recommendation['label']}",
                 "page": "simulator",
                 "account_id": account_id,
+                "scenario_name": lead_recommendation["label"],
                 "months_ahead": lead_recommendation["months"],
                 "income_adjustment": lead_recommendation["income_adjustment"],
                 "expense_adjustment": lead_recommendation["expense_adjustment"],
@@ -3478,6 +3513,7 @@ def generate_assistant_response(
                     "label": f"Try {runner_up['label']}",
                     "page": "simulator",
                     "account_id": account_id,
+                    "scenario_name": runner_up["label"],
                     "months_ahead": runner_up["months"],
                     "income_adjustment": runner_up["income_adjustment"],
                     "expense_adjustment": runner_up["expense_adjustment"],
@@ -3646,6 +3682,7 @@ def generate_assistant_response(
                     "label": f"Model cancelling {review_candidate['description']}",
                     "page": "simulator",
                     "account_id": account_id,
+                    "scenario_name": f"Cancel {review_candidate['description']}",
                     "expense_adjustment": -float(review_candidate["average_amount"]),
                 },
                 *(
@@ -3654,6 +3691,7 @@ def generate_assistant_response(
                             "label": "Model review-first recurring cuts",
                             "page": "simulator",
                             "account_id": account_id,
+                            "scenario_name": "Review-first recurring cuts",
                             "expense_adjustment": -combined_review_cut,
                         }
                     ]
@@ -4137,6 +4175,7 @@ def generate_assistant_response(
                 "label": f"Model cancelling {lead_recurring['description']}",
                 "page": "simulator",
                 "account_id": account_id,
+                "scenario_name": f"Cancel {lead_recurring['description']}",
                 "expense_adjustment": -float(lead_recurring["average_amount"]),
             },
         ]
@@ -4146,6 +4185,7 @@ def generate_assistant_response(
                     "label": "Model top recurring cuts",
                     "page": "simulator",
                     "account_id": account_id,
+                    "scenario_name": "Top recurring cuts",
                     "expense_adjustment": -combined_recurring_cut,
                 }
             )

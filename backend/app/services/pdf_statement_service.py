@@ -727,6 +727,41 @@ def resolve_transaction_type(amount_text: str | None, description: str) -> str:
     return infer_transaction_type(description)
 
 
+def build_preview_row_review_metadata(
+    trailing_amounts: list[str],
+    amount_text: str,
+    balance_text: str | None,
+    explicit_type: str | None,
+    description: str,
+    tx_type: str,
+) -> tuple[float, str | None]:
+    if explicit_type or infer_amount_token_type(amount_text):
+        return 0.94, None
+
+    if len(trailing_amounts) >= 3:
+        return (
+            0.58,
+            "Multiple amount columns were detected without a clear debit or credit marker; verify the amount and type.",
+        )
+
+    if is_income_description(description) or is_expense_description(description):
+        return 0.86, "Type was inferred from transaction wording; verify if this row looks unusual."
+
+    if balance_text:
+        return (
+            0.72,
+            "Detected an amount plus balance, but no debit or credit marker; verify the transaction type.",
+        )
+
+    if tx_type == "expense":
+        return (
+            0.68,
+            "No debit or credit marker was available, so this row was assumed to be an expense.",
+        )
+
+    return 0.72, "No debit or credit marker was available; verify the transaction type."
+
+
 def resolve_statement_year_for_month(
     month_num: int,
     start_year: int | None,
@@ -932,6 +967,14 @@ def finalize_pending_transaction(
         return
 
     tx_type = explicit_type or resolve_transaction_type(amount_text_1, description)
+    confidence, review_reason = build_preview_row_review_metadata(
+        trailing_amounts=trailing_amounts,
+        amount_text=amount_text_1,
+        balance_text=amount_text_2,
+        explicit_type=explicit_type,
+        description=description,
+        tx_type=tx_type,
+    )
     category = categorize_transaction(
         db=db,
         owner_id=owner_id,
@@ -953,6 +996,8 @@ def finalize_pending_transaction(
             type=tx_type,
             category=category,
             source_line=source_line[:300],
+            confidence=confidence,
+            review_reason=review_reason,
         )
     )
 

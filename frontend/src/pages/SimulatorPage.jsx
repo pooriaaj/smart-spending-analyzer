@@ -129,6 +129,36 @@ const SAVED_SCENARIO_FILTER_OPTIONS = [
   { value: "event", label: "Event Plans" },
 ];
 
+const RECOMMENDATION_FILTER_OPTIONS = [
+  { value: "all", label: "All Ideas" },
+  { value: "cash_flow", label: "Cash Flow" },
+  { value: "recurring", label: "Recurring" },
+  { value: "budget_pressure", label: "Budget Risk" },
+  { value: "saved", label: "Saved" },
+];
+
+function getRecommendationSourceLabel(source) {
+  if (source === "cash_flow") return "Cash flow";
+  if (source === "recurring" || source === "recurring_bundle") return "Recurring";
+  if (source === "budget_pressure") return "Budget risk";
+  return "Strategy";
+}
+
+function filterRecommendations(recommendations, filterMode) {
+  if (filterMode === "saved") {
+    return recommendations.filter((recommendation) => recommendation.is_saved);
+  }
+  if (filterMode === "recurring") {
+    return recommendations.filter((recommendation) =>
+      ["recurring", "recurring_bundle"].includes(String(recommendation.source || ""))
+    );
+  }
+  if (filterMode === "cash_flow" || filterMode === "budget_pressure") {
+    return recommendations.filter((recommendation) => recommendation.source === filterMode);
+  }
+  return recommendations;
+}
+
 function buildSavedScenarioSummary(scenario) {
   const summaryParts = [`${scenario.months} month${scenario.months === 1 ? "" : "s"}`];
 
@@ -170,6 +200,28 @@ function buildSimulationRequestParams({
         : undefined,
     event_label:
       normalizedEventAmount !== 0 ? String(eventLabel || "").trim() || undefined : undefined,
+  };
+}
+
+function buildSavedScenarioPayloadFromRecommendation(recommendation, accountId) {
+  return {
+    name: recommendation.label || "Recommended simulator plan",
+    months: Math.max(1, Math.min(Number(recommendation.months) || 6, 12)),
+    income_adjustment: Number(recommendation.income_adjustment) || 0,
+    expense_adjustment: Number(recommendation.expense_adjustment) || 0,
+    target_balance:
+      Number(recommendation.target_balance) > 0 ? Number(recommendation.target_balance) : null,
+    event_month_offset:
+      Number(recommendation.event_amount) !== 0 && Number(recommendation.event_month_offset) > 0
+        ? Number(recommendation.event_month_offset)
+        : null,
+    event_amount:
+      Number(recommendation.event_amount) !== 0 ? Number(recommendation.event_amount) : null,
+    event_label:
+      Number(recommendation.event_amount) !== 0
+        ? String(recommendation.event_label || "").trim() || null
+        : null,
+    account_id: accountId,
   };
 }
 
@@ -471,9 +523,14 @@ function SimulatorPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [strategyRecommendations, setStrategyRecommendations] = useState([]);
+  const [recommendationFilter, setRecommendationFilter] = useState("all");
   const [recommendationsLoading, setRecommendationsLoading] = useState(true);
   const [recommendationsError, setRecommendationsError] = useState("");
   const [recommendationMessage, setRecommendationMessage] = useState("");
+  const [previewedRecommendation, setPreviewedRecommendation] = useState(null);
+  const [recommendationPreviewData, setRecommendationPreviewData] = useState(null);
+  const [recommendationPreviewLoading, setRecommendationPreviewLoading] = useState(false);
+  const [recommendationPreviewError, setRecommendationPreviewError] = useState("");
   const [recurringExpenses, setRecurringExpenses] = useState([]);
   const [recurringLoading, setRecurringLoading] = useState(true);
   const [recurringError, setRecurringError] = useState("");
@@ -494,7 +551,9 @@ function SimulatorPage() {
       ? Number(searchParams.get("compare_saved_scenario_id"))
       : null
   );
-  const [savedScenarioName, setSavedScenarioName] = useState("");
+  const [savedScenarioName, setSavedScenarioName] = useState(
+    searchParams.get("scenario_name") || ""
+  );
   const [savedScenarioQuery, setSavedScenarioQuery] = useState("");
   const [savedScenarioFilter, setSavedScenarioFilter] = useState("all");
   const [savedScenarioSort, setSavedScenarioSort] = useState("newest");
@@ -502,6 +561,7 @@ function SimulatorPage() {
   const [savedScenariosLoading, setSavedScenariosLoading] = useState(true);
   const [savingScenario, setSavingScenario] = useState(false);
   const [savingScenarioMode, setSavingScenarioMode] = useState(null);
+  const [savingRecommendationKey, setSavingRecommendationKey] = useState(null);
   const [deletingScenarioId, setDeletingScenarioId] = useState(null);
   const [savedScenarioMessage, setSavedScenarioMessage] = useState("");
   const [savedScenarioError, setSavedScenarioError] = useState("");
@@ -534,6 +594,7 @@ function SimulatorPage() {
     const eventAmountParam = searchParams.get("event_amount");
     const eventMonthParam = Number(searchParams.get("event_month_offset"));
     const eventLabelParam = searchParams.get("event_label");
+    const scenarioNameParam = searchParams.get("scenario_name");
     const compareScenarioParam = Number(searchParams.get("compare_saved_scenario_id"));
 
     if (monthsParam > 0) {
@@ -561,6 +622,9 @@ function SimulatorPage() {
     }
     if (eventLabelParam !== null) {
       setEventLabel(eventLabelParam);
+    }
+    if (scenarioNameParam !== null && !activeSavedScenarioId) {
+      setSavedScenarioName(scenarioNameParam);
     }
     if (compareScenarioParam > 0) {
       setLinkedComparisonScenarioId(compareScenarioParam);
@@ -659,28 +723,28 @@ function SimulatorPage() {
     fetchSavedScenarios();
   }, [navigate, normalizedAccountId]);
 
-  useEffect(() => {
-    const fetchRecommendations = async () => {
-      try {
-        setRecommendationsLoading(true);
-        setRecommendationsError("");
-        const response = await api.get("/analytics/future-simulator-recommendations", {
-          params: {
-            account_id: normalizedAccountId,
-            months: Math.max(1, Math.min(Number(months) || 6, 12)),
-          },
-        });
-        setStrategyRecommendations(response.data?.items || []);
-      } catch (fetchError) {
-        if (!handleApiAuthError(fetchError, navigate)) {
-          setStrategyRecommendations([]);
-          setRecommendationsError("Failed to load recommended plans.");
-        }
-      } finally {
-        setRecommendationsLoading(false);
+  const fetchRecommendations = async () => {
+    try {
+      setRecommendationsLoading(true);
+      setRecommendationsError("");
+      const response = await api.get("/analytics/future-simulator-recommendations", {
+        params: {
+          account_id: normalizedAccountId,
+          months: Math.max(1, Math.min(Number(months) || 6, 12)),
+        },
+      });
+      setStrategyRecommendations(response.data?.items || []);
+    } catch (fetchError) {
+      if (!handleApiAuthError(fetchError, navigate)) {
+        setStrategyRecommendations([]);
+        setRecommendationsError("Failed to load recommended plans.");
       }
-    };
+    } finally {
+      setRecommendationsLoading(false);
+    }
+  };
 
+  useEffect(() => {
     fetchRecommendations();
   }, [navigate, normalizedAccountId, months]);
 
@@ -869,6 +933,38 @@ function SimulatorPage() {
 
     return highlights;
   }, [displayedSavedScenarios]);
+  const recommendationCountsByFilter = useMemo(
+    () =>
+      Object.fromEntries(
+        RECOMMENDATION_FILTER_OPTIONS.map((option) => [
+          option.value,
+          filterRecommendations(strategyRecommendations, option.value).length,
+        ])
+      ),
+    [strategyRecommendations]
+  );
+  const displayedRecommendations = useMemo(
+    () => filterRecommendations(strategyRecommendations, recommendationFilter),
+    [strategyRecommendations, recommendationFilter]
+  );
+  const recommendationSummary = useMemo(() => {
+    const strongestRecommendation = [...strategyRecommendations].sort(
+      (left, right) =>
+        (Number(right.scenario_impact_amount) || 0) - (Number(left.scenario_impact_amount) || 0) ||
+        (Number(right.projected_end_balance) || 0) - (Number(left.projected_end_balance) || 0)
+    )[0] || null;
+    const savedCount = strategyRecommendations.filter((recommendation) => recommendation.is_saved).length;
+    const healthyCount = strategyRecommendations.filter(
+      (recommendation) => recommendation.risk_level === "healthy"
+    ).length;
+
+    return {
+      total: strategyRecommendations.length,
+      savedCount,
+      healthyCount,
+      strongestRecommendation,
+    };
+  }, [strategyRecommendations]);
   const recurringLeverCandidates = useMemo(() => {
     const priorityRank = { high: 2, medium: 1, low: 0 };
 
@@ -1013,6 +1109,28 @@ function SimulatorPage() {
     () => buildScenarioComparisonHighlights(simulatorData, comparisonData, comparedScenario?.name),
     [simulatorData, comparisonData, comparedScenario]
   );
+  const recommendationPreviewNote = useMemo(
+    () =>
+      buildScenarioComparisonNote(
+        simulatorData,
+        recommendationPreviewData,
+        previewedRecommendation?.label
+      ),
+    [simulatorData, recommendationPreviewData, previewedRecommendation]
+  );
+  const recommendationPreviewTimeline = useMemo(
+    () => buildScenarioComparisonTimeline(simulatorData, recommendationPreviewData),
+    [simulatorData, recommendationPreviewData]
+  );
+  const recommendationPreviewHighlights = useMemo(
+    () =>
+      buildScenarioComparisonHighlights(
+        simulatorData,
+        recommendationPreviewData,
+        previewedRecommendation?.label
+      ),
+    [simulatorData, recommendationPreviewData, previewedRecommendation]
+  );
 
   const scenarioCheckpoints = useMemo(
     () => buildScenarioCheckpoints(simulatorData),
@@ -1029,6 +1147,16 @@ function SimulatorPage() {
     simulatorData && comparisonData
       ? Number(simulatorData.monthly_net_change || 0) -
         Number(comparisonData.monthly_net_change || 0)
+      : null;
+  const recommendationPreviewBalanceDelta =
+    simulatorData && recommendationPreviewData
+      ? Number(recommendationPreviewData.projected_end_balance || 0) -
+        Number(simulatorData.projected_end_balance || 0)
+      : null;
+  const recommendationPreviewMonthlyNetDelta =
+    simulatorData && recommendationPreviewData
+      ? Number(recommendationPreviewData.monthly_net_change || 0) -
+        Number(simulatorData.monthly_net_change || 0)
       : null;
 
   const customTooltipStyle = {
@@ -1066,7 +1194,7 @@ function SimulatorPage() {
 
     setActiveSavedScenarioId(null);
     setLinkedSavedScenarioId(null);
-    setSavedScenarioName("");
+    setSavedScenarioName(recommendation.label || "");
     setRecurringLeverMessage("");
     setMonths(recommendation.months || 6);
     setIncomeAdjustment(String(recommendation.income_adjustment || 0));
@@ -1080,6 +1208,98 @@ function SimulatorPage() {
     setEventMonthOffset(recommendation.event_month_offset || 1);
     setEventLabel(recommendation.event_label || "");
     setRecommendationMessage(`Applied "${recommendation.label}" to the simulator controls.`);
+  };
+
+  const handleSaveRecommendation = async (recommendation) => {
+    if (!recommendation) {
+      return;
+    }
+
+    if (recommendation.saved_scenario_id) {
+      const matchedScenario = savedScenarios.find(
+        (scenario) => scenario.id === recommendation.saved_scenario_id
+      );
+      if (matchedScenario) {
+        handleLoadSavedScenario(matchedScenario);
+        return;
+      }
+    }
+
+    try {
+      setSavingRecommendationKey(recommendation.key);
+      setSavedScenarioError("");
+      setSavedScenarioMessage("");
+      const payload = buildSavedScenarioPayloadFromRecommendation(
+        recommendation,
+        normalizedAccountId
+      );
+      const response = await api.post("/analytics/saved-scenarios", payload);
+      setActiveSavedScenarioId(response.data.id);
+      setLinkedSavedScenarioId(response.data.id);
+      setSavedScenarioName(response.data.name);
+      setSelectedAccountId(
+        response.data.account_id == null ? ALL_ACCOUNTS_VALUE : String(response.data.account_id)
+      );
+      setMonths(response.data.months || payload.months);
+      setIncomeAdjustment(String(response.data.income_adjustment || 0));
+      setExpenseAdjustment(String(response.data.expense_adjustment || 0));
+      setTargetBalance(
+        response.data.target_balance != null ? String(response.data.target_balance) : ""
+      );
+      setEventAmount(response.data.event_amount != null ? String(response.data.event_amount) : "");
+      setEventMonthOffset(response.data.event_month_offset || 1);
+      setEventLabel(response.data.event_label || "");
+      setSavedScenarioMessage(`Saved recommended plan "${response.data.name}".`);
+      await fetchSavedScenarios();
+      await fetchRecommendations();
+    } catch (saveError) {
+      if (!handleApiAuthError(saveError, navigate)) {
+        setSavedScenarioError(
+          saveError?.response?.data?.detail || "Failed to save recommended plan."
+        );
+      }
+    } finally {
+      setSavingRecommendationKey(null);
+    }
+  };
+
+  const handlePreviewRecommendation = async (recommendation) => {
+    if (!recommendation) {
+      return;
+    }
+
+    try {
+      setPreviewedRecommendation(recommendation);
+      setRecommendationPreviewLoading(true);
+      setRecommendationPreviewError("");
+      const response = await api.get("/analytics/future-simulator", {
+        params: buildSimulationRequestParams({
+          accountId: normalizedAccountId,
+          months: recommendation.months,
+          incomeAdjustment: recommendation.income_adjustment,
+          expenseAdjustment: recommendation.expense_adjustment,
+          targetBalance: recommendation.target_balance,
+          eventAmount: recommendation.event_amount,
+          eventMonthOffset: recommendation.event_month_offset,
+          eventLabel: recommendation.event_label,
+        }),
+      });
+      setRecommendationPreviewData(response.data);
+    } catch (previewError) {
+      if (!handleApiAuthError(previewError, navigate)) {
+        setRecommendationPreviewData(null);
+        setRecommendationPreviewError(`Failed to preview "${recommendation.label}".`);
+      }
+    } finally {
+      setRecommendationPreviewLoading(false);
+    }
+  };
+
+  const clearRecommendationPreview = () => {
+    setPreviewedRecommendation(null);
+    setRecommendationPreviewData(null);
+    setRecommendationPreviewError("");
+    setRecommendationPreviewLoading(false);
   };
 
   const handleApplyRecurringLever = ({ amount, label }) => {
@@ -1364,58 +1584,248 @@ function SimulatorPage() {
               <p>No recommendation-ready plans yet for this scope.</p>
             </div>
           ) : (
-            <div className="simulator-recommendation-grid">
-              {strategyRecommendations.map((recommendation) => (
-                <div
-                  key={`simulator-recommendation-${recommendation.key}`}
-                  className="simulator-recommendation-card"
-                >
-                  <div className="simulator-recommendation-top">
-                    <div>
-                      <h3>{recommendation.label}</h3>
-                      <p>{recommendation.description}</p>
-                    </div>
-                    <span
-                      className={`simulator-risk-pill ${
-                        recommendation.risk_level === "high"
-                          ? "simulator-risk-high"
-                          : recommendation.risk_level === "watch"
-                            ? "simulator-risk-watch"
-                            : "simulator-risk-healthy"
-                      }`}
-                    >
-                      {getScenarioRiskLabel(recommendation.risk_level)}
-                    </span>
-                  </div>
-
-                  <div className="simulator-recommendation-metrics">
-                    <div>
-                      <span>Impact</span>
-                      <strong>{formatScenarioCurrency(recommendation.scenario_impact_amount)}</strong>
-                    </div>
-                    <div>
-                      <span>Projected end</span>
-                      <strong>{formatScenarioCurrency(recommendation.projected_end_balance)}</strong>
-                    </div>
-                    <div>
-                      <span>Monthly net</span>
-                      <strong>{formatSignedScenarioAmount(recommendation.monthly_net_change)}</strong>
-                    </div>
-                  </div>
-
-                  <p className="budget-inline-note">{recommendation.reason}</p>
-                  <div className="simulator-saved-scenario-actions">
-                    <button
-                      type="button"
-                      className="secondary-button"
-                      onClick={() => applyRecommendation(recommendation)}
-                    >
-                      Apply Plan
-                    </button>
-                  </div>
+            <>
+              <div className="simulator-recommendation-summary-grid">
+                <div className="simulator-recommendation-summary-card">
+                  <span>Ideas</span>
+                  <strong>{recommendationSummary.total}</strong>
                 </div>
-              ))}
-            </div>
+                <div className="simulator-recommendation-summary-card">
+                  <span>Saved</span>
+                  <strong>{recommendationSummary.savedCount}</strong>
+                </div>
+                <div className="simulator-recommendation-summary-card">
+                  <span>Healthy</span>
+                  <strong>{recommendationSummary.healthyCount}</strong>
+                </div>
+                <div className="simulator-recommendation-summary-card">
+                  <span>Best impact</span>
+                  <strong>
+                    {recommendationSummary.strongestRecommendation
+                      ? formatScenarioCurrency(recommendationSummary.strongestRecommendation.scenario_impact_amount)
+                      : "$0.00"}
+                  </strong>
+                </div>
+              </div>
+
+              <div className="simulator-recommendation-filter-row">
+                {RECOMMENDATION_FILTER_OPTIONS.map((option) => (
+                  <button
+                    key={`recommendation-filter-${option.value}`}
+                    type="button"
+                    className={
+                      recommendationFilter === option.value
+                        ? "smart-action-button simulator-recommendation-filter-active"
+                        : "secondary-button"
+                    }
+                    onClick={() => setRecommendationFilter(option.value)}
+                  >
+                    {option.label} ({recommendationCountsByFilter[option.value] || 0})
+                  </button>
+                ))}
+              </div>
+
+              {displayedRecommendations.length === 0 ? (
+                <div className="empty-state">
+                  <p>No recommended plans match this filter.</p>
+                </div>
+              ) : (
+                <div className="simulator-recommendation-grid">
+                  {displayedRecommendations.map((recommendation) => {
+                const savedScenario = recommendation.saved_scenario_id
+                  ? savedScenarios.find(
+                      (scenario) => scenario.id === recommendation.saved_scenario_id
+                    )
+                  : null;
+
+                return (
+                  <div
+                    key={`simulator-recommendation-${recommendation.key}`}
+                    className="simulator-recommendation-card"
+                  >
+                    <div className="simulator-recommendation-top">
+                      <div>
+                        <h3>{recommendation.label}</h3>
+                        <p>{recommendation.description}</p>
+                      </div>
+                      <div className="simulator-saved-scenario-badges">
+                        {recommendation.is_saved && (
+                          <span className="budget-status budget-status-on-track">Saved</span>
+                        )}
+                        <span className="budget-status budget-status-risk">
+                          {getRecommendationSourceLabel(recommendation.source)}
+                        </span>
+                        <span
+                          className={`simulator-risk-pill ${
+                            recommendation.risk_level === "high"
+                              ? "simulator-risk-high"
+                              : recommendation.risk_level === "watch"
+                                ? "simulator-risk-watch"
+                                : "simulator-risk-healthy"
+                          }`}
+                        >
+                          {getScenarioRiskLabel(recommendation.risk_level)}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="simulator-recommendation-metrics">
+                      <div>
+                        <span>Impact</span>
+                        <strong>{formatScenarioCurrency(recommendation.scenario_impact_amount)}</strong>
+                      </div>
+                      <div>
+                        <span>Projected end</span>
+                        <strong>{formatScenarioCurrency(recommendation.projected_end_balance)}</strong>
+                      </div>
+                      <div>
+                        <span>Monthly net</span>
+                        <strong>{formatSignedScenarioAmount(recommendation.monthly_net_change)}</strong>
+                      </div>
+                    </div>
+
+                    <p className="budget-inline-note">{recommendation.reason}</p>
+                    <div className="simulator-saved-scenario-actions">
+                      <button
+                        type="button"
+                        className="secondary-button"
+                        onClick={() => applyRecommendation(recommendation)}
+                      >
+                        Apply Plan
+                      </button>
+                      <button
+                        type="button"
+                        className="secondary-button"
+                        onClick={() => handlePreviewRecommendation(recommendation)}
+                        disabled={
+                          recommendationPreviewLoading &&
+                          previewedRecommendation?.key === recommendation.key
+                        }
+                      >
+                        {recommendationPreviewLoading &&
+                        previewedRecommendation?.key === recommendation.key
+                          ? "Previewing..."
+                          : "Preview Impact"}
+                      </button>
+                      <button
+                        type="button"
+                        className="secondary-button"
+                        onClick={() =>
+                          savedScenario
+                            ? handleLoadSavedScenario(savedScenario)
+                            : handleSaveRecommendation(recommendation)
+                        }
+                        disabled={savingRecommendationKey === recommendation.key}
+                      >
+                        {savingRecommendationKey === recommendation.key
+                          ? "Saving..."
+                          : savedScenario
+                            ? "Load Saved"
+                            : "Save Plan"}
+                      </button>
+                    </div>
+                  </div>
+                );
+                  })}
+                </div>
+              )}
+
+              {previewedRecommendation && (
+                <div className="simulator-recommendation-preview">
+                  <div className="section-header">
+                    <div>
+                      <h2>Recommendation Preview</h2>
+                      <p>Current draft vs "{previewedRecommendation.label}".</p>
+                    </div>
+                    <div className="budget-section-actions">
+                      <button
+                        type="button"
+                        className="secondary-button"
+                        onClick={() => applyRecommendation(previewedRecommendation)}
+                      >
+                        Apply Preview
+                      </button>
+                      <button
+                        type="button"
+                        className="secondary-button"
+                        onClick={clearRecommendationPreview}
+                      >
+                        Clear Preview
+                      </button>
+                    </div>
+                  </div>
+
+                  {recommendationPreviewLoading ? (
+                    <div className="empty-state">
+                      <p>Previewing recommendation...</p>
+                    </div>
+                  ) : recommendationPreviewError ? (
+                    <p className="error-text">{recommendationPreviewError}</p>
+                  ) : recommendationPreviewData && simulatorData ? (
+                    <>
+                      <p className="budget-forecast-banner">{recommendationPreviewNote}</p>
+                      <div className="simulator-checkpoint-grid">
+                        {recommendationPreviewHighlights.map((item) => (
+                          <div
+                            key={`recommendation-preview-${item.title}-${item.value}`}
+                            className="simulator-checkpoint-card"
+                          >
+                            <span>{item.title}</span>
+                            <strong>{item.value}</strong>
+                            <p>{item.detail}</p>
+                          </div>
+                        ))}
+                      </div>
+
+                      <div className="simulator-metrics-grid">
+                        <div className="simulator-metric-card">
+                          <span>Preview end balance</span>
+                          <strong>{formatScenarioCurrency(recommendationPreviewData.projected_end_balance)}</strong>
+                        </div>
+                        <div className="simulator-metric-card">
+                          <span>End balance lift</span>
+                          <strong>{formatSignedScenarioAmount(recommendationPreviewBalanceDelta)}</strong>
+                        </div>
+                        <div className="simulator-metric-card">
+                          <span>Monthly net lift</span>
+                          <strong>{formatSignedScenarioAmount(recommendationPreviewMonthlyNetDelta)}</strong>
+                        </div>
+                      </div>
+
+                      <div className="simulator-comparison-section simulator-chart-card">
+                        <ResponsiveContainer width="100%" height={240}>
+                          <LineChart data={recommendationPreviewTimeline}>
+                            <CartesianGrid strokeDasharray="3 3" stroke={chartTheme.grid} />
+                            <XAxis dataKey="month" tick={{ fill: chartTheme.text, fontSize: 12 }} />
+                            <YAxis tick={{ fill: chartTheme.text, fontSize: 12 }} />
+                            <Tooltip
+                              contentStyle={customTooltipStyle}
+                              formatter={(value) => formatScenarioCurrency(value)}
+                            />
+                            <Line
+                              type="monotone"
+                              dataKey="current_ending_balance"
+                              name="Current draft"
+                              stroke={chartTheme.balanceLine}
+                              strokeWidth={3}
+                              dot={{ r: 3 }}
+                            />
+                            <Line
+                              type="monotone"
+                              dataKey="compared_ending_balance"
+                              name={previewedRecommendation.label}
+                              stroke={chartTheme.compareLine}
+                              strokeWidth={3}
+                              dot={{ r: 3 }}
+                            />
+                          </LineChart>
+                        </ResponsiveContainer>
+                      </div>
+                    </>
+                  ) : null}
+                </div>
+              )}
+            </>
           )}
 
           <div className="simulator-preset-grid">

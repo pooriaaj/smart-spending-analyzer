@@ -87,6 +87,17 @@ const buildPreviewDuplicateKey = (row, validation) => {
   });
 };
 
+const getPreviewRowConfidence = (row) => {
+  const confidence = Number(row?.confidence);
+  if (!Number.isFinite(confidence) || confidence <= 0) {
+    return null;
+  }
+  return Math.max(0, Math.min(confidence, 1));
+};
+
+const formatConfidencePercent = (confidence) =>
+  confidence == null ? "Not scored" : `${Math.round(confidence * 100)}%`;
+
 function ImportPage() {
   const navigate = useNavigate();
   const fileInputRef = useRef(null);
@@ -161,25 +172,39 @@ function ImportPage() {
       [duplicateKey]: (counts[duplicateKey] || 0) + 1,
     };
   }, {});
-  const previewRowItems = previewRows.map((row, index) => ({
-    row,
-    index,
-    validation: previewRowValidations[index],
-    duplicateReason:
-      row.is_duplicate && row.duplicate_reason
-        ? row.duplicate_reason
-        : (() => {
-            const duplicateKey = buildPreviewDuplicateKey(row, previewRowValidations[index]);
-            if (duplicateKey && previewDuplicateCounts[duplicateKey] > 1) {
-              return "Duplicate of another row in this preview.";
-            }
-            return null;
-          })(),
-  }));
+  const previewRowItems = previewRows.map((row, index) => {
+    const confidence = getPreviewRowConfidence(row);
+    const confidenceReason =
+      row.review_reason ||
+      (confidence != null && confidence < 0.75
+        ? "Parser confidence is low; verify this row before importing."
+        : null);
+
+    return {
+      row,
+      index,
+      validation: previewRowValidations[index],
+      confidence,
+      confidenceReason,
+      duplicateReason:
+        row.is_duplicate && row.duplicate_reason
+          ? row.duplicate_reason
+          : (() => {
+              const duplicateKey = buildPreviewDuplicateKey(row, previewRowValidations[index]);
+              if (duplicateKey && previewDuplicateCounts[duplicateKey] > 1) {
+                return "Duplicate of another row in this preview.";
+              }
+              return null;
+            })(),
+    };
+  });
   const invalidPreviewRowCount = previewRowValidations.filter(
     (validation) => validation.messages.length > 0
   ).length;
   const duplicatePreviewRowCount = previewRowItems.filter((item) => item.duplicateReason).length;
+  const confidencePreviewRowCount = previewRowItems.filter(
+    (item) => item.confidenceReason
+  ).length;
   const manualPreviewRowCount = previewRows.filter(
     (row) => row.source_line === "Added manually during review."
   ).length;
@@ -187,15 +212,20 @@ function ImportPage() {
     ({ duplicateReason, validation }) => !duplicateReason && validation.messages.length === 0
   ).length;
   const receiptDraftValidation = validateReceiptDraft(receiptDraft);
-  const filteredPreviewRows = previewRowItems.filter(({ duplicateReason, validation }) => {
-    if (previewFilter === "needs_review") {
-      return validation.messages.length > 0;
+  const filteredPreviewRows = previewRowItems.filter(
+    ({ duplicateReason, validation, confidenceReason }) => {
+      if (previewFilter === "needs_review") {
+        return validation.messages.length > 0;
+      }
+      if (previewFilter === "duplicates") {
+        return Boolean(duplicateReason);
+      }
+      if (previewFilter === "confidence") {
+        return Boolean(confidenceReason);
+      }
+      return true;
     }
-    if (previewFilter === "duplicates") {
-      return Boolean(duplicateReason);
-    }
-    return true;
-  });
+  );
 
   const clearAll = () => {
     setSelectedFileName("");
@@ -623,6 +653,8 @@ function ImportPage() {
                     ? `${invalidPreviewRowCount} row${invalidPreviewRowCount === 1 ? "" : "s"} still need attention before you can import.`
                     : duplicatePreviewRowCount > 0
                     ? `${duplicatePreviewRowCount} row${duplicatePreviewRowCount === 1 ? "" : "s"} look like duplicates and may be skipped on import.`
+                    : confidencePreviewRowCount > 0
+                    ? `${confidencePreviewRowCount} row${confidencePreviewRowCount === 1 ? "" : "s"} should get a quick parser confidence check before importing.`
                     : removedPreviewCount > 0
                     ? `${removedPreviewCount} removed row${removedPreviewCount === 1 ? "" : "s"} will be skipped when you confirm.`
                     : manualPreviewRowCount > 0
@@ -689,6 +721,10 @@ function ImportPage() {
                 <strong>{duplicatePreviewRowCount}</strong>
               </div>
               <div className="import-preview-stat-card">
+                <span className="import-preview-stat-label">Confidence</span>
+                <strong>{confidencePreviewRowCount}</strong>
+              </div>
+              <div className="import-preview-stat-card">
                 <span className="import-preview-stat-label">Removed</span>
                 <strong>{removedPreviewCount}</strong>
               </div>
@@ -720,6 +756,13 @@ function ImportPage() {
               >
                 Likely Duplicates ({duplicatePreviewRowCount})
               </button>
+              <button
+                type="button"
+                className={`import-filter-chip ${previewFilter === "confidence" ? "import-filter-chip-active" : ""}`}
+                onClick={() => setPreviewFilter("confidence")}
+              >
+                Confidence Check ({confidencePreviewRowCount})
+              </button>
             </div>
 
             {invalidPreviewRowCount > 0 && (
@@ -742,6 +785,17 @@ function ImportPage() {
               </div>
             )}
 
+            {confidencePreviewRowCount > 0 && (
+              <div className="import-confidence-box">
+                <strong>
+                  {confidencePreviewRowCount} parser confidence check{confidencePreviewRowCount === 1 ? "" : "s"}
+                </strong>
+                <p>
+                  These rows are still importable, but the parser is telling us to verify the amount or income/expense direction before saving.
+                </p>
+              </div>
+            )}
+
             {previewRows.length > 0 && filteredPreviewRows.length > 0 ? (
               <div className="transactions-table-wrapper">
                 <table className="transactions-table">
@@ -756,89 +810,102 @@ function ImportPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {filteredPreviewRows.map(({ row, index, validation, duplicateReason }) => {
-
-                      return (
-                        <tr key={`preview-row-${index}`}>
-                          <td>
-                            <input
-                              type="date"
-                              className={validation.fieldIssues.date ? "import-invalid-input" : ""}
-                              value={row.date}
-                              onChange={(e) => handlePreviewRowChange(index, "date", e.target.value)}
-                            />
-                          </td>
-                          <td>
-                            <input
-                              type="text"
-                              className={validation.fieldIssues.description ? "import-invalid-input" : ""}
-                              value={row.description}
-                              onChange={(e) => handlePreviewRowChange(index, "description", e.target.value)}
-                            />
-                            {row.source_line && (
-                              <div className="import-source-line">
-                                <span className="import-source-label">Parsed From</span>
-                                <code>{row.source_line}</code>
-                              </div>
-                            )}
-                            {duplicateReason && (
-                              <div className="import-duplicate-note">{duplicateReason}</div>
-                            )}
-                            {validation.messages.length > 0 && (
-                              <div className="import-row-issues">
-                                Needs review: {validation.messages.join(", ")}.
-                              </div>
-                            )}
-                          </td>
-                          <td>
-                            <input
-                              type="number"
-                              step="0.01"
-                              className={validation.fieldIssues.amount ? "import-invalid-input" : ""}
-                              value={row.amount}
-                              onChange={(e) => handlePreviewRowChange(index, "amount", e.target.value)}
-                            />
-                          </td>
-                          <td>
-                            <select
-                              className={validation.fieldIssues.type ? "import-invalid-input" : ""}
-                              value={row.type}
-                              onChange={(e) => handlePreviewRowChange(index, "type", e.target.value)}
-                            >
-                              <option value="expense">Expense</option>
-                              <option value="income">Income</option>
-                            </select>
-                          </td>
-                          <td>
-                            <input
-                              type="text"
-                              className={validation.fieldIssues.category ? "import-invalid-input" : ""}
-                              value={row.category}
-                              onChange={(e) => handlePreviewRowChange(index, "category", e.target.value)}
-                            />
-                          </td>
-                          <td className="import-actions-cell">
-                            <button
-                              type="button"
-                              className="import-remove-row-button"
-                              onClick={() => handleRemovePreviewRow(index)}
-                              disabled={confirmingPreview}
-                            >
-                              Remove
-                            </button>
-                            {row.source_line === "Added manually during review." && (
-                              <span className="import-row-status import-row-status-manual">Manual row</span>
-                            )}
-                            {duplicateReason && (
-                              <span className="import-row-status import-row-status-duplicate">Likely duplicate</span>
-                            )}
-                            {validation.messages.length > 0 && (
-                              <span className="import-row-status import-row-status-warning">Needs review</span>
-                            )}
-                          </td>
-                        </tr>
-                      );
-                    })}
+                    {filteredPreviewRows.map(
+                      ({ row, index, validation, duplicateReason, confidence, confidenceReason }) => {
+                        return (
+                          <tr key={`preview-row-${index}`}>
+                            <td>
+                              <input
+                                type="date"
+                                className={validation.fieldIssues.date ? "import-invalid-input" : ""}
+                                value={row.date}
+                                onChange={(e) => handlePreviewRowChange(index, "date", e.target.value)}
+                              />
+                            </td>
+                            <td>
+                              <input
+                                type="text"
+                                className={validation.fieldIssues.description ? "import-invalid-input" : ""}
+                                value={row.description}
+                                onChange={(e) => handlePreviewRowChange(index, "description", e.target.value)}
+                              />
+                              {row.source_line && (
+                                <div className="import-source-line">
+                                  <span className="import-source-label">Parsed From</span>
+                                  <code>{row.source_line}</code>
+                                </div>
+                              )}
+                              {confidence != null && (
+                                <div className="import-confidence-row">
+                                  <span>Parser confidence</span>
+                                  <strong>{formatConfidencePercent(confidence)}</strong>
+                                </div>
+                              )}
+                              {confidenceReason && (
+                                <div className="import-confidence-note">{confidenceReason}</div>
+                              )}
+                              {duplicateReason && (
+                                <div className="import-duplicate-note">{duplicateReason}</div>
+                              )}
+                              {validation.messages.length > 0 && (
+                                <div className="import-row-issues">
+                                  Needs review: {validation.messages.join(", ")}.
+                                </div>
+                              )}
+                            </td>
+                            <td>
+                              <input
+                                type="number"
+                                step="0.01"
+                                className={validation.fieldIssues.amount ? "import-invalid-input" : ""}
+                                value={row.amount}
+                                onChange={(e) => handlePreviewRowChange(index, "amount", e.target.value)}
+                              />
+                            </td>
+                            <td>
+                              <select
+                                className={validation.fieldIssues.type ? "import-invalid-input" : ""}
+                                value={row.type}
+                                onChange={(e) => handlePreviewRowChange(index, "type", e.target.value)}
+                              >
+                                <option value="expense">Expense</option>
+                                <option value="income">Income</option>
+                              </select>
+                            </td>
+                            <td>
+                              <input
+                                type="text"
+                                className={validation.fieldIssues.category ? "import-invalid-input" : ""}
+                                value={row.category}
+                                onChange={(e) => handlePreviewRowChange(index, "category", e.target.value)}
+                              />
+                            </td>
+                            <td className="import-actions-cell">
+                              <button
+                                type="button"
+                                className="import-remove-row-button"
+                                onClick={() => handleRemovePreviewRow(index)}
+                                disabled={confirmingPreview}
+                              >
+                                Remove
+                              </button>
+                              {row.source_line === "Added manually during review." && (
+                                <span className="import-row-status import-row-status-manual">Manual row</span>
+                              )}
+                              {duplicateReason && (
+                                <span className="import-row-status import-row-status-duplicate">Likely duplicate</span>
+                              )}
+                              {confidenceReason && (
+                                <span className="import-row-status import-row-status-confidence">Check parser</span>
+                              )}
+                              {validation.messages.length > 0 && (
+                                <span className="import-row-status import-row-status-warning">Needs review</span>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      }
+                    )}
                   </tbody>
                 </table>
               </div>
