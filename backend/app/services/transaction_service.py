@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from datetime import date, datetime
 from typing import Iterable
 
+from sqlalchemy import inspect
 from sqlalchemy.orm import Session
 
 from app.models import CategoryMemory, MerchantCategoryProfile, Transaction
@@ -375,6 +376,13 @@ def merchant_profile_confidence(confirmation_count: int) -> float:
     return 0.9
 
 
+def merchant_profile_table_available(db: Session) -> bool:
+    try:
+        return inspect(db.get_bind()).has_table(MerchantCategoryProfile.__tablename__)
+    except Exception:
+        return False
+
+
 def save_merchant_category_profile(
     db: Session,
     owner_id: int,
@@ -383,6 +391,9 @@ def save_merchant_category_profile(
     tx_type: str,
     amount: float | None = None,
 ) -> dict[str, int]:
+    if not merchant_profile_table_available(db):
+        return {"created": 0, "updated": 0}
+
     normalized_category = normalize_category_name(category)
     if not should_store_category_memory(normalized_category):
         return {"created": 0, "updated": 0}
@@ -573,6 +584,9 @@ def learnable_category_from_merchant_profile(
     description: str,
     tx_type: str,
 ) -> MerchantCategoryProfile | None:
+    if not merchant_profile_table_available(db):
+        return None
+
     fingerprint = extract_merchant_fingerprint(description)
     if not fingerprint:
         return None

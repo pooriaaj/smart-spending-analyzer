@@ -212,6 +212,7 @@ def confirm_preview_import(
     imported = 0
     duplicates_skipped = 0
     invalid_rows_skipped = 0
+    category_memory_events = []
 
     for row in payload.rows:
         try:
@@ -244,19 +245,33 @@ def confirm_preview_import(
                 account_id=payload.account_id,
             )
             db.add(transaction)
-            save_category_memory(
-                db=db,
-                owner_id=current_user.id,
-                description=row.description,
-                category=normalized_category,
-                tx_type=row.type,
-                amount=row.amount,
+            category_memory_events.append(
+                {
+                    "description": row.description,
+                    "category": normalized_category,
+                    "tx_type": row.type,
+                    "amount": row.amount,
+                }
             )
             imported += 1
         except Exception:
             invalid_rows_skipped += 1
 
     db.commit()
+
+    try:
+        for event in category_memory_events:
+            save_category_memory(
+                db=db,
+                owner_id=current_user.id,
+                description=event["description"],
+                category=event["category"],
+                tx_type=event["tx_type"],
+                amount=event["amount"],
+            )
+        db.commit()
+    except Exception:
+        db.rollback()
 
     return {
         "message": "Preview import completed",

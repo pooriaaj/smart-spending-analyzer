@@ -448,6 +448,44 @@ class SmartImportRouteTest(unittest.TestCase):
         self.assertEqual(suggestions[0]["matched_keyword"], "sephora")
         self.assertIn("learned category memory", suggestions[0]["reason"].lower())
 
+    def test_confirm_preview_import_does_not_fail_when_learning_memory_fails(self) -> None:
+        with patch(
+            "app.routes.transaction_routes.save_category_memory",
+            side_effect=RuntimeError("learning table unavailable"),
+        ):
+            confirm_response = self.client.post(
+                "/transactions/import/confirm-preview",
+                json={
+                    "account_id": self.account_id,
+                    "rows": [
+                        {
+                            "date": "2025-01-03",
+                            "description": "Metro Groceries",
+                            "amount": 54.25,
+                            "type": "expense",
+                            "category": "groceries",
+                        }
+                    ],
+                },
+            )
+
+        self.assertEqual(confirm_response.status_code, 200, confirm_response.text)
+        payload = confirm_response.json()
+        self.assertEqual(payload["imported"], 1)
+        self.assertEqual(payload["invalid_rows_skipped"], 0)
+
+        with self.session_local() as session:
+            imported_transaction = (
+                session.query(Transaction)
+                .filter(
+                    Transaction.owner_id == self.user_id,
+                    Transaction.description == "Metro Groceries",
+                )
+                .one_or_none()
+            )
+
+        self.assertIsNotNone(imported_transaction)
+
     def test_confirmed_categories_train_learned_merchant_profiles(self) -> None:
         categorized_response = self.client.post(
             "/transactions/",

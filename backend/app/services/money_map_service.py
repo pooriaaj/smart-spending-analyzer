@@ -14,6 +14,7 @@ from app.services.transaction_service import (
     UNCATEGORIZED_VALUES,
     categorize_transaction_details,
     get_uncategorized_candidates,
+    merchant_profile_table_available,
 )
 
 
@@ -175,14 +176,17 @@ def get_money_map_payload(
     )
 
     memory_query = db.query(CategoryMemory).filter(CategoryMemory.owner_id == user_id)
-    merchant_query = db.query(MerchantCategoryProfile).filter(
-        MerchantCategoryProfile.owner_id == user_id
+    can_use_merchant_profiles = merchant_profile_table_available(db)
+    merchant_query = (
+        db.query(MerchantCategoryProfile).filter(MerchantCategoryProfile.owner_id == user_id)
+        if can_use_merchant_profiles
+        else None
     )
     if account_id is not None:
         transaction_ids = [item.id for item in transactions]
         # Category memories are user-level, but merchant profiles are learned from the
         # user's confirmed transactions. Keep counts user-level when the scope has no rows.
-        if transaction_ids:
+        if transaction_ids and merchant_query is not None:
             merchant_keys = {
                 profile.merchant_key
                 for profile in merchant_query.all()
@@ -192,7 +196,7 @@ def get_money_map_payload(
         else:
             learned_merchant_count = 0
     else:
-        learned_merchant_count = merchant_query.count()
+        learned_merchant_count = merchant_query.count() if merchant_query is not None else 0
 
     memory_count = memory_query.count()
     confidence_score = build_money_map_confidence(
