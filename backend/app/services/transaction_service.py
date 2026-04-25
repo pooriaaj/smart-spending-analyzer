@@ -11,6 +11,7 @@ from sqlalchemy import inspect
 from sqlalchemy.orm import Session
 
 from app.models import CategoryMemory, MerchantCategoryProfile, Transaction
+from app.schemas import StatementPreviewRow
 
 
 SUPPORTED_ENCODINGS = ["utf-8-sig", "utf-8", "cp1252", "latin-1"]
@@ -749,6 +750,22 @@ def build_duplicate_key(
     )
 
 
+def build_statement_match_key(
+    owner_id: int,
+    account_id: int,
+    tx_date: date,
+    amount: float,
+    tx_type: str,
+) -> tuple:
+    return (
+        owner_id,
+        account_id,
+        tx_date.isoformat(),
+        round(abs(float(amount)), 2),
+        tx_type.strip().lower(),
+    )
+
+
 def get_existing_duplicate_keys(db: Session, owner_id: int, account_id: int | None = None) -> set[tuple]:
     query = db.query(Transaction).filter(Transaction.owner_id == owner_id)
 
@@ -769,6 +786,33 @@ def get_existing_duplicate_keys(db: Session, owner_id: int, account_id: int | No
         )
         for transaction in existing_transactions
     }
+
+
+def get_existing_statement_match_map(
+    db: Session,
+    owner_id: int,
+    account_id: int | None = None,
+) -> dict[tuple, Transaction]:
+    query = db.query(Transaction).filter(Transaction.owner_id == owner_id)
+
+    if account_id is not None:
+        query = query.filter(Transaction.account_id == account_id)
+
+    existing_transactions = query.all()
+    match_map: dict[tuple, Transaction] = {}
+    for transaction in existing_transactions:
+        if transaction.account_id is None:
+            continue
+        key = build_statement_match_key(
+            owner_id=transaction.owner_id,
+            account_id=transaction.account_id,
+            tx_date=transaction.date,
+            amount=transaction.amount,
+            tx_type=transaction.type,
+        )
+        match_map.setdefault(key, transaction)
+
+    return match_map
 
 
 def import_transactions_from_csv(
@@ -852,6 +896,71 @@ def import_transactions_from_csv(
         "message": "Statement import completed",
         "imported": imported,
         "duplicates_skipped": duplicates_skipped,
+        "invalid_rows_skipped": invalid_rows_skipped,
+    }
+
+
+def parse_csv_statement_preview(
+    db: Session,
+    owner_id: int,
+    file_bytes: bytes,
+) -> dict:
+    text = decode_file_bytes(file_bytes)
+    rows, header_mapping = read_csv_rows(text)
+
+    preview_rows: list[StatementPreviewRow] = []
+    invalid_rows_skipped = 0
+
+    for row_number, row in enumerate(rows, start=2):
+        try:
+            tx_date = parse_date(row[header_mapping["date"]])
+            raw_description = row[header_mapping["description"]]
+            description = normalize_description(raw_description)
+            tx_type, amount = infer_type_and_amount(row, header_mapping)
+
+            if header_mapping.get("category") and row.get(header_mapping["category"]):
+                category = normalize_category_name(row[header_mapping["category"]])
+                category_confidence = 1.0
+                category_source = "statement"
+                category_reason = "Used the category supplied by the statement file."
+            else:
+                decision = categorize_transaction_details(
+                    db=db,
+                    owner_id=owner_id,
+                    description=description,
+                    tx_type=tx_type,
+                )
+                category = decision.category
+                category_confidence = decision.confidence
+                category_source = decision.source
+                category_reason = decision.reason
+
+            if not description or not category:
+                raise ValueError("Description and category are required.")
+
+            preview_rows.append(
+                StatementPreviewRow(
+                    date=tx_date.isoformat(),
+                    description=description,
+                    amount=amount,
+                    type=tx_type,
+                    category=category,
+                    source_line=f"CSV row {row_number}: {raw_description}",
+                    confidence=0.94,
+                    review_reason=None,
+                    category_confidence=category_confidence,
+                    category_source=category_source,
+                    category_reason=category_reason,
+                )
+            )
+        except Exception:
+            invalid_rows_skipped += 1
+
+    if not preview_rows:
+        raise ValueError("No transaction rows were recognized in this CSV statement.")
+
+    return {
+        "preview_rows": preview_rows,
         "invalid_rows_skipped": invalid_rows_skipped,
     }
 

@@ -13,6 +13,8 @@ from app.schemas import (
     BulkCategorySuggestionItem,
     BulkCategorySuggestionResponse,
     ConfirmPreviewImportRequest,
+    FreshStartRequest,
+    FreshStartResponse,
     SmartImportResponse,
     TransactionCreate,
     TransactionResponse,
@@ -22,16 +24,18 @@ from app.services.seed_service import seed_realistic_transactions
 from app.services.transaction_service import (
     apply_bulk_categories,
     build_duplicate_key,
+    build_statement_match_key,
     categorize_transaction,
     categorize_transaction_details,
     get_existing_duplicate_keys,
+    get_existing_statement_match_map,
     get_transactions_for_user,
     get_uncategorized_candidates,
     normalize_category_name,
     normalize_existing_categories_for_user,
     save_category_memory,
 )
-from app.services.unified_import_service import process_smart_import
+from app.services.unified_import_service import FREE_BATCH_IMPORT_FILE_LIMIT, process_smart_import, process_smart_import_batch
 
 router = APIRouter(prefix="/transactions", tags=["Transactions"])
 
@@ -147,6 +151,43 @@ def delete_transaction(
     return {"message": "Transaction deleted successfully"}
 
 
+@router.post("/fresh-start", response_model=FreshStartResponse)
+def fresh_start_transactions(
+    payload: FreshStartRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    if payload.account_id is not None:
+        account = get_account_for_user(db, current_user.id, payload.account_id)
+        if not account:
+            raise HTTPException(status_code=404, detail="Account not found")
+
+    query = db.query(Transaction).filter(Transaction.owner_id == current_user.id)
+    if payload.account_id is not None:
+        query = query.filter(Transaction.account_id == payload.account_id)
+
+    if not payload.delete_all:
+        if payload.keep_from is None:
+            raise HTTPException(
+                status_code=400,
+                detail="Choose a date to keep transactions from, or confirm deleting all transactions.",
+            )
+        query = query.filter(Transaction.date < payload.keep_from)
+
+    deleted_count = query.delete(synchronize_session=False)
+    db.commit()
+
+    if payload.delete_all:
+        message = f"Fresh start complete. Deleted {deleted_count} transaction(s)."
+    else:
+        message = (
+            f"Fresh start complete. Deleted {deleted_count} transaction(s) before "
+            f"{payload.keep_from.isoformat()}."
+        )
+
+    return {"deleted_count": deleted_count, "message": message}
+
+
 @router.post("/normalize-categories")
 def normalize_categories_route(
     account_id: int | None = Query(default=None),
@@ -192,6 +233,43 @@ async def smart_import_file(
         raise HTTPException(status_code=500, detail=f"Smart import failed: {str(exc)}")
 
 
+@router.post("/import/files", response_model=SmartImportResponse)
+async def smart_import_files(
+    files: list[UploadFile] = File(...),
+    account_id: int = Form(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    account = get_account_for_user(db, current_user.id, account_id)
+    if not account:
+        raise HTTPException(status_code=404, detail="Account not found")
+
+    if len(files) > FREE_BATCH_IMPORT_FILE_LIMIT:
+        raise HTTPException(
+            status_code=402,
+            detail=(
+                f"Free batch imports support up to {FREE_BATCH_IMPORT_FILE_LIMIT} bank statements at once. "
+                "Upgrade to Premium to import more statements in one try."
+            ),
+        )
+
+    try:
+        file_payloads = [
+            (await file.read(), file.filename or "statement", file.content_type)
+            for file in files
+        ]
+        return process_smart_import_batch(
+            db=db,
+            owner_id=current_user.id,
+            account_id=account_id,
+            files=file_payloads,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Smart batch import failed: {str(exc)}")
+
+
 @router.post("/import/confirm-preview")
 def confirm_preview_import(
     payload: ConfirmPreviewImportRequest,
@@ -207,7 +285,13 @@ def confirm_preview_import(
         owner_id=current_user.id,
         account_id=payload.account_id,
     )
+    existing_statement_matches = get_existing_statement_match_map(
+        db=db,
+        owner_id=current_user.id,
+        account_id=payload.account_id,
+    )
     seen_in_request = set()
+    seen_statement_matches = set()
 
     imported = 0
     duplicates_skipped = 0
@@ -228,12 +312,25 @@ def confirm_preview_import(
                 tx_type=row.type,
                 category=normalized_category,
             )
+            statement_match_key = build_statement_match_key(
+                owner_id=current_user.id,
+                account_id=payload.account_id,
+                tx_date=tx_date,
+                amount=row.amount,
+                tx_type=row.type,
+            )
 
-            if duplicate_key in existing_keys or duplicate_key in seen_in_request:
+            if (
+                duplicate_key in existing_keys
+                or duplicate_key in seen_in_request
+                or statement_match_key in existing_statement_matches
+                or statement_match_key in seen_statement_matches
+            ):
                 duplicates_skipped += 1
                 continue
 
             seen_in_request.add(duplicate_key)
+            seen_statement_matches.add(statement_match_key)
 
             transaction = Transaction(
                 amount=row.amount,

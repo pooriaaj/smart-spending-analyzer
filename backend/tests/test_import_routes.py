@@ -155,6 +155,104 @@ class SmartImportRouteTest(unittest.TestCase):
         self.assertEqual(payload["preview_rows"][1]["date"], "2025-01-02")
         self.assertEqual(payload["preview_rows"][1]["type"], "income")
 
+    def test_batch_statement_import_accepts_up_to_six_files(self) -> None:
+        csv_one = (
+            "Date,Description,Amount,Type,Category\n"
+            "2025-01-03,Metro Groceries,54.25,expense,groceries\n"
+        ).encode("utf-8")
+        csv_two = (
+            "Date,Description,Amount,Type,Category\n"
+            "2025-01-04,Payroll Deposit,2000.00,income,salary\n"
+        ).encode("utf-8")
+
+        response = self.client.post(
+            "/transactions/import/files",
+            data={"account_id": str(self.account_id)},
+            files=[
+                ("files", ("january.csv", csv_one, "text/csv")),
+                ("files", ("february.csv", csv_two, "text/csv")),
+            ],
+        )
+
+        self.assertEqual(response.status_code, 200, response.text)
+        payload = response.json()
+        self.assertEqual(payload["status"], "table_review")
+        self.assertEqual(payload["import_summary"]["imported"], 0)
+        self.assertEqual(len(payload["preview_rows"]), 2)
+        self.assertEqual(len(payload["notes"]), 2)
+
+        with self.session_local() as session:
+            transaction_count = (
+                session.query(Transaction)
+                .filter(Transaction.owner_id == self.user_id)
+                .count()
+            )
+
+        self.assertEqual(transaction_count, 0)
+
+        confirm_response = self.client.post(
+            "/transactions/import/confirm-preview",
+            json={
+                "account_id": self.account_id,
+                "rows": payload["preview_rows"],
+            },
+        )
+
+        self.assertEqual(confirm_response.status_code, 200, confirm_response.text)
+        self.assertEqual(confirm_response.json()["imported"], 2)
+
+    def test_batch_statement_import_combines_pdf_preview_rows(self) -> None:
+        first_pdf = build_text_pdf(
+            [
+                "Royal Bank of Canada",
+                "Details of your account activity",
+                "From January 1, 2025 to January 31, 2025",
+                "03 Jan COFFEE SHOP $5.25 $1,200.00",
+            ]
+        )
+        second_pdf = build_text_pdf(
+            [
+                "Royal Bank of Canada",
+                "Details of your account activity",
+                "From February 1, 2025 to February 28, 2025",
+                "04 Feb GROCERY STORE $42.10 $1,100.00",
+            ]
+        )
+
+        response = self.client.post(
+            "/transactions/import/files",
+            data={"account_id": str(self.account_id)},
+            files=[
+                ("files", ("january.pdf", first_pdf, "application/pdf")),
+                ("files", ("february.pdf", second_pdf, "application/pdf")),
+            ],
+        )
+
+        self.assertEqual(response.status_code, 200, response.text)
+        payload = response.json()
+        self.assertEqual(payload["status"], "table_review")
+        self.assertEqual(len(payload["preview_rows"]), 2)
+        self.assertIn("january.pdf", payload["preview_rows"][0]["source_line"])
+        self.assertIn("february.pdf", payload["preview_rows"][1]["source_line"])
+
+    def test_batch_statement_import_rejects_more_than_six_files_for_free_plan(self) -> None:
+        statement = (
+            "Date,Description,Amount,Type,Category\n"
+            "2025-01-03,Metro Groceries,54.25,expense,groceries\n"
+        ).encode("utf-8")
+
+        response = self.client.post(
+            "/transactions/import/files",
+            data={"account_id": str(self.account_id)},
+            files=[
+                ("files", (f"statement-{index}.csv", statement, "text/csv"))
+                for index in range(7)
+            ],
+        )
+
+        self.assertEqual(response.status_code, 402, response.text)
+        self.assertIn("Upgrade to Premium", response.json()["detail"])
+
     def test_confirm_preview_import_persists_rows_after_pdf_preview(self) -> None:
         pdf_bytes = build_text_pdf(
             [
@@ -240,14 +338,108 @@ class SmartImportRouteTest(unittest.TestCase):
         preview_rows = response.json()["preview_rows"]
         self.assertEqual(len(preview_rows), 3)
         self.assertTrue(preview_rows[0]["is_duplicate"])
-        self.assertEqual(preview_rows[0]["duplicate_reason"], "Already exists in this account.")
+        self.assertEqual(preview_rows[0]["duplicate_reason"], "Already written in this account.")
+        self.assertEqual(preview_rows[0]["reconciliation_status"], "matched")
         self.assertFalse(preview_rows[1]["is_duplicate"])
         self.assertIsNone(preview_rows[1]["duplicate_reason"])
+        self.assertEqual(preview_rows[1]["reconciliation_status"], "missing")
         self.assertTrue(preview_rows[2]["is_duplicate"])
         self.assertEqual(
             preview_rows[2]["duplicate_reason"],
             "Duplicate of another row in this preview.",
         )
+
+    def test_statement_reconciliation_matches_manual_transaction_with_different_category(self) -> None:
+        with self.session_local() as session:
+            session.add(
+                Transaction(
+                    amount=8.75,
+                    category="coffee with friend",
+                    description="Morning latte",
+                    date=date(2025, 1, 5),
+                    type="expense",
+                    owner_id=self.user_id,
+                    account_id=self.account_id,
+                )
+            )
+            session.commit()
+
+        pdf_bytes = build_text_pdf(
+            [
+                "Account Statement",
+                "From January 1, 2025 to January 31, 2025",
+                "05 Jan TIM HORTONS $8.75",
+            ]
+        )
+
+        response = self.client.post(
+            "/transactions/import/file",
+            data={"account_id": str(self.account_id)},
+            files={"file": ("january-check.pdf", pdf_bytes, "application/pdf")},
+        )
+
+        self.assertEqual(response.status_code, 200, response.text)
+        preview_row = response.json()["preview_rows"][0]
+        self.assertTrue(preview_row["is_duplicate"])
+        self.assertEqual(preview_row["reconciliation_status"], "matched")
+        self.assertEqual(preview_row["duplicate_reason"], "Already written as Morning latte.")
+        self.assertIsNotNone(preview_row["matched_transaction_id"])
+
+        confirm_response = self.client.post(
+            "/transactions/import/confirm-preview",
+            json={
+                "account_id": self.account_id,
+                "rows": [preview_row],
+            },
+        )
+
+        self.assertEqual(confirm_response.status_code, 200, confirm_response.text)
+        self.assertEqual(confirm_response.json()["imported"], 0)
+        self.assertEqual(confirm_response.json()["duplicates_skipped"], 1)
+
+    def test_fresh_start_deletes_old_transactions_and_keeps_current_life(self) -> None:
+        with self.session_local() as session:
+            session.add_all(
+                [
+                    Transaction(
+                        amount=20.00,
+                        category="legacy",
+                        description="Old statement row",
+                        date=date(2024, 12, 28),
+                        type="expense",
+                        owner_id=self.user_id,
+                        account_id=self.account_id,
+                    ),
+                    Transaction(
+                        amount=9.50,
+                        category="groceries",
+                        description="Today groceries",
+                        date=date(2025, 1, 2),
+                        type="expense",
+                        owner_id=self.user_id,
+                        account_id=self.account_id,
+                    ),
+                ]
+            )
+            session.commit()
+
+        response = self.client.post(
+            "/transactions/fresh-start",
+            json={
+                "keep_from": "2025-01-01",
+                "account_id": self.account_id,
+                "delete_all": False,
+            },
+        )
+
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(response.json()["deleted_count"], 1)
+
+        with self.session_local() as session:
+            remaining = session.query(Transaction).filter(Transaction.owner_id == self.user_id).all()
+
+        self.assertEqual(len(remaining), 1)
+        self.assertEqual(remaining[0].description, "Today groceries")
 
     def test_import_file_reports_pdf_with_no_selectable_text(self) -> None:
         pdf_bytes = build_text_pdf([])
