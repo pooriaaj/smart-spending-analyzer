@@ -15,6 +15,7 @@ from app.schemas import (
     FutureSimulationRecommendationsResponse,
     FutureSimulationResponse,
     MessageResponse,
+    MoneyMapResponse,
     MonthlySummaryItem,
     OverspendingAlertsResponse,
     RecurringExpensesResponse,
@@ -42,6 +43,7 @@ from app.services.analytics_service import (
     get_top_expense_category,
 )
 from app.services.account_service import get_account_for_user
+from app.services.money_map_service import get_money_map_payload
 from app.services.saved_scenario_service import (
     create_saved_scenario,
     delete_saved_scenario,
@@ -89,6 +91,21 @@ def get_dashboard(
         transaction_type=transaction_type,
         category=category,
         account_id=account_id,
+    )
+
+
+@router.get("/money-map", response_model=MoneyMapResponse)
+def get_money_map_route(
+    account_id: int | None = Query(default=None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    scope_label = resolve_account_scope(db, current_user, account_id)
+    return get_money_map_payload(
+        db=db,
+        user_id=current_user.id,
+        account_id=account_id,
+        scope_label=scope_label,
     )
 
 

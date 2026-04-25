@@ -9,7 +9,7 @@ from typing import Iterable
 
 from sqlalchemy.orm import Session
 
-from app.models import CategoryMemory, Transaction
+from app.models import CategoryMemory, MerchantCategoryProfile, Transaction
 
 
 SUPPORTED_ENCODINGS = ["utf-8-sig", "utf-8", "cp1252", "latin-1"]
@@ -42,6 +42,41 @@ CATEGORY_RULES = {
     "personal": ["personal", "pharmacy", "shoppers drug mart", "beauty", "haircut"],
 }
 
+CATEGORY_RULES["groceries"].extend([
+    "no frills",
+    "metro grocery",
+    "food basics",
+    "farm boy",
+    "longos",
+    "sobeys",
+])
+CATEGORY_RULES["transport"].extend(["presto", "parking", "transit"])
+CATEGORY_RULES["restaurant"].extend([
+    "chipotle",
+    "ubereats",
+    "uber eats",
+    "doordash",
+    "skip the dishes",
+])
+CATEGORY_RULES["cafe"].extend(["timhortons", "second cup"])
+CATEGORY_RULES["entertainment"].extend([
+    "disney",
+    "prime video",
+    "apple music",
+    "playstation",
+    "xbox",
+])
+CATEGORY_RULES["shopping"].extend(["winners", "sephora", "ikea"])
+CATEGORY_RULES.update(
+    {
+        "health": ["clinic", "doctor", "dental", "dentist", "pharmacy", "health", "gym"],
+        "insurance": ["insurance", "belair", "intact", "aviva", "td insurance"],
+        "debt payments": ["loan payment", "student loan", "line of credit", "minimum payment"],
+        "education": ["tuition", "school", "college", "university", "course"],
+        "travel": ["air canada", "westjet", "hotel", "airbnb", "booking.com", "expedia"],
+    }
+)
+
 CATEGORY_ALIASES = {
     "grocery": "groceries",
     "groceries": "groceries",
@@ -73,6 +108,14 @@ CATEGORY_ALIASES = {
     "entertainment": "entertainment",
     "car maintenance": "car maintenance",
     "car_maintenance": "car maintenance",
+    "health": "health",
+    "medical": "health",
+    "insurance": "insurance",
+    "debt": "debt payments",
+    "debt payment": "debt payments",
+    "debt payments": "debt payments",
+    "education": "education",
+    "travel": "travel",
 }
 
 CATEGORY_MEMORY_STOPWORDS = {
@@ -117,6 +160,39 @@ CATEGORY_MEMORY_STOPWORDS = {
     "visa",
     "withdrawal",
 }
+
+MERCHANT_PROFILE_STOPWORDS = CATEGORY_MEMORY_STOPWORDS | {
+    "amex",
+    "branch",
+    "cd",
+    "charge",
+    "city",
+    "contactless",
+    "corp",
+    "direct",
+    "mastercard",
+    "merchant",
+    "preauth",
+    "retail",
+    "terminal",
+    "toronto",
+    "vancouver",
+}
+
+MERCHANT_PHRASE_ALIASES = {
+    "tim hortons": "tim hortons",
+    "timhortons": "tim hortons",
+    "shoppers drug mart": "shoppers drug mart",
+    "no frills": "no frills",
+    "uber eats": "uber eats",
+    "skip the dishes": "skip the dishes",
+    "apple music": "apple music",
+    "apple store": "apple store",
+    "prime video": "prime video",
+    "youtube premium": "youtube premium",
+}
+
+AMBIGUOUS_PRIMARY_MERCHANTS = {"apple", "google", "amazon", "bell", "rogers", "td", "rbc"}
 
 
 @dataclass(frozen=True)
@@ -247,23 +323,135 @@ def derive_category_memory_keywords(description: str) -> list[str]:
     return deduped_keywords
 
 
+def title_case_merchant_key(value: str) -> str:
+    return " ".join(word.capitalize() for word in value.split())
+
+
+def extract_merchant_fingerprint(description: str) -> tuple[str, str] | None:
+    normalized_description = normalize_description(description).lower()
+    normalized_description = normalized_description.replace("&", " and ")
+    normalized_description = re.sub(r"[^a-z0-9 ]+", " ", normalized_description)
+    normalized_description = re.sub(r"\s+", " ", normalized_description).strip()
+
+    if not normalized_description:
+        return None
+
+    for phrase, alias in MERCHANT_PHRASE_ALIASES.items():
+        if phrase in normalized_description:
+            return alias, title_case_merchant_key(alias)
+
+    tokens = [
+        token
+        for token in normalized_description.split()
+        if len(token) >= 2
+        and not token.isdigit()
+        and not re.fullmatch(r"\d+[a-z]*", token)
+        and token not in MERCHANT_PROFILE_STOPWORDS
+    ]
+    if not tokens:
+        return None
+
+    if tokens[0] in AMBIGUOUS_PRIMARY_MERCHANTS and len(tokens) >= 2:
+        merchant_key = f"{tokens[0]} {tokens[1]}"
+    elif len(tokens[0]) <= 3 and len(tokens) >= 2:
+        merchant_key = f"{tokens[0]} {tokens[1]}"
+    else:
+        merchant_key = tokens[0]
+
+    merchant_key = re.sub(r"\s+", " ", merchant_key).strip()
+    if not merchant_key:
+        return None
+
+    return merchant_key[:160], title_case_merchant_key(merchant_key)[:160]
+
+
+def merchant_profile_confidence(confirmation_count: int) -> float:
+    if confirmation_count >= 5:
+        return 0.99
+    if confirmation_count >= 3:
+        return 0.97
+    if confirmation_count >= 2:
+        return 0.94
+    return 0.9
+
+
+def save_merchant_category_profile(
+    db: Session,
+    owner_id: int,
+    description: str,
+    category: str,
+    tx_type: str,
+    amount: float | None = None,
+) -> dict[str, int]:
+    normalized_category = normalize_category_name(category)
+    if not should_store_category_memory(normalized_category):
+        return {"created": 0, "updated": 0}
+
+    fingerprint = extract_merchant_fingerprint(description)
+    if not fingerprint:
+        return {"created": 0, "updated": 0}
+
+    merchant_key, display_name = fingerprint
+    existing = (
+        db.query(MerchantCategoryProfile)
+        .filter(
+            MerchantCategoryProfile.owner_id == owner_id,
+            MerchantCategoryProfile.merchant_key == merchant_key,
+            MerchantCategoryProfile.transaction_type == tx_type,
+        )
+        .first()
+    )
+
+    if existing:
+        existing.display_name = display_name
+        existing.last_amount = amount
+        if existing.category != normalized_category:
+            existing.category = normalized_category
+        existing.confirmation_count = int(existing.confirmation_count or 0) + 1
+        existing.confidence = merchant_profile_confidence(existing.confirmation_count)
+        return {"created": 0, "updated": 1}
+
+    db.add(
+        MerchantCategoryProfile(
+            merchant_key=merchant_key,
+            display_name=display_name,
+            category=normalized_category,
+            transaction_type=tx_type,
+            confidence=merchant_profile_confidence(1),
+            confirmation_count=1,
+            last_amount=amount,
+            owner_id=owner_id,
+        )
+    )
+    return {"created": 1, "updated": 0}
+
+
 def save_category_memory(
     db: Session,
     owner_id: int,
     description: str,
     category: str,
     tx_type: str,
+    amount: float | None = None,
 ) -> dict[str, int]:
     normalized_category = normalize_category_name(category)
     if not should_store_category_memory(normalized_category):
         return {"created": 0, "updated": 0}
 
     keywords = derive_category_memory_keywords(description)
+    profile_stats = save_merchant_category_profile(
+        db=db,
+        owner_id=owner_id,
+        description=description,
+        category=normalized_category,
+        tx_type=tx_type,
+        amount=amount,
+    )
     if not keywords:
-        return {"created": 0, "updated": 0}
+        return profile_stats
 
-    created = 0
-    updated = 0
+    created = profile_stats["created"]
+    updated = profile_stats["updated"]
 
     for keyword in keywords:
         existing = (
@@ -379,6 +567,28 @@ def normalize_description(value: str) -> str:
     return text or value.strip()
 
 
+def learnable_category_from_merchant_profile(
+    db: Session,
+    owner_id: int,
+    description: str,
+    tx_type: str,
+) -> MerchantCategoryProfile | None:
+    fingerprint = extract_merchant_fingerprint(description)
+    if not fingerprint:
+        return None
+
+    merchant_key, _ = fingerprint
+    return (
+        db.query(MerchantCategoryProfile)
+        .filter(
+            MerchantCategoryProfile.owner_id == owner_id,
+            MerchantCategoryProfile.merchant_key == merchant_key,
+            MerchantCategoryProfile.transaction_type == tx_type,
+        )
+        .first()
+    )
+
+
 def learnable_category_from_memory(
     db: Session,
     owner_id: int,
@@ -415,6 +625,26 @@ def categorize_transaction_details(
     description: str,
     tx_type: str,
 ) -> CategoryDecision:
+    merchant_profile = learnable_category_from_merchant_profile(
+        db,
+        owner_id,
+        description,
+        tx_type,
+    )
+    if merchant_profile:
+        return CategoryDecision(
+            category=normalize_category_name(merchant_profile.category),
+            confidence=float(merchant_profile.confidence or merchant_profile_confidence(1)),
+            matched_keyword=merchant_profile.merchant_key,
+            reason=(
+                "Matched learned category memory from your learned merchant profile "
+                "and previous confirmed categories "
+                f"({merchant_profile.confirmation_count} confirmation"
+                f"{'' if merchant_profile.confirmation_count == 1 else 's'})."
+            ),
+            source="merchant_profile",
+        )
+
     memory_match = learnable_category_from_memory(db, owner_id, description, tx_type)
     if memory_match:
         category, matched_keyword = memory_match
@@ -587,6 +817,14 @@ def import_transactions_from_csv(
                     account_id=account_id,
                 )
             )
+            save_category_memory(
+                db=db,
+                owner_id=owner_id,
+                description=description,
+                category=category,
+                tx_type=tx_type,
+                amount=amount,
+            )
             imported += 1
 
         except Exception:
@@ -653,6 +891,7 @@ def apply_bulk_categories(
                 description=transaction.description,
                 category=new_category,
                 tx_type=transaction.type,
+                amount=transaction.amount,
             )
             memory_created += memory_stats["created"]
             memory_updated += memory_stats["updated"]
@@ -696,6 +935,7 @@ def normalize_existing_categories_for_user(
             description=transaction.description,
             category=new_category,
             tx_type=transaction.type,
+            amount=transaction.amount,
         )
         memory_created += memory_stats["created"]
         memory_updated += memory_stats["updated"]

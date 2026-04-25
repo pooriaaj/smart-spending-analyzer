@@ -188,6 +188,11 @@ function AssistantPage() {
       return;
     }
 
+    if (action.page === "money_map") {
+      navigate("/money-map");
+      return;
+    }
+
     if (action.page === "accounts") {
       navigate("/accounts");
       return;
@@ -285,6 +290,13 @@ function AssistantPage() {
               onClick={() => navigate("/analytics")}
             >
               View Analytics
+            </button>
+
+            <button
+              className="secondary-button"
+              onClick={() => navigate("/money-map")}
+            >
+              Money Map
             </button>
 
             <button

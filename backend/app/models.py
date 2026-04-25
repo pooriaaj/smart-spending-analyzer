@@ -36,6 +36,13 @@ class User(Base):
         passive_deletes=True,
     )
 
+    merchant_category_profiles = relationship(
+        "MerchantCategoryProfile",
+        back_populates="owner",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
+
     budgets = relationship(
         "BudgetPlan",
         back_populates="owner",
@@ -126,6 +133,34 @@ class CategoryMemory(Base):
             name="uq_category_memory_owner_keyword_type",
         ),
         Index("ix_category_memories_owner_keyword", "owner_id", "keyword"),
+    )
+
+
+class MerchantCategoryProfile(Base):
+    __tablename__ = "merchant_category_profiles"
+
+    id = Column(Integer, primary_key=True, index=True)
+    merchant_key = Column(String(160), nullable=False)
+    display_name = Column(String(160), nullable=False)
+    category = Column(String(100), nullable=False)
+    transaction_type = Column(String(20), nullable=False, index=True)
+    confidence = Column(Float, nullable=False, default=0.9)
+    confirmation_count = Column(Integer, nullable=False, default=1)
+    last_amount = Column(Float, nullable=True)
+    owner_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now())
+
+    owner = relationship("User", back_populates="merchant_category_profiles")
+
+    __table_args__ = (
+        UniqueConstraint(
+            "owner_id",
+            "merchant_key",
+            "transaction_type",
+            name="uq_merchant_profile_owner_key_type",
+        ),
+        Index("ix_merchant_profiles_owner_key", "owner_id", "merchant_key"),
     )
 
 

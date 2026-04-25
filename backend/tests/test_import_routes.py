@@ -13,7 +13,7 @@ from sqlalchemy.pool import StaticPool
 
 from app.database import Base
 from app.dependencies import get_current_user, get_db
-from app.models import Account, CategoryMemory, Transaction, User
+from app.models import Account, CategoryMemory, MerchantCategoryProfile, Transaction, User
 from app.routes.transaction_routes import router as transaction_router
 from app.services import pdf_statement_service
 
@@ -124,6 +124,7 @@ class SmartImportRouteTest(unittest.TestCase):
         with self.session_local() as session:
             session.query(Transaction).delete()
             session.query(CategoryMemory).delete()
+            session.query(MerchantCategoryProfile).delete()
             session.commit()
 
     def test_import_file_returns_rbc_preview_from_pdf_upload(self) -> None:
@@ -446,6 +447,58 @@ class SmartImportRouteTest(unittest.TestCase):
         self.assertEqual(suggestions[0]["suggested_category"], "personal")
         self.assertEqual(suggestions[0]["matched_keyword"], "sephora")
         self.assertIn("learned category memory", suggestions[0]["reason"].lower())
+
+    def test_confirmed_categories_train_learned_merchant_profiles(self) -> None:
+        categorized_response = self.client.post(
+            "/transactions/",
+            json={
+                "amount": 42.15,
+                "category": "Beauty Treat",
+                "description": "Sephora Eaton Centre",
+                "date": "2025-01-03",
+                "type": "expense",
+                "account_id": self.account_id,
+            },
+        )
+        self.assertEqual(categorized_response.status_code, 200, categorized_response.text)
+
+        uncategorized_response = self.client.post(
+            "/transactions/",
+            json={
+                "amount": 28.40,
+                "category": "other",
+                "description": "Sephora Yorkdale",
+                "date": "2025-01-04",
+                "type": "expense",
+                "account_id": self.account_id,
+            },
+        )
+        self.assertEqual(uncategorized_response.status_code, 200, uncategorized_response.text)
+
+        preview_response = self.client.get(
+            "/transactions/categorize/bulk-preview",
+            params={"account_id": self.account_id},
+        )
+        self.assertEqual(preview_response.status_code, 200, preview_response.text)
+        suggestions = preview_response.json()["suggestions"]
+        self.assertEqual(len(suggestions), 1)
+        self.assertEqual(suggestions[0]["description"], "Sephora Yorkdale")
+        self.assertEqual(suggestions[0]["suggested_category"], "beauty treat")
+        self.assertEqual(suggestions[0]["matched_keyword"], "sephora")
+        self.assertIn("learned merchant profile", suggestions[0]["reason"].lower())
+
+        with self.session_local() as session:
+            profile = (
+                session.query(MerchantCategoryProfile)
+                .filter(
+                    MerchantCategoryProfile.owner_id == self.user_id,
+                    MerchantCategoryProfile.merchant_key == "sephora",
+                )
+                .one()
+            )
+
+        self.assertEqual(profile.category, "beauty treat")
+        self.assertGreaterEqual(profile.confirmation_count, 1)
 
     def test_normalize_categories_route_backfills_category_memory(self) -> None:
         with self.session_local() as session:

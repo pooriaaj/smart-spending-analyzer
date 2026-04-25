@@ -10,7 +10,7 @@ from pypdf import PdfReader
 from sqlalchemy.orm import Session
 
 from app.schemas import StatementPreviewRow
-from app.services.transaction_service import categorize_transaction
+from app.services.transaction_service import categorize_transaction_details
 from app.services.vision_ocr_service import (
     build_input_image_part,
     is_vision_ocr_enabled,
@@ -975,12 +975,13 @@ def finalize_pending_transaction(
         description=description,
         tx_type=tx_type,
     )
-    category = categorize_transaction(
+    category_decision = categorize_transaction_details(
         db=db,
         owner_id=owner_id,
         description=description,
         tx_type=tx_type,
     )
+    category = category_decision.category
 
     source_line = description
     if amount_text_2:
@@ -998,6 +999,9 @@ def finalize_pending_transaction(
             source_line=source_line[:300],
             confidence=confidence,
             review_reason=review_reason,
+            category_confidence=category_decision.confidence,
+            category_source=category_decision.source,
+            category_reason=category_decision.reason,
         )
     )
 

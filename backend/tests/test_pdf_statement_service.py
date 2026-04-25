@@ -5,6 +5,7 @@ import unittest
 from unittest.mock import MagicMock, patch
 
 from app.services import pdf_statement_service as service
+from app.services.transaction_service import CategoryDecision
 
 
 class PdfStatementServiceHelpersTest(unittest.TestCase):
@@ -114,8 +115,15 @@ class PdfStatementServicePreviewParsingTest(unittest.TestCase):
     def setUp(self) -> None:
         self.db = MagicMock()
 
-    def categorize(self, **kwargs: str) -> str:
-        return "income" if kwargs["tx_type"] == "income" else "other"
+    def categorize(self, **kwargs: str) -> CategoryDecision:
+        category = "income" if kwargs["tx_type"] == "income" else "other"
+        return CategoryDecision(
+            category=category,
+            confidence=0.9,
+            matched_keyword=None,
+            reason="Test category decision.",
+            source="test",
+        )
 
     def extraction_result(
         self,
@@ -150,7 +158,7 @@ TORONTO ON $45.10 $3,154.90
 Closing balance $3,154.90
         """.strip()
 
-        with patch.object(service, "categorize_transaction", side_effect=self.categorize):
+        with patch.object(service, "categorize_transaction_details", side_effect=self.categorize):
             result = service.parse_rbc_statement_preview(
                 db=self.db,
                 owner_id=123,
@@ -186,7 +194,7 @@ From December 28, 2024 to January 10, 2025
                 "extract_pdf_text_result",
                 return_value=self.extraction_result(text),
             ),
-            patch.object(service, "categorize_transaction", side_effect=self.categorize),
+            patch.object(service, "categorize_transaction_details", side_effect=self.categorize),
         ):
             result = service.parse_pdf_statement_preview(
                 db=self.db,
@@ -217,7 +225,7 @@ Jan 02 PAYROLL DEPOSIT $1,500.00
                 "extract_pdf_text_result",
                 return_value=self.extraction_result(text),
             ),
-            patch.object(service, "categorize_transaction", side_effect=self.categorize),
+            patch.object(service, "categorize_transaction_details", side_effect=self.categorize),
         ):
             result = service.parse_pdf_statement_preview(
                 db=self.db,
@@ -247,7 +255,7 @@ Jan 02 PAYROLL DEPOSIT $1,500.00
                 "extract_pdf_text_result",
                 return_value=self.extraction_result(text),
             ),
-            patch.object(service, "categorize_transaction", side_effect=self.categorize),
+            patch.object(service, "categorize_transaction_details", side_effect=self.categorize),
         ):
             result = service.parse_pdf_statement_preview(
                 db=self.db,
@@ -277,7 +285,7 @@ Jan 03 Jan 04 MONTHLY FEE 15.99 0.00 1,684.01
                 "extract_pdf_text_result",
                 return_value=self.extraction_result(text),
             ),
-            patch.object(service, "categorize_transaction", side_effect=self.categorize),
+            patch.object(service, "categorize_transaction_details", side_effect=self.categorize),
         ):
             result = service.parse_pdf_statement_preview(
                 db=self.db,
@@ -311,7 +319,7 @@ Statement period 12/28/2024 - 01/10/2025
                 "extract_pdf_text_result",
                 return_value=self.extraction_result(text),
             ),
-            patch.object(service, "categorize_transaction", side_effect=self.categorize),
+            patch.object(service, "categorize_transaction_details", side_effect=self.categorize),
         ):
             result = service.parse_pdf_statement_preview(
                 db=self.db,
@@ -340,7 +348,7 @@ Jan 03 MONTHLY FEE 15.99DR
                 "extract_pdf_text_result",
                 return_value=self.extraction_result(text),
             ),
-            patch.object(service, "categorize_transaction", side_effect=self.categorize),
+            patch.object(service, "categorize_transaction_details", side_effect=self.categorize),
         ):
             result = service.parse_pdf_statement_preview(
                 db=self.db,
@@ -370,7 +378,7 @@ Jan 03 MONTHLY FEE 15.99 0.00 1,684.01
                 "extract_pdf_text_result",
                 return_value=self.extraction_result(text),
             ),
-            patch.object(service, "categorize_transaction", side_effect=self.categorize),
+            patch.object(service, "categorize_transaction_details", side_effect=self.categorize),
         ):
             result = service.parse_pdf_statement_preview(
                 db=self.db,
@@ -402,7 +410,7 @@ Jan 03 FARMERS MARKET $12.34 $1,684.01
                 "extract_pdf_text_result",
                 return_value=self.extraction_result(text),
             ),
-            patch.object(service, "categorize_transaction", side_effect=self.categorize),
+            patch.object(service, "categorize_transaction_details", side_effect=self.categorize),
         ):
             result = service.parse_pdf_statement_preview(
                 db=self.db,
@@ -430,7 +438,7 @@ Jan 03 MONTHLY FEE 15.99 - 1,684.01
                 "extract_pdf_text_result",
                 return_value=self.extraction_result(text),
             ),
-            patch.object(service, "categorize_transaction", side_effect=self.categorize),
+            patch.object(service, "categorize_transaction_details", side_effect=self.categorize),
         ):
             result = service.parse_pdf_statement_preview(
                 db=self.db,
@@ -458,7 +466,7 @@ Statement period 12/28/2024 - 01/10/2025
                 "extract_pdf_text_result",
                 return_value=self.extraction_result(text),
             ),
-            patch.object(service, "categorize_transaction", side_effect=self.categorize),
+            patch.object(service, "categorize_transaction_details", side_effect=self.categorize),
         ):
             result = service.parse_pdf_statement_preview(
                 db=self.db,
@@ -537,7 +545,7 @@ Jan 03 BOOK STORE $12.34
                     processed_pages=1,
                 ),
             ),
-            patch.object(service, "categorize_transaction", side_effect=self.categorize),
+            patch.object(service, "categorize_transaction_details", side_effect=self.categorize),
         ):
             result = service.parse_pdf_statement_preview(
                 db=self.db,
@@ -569,7 +577,7 @@ Jan 02 PAYROLL DEPOSIT $1,500.00
                 return_value=self.extraction_result(text, total_pages=3, readable_text_pages=1),
             ),
             patch.object(service, "extract_pdf_page_image_candidates", return_value=[]),
-            patch.object(service, "categorize_transaction", side_effect=self.categorize),
+            patch.object(service, "categorize_transaction_details", side_effect=self.categorize),
         ):
             result = service.parse_pdf_statement_preview(
                 db=self.db,

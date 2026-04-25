@@ -474,6 +474,64 @@ class RecurringExpensesResponse(BaseModel):
     items: list[RecurringExpenseItem]
 
 
+class MoneyMapCategoryItem(BaseModel):
+    category: str
+    total: float
+    share_percent: float
+
+
+class MoneyMapRecurringItem(BaseModel):
+    description: str
+    category: str
+    average_amount: float
+    annualized_amount: float
+    review_priority: str
+    review_reason: str | None = None
+
+
+class MoneyMapCategorySuggestionItem(BaseModel):
+    description: str
+    current_category: str
+    suggested_category: str
+    confidence: float
+    source: str
+    matched_keyword: str | None = None
+    reason: str
+
+
+class MoneyMapLearningSignal(BaseModel):
+    label: str
+    value: str
+    detail: str
+    severity: str = "info"
+
+
+class MoneyMapAction(BaseModel):
+    label: str
+    detail: str
+    page: str
+    priority: str = "medium"
+
+
+class MoneyMapResponse(BaseModel):
+    scope_label: str = "All accounts combined"
+    status: str
+    confidence_level: str
+    confidence_score: float
+    transaction_count: int = 0
+    month_count: int = 0
+    learned_merchant_count: int = 0
+    memory_count: int = 0
+    uncategorized_count: int = 0
+    summary: AnalyticsSummary
+    top_categories: list[MoneyMapCategoryItem] = Field(default_factory=list)
+    recurring_highlights: list[MoneyMapRecurringItem] = Field(default_factory=list)
+    category_suggestions: list[MoneyMapCategorySuggestionItem] = Field(default_factory=list)
+    learning_signals: list[MoneyMapLearningSignal] = Field(default_factory=list)
+    actions: list[MoneyMapAction] = Field(default_factory=list)
+    narrative: str
+
+
 class AssistantMessage(BaseModel):
     role: str
     content: str
@@ -557,6 +615,9 @@ class StatementPreviewRow(BaseModel):
     source_line: str | None = None
     confidence: float = 0.0
     review_reason: str | None = None
+    category_confidence: float = 0.0
+    category_source: str | None = None
+    category_reason: str | None = None
     is_duplicate: bool = False
     duplicate_reason: str | None = None
 

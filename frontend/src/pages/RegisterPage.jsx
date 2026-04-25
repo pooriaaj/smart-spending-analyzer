@@ -33,7 +33,7 @@ function RegisterPage() {
       });
 
       localStorage.setItem("token", response.data.access_token);
-      navigate("/dashboard", { replace: true });
+      navigate("/money-map", { replace: true });
     } catch (err) {
       setError("Registration failed. Email may already be in use.");
     }

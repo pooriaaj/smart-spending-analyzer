@@ -80,6 +80,7 @@ def create_transaction(
         description=transaction.description,
         category=transaction.category,
         tx_type=transaction.type,
+        amount=transaction.amount,
     )
     db.commit()
     db.refresh(new_transaction)
@@ -119,6 +120,7 @@ def update_transaction(
         description=updated_data.description,
         category=updated_data.category,
         tx_type=updated_data.type,
+        amount=updated_data.amount,
     )
     db.commit()
     db.refresh(transaction)
@@ -248,6 +250,7 @@ def confirm_preview_import(
                 description=row.description,
                 category=normalized_category,
                 tx_type=row.type,
+                amount=row.amount,
             )
             imported += 1
         except Exception:

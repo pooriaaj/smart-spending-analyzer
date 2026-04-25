@@ -408,6 +408,9 @@ function BudgetsPage() {
             <button className="secondary-button" onClick={() => navigate("/analytics")}>
               View Analytics
             </button>
+            <button className="secondary-button" onClick={() => navigate("/money-map")}>
+              Money Map
+            </button>
             <button className="secondary-button" onClick={() => navigate("/simulator")}>
               Simulator
             </button>

@@ -1542,6 +1542,9 @@ function SimulatorPage() {
             <button className="secondary-button" onClick={() => navigate("/analytics")}>
               Analytics
             </button>
+            <button className="secondary-button" onClick={() => navigate("/money-map")}>
+              Money Map
+            </button>
             <button className="secondary-button" onClick={() => navigate("/budgets")}>
               Budgets
             </button>

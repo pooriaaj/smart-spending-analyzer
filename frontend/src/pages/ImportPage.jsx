@@ -98,6 +98,14 @@ const getPreviewRowConfidence = (row) => {
 const formatConfidencePercent = (confidence) =>
   confidence == null ? "Not scored" : `${Math.round(confidence * 100)}%`;
 
+const getPreviewCategoryConfidence = (row) => {
+  const confidence = Number(row?.category_confidence);
+  if (!Number.isFinite(confidence) || confidence <= 0) {
+    return null;
+  }
+  return Math.max(0, Math.min(confidence, 1));
+};
+
 function ImportPage() {
   const navigate = useNavigate();
   const fileInputRef = useRef(null);
@@ -174,17 +182,25 @@ function ImportPage() {
   }, {});
   const previewRowItems = previewRows.map((row, index) => {
     const confidence = getPreviewRowConfidence(row);
+    const categoryConfidence = getPreviewCategoryConfidence(row);
+    const categoryReason =
+      row.category_reason ||
+      (categoryConfidence != null && categoryConfidence < 0.75
+        ? "Category confidence is low; verify this label before importing."
+        : null);
     const confidenceReason =
       row.review_reason ||
       (confidence != null && confidence < 0.75
         ? "Parser confidence is low; verify this row before importing."
-        : null);
+        : categoryReason);
 
     return {
       row,
       index,
       validation: previewRowValidations[index],
       confidence,
+      categoryConfidence,
+      categoryReason,
       confidenceReason,
       duplicateReason:
         row.is_duplicate && row.duplicate_reason
@@ -419,6 +435,9 @@ function ImportPage() {
             <button className="secondary-button" onClick={() => navigate("/dashboard")}>
               Dashboard
             </button>
+            <button className="secondary-button" onClick={() => navigate("/money-map")}>
+              Money Map
+            </button>
           </div>
         </div>
 
@@ -548,6 +567,23 @@ function ImportPage() {
                     </ul>
                   </div>
                 )}
+
+                <div className="budget-section-actions">
+                  <button
+                    type="button"
+                    className="secondary-button"
+                    onClick={() => navigate("/money-map")}
+                  >
+                    Open Money Map
+                  </button>
+                  <button
+                    type="button"
+                    className="secondary-button"
+                    onClick={() => navigate("/transactions")}
+                  >
+                    Review Transactions
+                  </button>
+                </div>
               </div>
             )}
           </div>
@@ -811,7 +847,16 @@ function ImportPage() {
                   </thead>
                   <tbody>
                     {filteredPreviewRows.map(
-                      ({ row, index, validation, duplicateReason, confidence, confidenceReason }) => {
+                      ({
+                        row,
+                        index,
+                        validation,
+                        duplicateReason,
+                        confidence,
+                        categoryConfidence,
+                        categoryReason,
+                        confidenceReason,
+                      }) => {
                         return (
                           <tr key={`preview-row-${index}`}>
                             <td>
@@ -841,8 +886,17 @@ function ImportPage() {
                                   <strong>{formatConfidencePercent(confidence)}</strong>
                                 </div>
                               )}
+                              {categoryConfidence != null && (
+                                <div className="import-confidence-row">
+                                  <span>Category confidence</span>
+                                  <strong>{formatConfidencePercent(categoryConfidence)}</strong>
+                                </div>
+                              )}
                               {confidenceReason && (
                                 <div className="import-confidence-note">{confidenceReason}</div>
+                              )}
+                              {categoryReason && categoryReason !== confidenceReason && (
+                                <div className="import-confidence-note">{categoryReason}</div>
                               )}
                               {duplicateReason && (
                                 <div className="import-duplicate-note">{duplicateReason}</div>

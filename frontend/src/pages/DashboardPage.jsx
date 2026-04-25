@@ -156,6 +156,7 @@ function DashboardPage() {
     projected_at_risk_count: 0,
   };
   const hasBudgets = (budgetData?.budgets || []).length > 0;
+  const hasTransactions = allTransactions.length > 0;
   const simulatorNarrative = simulatorData?.goal_note || simulatorData?.narrative || "";
 
   const suggestCategory = () => {
@@ -291,6 +292,9 @@ function DashboardPage() {
             <button className="secondary-button" onClick={() => navigate("/analytics")}>
               Analytics
             </button>
+            <button className="secondary-button" onClick={() => navigate("/money-map")}>
+              Money Map
+            </button>
             <button className="secondary-button" onClick={() => navigate("/budgets")}>
               Budgets
             </button>
@@ -325,6 +329,31 @@ function DashboardPage() {
           </div>
           <AccountSelector onChange={setSelectedAccountId} allowAll={true} />
         </div>
+
+        {!hasTransactions && (
+          <div className="dashboard-card money-map-command-card">
+            <div className="money-map-command-top">
+              <div>
+                <span className="money-map-confidence-pill money-map-confidence-low">
+                  Day-0 setup
+                </span>
+                <h2>Build your Money Map from one statement</h2>
+                <p>
+                  Instead of staring at zero charts, upload a bank statement and let the app
+                  learn categories, recurring bills, and simulator assumptions from real activity.
+                </p>
+              </div>
+            </div>
+            <div className="budget-section-actions">
+              <button className="secondary-button" onClick={() => navigate("/import")}>
+                Upload Statement
+              </button>
+              <button className="secondary-button" onClick={() => navigate("/money-map")}>
+                Open Money Map
+              </button>
+            </div>
+          </div>
+        )}
 
         <div className="dashboard-card">
           <div className="section-header">

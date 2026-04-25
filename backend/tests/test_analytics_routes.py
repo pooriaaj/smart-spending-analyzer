@@ -13,7 +13,7 @@ from sqlalchemy.pool import StaticPool
 
 from app.database import Base
 from app.dependencies import get_current_user, get_db
-from app.models import Account, BudgetPlan, SavedScenario, Transaction, User
+from app.models import Account, BudgetPlan, MerchantCategoryProfile, SavedScenario, Transaction, User
 from app.routes.analytics_routes import router as analytics_router
 
 
@@ -87,6 +87,7 @@ class AnalyticsRouteTest(unittest.TestCase):
             session.query(SavedScenario).delete()
             session.query(Transaction).delete()
             session.query(BudgetPlan).delete()
+            session.query(MerchantCategoryProfile).delete()
             session.commit()
 
     def seed_transactions(self) -> None:
@@ -201,6 +202,113 @@ class AnalyticsRouteTest(unittest.TestCase):
 
         self.assertEqual(response.status_code, 404, response.text)
         self.assertEqual(response.json()["detail"], "Account not found")
+
+    def test_money_map_guides_empty_users_to_import(self) -> None:
+        response = self.client.get("/analytics/money-map")
+
+        self.assertEqual(response.status_code, 200, response.text)
+        payload = response.json()
+
+        self.assertEqual(payload["status"], "empty")
+        self.assertEqual(payload["confidence_level"], "Low")
+        self.assertEqual(payload["transaction_count"], 0)
+        self.assertEqual(payload["actions"][0]["page"], "import")
+        self.assertIn("Upload one bank statement", payload["narrative"])
+
+    def test_money_map_summarizes_imported_statement_patterns(self) -> None:
+        with self.session_local() as session:
+            session.add_all(
+                [
+                    Transaction(
+                        amount=2400.0,
+                        category="salary",
+                        description="Payroll Jan",
+                        date=date(2026, 1, 3),
+                        type="income",
+                        owner_id=self.user_id,
+                        account_id=self.chequing_account_id,
+                    ),
+                    Transaction(
+                        amount=140.0,
+                        category="groceries",
+                        description="FreshCo Jan",
+                        date=date(2026, 1, 5),
+                        type="expense",
+                        owner_id=self.user_id,
+                        account_id=self.chequing_account_id,
+                    ),
+                    Transaction(
+                        amount=18.99,
+                        category="entertainment",
+                        description="Spotify Premium",
+                        date=date(2026, 1, 8),
+                        type="expense",
+                        owner_id=self.user_id,
+                        account_id=self.chequing_account_id,
+                    ),
+                    Transaction(
+                        amount=2400.0,
+                        category="salary",
+                        description="Payroll Feb",
+                        date=date(2026, 2, 3),
+                        type="income",
+                        owner_id=self.user_id,
+                        account_id=self.chequing_account_id,
+                    ),
+                    Transaction(
+                        amount=18.99,
+                        category="entertainment",
+                        description="Spotify Premium",
+                        date=date(2026, 2, 8),
+                        type="expense",
+                        owner_id=self.user_id,
+                        account_id=self.chequing_account_id,
+                    ),
+                    Transaction(
+                        amount=2400.0,
+                        category="salary",
+                        description="Payroll Mar",
+                        date=date(2026, 3, 3),
+                        type="income",
+                        owner_id=self.user_id,
+                        account_id=self.chequing_account_id,
+                    ),
+                    Transaction(
+                        amount=18.99,
+                        category="entertainment",
+                        description="Spotify Premium",
+                        date=date(2026, 3, 8),
+                        type="expense",
+                        owner_id=self.user_id,
+                        account_id=self.chequing_account_id,
+                    ),
+                    MerchantCategoryProfile(
+                        merchant_key="spotify",
+                        display_name="Spotify",
+                        category="entertainment",
+                        transaction_type="expense",
+                        confidence=0.97,
+                        confirmation_count=3,
+                        owner_id=self.user_id,
+                    ),
+                ]
+            )
+            session.commit()
+
+        response = self.client.get(
+            "/analytics/money-map",
+            params={"account_id": self.chequing_account_id},
+        )
+
+        self.assertEqual(response.status_code, 200, response.text)
+        payload = response.json()
+
+        self.assertEqual(payload["scope_label"], "Daily Spending (chequing)")
+        self.assertGreater(payload["transaction_count"], 0)
+        self.assertEqual(payload["month_count"], 3)
+        self.assertGreaterEqual(payload["learned_merchant_count"], 1)
+        self.assertTrue(any(item["category"] == "entertainment" for item in payload["top_categories"]))
+        self.assertTrue(any(item["description"] == "Spotify Premium" for item in payload["recurring_highlights"]))
 
     def test_recurring_expenses_route_detects_monthly_patterns(self) -> None:
         with self.session_local() as session:

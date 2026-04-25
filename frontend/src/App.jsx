@@ -15,6 +15,7 @@ const AccountsPage = lazy(() => import("./pages/AccountsPage"));
 const ImportPage = lazy(() => import("./pages/ImportPage"));
 const BudgetsPage = lazy(() => import("./pages/BudgetsPage"));
 const SimulatorPage = lazy(() => import("./pages/SimulatorPage"));
+const MoneyMapPage = lazy(() => import("./pages/MoneyMapPage"));
 
 function ProtectedRoute({ children }) {
   const token = localStorage.getItem("token");
@@ -68,6 +69,7 @@ function App() {
           <Route path="/profile" element={<ProtectedRoute><ProfilePage /></ProtectedRoute>} />
           <Route path="/accounts" element={<ProtectedRoute><AccountsPage /></ProtectedRoute>} />
           <Route path="/import" element={<ProtectedRoute><ImportPage /></ProtectedRoute>} />
+          <Route path="/money-map" element={<ProtectedRoute><MoneyMapPage /></ProtectedRoute>} />
           <Route path="/budgets" element={<ProtectedRoute><BudgetsPage /></ProtectedRoute>} />
           <Route path="/simulator" element={<ProtectedRoute><SimulatorPage /></ProtectedRoute>} />
         </Routes>
