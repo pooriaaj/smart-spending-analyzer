@@ -265,12 +265,18 @@ function ImportPage() {
   ).length;
   const receiptDraftValidation = validateReceiptDraft(receiptDraft);
   const filteredPreviewRows = previewRowItems.filter(
-    ({ duplicateReason, validation, confidenceReason }) => {
+    ({ duplicateReason, validation, confidenceReason, row }) => {
+      if (previewFilter === "missing") {
+        return !duplicateReason && validation.messages.length === 0;
+      }
       if (previewFilter === "needs_review") {
         return validation.messages.length > 0;
       }
       if (previewFilter === "duplicates") {
         return Boolean(duplicateReason);
+      }
+      if (previewFilter === "repeating") {
+        return Boolean(row.is_repeating_pattern);
       }
       if (previewFilter === "confidence") {
         return Boolean(confidenceReason);
@@ -381,6 +387,16 @@ function ImportPage() {
               [field]: field === "amount" ? (value === "" ? "" : Number(value)) : value,
               is_duplicate: false,
               duplicate_reason: null,
+              matched_transaction_id: null,
+              reconciliation_status: "missing",
+              reconciliation_reason: null,
+              is_repeating_pattern: false,
+              repeating_pattern_type: null,
+              repeating_pattern_reason: null,
+              repeating_pattern_occurrences: 0,
+              repeating_pattern_average_amount: null,
+              repeating_pattern_cadence: null,
+              repeating_pattern_confidence: null,
             }
           : row
       )
@@ -419,13 +435,17 @@ function ImportPage() {
   };
 
   const handleConfirmPreviewImport = async () => {
-    if (!normalizedAccountId || previewRows.length === 0) return;
+    const rowsToImport = previewRowItems
+      .filter(({ duplicateReason, validation }) => !duplicateReason && validation.messages.length === 0)
+      .map(({ row }) => row);
+
+    if (!normalizedAccountId || rowsToImport.length === 0) return;
 
     try {
       setConfirmingPreview(true);
       const response = await api.post("/transactions/import/confirm-preview", {
         account_id: normalizedAccountId,
-        rows: previewRows,
+        rows: rowsToImport,
       });
 
       setImportResult({
@@ -434,7 +454,8 @@ function ImportPage() {
         message: response.data.message,
         import_summary: {
           imported: response.data.imported || 0,
-          duplicates_skipped: response.data.duplicates_skipped || 0,
+          duplicates_skipped:
+            (response.data.duplicates_skipped || 0) + Math.max(previewRows.length - rowsToImport.length, 0),
           invalid_rows_skipped: response.data.invalid_rows_skipped || 0,
         },
         notes: [],
@@ -819,7 +840,7 @@ function ImportPage() {
 
             <div className="import-preview-stats-grid">
               <div className="import-preview-stat-card">
-                <span className="import-preview-stat-label">Ready</span>
+                <span className="import-preview-stat-label">Missing</span>
                 <strong>{missingPreviewRowCount}</strong>
               </div>
               <div className="import-preview-stat-card">
@@ -858,6 +879,13 @@ function ImportPage() {
               </button>
               <button
                 type="button"
+                className={`import-filter-chip ${previewFilter === "missing" ? "import-filter-chip-active" : ""}`}
+                onClick={() => setPreviewFilter("missing")}
+              >
+                Missing ({missingPreviewRowCount})
+              </button>
+              <button
+                type="button"
                 className={`import-filter-chip ${previewFilter === "needs_review" ? "import-filter-chip-active" : ""}`}
                 onClick={() => setPreviewFilter("needs_review")}
               >
@@ -869,6 +897,13 @@ function ImportPage() {
                 onClick={() => setPreviewFilter("duplicates")}
               >
                 Already Written ({duplicatePreviewRowCount})
+              </button>
+              <button
+                type="button"
+                className={`import-filter-chip ${previewFilter === "repeating" ? "import-filter-chip-active" : ""}`}
+                onClick={() => setPreviewFilter("repeating")}
+              >
+                Repeating ({repeatingPreviewRowCount})
               </button>
               <button
                 type="button"
@@ -1106,7 +1141,7 @@ function ImportPage() {
                 type="button"
                 className="smart-apply-button"
                 onClick={handleConfirmPreviewImport}
-                disabled={confirmingPreview || previewRows.length === 0 || invalidPreviewRowCount > 0}
+                disabled={confirmingPreview || missingPreviewRowCount === 0 || invalidPreviewRowCount > 0}
               >
                 {confirmingPreview ? "Importing..." : "Import Missing Rows"}
               </button>
