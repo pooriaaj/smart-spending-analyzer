@@ -2,7 +2,12 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import api, { handleApiAuthError } from "../services/api";
 import AccountSelector from "../components/AccountSelector";
-import { ALL_ACCOUNTS_VALUE } from "../services/accountStorage";
+import { ALL_ACCOUNTS_VALUE, getSelectedAccountId } from "../services/accountStorage";
+
+const getCurrentMonthStart = () => {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`;
+};
 
 const normalizeTextForMatching = (value = "") =>
   value.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
@@ -26,9 +31,14 @@ function TransactionsPage() {
   const [categoryFilter, setCategoryFilter] = useState("");
   const [searchFilter, setSearchFilter] = useState("");
   const [recurringOnlyFilter, setRecurringOnlyFilter] = useState(false);
-  const [selectedAccountId, setSelectedAccountId] = useState(ALL_ACCOUNTS_VALUE);
+  const [selectedAccountId, setSelectedAccountId] = useState(getSelectedAccountId());
   const [loading, setLoading] = useState(true);
   const [recurringExpenses, setRecurringExpenses] = useState([]);
+  const [freshStartDate, setFreshStartDate] = useState(getCurrentMonthStart());
+  const [freshStartConfirm, setFreshStartConfirm] = useState("");
+  const [freshStartLoading, setFreshStartLoading] = useState(false);
+  const [freshStartMessage, setFreshStartMessage] = useState("");
+  const [freshStartError, setFreshStartError] = useState("");
 
   const [bulkSuggestions, setBulkSuggestions] = useState([]);
   const [bulkLoading, setBulkLoading] = useState(false);
@@ -297,6 +307,35 @@ function TransactionsPage() {
     }
   };
 
+  const handleFreshStart = async () => {
+    if (freshStartConfirm.trim().toUpperCase() !== "START FRESH") {
+      setFreshStartError('Type "START FRESH" to confirm this cleanup.');
+      return;
+    }
+
+    try {
+      setFreshStartLoading(true);
+      setFreshStartMessage("");
+      setFreshStartError("");
+
+      const response = await api.post("/transactions/fresh-start", {
+        keep_from: freshStartDate,
+        account_id: normalizedAccountId || null,
+        delete_all: false,
+      });
+
+      setFreshStartMessage(response.data?.message || "Fresh start complete.");
+      setFreshStartConfirm("");
+      await fetchTransactions();
+    } catch (error) {
+      if (!handleApiAuthError(error, navigate)) {
+        setFreshStartError(error?.response?.data?.detail || "Failed to clean old history.");
+      }
+    } finally {
+      setFreshStartLoading(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="page-container dashboard-page">
@@ -338,6 +377,66 @@ function TransactionsPage() {
             <p>Select all accounts or focus on one account.</p>
           </div>
           <AccountSelector onChange={setSelectedAccountId} allowAll={true} />
+        </div>
+
+        <div className="filter-card fresh-start-card">
+          <div className="section-header">
+            <h2>Fresh Start</h2>
+            <p>
+              Remove old statement history and keep the transactions from your new spending life.
+              This is built for your new workflow: write daily transactions, then reconcile the month-end bank statement.
+            </p>
+          </div>
+
+          <div className="fresh-start-grid">
+            <div>
+              <label htmlFor="fresh-start-date">Keep transactions from</label>
+              <input
+                id="fresh-start-date"
+                type="date"
+                value={freshStartDate}
+                onChange={(event) => setFreshStartDate(event.target.value)}
+              />
+              <p className="budget-inline-note">
+                Everything before this date in the selected account view will be deleted.
+              </p>
+            </div>
+
+            <div>
+              <label htmlFor="fresh-start-confirm">Confirmation</label>
+              <input
+                id="fresh-start-confirm"
+                type="text"
+                value={freshStartConfirm}
+                onChange={(event) => setFreshStartConfirm(event.target.value)}
+                placeholder='Type "START FRESH"'
+              />
+              <p className="budget-inline-note">
+                This cannot tell old manual rows from old imported rows, so choose the date carefully.
+              </p>
+            </div>
+          </div>
+
+          <div className="smart-actions-row">
+            <button
+              type="button"
+              className="delete-button"
+              onClick={handleFreshStart}
+              disabled={freshStartLoading || !freshStartDate}
+            >
+              {freshStartLoading ? "Cleaning..." : "Delete Old History"}
+            </button>
+            <button
+              type="button"
+              className="secondary-button"
+              onClick={() => navigate("/import")}
+            >
+              Reconcile This Month
+            </button>
+          </div>
+
+          {freshStartMessage && <div className="bulk-message-box">{freshStartMessage}</div>}
+          {freshStartError && <p className="error-text">{freshStartError}</p>}
         </div>
 
         <div className="filter-card">
@@ -505,7 +604,10 @@ function TransactionsPage() {
         <div className="filter-card">
           <div className="section-header">
             <h2>Transaction Filters</h2>
-            <p>Filter the full transaction table by type, month, and category.</p>
+            <p>
+              Showing {filteredTransactions.length} of {transactions.length} transaction
+              {transactions.length === 1 ? "" : "s"} in this account view.
+            </p>
           </div>
 
           <div className="filter-bar">
@@ -577,11 +679,26 @@ function TransactionsPage() {
         <div className="dashboard-card">
           <div className="section-header">
             <h2>Transaction Table</h2>
-            <p>Detailed records of your income and expense entries.</p>
+            <p>Your daily written transactions and any missing statement rows you chose to import.</p>
           </div>
 
           {filteredTransactions.length === 0 ? (
-            <div className="empty-state"><p>No transactions found.</p></div>
+            <div className="empty-state">
+              <p>
+                {transactions.length === 0
+                  ? "No transactions found in this account view yet."
+                  : "Transactions exist, but the current filters are hiding them."}
+              </p>
+              {transactions.length === 0 ? (
+                <button className="secondary-button" onClick={() => navigate("/dashboard")}>
+                  Add Today&apos;s Transaction
+                </button>
+              ) : (
+                <button className="secondary-button" onClick={clearFilters}>
+                  Clear Filters
+                </button>
+              )}
+            </div>
           ) : (
             <div className="transactions-table-wrapper">
               <table className="transactions-table">

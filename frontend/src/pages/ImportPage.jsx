@@ -5,6 +5,8 @@ import AccountSelector from "../components/AccountSelector";
 import { ALL_ACCOUNTS_VALUE } from "../services/accountStorage";
 
 const ALLOWED_TRANSACTION_TYPES = new Set(["expense", "income"]);
+const FREE_BATCH_IMPORT_FILE_LIMIT = 6;
+const RECEIPT_IMAGE_EXTENSIONS = new Set(["jpg", "jpeg", "png", "webp"]);
 const todayIsoDate = () => new Date().toISOString().slice(0, 10);
 
 const isValidIsoDate = (value) => {
@@ -106,6 +108,23 @@ const getPreviewCategoryConfidence = (row) => {
   return Math.max(0, Math.min(confidence, 1));
 };
 
+const getFileExtension = (fileName = "") => fileName.split(".").pop()?.toLowerCase() || "";
+
+const isReceiptImageFile = (file) => RECEIPT_IMAGE_EXTENSIONS.has(getFileExtension(file.name));
+
+const formatSelectedFilesLabel = (files) => {
+  if (files.length === 0) {
+    return "";
+  }
+  if (files.length === 1) {
+    return files[0].name;
+  }
+
+  const visibleNames = files.slice(0, 3).map((file) => file.name).join(", ");
+  const remainingCount = files.length - 3;
+  return `${files.length} files selected: ${visibleNames}${remainingCount > 0 ? `, +${remainingCount} more` : ""}`;
+};
+
 function ImportPage() {
   const navigate = useNavigate();
   const fileInputRef = useRef(null);
@@ -125,6 +144,17 @@ function ImportPage() {
     selectedAccountId === ALL_ACCOUNTS_VALUE ? undefined : Number(selectedAccountId);
   const normalizedError = error.trim().toLowerCase();
   const importErrorGuidance = (() => {
+    if (normalizedError.includes("upgrade to premium")) {
+      return {
+        title: "Premium batch import",
+        items: [
+          `Free users can import ${FREE_BATCH_IMPORT_FILE_LIMIT} statement files per batch.`,
+          "Split larger uploads into smaller batches for now, or upgrade when Premium billing is enabled.",
+          "Premium will unlock larger statement batches for faster setup and deeper history building.",
+        ],
+      };
+    }
+
     if (
       normalizedError.includes("no selectable text") ||
       normalizedError.includes("image-only or scanned")
@@ -218,14 +248,17 @@ function ImportPage() {
     (validation) => validation.messages.length > 0
   ).length;
   const duplicatePreviewRowCount = previewRowItems.filter((item) => item.duplicateReason).length;
+  const matchedPreviewRowCount = previewRowItems.filter(
+    (item) => item.row.reconciliation_status === "matched"
+  ).length;
+  const missingPreviewRowCount = previewRowItems.filter(
+    ({ duplicateReason, validation }) => !duplicateReason && validation.messages.length === 0
+  ).length;
   const confidencePreviewRowCount = previewRowItems.filter(
     (item) => item.confidenceReason
   ).length;
   const manualPreviewRowCount = previewRows.filter(
     (row) => row.source_line === "Added manually during review."
-  ).length;
-  const readyPreviewRowCount = previewRowItems.filter(
-    ({ duplicateReason, validation }) => !duplicateReason && validation.messages.length === 0
   ).length;
   const receiptDraftValidation = validateReceiptDraft(receiptDraft);
   const filteredPreviewRows = previewRowItems.filter(
@@ -257,15 +290,38 @@ function ImportPage() {
   };
 
   const handleFileUpload = async (event) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
+    const selectedFiles = Array.from(event.target.files || []);
+    if (!selectedFiles.length) return;
 
     if (!normalizedAccountId) {
       setError("Please select a specific account before importing a file.");
+      event.target.value = "";
       return;
     }
 
-    setSelectedFileName(file.name);
+    if (selectedFiles.length > FREE_BATCH_IMPORT_FILE_LIMIT) {
+      setSelectedFileName(formatSelectedFilesLabel(selectedFiles));
+      setImportResult(null);
+      setPreviewRows([]);
+      setReceiptDraft(null);
+      setError(
+        `Free users can upload up to ${FREE_BATCH_IMPORT_FILE_LIMIT} bank statements in one try. Upgrade to Premium to import more at once.`
+      );
+      event.target.value = "";
+      return;
+    }
+
+    if (selectedFiles.length > 1 && selectedFiles.some(isReceiptImageFile)) {
+      setSelectedFileName(formatSelectedFilesLabel(selectedFiles));
+      setImportResult(null);
+      setPreviewRows([]);
+      setReceiptDraft(null);
+      setError("Batch import supports CSV and PDF bank statements. Upload receipt images one at a time.");
+      event.target.value = "";
+      return;
+    }
+
+    setSelectedFileName(formatSelectedFilesLabel(selectedFiles));
     setImportResult(null);
     setPreviewRows([]);
     setReceiptDraft(null);
@@ -273,11 +329,20 @@ function ImportPage() {
     setLoading(true);
 
     const formData = new FormData();
-    formData.append("file", file);
     formData.append("account_id", String(normalizedAccountId));
+    const uploadPath =
+      selectedFiles.length === 1 ? "/transactions/import/file" : "/transactions/import/files";
+
+    if (selectedFiles.length === 1) {
+      formData.append("file", selectedFiles[0]);
+    } else {
+      selectedFiles.forEach((file) => {
+        formData.append("files", file);
+      });
+    }
 
     try {
-      const response = await api.post("/transactions/import/file", formData, {
+      const response = await api.post(uploadPath, formData, {
         headers: {
           "Content-Type": "multipart/form-data",
         },
@@ -361,7 +426,7 @@ function ImportPage() {
       });
 
       setImportResult({
-        detected_type: "pdf_statement",
+        detected_type: importResult?.detected_type || "pdf_statement",
         status: "completed",
         message: response.data.message,
         import_summary: {
@@ -424,7 +489,7 @@ function ImportPage() {
             <p className="eyebrow-text">Smart Spending Analyzer</p>
             <h1>Smart Import</h1>
             <p className="hero-subtitle">
-              Upload one file and the app will detect whether it is a CSV statement, PDF statement, or receipt image.
+              Use daily transactions as your source of truth, then upload the month-end statement to find what you missed.
             </p>
           </div>
 
@@ -452,10 +517,10 @@ function ImportPage() {
 
         <div className="dashboard-card large-card">
           <div className="section-header">
-            <h2>Upload File</h2>
+            <h2>Upload Files</h2>
             <p>
-              Supported files: CSV statements, PDF statements, and receipt images (JPG, PNG, WEBP).
-              Scanned PDFs can use OCR fallback when vision OCR is configured.
+              Upload up to {FREE_BATCH_IMPORT_FILE_LIMIT} CSV or PDF bank statements in one try. The app marks rows
+              already written and lets you import only the missed transactions.
             </p>
           </div>
 
@@ -464,6 +529,7 @@ function ImportPage() {
               ref={fileInputRef}
               type="file"
               accept=".csv,.pdf,.jpg,.jpeg,.png,.webp"
+              multiple
               onChange={handleFileUpload}
               disabled={loading}
               className="hidden-file-input"
@@ -472,7 +538,10 @@ function ImportPage() {
             <div className="import-upload-top">
               <div>
                 <h3>Smart Import</h3>
-                <p>The app automatically detects the file type and starts the right workflow.</p>
+                <p>
+                  Select this month&apos;s statement to reconcile your daily entries. More than{" "}
+                  {FREE_BATCH_IMPORT_FILE_LIMIT} files in one batch is a Premium workflow.
+                </p>
               </div>
 
               <button
@@ -481,19 +550,19 @@ function ImportPage() {
                 onClick={handleChooseFile}
                 disabled={loading}
               >
-                {loading ? "Processing..." : "Choose File"}
+                {loading ? "Processing..." : "Choose Files"}
               </button>
             </div>
 
             <div className="import-upload-meta">
-              <span className="import-file-label">Selected file:</span>
-              <span className="import-file-name">{selectedFileName || "No file selected yet"}</span>
+              <span className="import-file-label">Selected files:</span>
+              <span className="import-file-name">{selectedFileName || "No files selected yet"}</span>
             </div>
 
             {loading && (
               <div className="import-info-box">
-                <strong>Processing file...</strong>
-                <p>Detecting file type and running the correct import pipeline.</p>
+                <strong>Processing upload...</strong>
+                <p>Detecting each file type and running the correct import pipeline.</p>
               </div>
             )}
 
@@ -677,8 +746,8 @@ function ImportPage() {
         {importResult?.status === "table_review" && (
           <div className="dashboard-card large-card">
             <div className="section-header">
-              <h2>Review PDF Statement Rows</h2>
-              <p>Review detected rows, remove anything incorrect, then import the final list.</p>
+              <h2>Review Statement Rows</h2>
+              <p>Matched rows are already in your app. Missing rows are the ones you may have forgotten to write.</p>
             </div>
 
             <div className="import-preview-toolbar">
@@ -687,8 +756,8 @@ function ImportPage() {
                 <p>
                   {invalidPreviewRowCount > 0
                     ? `${invalidPreviewRowCount} row${invalidPreviewRowCount === 1 ? "" : "s"} still need attention before you can import.`
-                    : duplicatePreviewRowCount > 0
-                    ? `${duplicatePreviewRowCount} row${duplicatePreviewRowCount === 1 ? "" : "s"} look like duplicates and may be skipped on import.`
+                    : matchedPreviewRowCount > 0
+                    ? `${matchedPreviewRowCount} row${matchedPreviewRowCount === 1 ? "" : "s"} already match your written transactions. ${missingPreviewRowCount} missing row${missingPreviewRowCount === 1 ? "" : "s"} can be imported if needed.`
                     : confidencePreviewRowCount > 0
                     ? `${confidencePreviewRowCount} row${confidencePreviewRowCount === 1 ? "" : "s"} should get a quick parser confidence check before importing.`
                     : removedPreviewCount > 0
@@ -727,7 +796,7 @@ function ImportPage() {
                       onClick={handleRemoveDuplicatePreviewRows}
                       disabled={confirmingPreview}
                     >
-                      Remove Flagged Duplicates
+                      Remove Already Written
                     </button>
                   )}
                   <button
@@ -746,15 +815,15 @@ function ImportPage() {
             <div className="import-preview-stats-grid">
               <div className="import-preview-stat-card">
                 <span className="import-preview-stat-label">Ready</span>
-                <strong>{readyPreviewRowCount}</strong>
+                <strong>{missingPreviewRowCount}</strong>
               </div>
               <div className="import-preview-stat-card">
                 <span className="import-preview-stat-label">Needs Review</span>
                 <strong>{invalidPreviewRowCount}</strong>
               </div>
               <div className="import-preview-stat-card">
-                <span className="import-preview-stat-label">Duplicates</span>
-                <strong>{duplicatePreviewRowCount}</strong>
+                <span className="import-preview-stat-label">Already Written</span>
+                <strong>{matchedPreviewRowCount}</strong>
               </div>
               <div className="import-preview-stat-card">
                 <span className="import-preview-stat-label">Confidence</span>
@@ -790,7 +859,7 @@ function ImportPage() {
                 className={`import-filter-chip ${previewFilter === "duplicates" ? "import-filter-chip-active" : ""}`}
                 onClick={() => setPreviewFilter("duplicates")}
               >
-                Likely Duplicates ({duplicatePreviewRowCount})
+                Already Written ({duplicatePreviewRowCount})
               </button>
               <button
                 type="button"
@@ -813,10 +882,10 @@ function ImportPage() {
             {duplicatePreviewRowCount > 0 && (
               <div className="import-duplicate-box">
                 <strong>
-                  {duplicatePreviewRowCount} likely duplicate row{duplicatePreviewRowCount === 1 ? "" : "s"}
+                  {matchedPreviewRowCount || duplicatePreviewRowCount} already written or duplicate row{(matchedPreviewRowCount || duplicatePreviewRowCount) === 1 ? "" : "s"}
                 </strong>
                 <p>
-                  These rows matched an existing transaction or another row in this preview. You can remove them now or keep them and let the backend skip them during import.
+                  These rows matched your written transactions or another row in this preview. Keep them visible for review or remove them; the backend skips them during import.
                 </p>
               </div>
             )}
@@ -947,7 +1016,9 @@ function ImportPage() {
                                 <span className="import-row-status import-row-status-manual">Manual row</span>
                               )}
                               {duplicateReason && (
-                                <span className="import-row-status import-row-status-duplicate">Likely duplicate</span>
+                                <span className="import-row-status import-row-status-duplicate">
+                                  {row.reconciliation_status === "matched" ? "Already written" : "Duplicate"}
+                                </span>
                               )}
                               {confidenceReason && (
                                 <span className="import-row-status import-row-status-confidence">Check parser</span>
@@ -1007,7 +1078,7 @@ function ImportPage() {
                 onClick={handleConfirmPreviewImport}
                 disabled={confirmingPreview || previewRows.length === 0 || invalidPreviewRowCount > 0}
               >
-                {confirmingPreview ? "Importing..." : "Confirm Import"}
+                {confirmingPreview ? "Importing..." : "Import Missing Rows"}
               </button>
             </div>
 

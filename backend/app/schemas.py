@@ -345,6 +345,17 @@ class TransactionResponse(TransactionBase, ORMBaseModel):
     owner_id: int
 
 
+class FreshStartRequest(BaseModel):
+    keep_from: date | None = None
+    account_id: int | None = None
+    delete_all: bool = False
+
+
+class FreshStartResponse(BaseModel):
+    deleted_count: int
+    message: str
+
+
 class AnalyticsSummary(BaseModel):
     total_income: float
     total_expenses: float
@@ -620,6 +631,9 @@ class StatementPreviewRow(BaseModel):
     category_reason: str | None = None
     is_duplicate: bool = False
     duplicate_reason: str | None = None
+    matched_transaction_id: int | None = None
+    reconciliation_status: str = "missing"
+    reconciliation_reason: str | None = None
 
 
 class SmartImportResponse(BaseModel):

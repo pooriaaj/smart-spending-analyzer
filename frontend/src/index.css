@@ -716,6 +716,34 @@ textarea:focus,
   flex-wrap: wrap;
 }
 
+.fresh-start-card {
+  border-color: rgba(239, 68, 68, 0.18);
+}
+
+.fresh-start-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  margin-bottom: 16px;
+}
+
+.fresh-start-grid label {
+  display: block;
+  margin-bottom: 8px;
+  font-weight: 700;
+  color: var(--text-main);
+}
+
+.fresh-start-grid input {
+  width: 100%;
+  min-height: 48px;
+  border-radius: 14px;
+  border: 1px solid rgba(15, 23, 42, 0.1);
+  background: rgba(255, 255, 255, 0.9);
+  padding: 0 14px;
+  color: var(--text-main);
+}
+
 .import-preview-toolbar {
   display: flex;
   justify-content: space-between;
@@ -3653,6 +3681,16 @@ textarea {
   background: rgba(127, 29, 29, 0.32);
 }
 
+:root[data-theme="dark"] .fresh-start-card {
+  border-color: rgba(248, 113, 113, 0.16);
+}
+
+:root[data-theme="dark"] .fresh-start-grid input {
+  background: rgba(15, 23, 42, 0.86);
+  border-color: rgba(148, 163, 184, 0.16);
+  color: #f8fafc;
+}
+
 :root[data-theme="dark"] .assistant-preset-button,
 :root[data-theme="dark"] .assistant-followup-button,
 :root[data-theme="dark"] .assistant-action-button,
@@ -4299,6 +4337,10 @@ textarea {
 
   .import-preview-stats-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .fresh-start-grid {
+    grid-template-columns: 1fr;
   }
 
   .import-preview-toolbar {
