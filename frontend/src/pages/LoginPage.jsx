@@ -9,6 +9,16 @@ function LoginPage() {
   const [error, setError] = useState("");
   const navigate = useNavigate();
 
+  const handleExploreChange = (event) => {
+    const value = event.target.value;
+    if (!value) return;
+
+    if (value === "create") {
+      navigate("/register");
+    }
+    event.target.value = "";
+  };
+
   useEffect(() => {
     const token = localStorage.getItem("token");
     if (token) {
@@ -46,34 +56,53 @@ function LoginPage() {
             <p className="auth-eyebrow">Smart Spending Analyzer</p>
             <h1>Understand your money with a cleaner, smarter workflow.</h1>
             <p className="auth-description">
-              Track transactions, detect trends, uncover overspending patterns,
-              and use an assistant designed to turn financial data into clear decisions.
+              Write daily transactions, reconcile bank statements at month-end, and let the app
+              learn your categories, recurring habits, and future money outlook.
             </p>
+
+            <div className="public-nav-strip">
+              <label htmlFor="public-explore">Explore</label>
+              <select id="public-explore" defaultValue="" onChange={handleExploreChange}>
+                <option value="" disabled>
+                  Choose where to start
+                </option>
+                <option value="create">Create free account</option>
+              </select>
+            </div>
 
             <div className="auth-feature-list">
               <div className="auth-feature-item">
                 <span className="auth-feature-dot" />
                 <div>
-                  <strong>Spending intelligence</strong>
-                  <p>Insights, trends, alerts, and category analysis in one place.</p>
+                  <strong>Month-end reconciliation</strong>
+                  <p>Compare what you wrote daily against your real bank statement.</p>
                 </div>
               </div>
 
               <div className="auth-feature-item">
                 <span className="auth-feature-dot" />
                 <div>
-                  <strong>CSV import + validation</strong>
-                  <p>Bring in bank-style transaction data with duplicate protection.</p>
+                  <strong>Learned category memory</strong>
+                  <p>Teach the app your personal naming habits instead of accepting generic guesses.</p>
                 </div>
               </div>
 
               <div className="auth-feature-item">
                 <span className="auth-feature-dot" />
                 <div>
-                  <strong>Built-in financial assistant</strong>
-                  <p>Ask natural questions and explore guided next actions.</p>
+                  <strong>Premium planning cockpit</strong>
+                  <p>Advanced forecasts, larger statement batches, saved scenarios, and guided spending plans.</p>
                 </div>
               </div>
+            </div>
+
+            <div className="auth-premium-card">
+              <strong>Premium preview</strong>
+              <p>
+                Unlock deeper 3 and 6 month analysis, bigger import batches, simulator portfolios,
+                and smarter recurring-charge decisions when plans launch.
+              </p>
+              <Link to="/register">Start free, upgrade later</Link>
             </div>
           </div>
         </div>
@@ -125,7 +154,7 @@ function LoginPage() {
 
             <div className="auth-footer">
               <p>
-                Don’t have an account? <Link to="/register">Create one</Link>
+                Don't have an account? <Link to="/register">Create one</Link>
               </p>
             </div>
           </div>

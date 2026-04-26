@@ -211,6 +211,41 @@ function ProfilePage() {
           {passwordError && <p className="error-text">{passwordError}</p>}
         </div>
 
+        <div id="plans" className="dashboard-card large-card premium-plans-card">
+          <div className="section-header">
+            <h2>Premium Plans</h2>
+            <p>
+              Free is for daily tracking and month-end reconciliation. Premium is for deeper forecasting,
+              larger statement workflows, and smarter decision support.
+            </p>
+          </div>
+
+          <div className="pricing-grid">
+            <div className="pricing-card">
+              <span className="pricing-kicker">Free</span>
+              <h3>Smart Starter</h3>
+              <p className="pricing-price">$0</p>
+              <p>Manual tracking, basic statement import, current-month dashboard, and clean transaction review.</p>
+              <button className="secondary-button" type="button">
+                Current Plan
+              </button>
+            </div>
+
+            <div className="pricing-card pricing-card-featured">
+              <span className="pricing-kicker">Premium</span>
+              <h3>Money Operator</h3>
+              <p className="pricing-price">Coming soon</p>
+              <p>
+                Larger statement batches, advanced simulator plans, 3 and 6 month trend intelligence,
+                recurring-charge levers, and personalized category learning controls.
+              </p>
+              <button className="premium-header-button" type="button">
+                Notify Me
+              </button>
+            </div>
+          </div>
+        </div>
+
         <div className="dashboard-card large-card danger-zone-card">
           <div className="section-header">
             <h2>Danger Zone</h2>

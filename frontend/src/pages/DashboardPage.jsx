@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import api, { handleApiAuthError } from "../services/api";
 import AccountSelector from "../components/AccountSelector";
+import PageHeader from "../components/PageHeader";
 import { ALL_ACCOUNTS_VALUE, getSelectedAccountId, setSelectedAccountId as persistSelectedAccountId } from "../services/accountStorage";
 import { buildBudgetForecastSummary } from "../utils/budgetDisplay";
 
@@ -48,6 +49,12 @@ const buildManualRepeatNotice = (savedTransaction, existingTransactions) => {
   return ` Repeating ${label} detected: ${matches.length + 1} similar entries, averaging $${averageAmount.toFixed(2)}.`;
 };
 
+const formatMonthLabel = (monthValue) => {
+  const parsed = new Date(`${monthValue}-01T00:00:00`);
+  if (Number.isNaN(parsed.getTime())) return monthValue;
+  return parsed.toLocaleDateString(undefined, { month: "long", year: "numeric" });
+};
+
 function DashboardPage() {
   const [dashboardData, setDashboardData] = useState(null);
   const [allTransactions, setAllTransactions] = useState([]);
@@ -76,6 +83,7 @@ function DashboardPage() {
   const navigate = useNavigate();
 
   const currentBudgetMonth = new Date().toISOString().slice(0, 7);
+  const currentMonthLabel = formatMonthLabel(currentBudgetMonth);
 
   const fetchData = async () => {
     try {
@@ -119,6 +127,7 @@ function DashboardPage() {
         api.get("/analytics/dashboard", {
           params: {
             account_id: scopedAccountId,
+            month: currentBudgetMonth,
           },
         }),
         api.get("/transactions/", {
@@ -147,7 +156,11 @@ function DashboardPage() {
 
         if ((allTransactionsRes.data || []).length > 0) {
           const [allDashboardRes, allBudgetsRes, allSimulatorRes] = await Promise.all([
-            api.get("/analytics/dashboard"),
+            api.get("/analytics/dashboard", {
+              params: {
+                month: currentBudgetMonth,
+              },
+            }),
             api.get("/budgets/", {
               params: {
                 month: currentBudgetMonth,
@@ -387,40 +400,13 @@ function DashboardPage() {
   return (
     <div className="page-container dashboard-page">
       <div className="dashboard-wrapper">
-        <div className="dashboard-hero">
-          <div>
-            <p className="eyebrow-text">Smart Spending Analyzer</p>
-            <h1>Dashboard</h1>
-            <p className="hero-subtitle">
-              Track your whole financial picture or switch into a specific account.
-            </p>
-          </div>
-
-          <div className="header-actions">
-            <button className="secondary-button" onClick={() => navigate("/transactions")}>
-              View Transactions
-            </button>
-            <button className="secondary-button" onClick={() => navigate("/analytics")}>
-              Analytics
-            </button>
-            <button className="secondary-button" onClick={() => navigate("/money-map")}>
-              Money Map
-            </button>
-            <button className="secondary-button" onClick={() => navigate("/budgets")}>
-              Budgets
-            </button>
-            <button className="secondary-button" onClick={() => navigate("/simulator")}>
-              Simulator
-            </button>
-            <button className="secondary-button" onClick={() => navigate("/assistant")}>
-              Assistant
-            </button>
-            <button className="secondary-button" onClick={() => navigate("/accounts")}>
-              Accounts
-            </button>
-            <button className="secondary-button" onClick={() => navigate("/profile")}>
-              Profile
-            </button>
+        <PageHeader
+          icon="$"
+          section="App"
+          current="Dashboard"
+          title="Dashboard"
+          subtitle="Your current-month command center. Keep this page simple, then use Analytics for deeper charts and history."
+          actions={(
             <button
               className="logout-button"
               onClick={() => {
@@ -430,8 +416,8 @@ function DashboardPage() {
             >
               Logout
             </button>
-          </div>
-        </div>
+          )}
+        />
 
         <div className="filter-card">
           <div className="section-header">
@@ -469,8 +455,11 @@ function DashboardPage() {
 
         <div className="dashboard-card">
           <div className="section-header">
-            <h2>Overview</h2>
-            <p>Your key financial snapshot at a glance.</p>
+            <h2>{currentMonthLabel} Overview</h2>
+            <p>
+              A simple current-month snapshot. For daily, weekly, monthly, 3-month, and 6-month analysis,
+              open Analytics.
+            </p>
           </div>
 
           <div className="summary-grid">
@@ -478,7 +467,7 @@ function DashboardPage() {
               <span className="card-label">Income</span>
               <div className="summary-card-content">
                 <p>${summary.total_income.toFixed(2)}</p>
-                <small className="summary-card-note">Total recorded income</small>
+                <small className="summary-card-note">Income recorded this month</small>
               </div>
             </div>
 
@@ -486,7 +475,7 @@ function DashboardPage() {
               <span className="card-label">Expenses</span>
               <div className="summary-card-content">
                 <p>${summary.total_expenses.toFixed(2)}</p>
-                <small className="summary-card-note">Total recorded expenses</small>
+                <small className="summary-card-note">Expenses recorded this month</small>
               </div>
             </div>
 
@@ -494,9 +483,14 @@ function DashboardPage() {
               <span className="card-label">Balance</span>
               <div className="summary-card-content">
                 <p>${summary.balance.toFixed(2)}</p>
-                <small className="summary-card-note">Income minus expenses</small>
+                <small className="summary-card-note">Current-month net</small>
               </div>
             </div>
+          </div>
+          <div className="budget-section-actions">
+            <button className="secondary-button" onClick={() => navigate("/analytics")}>
+              Open Detailed Analytics
+            </button>
           </div>
         </div>
 
@@ -541,6 +535,32 @@ function DashboardPage() {
             </div>
           </div>
         )}
+
+        <div className="dashboard-card premium-promo-card">
+          <div>
+            <p className="eyebrow-text">Premium planning layer</p>
+            <h2>Turn your spending history into a financial operating system.</h2>
+            <p>
+              Premium is where advanced forecasting, larger statement batches, category learning history,
+              custom money rules, and guided monthly plans will live. Free stays clean and useful; Premium
+              becomes the cockpit for people who want smarter decisions every month.
+            </p>
+          </div>
+          <div className="premium-feature-grid">
+            <span>6+ statement batch import</span>
+            <span>3 and 6 month trend packs</span>
+            <span>Advanced simulator scenarios</span>
+            <span>Category learning controls</span>
+          </div>
+          <div className="budget-section-actions">
+            <button className="premium-header-button" onClick={() => navigate("/profile#plans")}>
+              See Plans
+            </button>
+            <button className="secondary-button" onClick={() => navigate("/simulator")}>
+              Preview Simulator
+            </button>
+          </div>
+        </div>
 
         <div className="dashboard-card">
           <div className="section-header">
@@ -711,7 +731,7 @@ function DashboardPage() {
                     <div>
                       <strong>{transaction.description}</strong>
                       <p>
-                        {transaction.category} • {transaction.type} • {transaction.date}
+                        {transaction.category} | {transaction.type} | {transaction.date}
                       </p>
                     </div>
                     <div className="transaction-right">
@@ -758,3 +778,4 @@ function DashboardPage() {
 }
 
 export default DashboardPage;
+

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import api from "../services/api";
 import AccountSelector from "../components/AccountSelector";
+import PageHeader from "../components/PageHeader";
 import { ALL_ACCOUNTS_VALUE, getSelectedAccountId } from "../services/accountStorage";
 import {
   BarChart,
@@ -243,6 +244,36 @@ function AnalyticsPage() {
     setSelectedCategory("");
   };
 
+  const applyDatePreset = (preset) => {
+    const today = new Date();
+    const toIso = (value) => value.toISOString().slice(0, 10);
+
+    setSelectedMonth("");
+    setSelectedType("");
+    setSelectedCategory("");
+
+    if (preset === "month") {
+      setStartDate("");
+      setEndDate("");
+      setSelectedMonth(today.toISOString().slice(0, 7));
+      return;
+    }
+
+    const start = new Date(today);
+    if (preset === "week") {
+      start.setDate(today.getDate() - 6);
+    }
+    if (preset === "3m") {
+      start.setMonth(today.getMonth() - 3);
+    }
+    if (preset === "6m") {
+      start.setMonth(today.getMonth() - 6);
+    }
+
+    setStartDate(toIso(start));
+    setEndDate(toIso(today));
+  };
+
   const renderTrendAmount = (value) => {
     const prefix = value > 0 ? "+" : "";
     return `${prefix}$${value.toFixed(2)}`;
@@ -305,59 +336,18 @@ function AnalyticsPage() {
   return (
     <div className="page-container dashboard-page">
       <div className="dashboard-wrapper">
-        <div className="dashboard-hero">
-          <div>
-            <p className="eyebrow-text">Smart Spending Analyzer</p>
-            <h1>Analytics & Insights</h1>
-            <p className="hero-subtitle">
-              Explore charts, category patterns, and intelligent spending insights.
-            </p>
-          </div>
-
-          <div className="header-actions">
-            <button
-              className="secondary-button"
-              onClick={() => navigate("/dashboard")}
-            >
-              Back to Dashboard
+        <PageHeader
+          icon="AN"
+          section="App"
+          current="Analytics"
+          title="Analytics & Insights"
+          subtitle="Deep-dive into daily, weekly, monthly, 3-month, and 6-month financial signals."
+          actions={(
+            <button className="secondary-button" onClick={() => navigate("/transactions")}>
+              View Ledger
             </button>
-
-            <button
-              className="secondary-button"
-              onClick={() => navigate("/transactions")}
-            >
-              View All Transactions
-            </button>
-
-            <button
-              className="secondary-button"
-              onClick={() => navigate("/assistant")}
-            >
-              Assistant
-            </button>
-
-            <button
-              className="secondary-button"
-              onClick={() => navigate("/money-map")}
-            >
-              Money Map
-            </button>
-
-            <button
-              className="secondary-button"
-              onClick={() => navigate("/budgets")}
-            >
-              Budgets
-            </button>
-
-            <button
-              className="secondary-button"
-              onClick={() => navigate("/simulator")}
-            >
-              Simulator
-            </button>
-          </div>
-        </div>
+          )}
+        />
 
         <div className="filter-card">
           <div className="section-header">
@@ -437,6 +427,21 @@ function AnalyticsPage() {
                 Clear Filters
               </button>
             </div>
+          </div>
+
+          <div className="analytics-preset-row">
+            <button type="button" className="secondary-button" onClick={() => applyDatePreset("week")}>
+              Last 7 Days
+            </button>
+            <button type="button" className="secondary-button" onClick={() => applyDatePreset("month")}>
+              Current Month
+            </button>
+            <button type="button" className="secondary-button" onClick={() => applyDatePreset("3m")}>
+              Last 3 Months
+            </button>
+            <button type="button" className="secondary-button" onClick={() => applyDatePreset("6m")}>
+              Last 6 Months
+            </button>
           </div>
         </div>
 

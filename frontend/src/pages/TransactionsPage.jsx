@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import api, { handleApiAuthError } from "../services/api";
 import AccountSelector from "../components/AccountSelector";
+import PageHeader from "../components/PageHeader";
 import {
   ALL_ACCOUNTS_VALUE,
   getSelectedAccountId,
@@ -26,6 +27,23 @@ const normalizeRecurringDescription = (value = "") => {
   );
   normalized = normalized.replace(/\b\d+\b/g, " ");
   return normalized.replace(/\s+/g, " ").trim();
+};
+
+const formatDisplayLabel = (value = "") => {
+  const cleaned = String(value || "Other").replace(/_/g, " ").trim();
+  return cleaned
+    .split(/\s+/)
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+    .join(" ");
+};
+
+const cleanRecurringDisplayName = (value = "") => {
+  let cleaned = String(value || "Recurring transaction").replace(/\s+/g, " ").trim();
+  cleaned = cleaned.replace(/^from .*?date description.*?balance \(\$\)\s*/i, "");
+  cleaned = cleaned.replace(/^contactless interac purchase\s*-\s*\d+\s*/i, "");
+  cleaned = cleaned.replace(/^interac purchase\s*-\s*\d+\s*/i, "");
+  cleaned = cleaned.replace(/\s+-\s+\d{3,}\s+/g, " ");
+  return cleaned.length > 92 ? `${cleaned.slice(0, 89)}...` : cleaned;
 };
 
 function TransactionsPage() {
@@ -229,7 +247,7 @@ function TransactionsPage() {
       description: transaction.description,
       date: transaction.date,
       type: transaction.type,
-      account_id: transaction.account_id,
+      account_id: transaction.account_id || "",
     });
   };
 
@@ -379,24 +397,18 @@ function TransactionsPage() {
   return (
     <div className="page-container dashboard-page">
       <div className="dashboard-wrapper">
-        <div className="dashboard-hero">
-          <div>
-            <p className="eyebrow-text">Smart Spending Analyzer</p>
-            <h1>All Transactions</h1>
-            <p className="hero-subtitle">
-              Browse, filter, manage, and improve your transaction history.
-            </p>
-          </div>
-
-          <div className="header-actions">
-            <button className="secondary-button" onClick={() => navigate("/dashboard")}>
-              Back to Dashboard
-            </button>
+        <PageHeader
+          icon="TX"
+          section="App"
+          current="Transactions"
+          title="Transactions"
+          subtitle="Review the ledger, clean category language, and reconcile month-end statements against what you wrote daily."
+          actions={(
             <button className="secondary-button" onClick={() => navigate("/import")}>
-              Smart Import
+              Reconcile Statement
             </button>
-          </div>
-        </div>
+          )}
+        />
 
         <div className="filter-card">
           <div className="section-header">
@@ -479,70 +491,81 @@ function TransactionsPage() {
             </div>
           ) : (
             <div className="recurring-charges-grid">
-              {recurringPatterns.map((item) => (
-                <div key={`${item.description}-${item.latest_date}`} className="recurring-charge-card">
-                  <div className="recurring-charge-top">
-                    <div>
-                      <h3>{item.description}</h3>
-                      <p>{item.type === "income" ? "Income" : "Expense"} | {item.category}</p>
-                    </div>
-                    <div className="recurring-charge-badges">
-                      <span className={getRecurringPriorityClass(item.review_priority)}>
-                        {item.review_priority === "high"
-                          ? "Review first"
-                          : item.review_priority === "medium"
-                            ? "Worth reviewing"
-                            : "Stable"}
-                      </span>
-                      <span className="budget-status budget-status-risk">
-                        {Math.round(Number(item.confidence || 0) * 100)}% match
-                      </span>
-                    </div>
-                  </div>
+              {recurringPatterns.map((item) => {
+                const displayName = cleanRecurringDisplayName(item.description);
+                const typeLabel = item.type === "income" ? "Income" : "Expense";
+                const categoryLabel = formatDisplayLabel(item.category);
 
-                  <div className="recurring-charge-metrics">
-                    <div>
-                      <span>Average</span>
-                      <strong>${Number(item.average_amount || 0).toFixed(2)}</strong>
+                return (
+                  <div key={`${item.description}-${item.latest_date}`} className="recurring-charge-card">
+                    <div className="recurring-charge-top">
+                      <div>
+                        <h3>{displayName}</h3>
+                        <p>
+                          {typeLabel}
+                          {categoryLabel.toLowerCase() !== typeLabel.toLowerCase()
+                            ? ` | ${categoryLabel}`
+                            : ""}
+                        </p>
+                      </div>
+                      <div className="recurring-charge-badges">
+                        <span className={getRecurringPriorityClass(item.review_priority)}>
+                          {item.review_priority === "high"
+                            ? "Review first"
+                            : item.review_priority === "medium"
+                              ? "Worth reviewing"
+                              : "Stable"}
+                        </span>
+                        <span className="budget-status budget-status-risk">
+                          {Math.round(Number(item.confidence || 0) * 100)}% match
+                        </span>
+                      </div>
                     </div>
-                    <div>
-                      <span>Annualized</span>
-                      <strong>${Number(item.annualized_amount || 0).toFixed(2)}</strong>
-                    </div>
-                    <div>
-                      <span>Occurrences</span>
-                      <strong>{item.occurrences}</strong>
-                    </div>
-                  </div>
 
-                  <p className="budget-inline-note">
-                    Latest {item.type === "income" ? "income" : "expense"}: ${Number(item.latest_amount || 0).toFixed(2)} on {item.latest_date}
-                  </p>
-                  {item.next_expected_date && (
+                    <div className="recurring-charge-metrics">
+                      <div>
+                        <span>Average</span>
+                        <strong>${Number(item.average_amount || 0).toFixed(2)}</strong>
+                      </div>
+                      <div>
+                        <span>Annualized</span>
+                        <strong>${Number(item.annualized_amount || 0).toFixed(2)}</strong>
+                      </div>
+                      <div>
+                        <span>Occurrences</span>
+                        <strong>{item.occurrences}</strong>
+                      </div>
+                    </div>
+
                     <p className="budget-inline-note">
-                      Next expected around {item.next_expected_date}
+                      Latest {item.type === "income" ? "income" : "expense"}: ${Number(item.latest_amount || 0).toFixed(2)} on {item.latest_date}
                     </p>
-                  )}
-                  {item.latest_change_percent != null && (
-                    <p className="budget-inline-note">
-                      Latest change: {item.latest_change_percent > 0 ? "+" : ""}
-                      {Number(item.latest_change_percent).toFixed(1)}% vs usual amount
-                    </p>
-                  )}
-                  {item.review_reason && (
-                    <p className="recurring-charge-reason">{item.review_reason}</p>
-                  )}
-                  <div className="recurring-charge-actions">
-                    <button
-                      type="button"
-                      className="secondary-button recurring-charge-action"
-                      onClick={() => applyRecurringFilter(item)}
-                    >
-                      Show matching transactions
-                    </button>
+                    {item.next_expected_date && (
+                      <p className="budget-inline-note">
+                        Next expected around {item.next_expected_date}
+                      </p>
+                    )}
+                    {item.latest_change_percent != null && (
+                      <p className="budget-inline-note">
+                        Latest change: {item.latest_change_percent > 0 ? "+" : ""}
+                        {Number(item.latest_change_percent).toFixed(1)}% vs usual amount
+                      </p>
+                    )}
+                    {item.review_reason && (
+                      <p className="recurring-charge-reason">{item.review_reason}</p>
+                    )}
+                    <div className="recurring-charge-actions">
+                      <button
+                        type="button"
+                        className="secondary-button recurring-charge-action"
+                        onClick={() => applyRecurringFilter(item)}
+                      >
+                        Show matching transactions
+                      </button>
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>
@@ -737,7 +760,7 @@ function TransactionsPage() {
                     <th>Category</th>
                     <th>Description</th>
                     <th>Amount</th>
-                    <th>Account ID</th>
+                    <th>Account</th>
                     <th>Action</th>
                   </tr>
                 </thead>
@@ -793,7 +816,7 @@ function TransactionsPage() {
                               value={editForm.account_id}
                               onChange={(e) => setEditForm({ ...editForm, account_id: e.target.value })}
                             />
-                          ) : transaction.account_id}
+                          ) : transaction.account_id || "Unassigned"}
                         </td>
 
                         <td>
