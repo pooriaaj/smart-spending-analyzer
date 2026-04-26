@@ -127,6 +127,29 @@ class SmartImportRouteTest(unittest.TestCase):
             session.query(MerchantCategoryProfile).delete()
             session.commit()
 
+    def test_transactions_route_returns_legacy_rows_without_account(self) -> None:
+        with self.session_local() as session:
+            session.add(
+                Transaction(
+                    amount=42.5,
+                    category="legacy",
+                    description="Older imported transaction",
+                    date=date(2026, 4, 12),
+                    type="expense",
+                    owner_id=self.user_id,
+                    account_id=None,
+                )
+            )
+            session.commit()
+
+        response = self.client.get("/transactions/")
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(len(payload), 1)
+        self.assertIsNone(payload[0]["account_id"])
+        self.assertEqual(payload[0]["description"], "Older imported transaction")
+
     def test_import_file_returns_rbc_preview_from_pdf_upload(self) -> None:
         pdf_bytes = build_text_pdf(
             [

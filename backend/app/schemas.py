@@ -340,8 +340,14 @@ class TransactionCreate(TransactionBase):
     pass
 
 
-class TransactionResponse(TransactionBase, ORMBaseModel):
+class TransactionResponse(ORMBaseModel):
     id: int
+    amount: float
+    category: str
+    description: str
+    date: date
+    type: TransactionType
+    account_id: int | None = None
     owner_id: int
 
 
