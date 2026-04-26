@@ -40,6 +40,29 @@ from app.services.unified_import_service import FREE_BATCH_IMPORT_FILE_LIMIT, pr
 router = APIRouter(prefix="/transactions", tags=["Transactions"])
 
 
+def save_category_memory_safely(
+    db: Session,
+    *,
+    owner_id: int,
+    description: str,
+    category: str,
+    tx_type: str,
+    amount: float,
+) -> None:
+    try:
+        save_category_memory(
+            db=db,
+            owner_id=owner_id,
+            description=description,
+            category=category,
+            tx_type=tx_type,
+            amount=amount,
+        )
+        db.commit()
+    except Exception:
+        db.rollback()
+
+
 @router.get("/", response_model=list[TransactionResponse])
 def get_transactions(
     account_id: int | None = Query(default=None),
@@ -78,7 +101,10 @@ def create_transaction(
     )
 
     db.add(new_transaction)
-    save_category_memory(
+    db.commit()
+    db.refresh(new_transaction)
+
+    save_category_memory_safely(
         db=db,
         owner_id=current_user.id,
         description=transaction.description,
@@ -86,8 +112,6 @@ def create_transaction(
         tx_type=transaction.type,
         amount=transaction.amount,
     )
-    db.commit()
-    db.refresh(new_transaction)
     return new_transaction
 
 
@@ -118,7 +142,10 @@ def update_transaction(
     transaction.type = updated_data.type
     transaction.account_id = updated_data.account_id
 
-    save_category_memory(
+    db.commit()
+    db.refresh(transaction)
+
+    save_category_memory_safely(
         db=db,
         owner_id=current_user.id,
         description=updated_data.description,
@@ -126,8 +153,6 @@ def update_transaction(
         tx_type=updated_data.type,
         amount=updated_data.amount,
     )
-    db.commit()
-    db.refresh(transaction)
     return transaction
 
 
@@ -358,7 +383,7 @@ def confirm_preview_import(
 
     try:
         for event in category_memory_events:
-            save_category_memory(
+            save_category_memory_safely(
                 db=db,
                 owner_id=current_user.id,
                 description=event["description"],

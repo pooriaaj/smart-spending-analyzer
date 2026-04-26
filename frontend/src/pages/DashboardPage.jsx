@@ -36,6 +36,7 @@ function DashboardPage() {
   const [transactionAccountId, setTransactionAccountId] = useState("");
   const [transactionType, setTransactionType] = useState("expense");
   const [formError, setFormError] = useState("");
+  const [formSuccess, setFormSuccess] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
   const [suggestion, setSuggestion] = useState(null);
@@ -252,6 +253,7 @@ function DashboardPage() {
   const handleAddTransaction = async (e) => {
     e.preventDefault();
     setFormError("");
+    setFormSuccess("");
 
     if (!transactionAccountId) {
       setFormError("Please choose an account for this transaction.");
@@ -266,7 +268,7 @@ function DashboardPage() {
     try {
       setSubmitting(true);
 
-      await api.post("/transactions/", {
+      const response = await api.post("/transactions/", {
         amount: Number(amount),
         category,
         description,
@@ -274,6 +276,7 @@ function DashboardPage() {
         type: transactionType,
         account_id: Number(transactionAccountId),
       });
+      const savedTransaction = response.data;
 
       setAmount("");
       setCategory("Other");
@@ -281,11 +284,18 @@ function DashboardPage() {
       setDate(new Date().toISOString().slice(0, 10));
       setTransactionType("expense");
       setSuggestion(null);
+      setFormSuccess("Transaction added successfully.");
+      setAllTransactions((currentTransactions) => {
+        if (currentTransactions.some((transaction) => transaction.id === savedTransaction.id)) {
+          return currentTransactions;
+        }
+        return [savedTransaction, ...currentTransactions];
+      });
 
       await fetchData();
     } catch (error) {
       if (!handleApiAuthError(error, navigate)) {
-        setFormError("Failed to add transaction.");
+        setFormError(error?.response?.data?.detail || "Failed to add transaction.");
       }
     } finally {
       setSubmitting(false);
@@ -569,6 +579,7 @@ function DashboardPage() {
           </form>
 
           {formError && <p className="error-text">{formError}</p>}
+          {formSuccess && <p className="success-text">{formSuccess}</p>}
 
           {suggestion && (
             <div className="suggestion-box">

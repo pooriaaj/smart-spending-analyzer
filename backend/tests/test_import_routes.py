@@ -597,6 +597,40 @@ class SmartImportRouteTest(unittest.TestCase):
 
         self.assertTrue(any(memory.keyword == "chipotle" for memory in memories))
 
+    def test_create_transaction_persists_when_category_memory_fails(self) -> None:
+        with patch(
+            "app.routes.transaction_routes.save_category_memory",
+            side_effect=RuntimeError("learning unavailable"),
+        ):
+            response = self.client.post(
+                "/transactions/",
+                json={
+                    "amount": 11.00,
+                    "category": "personal",
+                    "description": "Cigar",
+                    "date": "2026-04-26",
+                    "type": "expense",
+                    "account_id": self.account_id,
+                },
+            )
+
+        self.assertEqual(response.status_code, 200, response.text)
+        payload = response.json()
+        self.assertEqual(payload["description"], "Cigar")
+        self.assertEqual(payload["amount"], 11.0)
+
+        with self.session_local() as session:
+            saved = (
+                session.query(Transaction)
+                .filter(
+                    Transaction.owner_id == self.user_id,
+                    Transaction.description == "Cigar",
+                )
+                .one_or_none()
+            )
+
+        self.assertIsNotNone(saved)
+
     def test_confirm_preview_import_saves_category_memory_for_future_suggestions(self) -> None:
         confirm_response = self.client.post(
             "/transactions/import/confirm-preview",
