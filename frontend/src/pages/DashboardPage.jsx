@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import api, { handleApiAuthError } from "../services/api";
 import AccountSelector from "../components/AccountSelector";
-import { ALL_ACCOUNTS_VALUE, getSelectedAccountId } from "../services/accountStorage";
+import { ALL_ACCOUNTS_VALUE, getSelectedAccountId, setSelectedAccountId as persistSelectedAccountId } from "../services/accountStorage";
 import { buildBudgetForecastSummary } from "../utils/budgetDisplay";
 
 const CATEGORY_RULES = {
@@ -42,45 +42,77 @@ function DashboardPage() {
 
   const navigate = useNavigate();
 
-  const normalizedAccountId =
-    selectedAccountId === ALL_ACCOUNTS_VALUE ? undefined : Number(selectedAccountId);
   const currentBudgetMonth = new Date().toISOString().slice(0, 7);
 
   const fetchData = async () => {
     try {
-      const [dashboardRes, transactionsRes, budgetsRes, simulatorRes, accountsRes] = await Promise.all([
+      const accountsRes = await api.get("/accounts/");
+      const loadedAccounts = accountsRes.data || [];
+      setAccounts(loadedAccounts);
+
+      const selectedAccountExists = loadedAccounts.some(
+        (account) => String(account.id) === String(selectedAccountId)
+      );
+      const repairedAccountId =
+        selectedAccountId !== ALL_ACCOUNTS_VALUE && !selectedAccountExists
+          ? ALL_ACCOUNTS_VALUE
+          : selectedAccountId;
+      const scopedAccountId =
+        repairedAccountId === ALL_ACCOUNTS_VALUE ? undefined : Number(repairedAccountId);
+
+      if (repairedAccountId !== selectedAccountId) {
+        persistSelectedAccountId(repairedAccountId);
+        setSelectedAccountId(repairedAccountId);
+      }
+
+      if (loadedAccounts.length > 0) {
+        setTransactionAccountId((currentValue) => {
+          const currentStillExists = loadedAccounts.some(
+            (account) => String(account.id) === String(currentValue)
+          );
+          if (currentStillExists) {
+            return currentValue;
+          }
+
+          if (scopedAccountId) {
+            return String(scopedAccountId);
+          }
+
+          return String(loadedAccounts[0].id);
+        });
+      }
+
+      const [dashboardRes, transactionsRes, budgetsRes, simulatorRes] = await Promise.all([
         api.get("/analytics/dashboard", {
           params: {
-            account_id: normalizedAccountId,
+            account_id: scopedAccountId,
           },
         }),
         api.get("/transactions/", {
           params: {
-            account_id: normalizedAccountId,
+            account_id: scopedAccountId,
           },
         }),
         api.get("/budgets/", {
           params: {
             month: currentBudgetMonth,
-            account_id: normalizedAccountId,
+            account_id: scopedAccountId,
           },
         }),
         api
           .get("/analytics/future-simulator", {
             params: {
-              account_id: normalizedAccountId,
+              account_id: scopedAccountId,
               months: 3,
             },
           })
           .catch(() => null),
-        api.get("/accounts/"),
       ]);
 
       setDashboardData(dashboardRes.data);
       setAllTransactions(transactionsRes.data);
       setBudgetData(budgetsRes.data);
       setSimulatorData(simulatorRes?.data || null);
-      setAccounts(accountsRes.data || []);
     } catch (error) {
       console.error("Failed to load dashboard:", error);
       handleApiAuthError(error, navigate);
@@ -511,9 +543,10 @@ function DashboardPage() {
             <select
               value={transactionAccountId}
               onChange={(e) => setTransactionAccountId(e.target.value)}
+              disabled={accounts.length === 0}
             >
               <option value="" disabled>
-                Select account
+                {accounts.length === 0 ? "Loading accounts..." : "Select account"}
               </option>
               {accounts.map((account) => (
                 <option key={account.id} value={String(account.id)}>
@@ -530,8 +563,8 @@ function DashboardPage() {
               Suggest Category
             </button>
 
-            <button type="submit" disabled={submitting}>
-              {submitting ? "Adding..." : "Add Transaction"}
+            <button type="submit" disabled={submitting || accounts.length === 0}>
+              {accounts.length === 0 ? "Loading Accounts..." : submitting ? "Adding..." : "Add Transaction"}
             </button>
           </form>
 
