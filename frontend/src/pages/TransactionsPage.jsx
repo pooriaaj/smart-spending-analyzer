@@ -2,7 +2,11 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import api, { handleApiAuthError } from "../services/api";
 import AccountSelector from "../components/AccountSelector";
-import { ALL_ACCOUNTS_VALUE, getSelectedAccountId } from "../services/accountStorage";
+import {
+  ALL_ACCOUNTS_VALUE,
+  getSelectedAccountId,
+  setSelectedAccountId as persistSelectedAccountId,
+} from "../services/accountStorage";
 
 const getCurrentMonthStart = () => {
   const now = new Date();
@@ -34,6 +38,7 @@ function TransactionsPage() {
   const [selectedAccountId, setSelectedAccountId] = useState(getSelectedAccountId());
   const [loading, setLoading] = useState(true);
   const [recurringPatterns, setRecurringPatterns] = useState([]);
+  const [scopeNotice, setScopeNotice] = useState("");
   const [freshStartDate, setFreshStartDate] = useState(getCurrentMonthStart());
   const [freshStartConfirm, setFreshStartConfirm] = useState("");
   const [freshStartLoading, setFreshStartLoading] = useState(false);
@@ -82,7 +87,7 @@ function TransactionsPage() {
 
   const fetchTransactions = async () => {
     try {
-      const [transactionsResponse, recurringResponse] = await Promise.all([
+      let [transactionsResponse, recurringResponse] = await Promise.all([
         api.get("/transactions/", {
           params: {
             account_id: normalizedAccountId,
@@ -96,6 +101,28 @@ function TransactionsPage() {
           })
           .catch(() => null),
       ]);
+
+      if (normalizedAccountId && (transactionsResponse.data || []).length === 0) {
+        const [allTransactionsResponse, allRecurringResponse] = await Promise.all([
+          api.get("/transactions/"),
+          api.get("/analytics/recurring-transactions").catch(() => null),
+        ]);
+
+        if ((allTransactionsResponse.data || []).length > 0) {
+          transactionsResponse = allTransactionsResponse;
+          recurringResponse = allRecurringResponse;
+          persistSelectedAccountId(ALL_ACCOUNTS_VALUE);
+          setSelectedAccountId(ALL_ACCOUNTS_VALUE);
+          setScopeNotice(
+            "We switched you back to All Accounts because this account view was empty, but your transactions exist in another account."
+          );
+        } else {
+          setScopeNotice("");
+        }
+      } else {
+        setScopeNotice("");
+      }
+
       setTransactions(transactionsResponse.data);
       setRecurringPatterns(recurringResponse?.data?.items || []);
     } catch (error) {
@@ -376,7 +403,8 @@ function TransactionsPage() {
             <h2>Account View</h2>
             <p>Select all accounts or focus on one account.</p>
           </div>
-          <AccountSelector onChange={setSelectedAccountId} allowAll={true} />
+          <AccountSelector value={selectedAccountId} onChange={setSelectedAccountId} allowAll={true} />
+          {scopeNotice && <div className="bulk-message-box">{scopeNotice}</div>}
         </div>
 
         <div className="filter-card fresh-start-card">

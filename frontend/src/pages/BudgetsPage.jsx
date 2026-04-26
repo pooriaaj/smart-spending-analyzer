@@ -427,7 +427,11 @@ function BudgetsPage() {
           </div>
 
           <div className="assistant-mode-row">
-            <AccountSelector label="Budget scope" onChange={setSelectedAccountId} />
+            <AccountSelector
+              value={selectedAccountId}
+              label="Budget scope"
+              onChange={setSelectedAccountId}
+            />
 
             <div className="assistant-mode-field">
               <label htmlFor="budget-month">Month</label>

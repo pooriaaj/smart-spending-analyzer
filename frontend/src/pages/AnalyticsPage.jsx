@@ -366,7 +366,11 @@ function AnalyticsPage() {
           </div>
 
           <div className="filter-bar">
-            <AccountSelector label="Account scope" onChange={setSelectedAccountId} />
+            <AccountSelector
+              value={selectedAccountId}
+              label="Account scope"
+              onChange={setSelectedAccountId}
+            />
 
             <div>
               <label>Month</label>

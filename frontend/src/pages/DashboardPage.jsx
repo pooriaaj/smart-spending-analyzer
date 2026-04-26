@@ -56,6 +56,7 @@ function DashboardPage() {
   const [simulatorData, setSimulatorData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [selectedAccountId, setSelectedAccountId] = useState(getSelectedAccountId());
+  const [scopeNotice, setScopeNotice] = useState("");
 
   const [typeFilter, setTypeFilter] = useState("");
   const [monthFilter, setMonthFilter] = useState("");
@@ -114,7 +115,7 @@ function DashboardPage() {
         });
       }
 
-      const [dashboardRes, transactionsRes, budgetsRes, simulatorRes] = await Promise.all([
+      let [dashboardRes, transactionsRes, budgetsRes, simulatorRes] = await Promise.all([
         api.get("/analytics/dashboard", {
           params: {
             account_id: scopedAccountId,
@@ -140,6 +141,42 @@ function DashboardPage() {
           })
           .catch(() => null),
       ]);
+
+      if (scopedAccountId && (transactionsRes.data || []).length === 0) {
+        const allTransactionsRes = await api.get("/transactions/");
+
+        if ((allTransactionsRes.data || []).length > 0) {
+          const [allDashboardRes, allBudgetsRes, allSimulatorRes] = await Promise.all([
+            api.get("/analytics/dashboard"),
+            api.get("/budgets/", {
+              params: {
+                month: currentBudgetMonth,
+              },
+            }),
+            api
+              .get("/analytics/future-simulator", {
+                params: {
+                  months: 3,
+                },
+              })
+              .catch(() => null),
+          ]);
+
+          dashboardRes = allDashboardRes;
+          transactionsRes = allTransactionsRes;
+          budgetsRes = allBudgetsRes;
+          simulatorRes = allSimulatorRes;
+          persistSelectedAccountId(ALL_ACCOUNTS_VALUE);
+          setSelectedAccountId(ALL_ACCOUNTS_VALUE);
+          setScopeNotice(
+            "We switched you back to All Accounts because this account view was empty, but your transactions exist in another account."
+          );
+        } else {
+          setScopeNotice("");
+        }
+      } else {
+        setScopeNotice("");
+      }
 
       setDashboardData(dashboardRes.data);
       setAllTransactions(transactionsRes.data);
@@ -401,7 +438,8 @@ function DashboardPage() {
             <h2>Account View</h2>
             <p>Switch between all accounts combined or one specific account.</p>
           </div>
-          <AccountSelector onChange={setSelectedAccountId} allowAll={true} />
+          <AccountSelector value={selectedAccountId} onChange={setSelectedAccountId} allowAll={true} />
+          {scopeNotice && <div className="bulk-message-box">{scopeNotice}</div>}
         </div>
 
         {!hasTransactions && (

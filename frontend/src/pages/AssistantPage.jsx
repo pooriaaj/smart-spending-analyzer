@@ -349,6 +349,7 @@ function AssistantPage() {
 
           <div className="assistant-mode-row">
             <AccountSelector
+              value={selectedAccountId}
               label="Assistant scope"
               onChange={setSelectedAccountId}
             />

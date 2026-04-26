@@ -536,7 +536,13 @@ function ImportPage() {
             <p>Select the account where imported transactions should go.</p>
           </div>
 
-          <AccountSelector onChange={setSelectedAccountId} allowAll={false} label="Target Account" />
+          <AccountSelector
+            value={selectedAccountId}
+            onChange={setSelectedAccountId}
+            allowAll={false}
+            label="Target Account"
+            persistSelection={false}
+          />
         </div>
 
         <div className="dashboard-card large-card">

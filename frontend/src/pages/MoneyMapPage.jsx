@@ -142,7 +142,7 @@ function MoneyMapPage() {
             <h2>Money Map Scope</h2>
             <p>Switch between all accounts or one account-specific learned model.</p>
           </div>
-          <AccountSelector onChange={setSelectedAccountId} allowAll={true} />
+          <AccountSelector value={selectedAccountId} onChange={setSelectedAccountId} allowAll={true} />
         </div>
 
         {error && <p className="error-text">{error}</p>}

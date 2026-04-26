@@ -1952,7 +1952,11 @@ function SimulatorPage() {
           )}
 
           <div className="simulator-controls-grid">
-            <AccountSelector label="Simulator scope" onChange={setSelectedAccountId} />
+            <AccountSelector
+              value={selectedAccountId}
+              label="Simulator scope"
+              onChange={setSelectedAccountId}
+            />
 
             <div className="budget-form-field">
               <label htmlFor="simulator-months">Months ahead</label>

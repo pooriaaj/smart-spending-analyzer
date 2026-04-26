@@ -2,11 +2,17 @@ import { useEffect, useState } from "react";
 import api from "../services/api";
 import { ALL_ACCOUNTS_VALUE, getSelectedAccountId, setSelectedAccountId } from "../services/accountStorage";
 
-function AccountSelector({ onChange, allowAll = true, label = "Account" }) {
+function AccountSelector({
+  onChange,
+  allowAll = true,
+  label = "Account",
+  value,
+  persistSelection = true,
+}) {
   const [accounts, setAccounts] = useState([]);
   const [selected, setSelected] = useState(() => {
-    const storedAccountId = getSelectedAccountId();
-    return allowAll || storedAccountId !== ALL_ACCOUNTS_VALUE ? storedAccountId : "";
+    const requestedAccountId = value ?? getSelectedAccountId();
+    return allowAll || requestedAccountId !== ALL_ACCOUNTS_VALUE ? String(requestedAccountId || "") : "";
   });
 
   useEffect(() => {
@@ -23,6 +29,13 @@ function AccountSelector({ onChange, allowAll = true, label = "Account" }) {
   }, []);
 
   useEffect(() => {
+    if (value === undefined) return;
+
+    const nextSelected = allowAll || value !== ALL_ACCOUNTS_VALUE ? String(value || "") : "";
+    setSelected(nextSelected);
+  }, [allowAll, value]);
+
+  useEffect(() => {
     if (!accounts.length) {
       onChange?.(selected);
       return;
@@ -37,9 +50,11 @@ function AccountSelector({ onChange, allowAll = true, label = "Account" }) {
       return;
     }
 
-    setSelectedAccountId(selected);
+    if (persistSelection) {
+      setSelectedAccountId(selected);
+    }
     onChange?.(selected);
-  }, [accounts, allowAll, selected, onChange]);
+  }, [accounts, allowAll, selected, onChange, persistSelection]);
 
   return (
     <div className="account-selector-block">
