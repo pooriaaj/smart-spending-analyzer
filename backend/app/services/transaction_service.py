@@ -195,6 +195,15 @@ MERCHANT_PHRASE_ALIASES = {
 }
 
 AMBIGUOUS_PRIMARY_MERCHANTS = {"apple", "google", "amazon", "bell", "rogers", "td", "rbc"}
+REPEATING_DESCRIPTION_STOPWORDS = MERCHANT_PROFILE_STOPWORDS - {
+    "deposit",
+    "direct",
+    "insurance",
+    "membership",
+    "payroll",
+    "rent",
+    "salary",
+}
 
 
 @dataclass(frozen=True)
@@ -577,6 +586,145 @@ def normalize_description(value: str) -> str:
     text = re.sub(r"\bpos\b|\bpurchase\b|\bpayment\b|\bdebit\b|\bcredit\b", "", text, flags=re.IGNORECASE)
     text = re.sub(r"\s+", " ", text).strip(" -")
     return text or value.strip()
+
+
+def normalize_repeating_description(value: str) -> str:
+    fingerprint = extract_merchant_fingerprint(value)
+    if fingerprint:
+        return fingerprint[0]
+
+    normalized = normalize_description(value).lower()
+    normalized = re.sub(
+        r"\b(?:jan|january|feb|february|mar|march|apr|april|may|jun|june|jul|july|aug|august|sep|sept|september|oct|october|nov|november|dec|december)\b",
+        " ",
+        normalized,
+    )
+    normalized = re.sub(r"[^a-z0-9 ]+", " ", normalized)
+    normalized = re.sub(r"\b\d+\b", " ", normalized)
+    normalized = " ".join(
+        token
+        for token in normalized.split()
+        if token not in REPEATING_DESCRIPTION_STOPWORDS and len(token) >= 2
+    )
+    return normalized[:160]
+
+
+def describe_repeating_pattern(
+    *,
+    description: str,
+    tx_type: str,
+    occurrences: int,
+    average_amount: float,
+    latest_date: date | None,
+    cadence: str,
+) -> str:
+    label = "income" if tx_type == "income" else "expense"
+    latest_text = f" Last seen on {latest_date.isoformat()}." if latest_date else ""
+    return (
+        f"Looks like a repeating {label}: {occurrences} similar occurrence"
+        f"{'' if occurrences == 1 else 's'} already recorded, averaging ${average_amount:.2f}."
+        f" Expected cadence: {cadence}.{latest_text}"
+    )
+
+
+def get_repeating_transaction_signal(
+    db: Session,
+    owner_id: int,
+    account_id: int,
+    description: str,
+    tx_type: str,
+    amount: float,
+    tx_date: date,
+) -> dict | None:
+    normalized_description = normalize_repeating_description(description)
+    if len(normalized_description) < 3:
+        return None
+
+    lowered_description = description.lower()
+    candidate_types = [tx_type]
+    if tx_type == "expense" and any(
+        keyword in lowered_description
+        for keyword in ("payroll", "salary", "direct deposit", "paycheque", "paycheck")
+    ):
+        candidate_types.append("income")
+
+    candidates = (
+        db.query(Transaction)
+        .filter(
+            Transaction.owner_id == owner_id,
+            Transaction.account_id == account_id,
+            Transaction.type.in_(candidate_types),
+            Transaction.date < tx_date,
+        )
+        .order_by(Transaction.date.asc(), Transaction.id.asc())
+        .all()
+    )
+
+    matches = [
+        transaction
+        for transaction in candidates
+        if normalize_repeating_description(transaction.description) == normalized_description
+    ]
+    if not matches:
+        return None
+
+    detected_type = matches[-1].type
+
+    amounts = [float(item.amount) for item in matches] + [float(amount)]
+    average_amount = sum(amounts) / len(amounts)
+    amount_variation = max(amounts) - min(amounts)
+    variation_ratio = amount_variation / average_amount if average_amount > 0 else 0.0
+    if variation_ratio > 0.45 and amount_variation > 25:
+        return None
+
+    previous_dates = [item.date for item in matches]
+    latest_date = previous_dates[-1] if previous_dates else None
+    intervals = [
+        (previous_dates[index] - previous_dates[index - 1]).days
+        for index in range(1, len(previous_dates))
+    ]
+    if latest_date:
+        intervals.append((tx_date - latest_date).days)
+
+    average_interval = sum(intervals) / len(intervals) if intervals else None
+    cadence = "monthly"
+    if average_interval is not None:
+        if average_interval <= 10:
+            cadence = "frequent"
+        elif average_interval <= 20:
+            cadence = "biweekly"
+        elif average_interval <= 45:
+            cadence = "monthly"
+        elif average_interval <= 75:
+            cadence = "every couple of months"
+        else:
+            cadence = "occasional"
+
+    occurrence_count = len(matches) + 1
+    confidence = min(
+        0.96,
+        0.62
+        + 0.08 * min(occurrence_count, 4)
+        + (0.1 if variation_ratio <= 0.15 else 0.0)
+        + (0.08 if cadence in {"monthly", "biweekly"} else 0.0),
+    )
+
+    return {
+        "is_repeating_pattern": True,
+        "repeating_pattern_type": detected_type,
+        "repeating_pattern_reason": describe_repeating_pattern(
+            description=description,
+            tx_type=detected_type,
+            occurrences=len(matches),
+            average_amount=average_amount,
+            latest_date=latest_date,
+            cadence=cadence,
+        ),
+        "repeating_pattern_occurrences": occurrence_count,
+        "repeating_pattern_average_amount": round(average_amount, 2),
+        "repeating_pattern_cadence": cadence,
+        "repeating_pattern_confidence": round(confidence, 2),
+    }
 
 
 def learnable_category_from_merchant_profile(

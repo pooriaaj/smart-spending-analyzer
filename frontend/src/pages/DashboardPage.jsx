@@ -17,6 +17,37 @@ const CATEGORY_RULES = {
   entertainment: ["netflix", "spotify", "youtube", "cinema", "movie"],
 };
 
+const normalizeRepeatDescription = (value = "") => {
+  let normalized = value.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+  normalized = normalized.replace(
+    /\b(?:jan|january|feb|february|mar|march|apr|april|may|jun|june|jul|july|aug|august|sep|sept|september|oct|october|nov|november|dec|december)\b/g,
+    " "
+  );
+  normalized = normalized.replace(/\b\d+\b/g, " ");
+  return normalized.replace(/\s+/g, " ").trim();
+};
+
+const buildManualRepeatNotice = (savedTransaction, existingTransactions) => {
+  const repeatKey = normalizeRepeatDescription(savedTransaction?.description || "");
+  if (!repeatKey) return "";
+
+  const matches = existingTransactions.filter((transaction) => {
+    if (transaction.id === savedTransaction.id) return false;
+    return (
+      transaction.type === savedTransaction.type &&
+      normalizeRepeatDescription(transaction.description) === repeatKey
+    );
+  });
+
+  if (matches.length === 0) return "";
+
+  const amounts = [...matches.map((item) => Number(item.amount || 0)), Number(savedTransaction.amount || 0)];
+  const averageAmount = amounts.reduce((total, value) => total + value, 0) / amounts.length;
+  const label = savedTransaction.type === "income" ? "income" : "expense";
+
+  return ` Repeating ${label} detected: ${matches.length + 1} similar entries, averaging $${averageAmount.toFixed(2)}.`;
+};
+
 function DashboardPage() {
   const [dashboardData, setDashboardData] = useState(null);
   const [allTransactions, setAllTransactions] = useState([]);
@@ -277,6 +308,7 @@ function DashboardPage() {
         account_id: Number(transactionAccountId),
       });
       const savedTransaction = response.data;
+      const repeatNotice = buildManualRepeatNotice(savedTransaction, allTransactions);
 
       setAmount("");
       setCategory("Other");
@@ -284,7 +316,7 @@ function DashboardPage() {
       setDate(new Date().toISOString().slice(0, 10));
       setTransactionType("expense");
       setSuggestion(null);
-      setFormSuccess("Transaction added successfully.");
+      setFormSuccess(`Transaction added successfully.${repeatNotice}`);
       setAllTransactions((currentTransactions) => {
         if (currentTransactions.some((transaction) => transaction.id === savedTransaction.id)) {
           return currentTransactions;

@@ -370,6 +370,61 @@ class AnalyticsRouteTest(unittest.TestCase):
         self.assertEqual(payload["items"][0]["next_expected_date"], "2026-04-07")
         self.assertGreater(payload["items"][0]["latest_change_percent"], 0)
 
+    def test_recurring_transactions_route_detects_income_and_expense_patterns(self) -> None:
+        with self.session_local() as session:
+            session.add_all(
+                [
+                    Transaction(
+                        amount=2500.0,
+                        category="Salary",
+                        description="Payroll Jan",
+                        date=date(2026, 1, 3),
+                        type="income",
+                        owner_id=self.user_id,
+                        account_id=self.chequing_account_id,
+                    ),
+                    Transaction(
+                        amount=2500.0,
+                        category="Salary",
+                        description="Payroll Feb",
+                        date=date(2026, 2, 3),
+                        type="income",
+                        owner_id=self.user_id,
+                        account_id=self.chequing_account_id,
+                    ),
+                    Transaction(
+                        amount=50.0,
+                        category="Health",
+                        description="Gym Membership",
+                        date=date(2026, 1, 8),
+                        type="expense",
+                        owner_id=self.user_id,
+                        account_id=self.chequing_account_id,
+                    ),
+                    Transaction(
+                        amount=50.0,
+                        category="Health",
+                        description="Gym Membership",
+                        date=date(2026, 2, 8),
+                        type="expense",
+                        owner_id=self.user_id,
+                        account_id=self.chequing_account_id,
+                    ),
+                ]
+            )
+            session.commit()
+
+        response = self.client.get(
+            "/analytics/recurring-transactions",
+            params={"account_id": self.chequing_account_id},
+        )
+
+        self.assertEqual(response.status_code, 200, response.text)
+        items = response.json()["items"]
+
+        self.assertTrue(any(item["type"] == "income" and "Payroll" in item["description"] for item in items))
+        self.assertTrue(any(item["type"] == "expense" and item["description"] == "Gym Membership" for item in items))
+
     def test_future_simulator_respects_account_scope_and_adjustments(self) -> None:
         with self.session_local() as session:
             session.add_all(

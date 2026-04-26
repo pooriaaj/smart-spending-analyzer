@@ -33,7 +33,7 @@ function TransactionsPage() {
   const [recurringOnlyFilter, setRecurringOnlyFilter] = useState(false);
   const [selectedAccountId, setSelectedAccountId] = useState(getSelectedAccountId());
   const [loading, setLoading] = useState(true);
-  const [recurringExpenses, setRecurringExpenses] = useState([]);
+  const [recurringPatterns, setRecurringPatterns] = useState([]);
   const [freshStartDate, setFreshStartDate] = useState(getCurrentMonthStart());
   const [freshStartConfirm, setFreshStartConfirm] = useState("");
   const [freshStartLoading, setFreshStartLoading] = useState(false);
@@ -89,7 +89,7 @@ function TransactionsPage() {
           },
         }),
         api
-          .get("/analytics/recurring-expenses", {
+          .get("/analytics/recurring-transactions", {
             params: {
               account_id: normalizedAccountId,
             },
@@ -97,7 +97,7 @@ function TransactionsPage() {
           .catch(() => null),
       ]);
       setTransactions(transactionsResponse.data);
-      setRecurringExpenses(recurringResponse?.data?.items || []);
+      setRecurringPatterns(recurringResponse?.data?.items || []);
     } catch (error) {
       handleApiAuthError(error, navigate);
     } finally {
@@ -123,11 +123,11 @@ function TransactionsPage() {
   const recurringDescriptionKeys = useMemo(
     () =>
       new Set(
-        recurringExpenses
+        recurringPatterns
           .map((item) => normalizeRecurringDescription(item.description))
           .filter(Boolean)
       ),
-    [recurringExpenses]
+    [recurringPatterns]
   );
 
   const filteredTransactions = useMemo(() => {
@@ -167,7 +167,7 @@ function TransactionsPage() {
   const applyRecurringFilter = (item) => {
     setSearchFilter(item.description || "");
     setRecurringOnlyFilter(true);
-    setTypeFilter("expense");
+    setTypeFilter(item.type || "expense");
     setCategoryFilter(item.category || "");
   };
 
@@ -441,22 +441,22 @@ function TransactionsPage() {
 
         <div className="filter-card">
           <div className="section-header">
-            <h2>Likely Recurring Charges</h2>
-            <p>Monthly subscriptions and repeat bills detected from your transaction history in this scope.</p>
+            <h2>Repeating Money Patterns</h2>
+            <p>Repeated expenses and income detected from your written transaction history in this scope.</p>
           </div>
 
-          {recurringExpenses.length === 0 ? (
+          {recurringPatterns.length === 0 ? (
             <div className="empty-state">
-              <p>No strong recurring charge patterns were detected yet.</p>
+              <p>No strong repeating income or expense patterns were detected yet.</p>
             </div>
           ) : (
             <div className="recurring-charges-grid">
-              {recurringExpenses.map((item) => (
+              {recurringPatterns.map((item) => (
                 <div key={`${item.description}-${item.latest_date}`} className="recurring-charge-card">
                   <div className="recurring-charge-top">
                     <div>
                       <h3>{item.description}</h3>
-                      <p>{item.category}</p>
+                      <p>{item.type === "income" ? "Income" : "Expense"} | {item.category}</p>
                     </div>
                     <div className="recurring-charge-badges">
                       <span className={getRecurringPriorityClass(item.review_priority)}>
@@ -488,7 +488,7 @@ function TransactionsPage() {
                   </div>
 
                   <p className="budget-inline-note">
-                    Latest charge: ${Number(item.latest_amount || 0).toFixed(2)} on {item.latest_date}
+                    Latest {item.type === "income" ? "income" : "expense"}: ${Number(item.latest_amount || 0).toFixed(2)} on {item.latest_date}
                   </p>
                   {item.next_expected_date && (
                     <p className="budget-inline-note">
@@ -670,7 +670,7 @@ function TransactionsPage() {
           {(searchFilter || recurringOnlyFilter) && (
             <p className="budget-inline-note recurring-filter-note">
               {recurringOnlyFilter
-                ? `Showing likely recurring charges${searchFilter ? ` matching "${searchFilter}".` : "."}`
+                ? `Showing likely repeating money patterns${searchFilter ? ` matching "${searchFilter}".` : "."}`
                 : `Filtering descriptions for "${searchFilter}".`}
             </p>
           )}

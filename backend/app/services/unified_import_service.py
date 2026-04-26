@@ -14,6 +14,7 @@ from app.services.transaction_service import (
     build_duplicate_key,
     get_existing_duplicate_keys,
     get_existing_statement_match_map,
+    get_repeating_transaction_signal,
     parse_csv_statement_preview,
 )
 
@@ -85,6 +86,15 @@ def annotate_preview_rows_for_duplicates(
 
         seen_in_preview.add(duplicate_key)
         seen_statement_matches.add(statement_match_key)
+        repeating_signal = get_repeating_transaction_signal(
+            db=db,
+            owner_id=owner_id,
+            account_id=account_id,
+            description=row.description,
+            tx_type=row.type,
+            amount=row.amount,
+            tx_date=tx_date,
+        )
         annotated_rows.append(
             row.model_copy(
                 update={
@@ -95,6 +105,7 @@ def annotate_preview_rows_for_duplicates(
                     "reconciliation_reason": duplicate_reason
                     if matched_transaction
                     else "Not found in your written transactions yet.",
+                    **(repeating_signal or {}),
                 }
             )
         )

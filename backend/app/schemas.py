@@ -467,6 +467,7 @@ class CategoryTrendsResponse(BaseModel):
 class RecurringExpenseItem(BaseModel):
     description: str
     category: str
+    type: TransactionType = "expense"
     occurrences: int
     cadence: str
     average_amount: float
@@ -634,6 +635,13 @@ class StatementPreviewRow(BaseModel):
     matched_transaction_id: int | None = None
     reconciliation_status: str = "missing"
     reconciliation_reason: str | None = None
+    is_repeating_pattern: bool = False
+    repeating_pattern_type: TransactionType | None = None
+    repeating_pattern_reason: str | None = None
+    repeating_pattern_occurrences: int = 0
+    repeating_pattern_average_amount: float | None = None
+    repeating_pattern_cadence: str | None = None
+    repeating_pattern_confidence: float | None = None
 
 
 class SmartImportResponse(BaseModel):

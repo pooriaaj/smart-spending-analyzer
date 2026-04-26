@@ -1635,33 +1635,37 @@ def get_recurring_review_priority(
     )
 
 
-def get_recurring_expense_patterns(
+def get_recurring_transaction_patterns(
     db: Session,
     user_id: int,
     account_id: int | None = None,
     *,
     limit: int = 5,
+    transaction_type: str | None = None,
 ) -> list[dict[str, Any]]:
     transactions = (
         build_filtered_query(
             db=db,
             user_id=user_id,
-            transaction_type="expense",
+            transaction_type=transaction_type,
             account_id=account_id,
         )
         .order_by(Transaction.date.asc(), Transaction.id.asc())
         .all()
     )
 
-    groups: dict[tuple[str, str], list[Transaction]] = {}
+    groups: dict[tuple[str, str, str], list[Transaction]] = {}
     for transaction in transactions:
         normalized_description = normalize_recurring_description(transaction.description)
         if len(normalized_description) < 3:
             continue
-        groups.setdefault((normalized_description, transaction.category), []).append(transaction)
+        groups.setdefault(
+            (transaction.type, normalized_description, transaction.category),
+            [],
+        ).append(transaction)
 
     recurring_items: list[dict[str, Any]] = []
-    for (_, category), items in groups.items():
+    for (item_type, _, category), items in groups.items():
         if len(items) < 2:
             continue
 
@@ -1721,6 +1725,7 @@ def get_recurring_expense_patterns(
             {
                 "description": latest_item.description,
                 "category": category,
+                "type": item_type,
                 "occurrences": len(items),
                 "cadence": "monthly",
                 "average_amount": round(average_amount, 2),
@@ -1750,6 +1755,22 @@ def get_recurring_expense_patterns(
         reverse=True,
     )
     return recurring_items[:limit]
+
+
+def get_recurring_expense_patterns(
+    db: Session,
+    user_id: int,
+    account_id: int | None = None,
+    *,
+    limit: int = 5,
+) -> list[dict[str, Any]]:
+    return get_recurring_transaction_patterns(
+        db=db,
+        user_id=user_id,
+        account_id=account_id,
+        limit=limit,
+        transaction_type="expense",
+    )
 
 
 def build_recurring_savings_opportunities(

@@ -254,6 +254,9 @@ function ImportPage() {
   const missingPreviewRowCount = previewRowItems.filter(
     ({ duplicateReason, validation }) => !duplicateReason && validation.messages.length === 0
   ).length;
+  const repeatingPreviewRowCount = previewRowItems.filter(
+    (item) => item.row.is_repeating_pattern
+  ).length;
   const confidencePreviewRowCount = previewRowItems.filter(
     (item) => item.confidenceReason
   ).length;
@@ -758,6 +761,8 @@ function ImportPage() {
                     ? `${invalidPreviewRowCount} row${invalidPreviewRowCount === 1 ? "" : "s"} still need attention before you can import.`
                     : matchedPreviewRowCount > 0
                     ? `${matchedPreviewRowCount} row${matchedPreviewRowCount === 1 ? "" : "s"} already match your written transactions. ${missingPreviewRowCount} missing row${missingPreviewRowCount === 1 ? "" : "s"} can be imported if needed.`
+                    : repeatingPreviewRowCount > 0
+                    ? `${repeatingPreviewRowCount} row${repeatingPreviewRowCount === 1 ? "" : "s"} look repetitive based on your written history.`
                     : confidencePreviewRowCount > 0
                     ? `${confidencePreviewRowCount} row${confidencePreviewRowCount === 1 ? "" : "s"} should get a quick parser confidence check before importing.`
                     : removedPreviewCount > 0
@@ -824,6 +829,10 @@ function ImportPage() {
               <div className="import-preview-stat-card">
                 <span className="import-preview-stat-label">Already Written</span>
                 <strong>{matchedPreviewRowCount}</strong>
+              </div>
+              <div className="import-preview-stat-card">
+                <span className="import-preview-stat-label">Repeating</span>
+                <strong>{repeatingPreviewRowCount}</strong>
               </div>
               <div className="import-preview-stat-card">
                 <span className="import-preview-stat-label">Confidence</span>
@@ -901,6 +910,17 @@ function ImportPage() {
               </div>
             )}
 
+            {repeatingPreviewRowCount > 0 && (
+              <div className="import-info-box">
+                <strong>
+                  {repeatingPreviewRowCount} repeating money pattern{repeatingPreviewRowCount === 1 ? "" : "s"} detected
+                </strong>
+                <p>
+                  These rows look similar to expenses or income you already wrote before. Use this to confirm monthly habits, subscriptions, payroll, or recurring transfers.
+                </p>
+              </div>
+            )}
+
             {previewRows.length > 0 && filteredPreviewRows.length > 0 ? (
               <div className="transactions-table-wrapper">
                 <table className="transactions-table">
@@ -970,6 +990,11 @@ function ImportPage() {
                               {duplicateReason && (
                                 <div className="import-duplicate-note">{duplicateReason}</div>
                               )}
+                              {row.repeating_pattern_reason && (
+                                <div className="import-confidence-note">
+                                  {row.repeating_pattern_reason}
+                                </div>
+                              )}
                               {validation.messages.length > 0 && (
                                 <div className="import-row-issues">
                                   Needs review: {validation.messages.join(", ")}.
@@ -1022,6 +1047,11 @@ function ImportPage() {
                               )}
                               {confidenceReason && (
                                 <span className="import-row-status import-row-status-confidence">Check parser</span>
+                              )}
+                              {row.is_repeating_pattern && (
+                                <span className="import-row-status import-row-status-confidence">
+                                  Repeating {row.repeating_pattern_type}
+                                </span>
                               )}
                               {validation.messages.length > 0 && (
                                 <span className="import-row-status import-row-status-warning">Needs review</span>

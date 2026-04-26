@@ -38,6 +38,7 @@ from app.services.analytics_service import (
     get_overspending_alerts,
     get_recent_transactions,
     get_recurring_expense_patterns,
+    get_recurring_transaction_patterns,
     get_spending_insights,
     get_summary,
     get_top_expense_category,
@@ -216,6 +217,23 @@ def get_recurring_expenses_route(
             db=db,
             user_id=current_user.id,
             account_id=account_id,
+        )
+    }
+
+
+@router.get("/recurring-transactions", response_model=RecurringExpensesResponse)
+def get_recurring_transactions_route(
+    account_id: int | None = Query(default=None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    resolve_account_scope(db, current_user, account_id)
+    return {
+        "items": get_recurring_transaction_patterns(
+            db=db,
+            user_id=current_user.id,
+            account_id=account_id,
+            limit=8,
         )
     }
 

@@ -397,6 +397,60 @@ class SmartImportRouteTest(unittest.TestCase):
         self.assertEqual(confirm_response.json()["imported"], 0)
         self.assertEqual(confirm_response.json()["duplicates_skipped"], 1)
 
+    def test_statement_preview_flags_repeating_income_and_expense_patterns(self) -> None:
+        with self.session_local() as session:
+            session.add_all(
+                [
+                    Transaction(
+                        amount=2000.0,
+                        category="salary",
+                        description="DIRECT DEPOSIT PAYROLL",
+                        date=date(2025, 1, 3),
+                        type="income",
+                        owner_id=self.user_id,
+                        account_id=self.account_id,
+                    ),
+                    Transaction(
+                        amount=45.0,
+                        category="health",
+                        description="GYM MEMBERSHIP",
+                        date=date(2025, 1, 10),
+                        type="expense",
+                        owner_id=self.user_id,
+                        account_id=self.account_id,
+                    ),
+                ]
+            )
+            session.commit()
+
+        pdf_bytes = build_text_pdf(
+            [
+                "Account Statement",
+                "From February 1, 2025 to February 28, 2025",
+                "03 Feb DIRECT DEPOSIT PAYROLL $2,000.00",
+                "10 Feb GYM MEMBERSHIP $45.00",
+            ]
+        )
+
+        response = self.client.post(
+            "/transactions/import/file",
+            data={"account_id": str(self.account_id)},
+            files={"file": ("february-check.pdf", pdf_bytes, "application/pdf")},
+        )
+
+        self.assertEqual(response.status_code, 200, response.text)
+        preview_rows = response.json()["preview_rows"]
+        payroll_row = next(item for item in preview_rows if "PAYROLL" in item["description"])
+        gym_row = next(item for item in preview_rows if "GYM" in item["description"])
+
+        self.assertTrue(payroll_row["is_repeating_pattern"])
+        self.assertEqual(payroll_row["repeating_pattern_type"], "income")
+        self.assertIn("repeating income", payroll_row["repeating_pattern_reason"].lower())
+
+        self.assertTrue(gym_row["is_repeating_pattern"])
+        self.assertEqual(gym_row["repeating_pattern_type"], "expense")
+        self.assertIn("repeating expense", gym_row["repeating_pattern_reason"].lower())
+
     def test_fresh_start_deletes_old_transactions_and_keeps_current_life(self) -> None:
         with self.session_local() as session:
             session.add_all(
