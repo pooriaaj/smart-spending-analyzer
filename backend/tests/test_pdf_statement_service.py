@@ -110,6 +110,20 @@ class PdfStatementServiceHelpersTest(unittest.TestCase):
 
         self.assertEqual(stripped, "PAYROLL DEPOSIT $1,500.00")
 
+    def test_clean_statement_description_removes_rbc_reference_noise(self) -> None:
+        self.assertEqual(
+            service.clean_statement_description("Contactless Interac purchase - 0095 ORANGE MART"),
+            "ORANGE MART",
+        )
+        self.assertEqual(
+            service.clean_statement_description("Contactless Interac Transit - 0620 PRES/R8SFN9RVZG"),
+            "Transit",
+        )
+        self.assertEqual(
+            service.clean_statement_description("ATM deposit - TZ661796"),
+            "ATM deposit",
+        )
+
 
 class PdfStatementServicePreviewParsingTest(unittest.TestCase):
     def setUp(self) -> None:
@@ -179,6 +193,58 @@ Closing balance $3,154.90
         self.assertEqual(preview_rows[2].date, "2025-01-03")
         self.assertEqual(preview_rows[2].description, "GROCERY STORE TORONTO ON")
         self.assertIn("balance=$3,154.90", preview_rows[2].source_line or "")
+
+    def test_parse_rbc_preview_returns_empty_rows_for_no_activity_statement(self) -> None:
+        text = """
+Royal Bank of Canada
+Details of your account activity
+From March 2, 2026 to April 2, 2026
+Date Description Withdrawals ($) Deposits ($) Balance ($)
+- No activity for this period - - -
+Closing balance $1.00
+        """.strip()
+
+        result = service.parse_rbc_statement_preview(
+            db=self.db,
+            owner_id=123,
+            text=text,
+        )
+
+        self.assertEqual(result["preview_rows"], [])
+        self.assertIn("Statement says no activity for this period.", result["notes"])
+
+    def test_generic_credit_card_parser_skips_balance_and_explainer_sections(self) -> None:
+        text = """
+RBC Avion Visa Platinum
+STATEMENT FROM FEB 12 TO MAR 11, 2026
+TRANSACTION DATE POSTING DATE ACTIVITY DESCRIPTION AMOUNT ($)
+MAR 11 MAR 11 PURCHASE INTEREST 20.99% $39.61
+TOTAL ACCOUNT BALANCE $2,092.07
+Time to Pay
+If you make only the Minimum Payment each month, we estimate it will take 17 years.
+Purchases & Fees 20.99%
+        """.strip()
+
+        with (
+            patch.object(
+                service,
+                "extract_pdf_text_result",
+                return_value=self.extraction_result(text),
+            ),
+            patch.object(service, "categorize_transaction_details", side_effect=self.categorize),
+        ):
+            result = service.parse_pdf_statement_preview(
+                db=self.db,
+                owner_id=123,
+                file_bytes=b"fake-pdf",
+            )
+
+        preview_rows = result["preview_rows"]
+        self.assertEqual(len(preview_rows), 1)
+        self.assertEqual(preview_rows[0].date, "2026-03-11")
+        self.assertEqual(preview_rows[0].description, "PURCHASE INTEREST 20.99%")
+        self.assertEqual(preview_rows[0].type, "expense")
+        self.assertEqual(preview_rows[0].amount, 39.61)
 
     def test_parse_pdf_statement_preview_uses_generic_parser_with_shared_date_logic(self) -> None:
         text = """

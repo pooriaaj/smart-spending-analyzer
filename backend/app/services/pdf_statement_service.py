@@ -73,13 +73,24 @@ GENERIC_NOISE_PREFIXES = (
     "summary of your account for this period",
     "opening balance",
     "closing balance",
+    "amount paid",
+    "applying your payments",
+    "credit card payment centre",
+    "determination of interest",
     "p.o. box",
     "how to reach us",
+    "interest rate chart",
+    "making your payment",
+    "minimum payment",
+    "missed payments",
+    "payment due date",
+    "payments & interest rates",
     "your account number",
     "protect your pin",
     "here are four ways",
     "stay informed",
     "please check this account statement",
+    "time to pay",
 )
 GENERIC_BALANCE_MARKERS = (
     "opening balance",
@@ -87,6 +98,7 @@ GENERIC_BALANCE_MARKERS = (
     "balance brought forward",
     "balance carried forward",
     "daily closing balance",
+    "total account balance",
 )
 HEADER_ONLY_WORDS = {
     "account",
@@ -506,6 +518,46 @@ def clean_description_line(value: str) -> str:
     return value
 
 
+def clean_statement_description(value: str) -> str:
+    cleaned = clean_description_line(value)
+
+    replacements = (
+        (
+            r"(?i)^contactless\s+interac\s+purchase\s*-\s*\d+\s+",
+            "",
+        ),
+        (
+            r"(?i)^contactless\s+interac\s+transit\s*-\s*\d+\s+(?:pres/[a-z0-9]+)?\s*",
+            "Transit",
+        ),
+        (
+            r"(?i)^online\s+banking\s+payment\s*-\s*\d+\s+",
+            "",
+        ),
+        (
+            r"(?i)^atm\s+deposit\s*-\s*[a-z0-9]+\s*",
+            "ATM deposit",
+        ),
+    )
+
+    for pattern, replacement in replacements:
+        cleaned = re.sub(pattern, replacement, cleaned).strip()
+
+    cleaned = re.sub(
+        r"(?i)\b(e-transfer\s+received\s+[A-Z][A-Z\s.'-]*?)\s+CA[a-z0-9]+\b",
+        r"\1",
+        cleaned,
+    )
+    cleaned = re.sub(r"(?i)\s+PRES/[A-Z0-9]+\b", "", cleaned)
+    cleaned = re.sub(r"(?i)\s+CA[A-Z0-9]{5,}\b", "", cleaned)
+    cleaned = re.sub(r"\s+", " ", cleaned).strip(" -|")
+    return cleaned or clean_description_line(value)
+
+
+def statement_has_no_activity(text: str) -> bool:
+    return bool(re.search(r"(?i)\bno\s+activity\s+for\s+this\s+period\b", text))
+
+
 def detect_statement_profile(text: str) -> StatementProfile:
     lowered = text.lower()
 
@@ -557,6 +609,9 @@ def is_noise_line(line: str, extra_noise_prefixes: tuple[str, ...] = ()) -> bool
 def is_income_description(description: str) -> bool:
     lowered = description.lower()
 
+    if any(marker in lowered for marker in ("purchase interest", "interest charged")):
+        return False
+
     income_markers = [
         "e-transfer received",
         "received",
@@ -576,6 +631,8 @@ def is_income_description(description: str) -> bool:
 def is_expense_description(description: str) -> bool:
     lowered = description.lower()
     expense_markers = [
+        "purchase interest",
+        "interest charged",
         "purchase",
         "pos",
         "debit",
@@ -587,6 +644,10 @@ def is_expense_description(description: str) -> bool:
         "subscription",
         "payment sent",
         "e-transfer sent",
+        "online banking payment",
+        "online banking transfer",
+        "transit",
+        "presto",
     ]
     return any(marker in lowered for marker in expense_markers)
 
@@ -745,7 +806,7 @@ def build_preview_row_review_metadata(
         )
 
     if is_income_description(description) or is_expense_description(description):
-        return 0.86, "Type was inferred from transaction wording; verify if this row looks unusual."
+        return 0.88, None
 
     if balance_text:
         return (
@@ -954,9 +1015,11 @@ def finalize_pending_transaction(
     if not current_date or not description_parts or not trailing_amounts:
         return
 
-    description = clean_description_line(" ".join(part for part in description_parts if part))
-    if not description:
+    raw_description = clean_description_line(" ".join(part for part in description_parts if part))
+    if not raw_description:
         return
+
+    description = clean_statement_description(raw_description)
 
     amount_text_1, amount_text_2, explicit_type = resolve_trailing_amount_columns(trailing_amounts)
     if not amount_text_1:
@@ -966,13 +1029,13 @@ def finalize_pending_transaction(
     if amount is None:
         return
 
-    tx_type = explicit_type or resolve_transaction_type(amount_text_1, description)
+    tx_type = explicit_type or resolve_transaction_type(amount_text_1, raw_description)
     confidence, review_reason = build_preview_row_review_metadata(
         trailing_amounts=trailing_amounts,
         amount_text=amount_text_1,
         balance_text=amount_text_2,
         explicit_type=explicit_type,
-        description=description,
+        description=raw_description,
         tx_type=tx_type,
     )
     category_decision = categorize_transaction_details(
@@ -983,11 +1046,11 @@ def finalize_pending_transaction(
     )
     category = category_decision.category
 
-    source_line = description
+    source_line = raw_description
     if amount_text_2:
-        source_line = f"{description} | amount={amount_text_1} | balance={amount_text_2}"
+        source_line = f"{raw_description} | amount={amount_text_1} | balance={amount_text_2}"
     else:
-        source_line = f"{description} | amount={amount_text_1}"
+        source_line = f"{raw_description} | amount={amount_text_1}"
 
     preview_rows.append(
         StatementPreviewRow(
@@ -1031,9 +1094,13 @@ def parse_rbc_statement_preview(
     for raw_line in lines:
         line = raw_line.strip()
         if is_noise_line(line, extra_noise_prefixes=profile.extra_noise_prefixes):
+            current_date = None
+            description_parts = []
             continue
 
         if looks_like_balance_only_line(line, extra_balance_markers=profile.extra_balance_markers):
+            current_date = None
+            description_parts = []
             continue
 
         extracted_date = extract_transaction_date_from_line(
@@ -1084,6 +1151,13 @@ def parse_rbc_statement_preview(
         cleaned = clean_description_line(line)
         if cleaned:
             description_parts.append(cleaned)
+
+    if not preview_rows and statement_has_no_activity(text):
+        notes.append("Statement says no activity for this period.")
+        return {
+            "preview_rows": [],
+            "notes": notes,
+        }
 
     if not preview_rows:
         raise ValueError(empty_result_message or DEFAULT_NO_TRANSACTIONS_ERROR)
@@ -1152,6 +1226,8 @@ def parse_pdf_statement_preview(
             line,
             extra_balance_markers=profile.extra_balance_markers,
         ):
+            current_date = None
+            description_parts = []
             continue
 
         extracted_date = extract_transaction_date_from_line(
@@ -1201,6 +1277,13 @@ def parse_pdf_statement_preview(
         cleaned = clean_description_line(line)
         if cleaned:
             description_parts.append(cleaned)
+
+    if not preview_rows and statement_has_no_activity(text):
+        notes.append("Statement says no activity for this period.")
+        return {
+            "preview_rows": [],
+            "notes": notes,
+        }
 
     if not preview_rows:
         raise ValueError(no_transaction_rows_error)

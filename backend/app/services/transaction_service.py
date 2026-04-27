@@ -37,7 +37,7 @@ CATEGORY_RULES = {
     "restaurant": ["restaurant", "pizza", "burger", "shawarma", "mcdonald", "kfc", "subway"],
     "cafe": ["coffee", "cafe", "café", "starbucks", "tim hortons"],
     "entertainment": ["netflix", "spotify", "cinema", "movie", "youtube"],
-    "shopping": ["amazon", "shop", "store", "mall", "purchase"],
+    "shopping": ["amazon", "winners", "sephora", "ikea", "dollarama", "ups store", "the ups store"],
     "transfer": ["e-transfer", "transfer", "interac"],
     "utilities": ["utility", "utilities", "hydro", "electric", "water", "gas bill"],
     "car maintenance": ["car maintenance", "mechanic", "oil change", "tire", "repair"],
@@ -51,10 +51,15 @@ CATEGORY_RULES["groceries"].extend([
     "farm boy",
     "longos",
     "sobeys",
+    "orange mart",
+    "kourosh super",
+    "kourosh bakery",
 ])
 CATEGORY_RULES["transport"].extend(["presto", "parking", "transit"])
 CATEGORY_RULES["restaurant"].extend([
     "chipotle",
+    "domino",
+    "dominos",
     "ubereats",
     "uber eats",
     "doordash",
@@ -68,13 +73,27 @@ CATEGORY_RULES["entertainment"].extend([
     "playstation",
     "xbox",
 ])
-CATEGORY_RULES["shopping"].extend(["winners", "sephora", "ikea"])
+CATEGORY_RULES["personal"].extend([
+    "cannabis",
+    "dispensary",
+    "just print",
+    "moksha",
+    "print2go",
+])
 CATEGORY_RULES.update(
     {
         "health": ["clinic", "doctor", "dental", "dentist", "pharmacy", "health", "gym"],
         "insurance": ["insurance", "belair", "intact", "aviva", "td insurance"],
-        "debt payments": ["loan payment", "student loan", "line of credit", "minimum payment"],
-        "education": ["tuition", "school", "college", "university", "course"],
+        "debt payments": [
+            "loan payment",
+            "student loan",
+            "line of credit",
+            "minimum payment",
+            "purchase interest",
+            "credit card interest",
+            "interest charge",
+        ],
+        "education": ["tuition", "school", "college", "university", "course", "concordia", "univ"],
         "travel": ["air canada", "westjet", "hotel", "airbnb", "booking.com", "expedia"],
     }
 )
@@ -182,6 +201,9 @@ MERCHANT_PROFILE_STOPWORDS = CATEGORY_MEMORY_STOPWORDS | {
 }
 
 MERCHANT_PHRASE_ALIASES = {
+    "orange mart": "orange mart",
+    "kourosh super": "kourosh super",
+    "kourosh bakery": "kourosh bakery",
     "tim hortons": "tim hortons",
     "timhortons": "tim hortons",
     "shoppers drug mart": "shoppers drug mart",
@@ -192,6 +214,8 @@ MERCHANT_PHRASE_ALIASES = {
     "apple store": "apple store",
     "prime video": "prime video",
     "youtube premium": "youtube premium",
+    "moksha cannabis": "moksha cannabis",
+    "the ups store": "the ups store",
 }
 
 AMBIGUOUS_PRIMARY_MERCHANTS = {"apple", "google", "amazon", "bell", "rogers", "td", "rbc"}
@@ -829,6 +853,15 @@ def categorize_transaction_details(
                     confidence=0.94,
                     matched_keyword=keyword,
                     reason="Matched an income rule in the transaction description.",
+                    source="rule",
+                )
+        for keyword in ("e-transfer received", "atm deposit", "deposit", "interest"):
+            if keyword in lowered:
+                return CategoryDecision(
+                    category="income",
+                    confidence=0.86,
+                    matched_keyword=keyword,
+                    reason="Matched a general income/deposit rule in the transaction description.",
                     source="rule",
                 )
         if "refund" in lowered:

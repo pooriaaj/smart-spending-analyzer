@@ -178,6 +178,34 @@ class SmartImportRouteTest(unittest.TestCase):
         self.assertEqual(payload["preview_rows"][1]["date"], "2025-01-02")
         self.assertEqual(payload["preview_rows"][1]["type"], "income")
 
+    def test_import_file_cleans_rbc_descriptions_before_categorizing(self) -> None:
+        pdf_bytes = build_text_pdf(
+            [
+                "Royal Bank of Canada",
+                "Details of your account activity",
+                "From March 2, 2026 to April 2, 2026",
+                "Date Description Withdrawals ($) Deposits ($) Balance ($)",
+                "3 Mar Contactless Interac purchase - 8572",
+                "ORANGE MART 15.51 10.00",
+                "4 Mar Contactless Interac Transit - 0620",
+                "PRES/R8SFN9RVZG 3.30 6.70",
+                "5 Mar ATM deposit - TZ661796 100.00 106.70",
+            ]
+        )
+
+        response = self.client.post(
+            "/transactions/import/file",
+            data={"account_id": str(self.account_id)},
+            files={"file": ("rbc-cleaning.pdf", pdf_bytes, "application/pdf")},
+        )
+
+        self.assertEqual(response.status_code, 200, response.text)
+        preview_rows = response.json()["preview_rows"]
+
+        self.assertEqual([row["description"] for row in preview_rows], ["ORANGE MART", "Transit", "ATM deposit"])
+        self.assertEqual([row["category"] for row in preview_rows], ["groceries", "transport", "income"])
+        self.assertTrue(all(row["review_reason"] is None for row in preview_rows))
+
     def test_batch_statement_import_accepts_up_to_six_files(self) -> None:
         csv_one = (
             "Date,Description,Amount,Type,Category\n"
@@ -361,7 +389,7 @@ class SmartImportRouteTest(unittest.TestCase):
         preview_rows = response.json()["preview_rows"]
         self.assertEqual(len(preview_rows), 3)
         self.assertTrue(preview_rows[0]["is_duplicate"])
-        self.assertEqual(preview_rows[0]["duplicate_reason"], "Already written in this account.")
+        self.assertEqual(preview_rows[0]["duplicate_reason"], "Already written as BOOK STORE.")
         self.assertEqual(preview_rows[0]["reconciliation_status"], "matched")
         self.assertFalse(preview_rows[1]["is_duplicate"])
         self.assertIsNone(preview_rows[1]["duplicate_reason"])
