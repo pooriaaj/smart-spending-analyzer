@@ -402,10 +402,8 @@ function DashboardPage() {
       <div className="dashboard-wrapper">
         <PageHeader
           icon="$"
-          section="App"
-          current="Dashboard"
           title="Dashboard"
-          subtitle="Your current-month command center. Keep this page simple, then use Analytics for deeper charts and history."
+          subtitle="Your current-month command center. Start here each day, record what happened, and jump into deeper tools only when you need them."
           actions={(
             <button
               className="logout-button"
@@ -418,6 +416,45 @@ function DashboardPage() {
             </button>
           )}
         />
+
+        <div className="dashboard-card product-guide-card">
+          <div className="section-header">
+            <h2>How to use this dashboard</h2>
+            <p>
+              This page is intentionally simple: it shows this month only, helps you add today&apos;s
+              transaction, and gives you a quick future warning before you go deeper.
+            </p>
+          </div>
+
+          <div className="feature-guide-grid">
+            <div className="feature-guide-item">
+              <span className="feature-step">1</span>
+              <h3>Choose your view</h3>
+              <p>
+                Use Account View to see all accounts together or focus on one account when you only
+                want one bank card, chequing account, or cash account.
+              </p>
+            </div>
+
+            <div className="feature-guide-item">
+              <span className="feature-step">2</span>
+              <h3>Write daily transactions</h3>
+              <p>
+                Add expenses and income when they happen. At month-end, Smart Import compares your
+                bank statement against this written history and helps find anything you missed.
+              </p>
+            </div>
+
+            <div className="feature-guide-item">
+              <span className="feature-step">3</span>
+              <h3>Watch the month</h3>
+              <p>
+                The overview and Future Outlook tell you whether the current month is healthy.
+                For detailed charts, open Analytics instead of crowding the dashboard.
+              </p>
+            </div>
+          </div>
+        </div>
 
         <div className="filter-card">
           <div className="section-header">

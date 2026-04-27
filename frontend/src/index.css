@@ -171,20 +171,6 @@ a {
   box-shadow: 0 18px 36px rgba(37, 99, 235, 0.2);
 }
 
-.app-breadcrumb {
-  display: inline-flex;
-  gap: 8px;
-  align-items: center;
-  margin-bottom: 8px;
-  color: var(--text-faint);
-  font-size: 13px;
-  font-weight: 700;
-}
-
-.app-breadcrumb strong {
-  color: var(--text);
-}
-
 .professional-header-actions {
   align-items: center;
   align-content: flex-start;
@@ -856,6 +842,10 @@ textarea:focus,
   flex-wrap: wrap;
 }
 
+.import-preview-primary-action {
+  width: auto;
+}
+
 .import-preview-stats-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
@@ -1162,6 +1152,35 @@ textarea:focus,
   font-weight: 750;
 }
 
+.dashboard-card.premium-promo-card {
+  background:
+    radial-gradient(circle at top right, rgba(20, 184, 166, 0.18), transparent 28%),
+    linear-gradient(135deg, rgba(15, 23, 42, 0.96), rgba(30, 64, 175, 0.88));
+  color: #f8fafc;
+  border-color: rgba(147, 197, 253, 0.22);
+}
+
+.dashboard-card.premium-promo-card h2 {
+  color: #f8fafc;
+}
+
+.dashboard-card.premium-promo-card p {
+  color: rgba(226, 232, 240, 0.9);
+}
+
+.dashboard-card.premium-promo-card .eyebrow-text {
+  color: #67e8f9;
+}
+
+.dashboard-card.premium-promo-card .premium-feature-grid span {
+  color: #ecfeff;
+}
+
+.dashboard-card.premium-promo-card .secondary-button {
+  color: #0f172a;
+  background: rgba(255, 255, 255, 0.94);
+}
+
 .analytics-preset-row {
   margin-top: 16px;
   display: flex;
@@ -1171,6 +1190,137 @@ textarea:focus,
 
 .analytics-preset-row .secondary-button {
   width: auto;
+}
+
+.product-guide-card {
+  background:
+    radial-gradient(circle at top left, rgba(37, 99, 235, 0.08), transparent 30%),
+    var(--surface);
+}
+
+.feature-guide-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: 14px;
+}
+
+.feature-guide-item {
+  padding: 18px;
+  border-radius: 20px;
+  background: rgba(248, 250, 252, 0.78);
+  border: 1px solid rgba(15, 23, 42, 0.08);
+}
+
+.feature-guide-item h3 {
+  margin: 10px 0 6px 0;
+  font-size: 18px;
+  letter-spacing: -0.02em;
+}
+
+.feature-guide-item p {
+  margin: 0;
+  color: var(--text-soft);
+  line-height: 1.65;
+}
+
+.feature-step {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 34px;
+  height: 34px;
+  padding: 0 10px;
+  border-radius: 999px;
+  color: #eff6ff;
+  background: linear-gradient(135deg, #2563eb, #0f766e);
+  font-size: 12px;
+  font-weight: 850;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.spending-pattern-card .section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+}
+
+.pattern-status-pill {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  padding: 9px 13px;
+  font-size: 12px;
+  font-weight: 850;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.pattern-status-positive {
+  color: #14532d;
+  background: #bbf7d0;
+}
+
+.pattern-status-warning {
+  color: #7f1d1d;
+  background: #fecaca;
+}
+
+.pattern-status-stable {
+  color: #075985;
+  background: #bae6fd;
+}
+
+.pattern-status-neutral {
+  color: #475569;
+  background: #e2e8f0;
+}
+
+.pattern-narrative {
+  margin: 0 0 16px 0;
+  color: var(--text-soft);
+  line-height: 1.7;
+}
+
+.pattern-comparison-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: 14px;
+  margin-bottom: 18px;
+}
+
+.pattern-metric-card {
+  padding: 18px;
+  border-radius: 20px;
+  background: rgba(248, 250, 252, 0.82);
+  border: 1px solid rgba(15, 23, 42, 0.08);
+}
+
+.pattern-metric-card span {
+  display: block;
+  margin-bottom: 8px;
+  color: var(--text-faint);
+  font-size: 12px;
+  font-weight: 850;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.pattern-metric-card strong {
+  display: block;
+  margin-bottom: 8px;
+  color: var(--text);
+  font-size: 28px;
+  letter-spacing: -0.04em;
+}
+
+.pattern-metric-card p {
+  margin: 0;
+  color: var(--text-soft);
+  line-height: 1.55;
 }
 
 .pricing-grid {
@@ -2717,18 +2867,38 @@ textarea:focus,
   color: #bbf7d0;
 }
 
-:root[data-theme="dark"] .app-breadcrumb {
-  color: #94a3b8;
-}
-
-:root[data-theme="dark"] .app-breadcrumb strong {
-  color: #f8fafc;
-}
-
 :root[data-theme="dark"] .nav-dropdown {
   background: rgba(15, 23, 42, 0.92);
   border-color: rgba(148, 163, 184, 0.18);
   color: #f8fafc;
+}
+
+:root[data-theme="dark"] .product-guide-card {
+  background:
+    radial-gradient(circle at top left, rgba(96, 165, 250, 0.12), transparent 30%),
+    rgba(15, 23, 42, 0.72);
+}
+
+:root[data-theme="dark"] .feature-guide-item,
+:root[data-theme="dark"] .pattern-metric-card {
+  background: rgba(15, 23, 42, 0.86);
+  border-color: rgba(148, 163, 184, 0.16);
+}
+
+:root[data-theme="dark"] .feature-guide-item h3,
+:root[data-theme="dark"] .pattern-metric-card strong {
+  color: #f8fafc;
+}
+
+:root[data-theme="dark"] .feature-guide-item p,
+:root[data-theme="dark"] .pattern-metric-card p,
+:root[data-theme="dark"] .pattern-narrative {
+  color: #cbd5e1;
+}
+
+:root[data-theme="dark"] .pattern-status-neutral {
+  color: #cbd5e1;
+  background: rgba(148, 163, 184, 0.18);
 }
 
 :root[data-theme="dark"] .recurring-charge-card {
@@ -3228,6 +3398,7 @@ canvas {
   .import-upload-top,
   .import-message-header,
   .bulk-suggestion-top,
+  .spending-pattern-card .section-header,
   .transaction-item {
     flex-direction: column;
     align-items: stretch;
@@ -4668,7 +4839,8 @@ textarea {
     width: 100%;
   }
 
-  .import-preview-actions .secondary-button {
+  .import-preview-actions .secondary-button,
+  .import-preview-actions .smart-apply-button {
     width: 100%;
   }
 }

@@ -18,8 +18,6 @@ function PageHeader({
   eyebrow = "Smart Spending Analyzer",
   title,
   subtitle,
-  section = "App",
-  current,
   actions,
 }) {
   const navigate = useNavigate();
@@ -41,13 +39,6 @@ function PageHeader({
 
         <div>
           <p className="eyebrow-text">{eyebrow}</p>
-          <div className="app-breadcrumb">
-            <span>Settings</span>
-            <span>/</span>
-            <span>{section}</span>
-            <span>/</span>
-            <strong>{current || title}</strong>
-          </div>
           <h1>{title}</h1>
           <p className="hero-subtitle">{subtitle}</p>
         </div>
@@ -55,7 +46,7 @@ function PageHeader({
 
       <div className="header-actions professional-header-actions">
         <label className="nav-dropdown-label" htmlFor={`nav-${title.replace(/\s+/g, "-").toLowerCase()}`}>
-          Go to
+          App Menu
         </label>
         <select
           id={`nav-${title.replace(/\s+/g, "-").toLowerCase()}`}
@@ -64,7 +55,7 @@ function PageHeader({
           onChange={handleDestinationChange}
         >
           <option value="" disabled>
-            Choose page
+            Open a page
           </option>
           {APP_DESTINATIONS.map((item) => (
             <option key={item.path} value={item.path}>

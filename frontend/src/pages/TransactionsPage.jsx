@@ -399,16 +399,53 @@ function TransactionsPage() {
       <div className="dashboard-wrapper">
         <PageHeader
           icon="TX"
-          section="App"
-          current="Transactions"
           title="Transactions"
-          subtitle="Review the ledger, clean category language, and reconcile month-end statements against what you wrote daily."
+          subtitle="Your ledger is the source of truth. Write daily transactions here, then reconcile the bank statement at month-end to catch what you forgot."
           actions={(
             <button className="secondary-button" onClick={() => navigate("/import")}>
               Reconcile Statement
             </button>
           )}
         />
+
+        <div className="dashboard-card product-guide-card">
+          <div className="section-header">
+            <h2>How transactions work</h2>
+            <p>
+              Think of this page as your financial notebook. The more consistently you write here,
+              the smarter the app becomes at spotting habits, repeated payments, and category patterns.
+            </p>
+          </div>
+
+          <div className="feature-guide-grid">
+            <div className="feature-guide-item">
+              <span className="feature-step">Daily</span>
+              <h3>Record what you remember</h3>
+              <p>
+                Add purchases, bills, income, and transfers as they happen. These are the transactions
+                you personally confirmed.
+              </p>
+            </div>
+
+            <div className="feature-guide-item">
+              <span className="feature-step">Month</span>
+              <h3>Reconcile the statement</h3>
+              <p>
+                Upload the month-end bank statement from Smart Import. The app looks for matching
+                written rows and only offers the missing statement rows for import.
+              </p>
+            </div>
+
+            <div className="feature-guide-item">
+              <span className="feature-step">Learn</span>
+              <h3>Improve category memory</h3>
+              <p>
+                Normalize categories and review suggestions when needed. Your naming habits help the
+                app suggest cleaner categories next time.
+              </p>
+            </div>
+          </div>
+        </div>
 
         <div className="filter-card">
           <div className="section-header">

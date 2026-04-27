@@ -16,6 +16,8 @@ import {
   Pie,
   Cell,
   Legend,
+  LineChart,
+  Line,
 } from "recharts";
 
 const CATEGORY_ALIASES = {
@@ -102,8 +104,154 @@ function buildTopPieData(items, topN = 5) {
   return topItems;
 }
 
+const toLocalDate = (dateValue) => {
+  const parsed = new Date(`${dateValue}T00:00:00`);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+};
+
+const getMonthKey = (dateValue) => {
+  const month = dateValue.getMonth() + 1;
+  return `${dateValue.getFullYear()}-${String(month).padStart(2, "0")}`;
+};
+
+const formatShortMonth = (monthKey) => {
+  const parsed = new Date(`${monthKey}-01T00:00:00`);
+  if (Number.isNaN(parsed.getTime())) return monthKey;
+  return parsed.toLocaleDateString(undefined, { month: "short", year: "2-digit" });
+};
+
+const formatMoney = (value) => `$${Number(value || 0).toFixed(2)}`;
+
+const calculateChangePercent = (currentValue, baselineValue) => {
+  if (!baselineValue || baselineValue <= 0) return null;
+  return ((currentValue - baselineValue) / baselineValue) * 100;
+};
+
+const formatPercentChange = (value) => {
+  if (value == null || Number.isNaN(value)) return "Not enough data";
+  const prefix = value > 0 ? "+" : "";
+  return `${prefix}${value.toFixed(1)}%`;
+};
+
+const buildRecentMonthKeys = (monthCount) => {
+  const today = new Date();
+  const monthKeys = [];
+
+  for (let index = monthCount - 1; index >= 0; index -= 1) {
+    const monthDate = new Date(today.getFullYear(), today.getMonth() - index, 1);
+    monthKeys.push(getMonthKey(monthDate));
+  }
+
+  return monthKeys;
+};
+
+const getExpenseTransactions = (transactions) =>
+  (transactions || [])
+    .map((transaction) => ({
+      ...transaction,
+      amount: Number(transaction.amount || 0),
+      parsedDate: toLocalDate(transaction.date),
+    }))
+    .filter(
+      (transaction) =>
+        transaction.type === "expense" &&
+        transaction.amount > 0 &&
+        transaction.parsedDate
+    );
+
+const sumExpensesBetween = (transactions, startDate, endDate) =>
+  transactions.reduce((total, transaction) => {
+    if (transaction.parsedDate >= startDate && transaction.parsedDate <= endDate) {
+      return total + transaction.amount;
+    }
+    return total;
+  }, 0);
+
+function buildSpendingPatternPulse(transactions) {
+  const expenseTransactions = getExpenseTransactions(transactions);
+  const today = new Date();
+  today.setHours(23, 59, 59, 999);
+  const currentMonthStart = new Date(today.getFullYear(), today.getMonth(), 1);
+  const lastSevenStart = new Date(today);
+  lastSevenStart.setDate(today.getDate() - 6);
+  lastSevenStart.setHours(0, 0, 0, 0);
+
+  const monthKeys = buildRecentMonthKeys(6);
+  const expensesByMonth = new Map(monthKeys.map((monthKey) => [monthKey, 0]));
+
+  expenseTransactions.forEach((transaction) => {
+    const monthKey = getMonthKey(transaction.parsedDate);
+    if (expensesByMonth.has(monthKey)) {
+      expensesByMonth.set(monthKey, expensesByMonth.get(monthKey) + transaction.amount);
+    }
+  });
+
+  const monthlyValues = monthKeys.map((monthKey) => Number((expensesByMonth.get(monthKey) || 0).toFixed(2)));
+  const lastThreeValues = monthlyValues.slice(-3);
+  const lastSixValues = monthlyValues;
+  const lastThreeAverage =
+    lastThreeValues.reduce((total, value) => total + value, 0) / Math.max(lastThreeValues.length, 1);
+  const lastSixAverage =
+    lastSixValues.reduce((total, value) => total + value, 0) / Math.max(lastSixValues.length, 1);
+
+  const lastSevenTotal = sumExpensesBetween(expenseTransactions, lastSevenStart, today);
+  const currentMonthTotal = sumExpensesBetween(expenseTransactions, currentMonthStart, today);
+  const daysElapsedThisMonth = Math.max(today.getDate(), 1);
+  const lastSevenDailyAverage = lastSevenTotal / 7;
+  const monthDailyAverage = currentMonthTotal / daysElapsedThisMonth;
+
+  const sevenVsMonthChange = calculateChangePercent(lastSevenDailyAverage, monthDailyAverage);
+  const threeVsSixChange = calculateChangePercent(lastThreeAverage, lastSixAverage);
+  const currentVsThreeChange = calculateChangePercent(currentMonthTotal, lastThreeAverage);
+  const primaryMovement =
+    sevenVsMonthChange != null ? sevenVsMonthChange : threeVsSixChange;
+
+  let status = "Building pattern";
+  let tone = "neutral";
+  if (expenseTransactions.length > 0 && primaryMovement != null) {
+    if (primaryMovement > 15) {
+      status = "Spending is rising";
+      tone = "warning";
+    } else if (primaryMovement < -15) {
+      status = "Spending is dropping";
+      tone = "positive";
+    } else {
+      status = "Spending is steady";
+      tone = "stable";
+    }
+  }
+
+  const narrative =
+    expenseTransactions.length === 0
+      ? "Add daily transactions or import a statement to unlock spending movement signals."
+      : `Your last 7-day daily average is ${formatMoney(lastSevenDailyAverage)} compared with ${formatMoney(monthDailyAverage)} for this month so far. The 3-month average is ${formatMoney(lastThreeAverage)} versus ${formatMoney(lastSixAverage)} across 6 months.`;
+
+  return {
+    hasData: expenseTransactions.length > 0,
+    status,
+    tone,
+    narrative,
+    lastSevenTotal,
+    lastSevenDailyAverage,
+    currentMonthTotal,
+    monthDailyAverage,
+    lastThreeAverage,
+    lastSixAverage,
+    sevenVsMonthChange,
+    threeVsSixChange,
+    currentVsThreeChange,
+    chartData: monthKeys.map((monthKey, index) => ({
+      month: formatShortMonth(monthKey),
+      expenses: monthlyValues[index],
+      threeMonthAverage: Number(lastThreeAverage.toFixed(2)),
+      sixMonthAverage: Number(lastSixAverage.toFixed(2)),
+    })),
+  };
+}
+
 function AnalyticsPage() {
   const [dashboardData, setDashboardData] = useState(null);
+  const [transactions, setTransactions] = useState([]);
   const [selectedAccountId, setSelectedAccountId] = useState(getSelectedAccountId());
   const [selectedMonth, setSelectedMonth] = useState("");
   const [startDate, setStartDate] = useState("");
@@ -152,18 +300,26 @@ function AnalyticsPage() {
       try {
         setLoading(true);
 
-        const response = await api.get("/analytics/dashboard", {
-          params: {
-            account_id: normalizedAccountId,
-            month: selectedMonth || undefined,
-            start_date: startDate || undefined,
-            end_date: endDate || undefined,
-            transaction_type: selectedType || undefined,
-            category: selectedCategory || undefined,
-          },
-        });
+        const [response, transactionsResponse] = await Promise.all([
+          api.get("/analytics/dashboard", {
+            params: {
+              account_id: normalizedAccountId,
+              month: selectedMonth || undefined,
+              start_date: startDate || undefined,
+              end_date: endDate || undefined,
+              transaction_type: selectedType || undefined,
+              category: selectedCategory || undefined,
+            },
+          }),
+          api.get("/transactions/", {
+            params: {
+              account_id: normalizedAccountId,
+            },
+          }),
+        ]);
 
         setDashboardData(response.data);
+        setTransactions(transactionsResponse.data || []);
       } catch (error) {
         console.error("Failed to load analytics data:", error);
 
@@ -212,6 +368,9 @@ function AnalyticsPage() {
       tooltipBorder: isDark ? "rgba(148, 163, 184, 0.16)" : "rgba(15, 23, 42, 0.08)",
       incomeBar: isDark ? "#4ade80" : "#16a34a",
       expenseBar: isDark ? "#f87171" : "#dc2626",
+      patternLine: isDark ? "#60a5fa" : "#2563eb",
+      threeMonthLine: isDark ? "#fbbf24" : "#d97706",
+      sixMonthLine: isDark ? "#a78bfa" : "#7c3aed",
       pieColors: isDark
         ? ["#60a5fa", "#4ade80", "#f87171", "#fbbf24", "#a78bfa", "#22d3ee"]
         : ["#2563eb", "#16a34a", "#dc2626", "#f59e0b", "#7c3aed", "#0891b2"],
@@ -235,6 +394,10 @@ function AnalyticsPage() {
   const availableCategories = useMemo(() => {
     return mergedCategoryBreakdown.map((item) => item.category);
   }, [mergedCategoryBreakdown]);
+
+  const spendingPatternPulse = useMemo(() => {
+    return buildSpendingPatternPulse(transactions);
+  }, [transactions]);
 
   const clearFilters = () => {
     setSelectedMonth("");
@@ -338,16 +501,53 @@ function AnalyticsPage() {
       <div className="dashboard-wrapper">
         <PageHeader
           icon="AN"
-          section="App"
-          current="Analytics"
           title="Analytics & Insights"
-          subtitle="Deep-dive into daily, weekly, monthly, 3-month, and 6-month financial signals."
+          subtitle="Learn what changed, what is driving your spending, and whether your recent pace is getting better or worse."
           actions={(
             <button className="secondary-button" onClick={() => navigate("/transactions")}>
               View Ledger
             </button>
           )}
         />
+
+        <div className="dashboard-card product-guide-card">
+          <div className="section-header">
+            <h2>How to read Analytics</h2>
+            <p>
+              Analytics is the deeper learning page. Use the quick ranges first, then read the
+              pattern chart to see whether spending is rising, dropping, or staying stable.
+            </p>
+          </div>
+
+          <div className="feature-guide-grid">
+            <div className="feature-guide-item">
+              <span className="feature-step">Daily</span>
+              <h3>Short-term pace</h3>
+              <p>
+                Last 7 Days shows the newest spending pulse. Use it when you want to know if this
+                week is heavier than normal.
+              </p>
+            </div>
+
+            <div className="feature-guide-item">
+              <span className="feature-step">Monthly</span>
+              <h3>Current month control</h3>
+              <p>
+                Current Month keeps the view focused on the month you are living in right now,
+                which is the best range for budgeting decisions.
+              </p>
+            </div>
+
+            <div className="feature-guide-item">
+              <span className="feature-step">3 / 6</span>
+              <h3>Longer-term direction</h3>
+              <p>
+                Last 3 Months catches recent behavior changes. Last 6 Months shows the bigger
+                baseline so you can tell whether the change is real or just one odd month.
+              </p>
+            </div>
+          </div>
+        </div>
 
         <div className="filter-card">
           <div className="section-header">
@@ -469,6 +669,105 @@ function AnalyticsPage() {
                 : "No expense data"}
             </p>
           </div>
+        </div>
+
+        <div className="dashboard-card spending-pattern-card">
+          <div className="section-header">
+            <div>
+              <h2>Spending Pattern Pulse</h2>
+              <p>
+                Dot-and-line view of your expense movement. It compares this week against the
+                current month, then recent 3-month behavior against the 6-month baseline.
+              </p>
+            </div>
+            <span className={`pattern-status-pill pattern-status-${spendingPatternPulse.tone}`}>
+              {spendingPatternPulse.status}
+            </span>
+          </div>
+
+          <p className="pattern-narrative">{spendingPatternPulse.narrative}</p>
+
+          <div className="pattern-comparison-grid">
+            <div className="pattern-metric-card">
+              <span>Last 7 days</span>
+              <strong>{formatMoney(spendingPatternPulse.lastSevenTotal)}</strong>
+              <p>
+                {formatMoney(spendingPatternPulse.lastSevenDailyAverage)}/day,
+                {" "}
+                {formatPercentChange(spendingPatternPulse.sevenVsMonthChange)}
+                {" "}
+                vs this month&apos;s daily pace.
+              </p>
+            </div>
+
+            <div className="pattern-metric-card">
+              <span>Current month</span>
+              <strong>{formatMoney(spendingPatternPulse.currentMonthTotal)}</strong>
+              <p>
+                Month-to-date spending compared with the 3-month average:
+                {" "}
+                {formatPercentChange(spendingPatternPulse.currentVsThreeChange)}.
+              </p>
+            </div>
+
+            <div className="pattern-metric-card">
+              <span>3 months vs 6 months</span>
+              <strong>{formatPercentChange(spendingPatternPulse.threeVsSixChange)}</strong>
+              <p>
+                3-month average {formatMoney(spendingPatternPulse.lastThreeAverage)} vs
+                6-month average {formatMoney(spendingPatternPulse.lastSixAverage)}.
+              </p>
+            </div>
+          </div>
+
+          {!spendingPatternPulse.hasData ? (
+            <div className="empty-state">
+              <p>No expense pattern yet. Add transactions or import a statement to activate this chart.</p>
+            </div>
+          ) : (
+            <ResponsiveContainer width="100%" height={320}>
+              <LineChart data={spendingPatternPulse.chartData}>
+                <CartesianGrid strokeDasharray="3 3" stroke={chartTheme.grid} />
+                <XAxis dataKey="month" tick={{ fill: chartTheme.text, fontSize: 12 }} />
+                <YAxis tick={{ fill: chartTheme.text, fontSize: 12 }} />
+                <Tooltip contentStyle={customTooltipStyle} formatter={(value, name) => [formatMoney(value), name]} />
+                <Legend
+                  verticalAlign="bottom"
+                  height={36}
+                  formatter={(value) => (
+                    <span style={{ color: chartTheme.text }}>{value}</span>
+                  )}
+                />
+                <Line
+                  type="monotone"
+                  dataKey="expenses"
+                  name="Monthly expenses"
+                  stroke={chartTheme.patternLine}
+                  strokeWidth={3}
+                  dot={{ r: 5, strokeWidth: 2 }}
+                  activeDot={{ r: 8 }}
+                />
+                <Line
+                  type="monotone"
+                  dataKey="threeMonthAverage"
+                  name="3-month average"
+                  stroke={chartTheme.threeMonthLine}
+                  strokeWidth={2}
+                  strokeDasharray="6 5"
+                  dot={false}
+                />
+                <Line
+                  type="monotone"
+                  dataKey="sixMonthAverage"
+                  name="6-month average"
+                  stroke={chartTheme.sixMonthLine}
+                  strokeWidth={2}
+                  strokeDasharray="3 5"
+                  dot={false}
+                />
+              </LineChart>
+            </ResponsiveContainer>
+          )}
         </div>
 
         {normalizedAccountId === undefined && accountComparison.length > 1 && (

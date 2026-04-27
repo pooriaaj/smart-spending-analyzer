@@ -263,6 +263,8 @@ function ImportPage() {
   const manualPreviewRowCount = previewRows.filter(
     (row) => row.source_line === "Added manually during review."
   ).length;
+  const previewImportDisabled =
+    confirmingPreview || missingPreviewRowCount === 0 || invalidPreviewRowCount > 0;
   const receiptDraftValidation = validateReceiptDraft(receiptDraft);
   const filteredPreviewRows = previewRowItems.filter(
     ({ duplicateReason, validation, confidenceReason, row }) => {
@@ -803,6 +805,16 @@ function ImportPage() {
               <div className="import-preview-actions">
                 <button
                   type="button"
+                  className="smart-apply-button import-preview-primary-action"
+                  onClick={handleConfirmPreviewImport}
+                  disabled={previewImportDisabled}
+                >
+                  {confirmingPreview
+                    ? "Importing..."
+                    : `Import Missing Rows (${missingPreviewRowCount})`}
+                </button>
+                <button
+                  type="button"
                   className="secondary-button"
                   onClick={handleAddManualPreviewRow}
                   disabled={confirmingPreview}
@@ -1147,7 +1159,7 @@ function ImportPage() {
                 type="button"
                 className="smart-apply-button"
                 onClick={handleConfirmPreviewImport}
-                disabled={confirmingPreview || missingPreviewRowCount === 0 || invalidPreviewRowCount > 0}
+                disabled={previewImportDisabled}
               >
                 {confirmingPreview ? "Importing..." : "Import Missing Rows"}
               </button>
