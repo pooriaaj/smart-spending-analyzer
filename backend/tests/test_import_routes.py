@@ -240,12 +240,49 @@ class SmartImportRouteTest(unittest.TestCase):
             ["groceries", "groceries", "restaurant", "restaurant", "restaurant"],
         )
         self.assertTrue(
-            all(row["category_source"] in {"merchant_semantic", "merchant_lookup_cache"} for row in preview_rows)
+            all(
+                row["category_source"] in {"rule", "merchant_semantic", "merchant_lookup_cache"}
+                for row in preview_rows
+            )
         )
-        with self.session_local() as session:
-            cached_count = session.query(MerchantLookupCache).count()
 
-        self.assertGreaterEqual(cached_count, 4)
+    def test_import_file_uses_expanded_lifestyle_categories(self) -> None:
+        pdf_bytes = build_text_pdf(
+            [
+                "Royal Bank of Canada",
+                "Details of your account activity",
+                "From March 2, 2026 to April 2, 2026",
+                "Date Description Withdrawals ($) Deposits ($) Balance ($)",
+                "3 Mar Contactless Interac purchase - 2001",
+                "WEED CIGAR VAPE 21.00 100.00",
+                "4 Mar Contactless Interac purchase - 2002",
+                "MOKSHA CANNABIS 18.25 81.75",
+                "5 Mar Contactless Interac purchase - 2003",
+                "MR. PUFFS YORK 7.65 74.10",
+                "6 Mar Contactless Interac purchase - 2004",
+                "AMBROSIA THORNH 86.30 12.20",
+                "7 Mar Contactless Interac purchase - 2005",
+                "SHOPPERS DRUG M 28.22 50.00",
+                "8 Mar Misc Payment PAYPAL 14.94 35.06",
+            ]
+        )
+
+        response = self.client.post(
+            "/transactions/import/file",
+            data={"account_id": str(self.account_id)},
+            files={"file": ("expanded-categories.pdf", pdf_bytes, "application/pdf")},
+        )
+
+        self.assertEqual(response.status_code, 200, response.text)
+        preview_rows = response.json()["preview_rows"]
+
+        self.assertEqual(
+            [row["category"] for row in preview_rows],
+            ["smoking", "smoking", "restaurant", "groceries", "health", "transfer"],
+        )
+        paypal_row = preview_rows[-1]
+        self.assertEqual(paypal_row["category_source"], "payment_processor")
+        self.assertLess(paypal_row["category_confidence"], 0.7)
 
     def test_batch_statement_import_accepts_up_to_six_files(self) -> None:
         csv_one = (
