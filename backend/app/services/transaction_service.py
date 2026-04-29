@@ -11,6 +11,7 @@ from sqlalchemy import inspect
 from sqlalchemy.orm import Session
 
 from app.models import CategoryMemory, MerchantCategoryProfile, Transaction
+from app.services.merchant_enrichment_service import enrich_merchant_category
 from app.schemas import StatementPreviewRow
 
 
@@ -79,6 +80,7 @@ CATEGORY_RULES["personal"].extend([
     "just print",
     "moksha",
     "print2go",
+    "shoppers drug",
 ])
 CATEGORY_RULES.update(
     {
@@ -94,9 +96,12 @@ CATEGORY_RULES.update(
             "interest charge",
         ],
         "education": ["tuition", "school", "college", "university", "course", "concordia", "univ"],
+        "investment": ["investment", "wealthsimple", "ws investments"],
         "travel": ["air canada", "westjet", "hotel", "airbnb", "booking.com", "expedia"],
+        "bank fees": ["monthly fee", "bank fee", "service fee"],
     }
 )
+CATEGORY_RULES["utilities"].extend(["metergy", "ez-pay", "ez pay"])
 
 CATEGORY_ALIASES = {
     "grocery": "groceries",
@@ -892,6 +897,16 @@ def categorize_transaction_details(
                     reason="Matched a normalized merchant/category rule in the transaction description.",
                     source="rule",
                 )
+
+    merchant_enrichment = enrich_merchant_category(db, description, tx_type)
+    if merchant_enrichment:
+        return CategoryDecision(
+            category=normalize_category_name(merchant_enrichment.category),
+            confidence=merchant_enrichment.confidence,
+            matched_keyword=merchant_enrichment.matched_keyword,
+            reason=merchant_enrichment.reason,
+            source=merchant_enrichment.source,
+        )
 
     return CategoryDecision(
         category="other",

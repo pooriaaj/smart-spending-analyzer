@@ -56,6 +56,8 @@ It is designed as a foundation for an intelligent financial assistant that:
 
 ### Smart Categorization
 - Rule-based transaction classification
+- Learned merchant/category memory from confirmed edits
+- Optional merchant enrichment for unknown statement names
 - Bulk categorization suggestions
 - Confidence scoring
 - Apply suggestions automatically
@@ -165,6 +167,12 @@ ACCESS_TOKEN_EXPIRE_MINUTES=60
 FRONTEND_URL=http://localhost:5173
 
 VITE_API_BASE_URL=http://localhost:8000
+
+# Optional: improves unknown merchant categorization with Google Places.
+# The backend only sends cleaned merchant names, not amounts, dates, account ids, or full transaction data.
+GOOGLE_PLACES_API_KEY=
+MERCHANT_LOOKUP_REGION=Toronto, Canada
+MERCHANT_LOOKUP_REGION_CODE=CA
 
 ---
 

@@ -164,6 +164,30 @@ class MerchantCategoryProfile(Base):
     )
 
 
+class MerchantLookupCache(Base):
+    __tablename__ = "merchant_lookup_cache"
+
+    id = Column(Integer, primary_key=True, index=True)
+    merchant_key = Column(String(160), nullable=False)
+    display_name = Column(String(160), nullable=False)
+    category = Column(String(100), nullable=False)
+    transaction_type = Column(String(20), nullable=False, index=True)
+    confidence = Column(Float, nullable=False, default=0.78)
+    matched_signal = Column(String(160), nullable=True)
+    provider = Column(String(40), nullable=False, default="semantic")
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now())
+
+    __table_args__ = (
+        UniqueConstraint(
+            "merchant_key",
+            "transaction_type",
+            name="uq_merchant_lookup_cache_key_type",
+        ),
+        Index("ix_merchant_lookup_cache_key", "merchant_key"),
+    )
+
+
 class BudgetPlan(Base):
     __tablename__ = "budget_plans"
 

@@ -13,7 +13,7 @@ from sqlalchemy.pool import StaticPool
 
 from app.database import Base
 from app.dependencies import get_current_user, get_db
-from app.models import Account, CategoryMemory, MerchantCategoryProfile, Transaction, User
+from app.models import Account, CategoryMemory, MerchantCategoryProfile, MerchantLookupCache, Transaction, User
 from app.routes.transaction_routes import router as transaction_router
 from app.services import pdf_statement_service
 
@@ -125,6 +125,7 @@ class SmartImportRouteTest(unittest.TestCase):
             session.query(Transaction).delete()
             session.query(CategoryMemory).delete()
             session.query(MerchantCategoryProfile).delete()
+            session.query(MerchantLookupCache).delete()
             session.commit()
 
     def test_transactions_route_returns_legacy_rows_without_account(self) -> None:
@@ -205,6 +206,46 @@ class SmartImportRouteTest(unittest.TestCase):
         self.assertEqual([row["description"] for row in preview_rows], ["ORANGE MART", "Transit", "ATM deposit"])
         self.assertEqual([row["category"] for row in preview_rows], ["groceries", "transport", "income"])
         self.assertTrue(all(row["review_reason"] is None for row in preview_rows))
+
+    def test_import_file_uses_merchant_semantics_for_unknown_food_merchants(self) -> None:
+        pdf_bytes = build_text_pdf(
+            [
+                "Royal Bank of Canada",
+                "Details of your account activity",
+                "From March 2, 2026 to April 2, 2026",
+                "Date Description Withdrawals ($) Deposits ($) Balance ($)",
+                "3 Mar Contactless Interac purchase - 1001",
+                "KHORAK SUPERMAR 15.51 100.00",
+                "4 Mar Contactless Interac purchase - 1002",
+                "ARZON SUPERMARK 20.25 79.75",
+                "5 Mar Contactless Interac purchase - 1003",
+                "BAGEL NASH 8.50 71.25",
+                "6 Mar Contactless Interac purchase - 1004",
+                "THAI ISLAND RES 18.25 53.00",
+                "7 Mar Misc Payment Paypal * BAGEL NASH 9.25 43.75",
+            ]
+        )
+
+        response = self.client.post(
+            "/transactions/import/file",
+            data={"account_id": str(self.account_id)},
+            files={"file": ("merchant-semantics.pdf", pdf_bytes, "application/pdf")},
+        )
+
+        self.assertEqual(response.status_code, 200, response.text)
+        preview_rows = response.json()["preview_rows"]
+
+        self.assertEqual(
+            [row["category"] for row in preview_rows],
+            ["groceries", "groceries", "restaurant", "restaurant", "restaurant"],
+        )
+        self.assertTrue(
+            all(row["category_source"] in {"merchant_semantic", "merchant_lookup_cache"} for row in preview_rows)
+        )
+        with self.session_local() as session:
+            cached_count = session.query(MerchantLookupCache).count()
+
+        self.assertGreaterEqual(cached_count, 4)
 
     def test_batch_statement_import_accepts_up_to_six_files(self) -> None:
         csv_one = (

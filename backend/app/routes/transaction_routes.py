@@ -63,6 +63,13 @@ def save_category_memory_safely(
         db.rollback()
 
 
+def commit_pending_side_effects_safely(db: Session) -> None:
+    try:
+        db.commit()
+    except Exception:
+        db.rollback()
+
+
 @router.get("/", response_model=list[TransactionResponse])
 def get_transactions(
     account_id: int | None = Query(default=None),
@@ -244,7 +251,7 @@ async def smart_import_file(
 
     try:
         file_bytes = await file.read()
-        return process_smart_import(
+        result = process_smart_import(
             db=db,
             owner_id=current_user.id,
             account_id=account_id,
@@ -252,6 +259,8 @@ async def smart_import_file(
             filename=file.filename,
             content_type=file.content_type,
         )
+        commit_pending_side_effects_safely(db)
+        return result
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     except Exception as exc:
@@ -283,12 +292,14 @@ async def smart_import_files(
             (await file.read(), file.filename or "statement", file.content_type)
             for file in files
         ]
-        return process_smart_import_batch(
+        result = process_smart_import_batch(
             db=db,
             owner_id=current_user.id,
             account_id=account_id,
             files=file_payloads,
         )
+        commit_pending_side_effects_safely(db)
+        return result
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     except Exception as exc:
@@ -480,6 +491,8 @@ def get_bulk_category_preview(
     suggestions.sort(
         key=lambda item: (-item.confidence, item.description.lower(), item.transaction_id)
     )
+
+    commit_pending_side_effects_safely(db)
 
     return BulkCategorySuggestionResponse(
         total_candidates=len(suggestions),
