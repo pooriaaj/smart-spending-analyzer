@@ -162,8 +162,8 @@ function ImportPage() {
       return {
         title: "What to try next",
         items: [
-          "If scanned-PDF OCR is enabled on the backend, try the upload again and the app will attempt OCR fallback automatically.",
-          "If OCR is not enabled yet, add a valid OPENAI_API_KEY to the backend environment for scanned PDF support.",
+          "The backend now tries free local OCR first for scanned or screenshot-style PDFs.",
+          "If it still fails, the backend server needs Tesseract OCR installed, or OpenAI vision OCR can be enabled as a stronger paid fallback.",
           "Original downloadable statement PDFs still import more reliably than camera scans or screenshot-to-PDF exports.",
         ],
       };

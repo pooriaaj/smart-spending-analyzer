@@ -36,6 +36,11 @@ It is designed as a foundation for an intelligent financial assistant that:
   - encoding handling
   - duplicate detection
   - validation system
+- PDF statement import with:
+  - text-based PDF parsing
+  - screenshot/scanned PDF page rendering
+  - optional free local Tesseract OCR fallback
+  - optional OpenAI vision OCR fallback
 
 ### Analytics
 - Monthly financial summaries
@@ -89,6 +94,12 @@ It is designed as a foundation for an intelligent financial assistant that:
 ### Deployment
 - Backend: Render
 - Frontend: Vercel
+
+### Free Scanned PDF OCR
+- Text-based statement PDFs work without OCR.
+- Scanned or screenshot-style PDFs are rendered with PyMuPDF, then read with Tesseract OCR when available.
+- For Render, use the backend Dockerfile if you want the free OCR path, because it installs the Tesseract system package.
+- OpenAI vision OCR remains optional as a stronger paid fallback.
 
 ---
 
@@ -173,6 +184,14 @@ VITE_API_BASE_URL=http://localhost:8000
 GOOGLE_PLACES_API_KEY=
 MERCHANT_LOOKUP_REGION=Toronto, Canada
 MERCHANT_LOOKUP_REGION_CODE=CA
+
+# Optional: free scanned-PDF OCR fallback.
+# The backend server must have the Tesseract OCR command installed.
+LOCAL_OCR_ENABLED=true
+LOCAL_OCR_COMMAND=tesseract
+LOCAL_OCR_LANGUAGE=eng
+LOCAL_OCR_TIMEOUT_SECONDS=25
+PDF_OCR_RENDER_DPI=200
 
 ---
 

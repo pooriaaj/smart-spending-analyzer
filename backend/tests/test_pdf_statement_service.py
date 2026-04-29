@@ -557,11 +557,12 @@ Statement period 12/28/2024 - 01/10/2025
                 ),
             ),
             patch.object(service, "extract_pdf_page_image_candidates", return_value=[]),
+            patch.object(service, "is_local_ocr_enabled", return_value=False),
             patch.object(service, "is_vision_ocr_enabled", return_value=False),
         ):
             with self.assertRaisesRegex(
                 ValueError,
-                "Add a valid OPENAI_API_KEY to enable OCR fallback for scanned PDFs.",
+                "No page images could be extracted or rendered for OCR fallback.",
             ):
                 service.parse_pdf_statement_preview(
                     db=self.db,
@@ -569,7 +570,7 @@ Statement period 12/28/2024 - 01/10/2025
                     file_bytes=b"fake-pdf",
                 )
 
-    def test_parse_pdf_statement_preview_uses_ocr_fallback_for_scanned_pdf(self) -> None:
+    def test_parse_pdf_statement_preview_uses_local_ocr_fallback_for_scanned_pdf(self) -> None:
         ocr_text = """
 Account Statement
 Statement period 12/28/2024 - 01/10/2025
@@ -600,6 +601,70 @@ Jan 03 BOOK STORE $12.34
                     )
                 ],
             ),
+            patch.object(service, "is_local_ocr_enabled", return_value=True),
+            patch.object(
+                service,
+                "ocr_pdf_page_images_with_local_tesseract",
+                return_value=service.PdfOcrFallbackResult(
+                    text=ocr_text,
+                    notes=(
+                        "Used free local Tesseract OCR on 1 scanned PDF page. Review extracted rows carefully.",
+                    ),
+                    candidate_pages=1,
+                    processed_pages=1,
+                ),
+            ),
+            patch.object(service, "is_vision_ocr_enabled", return_value=False),
+            patch.object(service, "categorize_transaction_details", side_effect=self.categorize),
+        ):
+            result = service.parse_pdf_statement_preview(
+                db=self.db,
+                owner_id=123,
+                file_bytes=b"fake-pdf",
+            )
+
+        preview_rows = result["preview_rows"]
+        self.assertEqual(len(preview_rows), 2)
+        self.assertEqual(preview_rows[0].date, "2025-01-02")
+        self.assertEqual(preview_rows[0].type, "income")
+        self.assertEqual(preview_rows[1].date, "2025-01-03")
+        self.assertEqual(result["notes"], [
+            "Used generic PDF parser. Accuracy may vary for this bank format.",
+            "Used free local Tesseract OCR on 1 scanned PDF page. Review extracted rows carefully.",
+        ])
+
+    def test_parse_pdf_statement_preview_uses_openai_ocr_fallback_for_scanned_pdf(self) -> None:
+        ocr_text = """
+Account Statement
+Statement period 12/28/2024 - 01/10/2025
+Jan 02 PAYROLL DEPOSIT $1,500.00
+Jan 03 BOOK STORE $12.34
+        """.strip()
+
+        with (
+            patch.object(
+                service,
+                "extract_pdf_text_result",
+                return_value=self.extraction_result(
+                    "",
+                    total_pages=2,
+                    readable_text_pages=0,
+                    page_texts=("", ""),
+                ),
+            ),
+            patch.object(
+                service,
+                "extract_pdf_page_image_candidates",
+                return_value=[
+                    service.PdfPageImageCandidate(
+                        page_number=1,
+                        name="page-1.jpg",
+                        data=b"fake-image",
+                        mime_type="image/jpeg",
+                    )
+                ],
+            ),
+            patch.object(service, "is_local_ocr_enabled", return_value=False),
             patch.object(service, "is_vision_ocr_enabled", return_value=True),
             patch.object(
                 service,

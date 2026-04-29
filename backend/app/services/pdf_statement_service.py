@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import io
+import os
 import re
 from dataclasses import dataclass
 from datetime import date, datetime
@@ -10,6 +11,7 @@ from pypdf import PdfReader
 from sqlalchemy.orm import Session
 
 from app.schemas import StatementPreviewRow
+from app.services.local_ocr_service import is_local_ocr_enabled, run_local_ocr_image
 from app.services.transaction_service import categorize_transaction_details
 from app.services.vision_ocr_service import (
     build_input_image_part,
@@ -205,6 +207,7 @@ DEFAULT_NO_TRANSACTIONS_ERROR = (
     "No transaction rows could be extracted from this PDF. Try a more text-based statement PDF."
 )
 PDF_OCR_MAX_PAGES = 8
+PDF_OCR_RENDER_DPI_DEFAULT = 200
 
 
 @dataclass(frozen=True)
@@ -221,6 +224,19 @@ class PdfOcrFallbackResult:
     notes: tuple[str, ...] = ()
     candidate_pages: int = 0
     processed_pages: int = 0
+
+
+def get_pdf_ocr_render_dpi() -> int:
+    raw_value = os.getenv("PDF_OCR_RENDER_DPI")
+    if not raw_value:
+        return PDF_OCR_RENDER_DPI_DEFAULT
+
+    try:
+        parsed_value = int(raw_value)
+    except ValueError:
+        return PDF_OCR_RENDER_DPI_DEFAULT
+
+    return max(120, min(parsed_value, 300))
 
 
 def extract_pdf_text_result(file_bytes: bytes) -> PdfTextExtractionResult:
@@ -265,6 +281,73 @@ def infer_pdf_image_mime_type(image_name: str, image_bytes: bytes) -> str | None
     return None
 
 
+def _load_pymupdf_module() -> Any | None:
+    try:
+        import pymupdf  # type: ignore[import-not-found]
+
+        return pymupdf
+    except Exception:
+        try:
+            import fitz  # type: ignore[import-not-found]
+
+            return fitz
+        except Exception:
+            return None
+
+
+def render_pdf_page_image_candidates(
+    file_bytes: bytes,
+    page_texts: tuple[str, ...] = (),
+    skipped_page_numbers: set[int] | None = None,
+) -> list[PdfPageImageCandidate]:
+    pymupdf = _load_pymupdf_module()
+    if pymupdf is None:
+        return []
+
+    skipped_page_numbers = skipped_page_numbers or set()
+    candidates: list[PdfPageImageCandidate] = []
+
+    try:
+        document = pymupdf.open(stream=file_bytes, filetype="pdf")
+    except Exception:
+        return []
+
+    try:
+        for page_index in range(len(document)):
+            page_number = page_index + 1
+            if page_number in skipped_page_numbers:
+                continue
+            if page_texts and page_index < len(page_texts) and page_texts[page_index].strip():
+                continue
+
+            try:
+                page = document.load_page(page_index)
+                pixmap = page.get_pixmap(dpi=get_pdf_ocr_render_dpi(), alpha=False)
+                image_bytes = pixmap.tobytes("png")
+            except Exception:
+                continue
+
+            if image_bytes:
+                candidates.append(
+                    PdfPageImageCandidate(
+                        page_number=page_number,
+                        name=f"rendered-page-{page_number}.png",
+                        data=image_bytes,
+                        mime_type="image/png",
+                    )
+                )
+
+            if len(candidates) >= PDF_OCR_MAX_PAGES:
+                break
+    finally:
+        try:
+            document.close()
+        except Exception:
+            pass
+
+    return candidates
+
+
 def extract_pdf_page_image_candidates(
     file_bytes: bytes,
     page_texts: tuple[str, ...] = (),
@@ -275,6 +358,7 @@ def extract_pdf_page_image_candidates(
         return []
 
     candidates: list[PdfPageImageCandidate] = []
+    pages_with_embedded_candidates: set[int] = set()
 
     for page_index, page in enumerate(reader.pages):
         if page_texts and page_index < len(page_texts) and page_texts[page_index].strip():
@@ -298,16 +382,72 @@ def extract_pdf_page_image_candidates(
             continue
 
         _, chosen_image, mime_type = max(supported_images, key=lambda item: item[0])
+        page_number = page_index + 1
+        pages_with_embedded_candidates.add(page_number)
         candidates.append(
             PdfPageImageCandidate(
-                page_number=page_index + 1,
+                page_number=page_number,
                 name=chosen_image.name,
                 data=chosen_image.data,
                 mime_type=mime_type,
             )
         )
 
-    return candidates
+    if len(candidates) >= PDF_OCR_MAX_PAGES:
+        return candidates[:PDF_OCR_MAX_PAGES]
+
+    rendered_candidates = render_pdf_page_image_candidates(
+        file_bytes,
+        page_texts=page_texts,
+        skipped_page_numbers=pages_with_embedded_candidates,
+    )
+
+    return [*candidates, *rendered_candidates][:PDF_OCR_MAX_PAGES]
+
+
+def ocr_pdf_page_images_with_local_tesseract(
+    image_candidates: list[PdfPageImageCandidate],
+) -> PdfOcrFallbackResult:
+    if not image_candidates or not is_local_ocr_enabled():
+        return PdfOcrFallbackResult(candidate_pages=len(image_candidates))
+
+    processed_candidates = image_candidates[:PDF_OCR_MAX_PAGES]
+    page_texts: list[str] = []
+    failed_pages: list[int] = []
+
+    for candidate in processed_candidates:
+        try:
+            page_text = run_local_ocr_image(candidate.data, candidate.mime_type)
+        except ValueError:
+            failed_pages.append(candidate.page_number)
+            continue
+
+        cleaned_text = page_text.strip()
+        if cleaned_text:
+            page_texts.append(cleaned_text)
+
+    notes: list[str] = []
+    if page_texts:
+        notes.append(
+            f"Used free local Tesseract OCR on {len(page_texts)} scanned PDF page"
+            f"{'' if len(page_texts) == 1 else 's'}. Review extracted rows carefully."
+        )
+    elif failed_pages:
+        notes.append(
+            "Free local Tesseract OCR was available, but it could not recover readable text "
+            "from the scanned PDF pages."
+        )
+    if len(image_candidates) > len(processed_candidates):
+        notes.append(
+            f"OCR fallback processed the first {len(processed_candidates)} image-only PDF pages."
+        )
+
+    return PdfOcrFallbackResult(
+        text="\n\n".join(page_texts).strip(),
+        notes=tuple(notes),
+        candidate_pages=len(image_candidates),
+        processed_pages=len(processed_candidates),
+    )
 
 
 def ocr_pdf_page_images_to_text(
@@ -942,16 +1082,22 @@ def build_no_readable_text_error(
     extraction_result: PdfTextExtractionResult,
     image_candidate_count: int,
 ) -> str:
-    if not is_vision_ocr_enabled():
-        return (
-            "This PDF appears to have no selectable text. It may be image-only or scanned. "
-            "Add a valid OPENAI_API_KEY to enable OCR fallback for scanned PDFs."
-        )
+    local_ocr_enabled = is_local_ocr_enabled()
+    vision_ocr_enabled = is_vision_ocr_enabled()
 
     if image_candidate_count <= 0:
         return (
-            "This PDF appears to have no selectable text, and no page images could be extracted "
-            "for OCR fallback."
+            "This PDF appears to have no selectable text. It may be image-only or scanned. "
+            "No page images could be extracted or rendered for OCR fallback. Make sure PyMuPDF "
+            "is installed so screenshot-style PDFs can be rendered before OCR."
+        )
+
+    if not local_ocr_enabled and not vision_ocr_enabled:
+        return (
+            "This PDF appears to have no selectable text. It may be image-only or scanned. "
+            "Free local OCR is not available on this backend because Tesseract was not found, "
+            "and OpenAI vision OCR is not configured. Install Tesseract on the backend or add "
+            "a valid OPENAI_API_KEY to enable scanned PDF support."
         )
 
     return (
@@ -1188,7 +1334,13 @@ def parse_pdf_statement_preview(
             file_bytes,
             page_texts=extraction_result.page_texts,
         )
-        if image_candidates and is_vision_ocr_enabled():
+
+        if image_candidates and is_local_ocr_enabled():
+            ocr_result = ocr_pdf_page_images_with_local_tesseract(image_candidates)
+            if ocr_result.text:
+                text = "\n\n".join(part for part in [text, ocr_result.text] if part).strip()
+
+        if image_candidates and not ocr_result.text and is_vision_ocr_enabled():
             ocr_result = ocr_pdf_page_images_to_text(image_candidates)
             if ocr_result.text:
                 text = "\n\n".join(part for part in [text, ocr_result.text] if part).strip()

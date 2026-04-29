@@ -629,6 +629,7 @@ class SmartImportRouteTest(unittest.TestCase):
 
         with (
             patch.object(pdf_statement_service, "extract_pdf_page_image_candidates", return_value=[]),
+            patch.object(pdf_statement_service, "is_local_ocr_enabled", return_value=False),
             patch.object(pdf_statement_service, "is_vision_ocr_enabled", return_value=False),
         ):
             response = self.client.post(
@@ -643,12 +644,13 @@ class SmartImportRouteTest(unittest.TestCase):
             {
                 "detail": (
                     "This PDF appears to have no selectable text. It may be image-only or scanned. "
-                    "Add a valid OPENAI_API_KEY to enable OCR fallback for scanned PDFs."
+                    "No page images could be extracted or rendered for OCR fallback. Make sure PyMuPDF "
+                    "is installed so screenshot-style PDFs can be rendered before OCR."
                 )
             },
         )
 
-    def test_import_file_uses_ocr_fallback_for_scanned_pdf(self) -> None:
+    def test_import_file_uses_local_ocr_fallback_for_scanned_pdf(self) -> None:
         pdf_bytes = build_text_pdf([])
 
         with (
@@ -674,6 +676,71 @@ class SmartImportRouteTest(unittest.TestCase):
                     )
                 ],
             ),
+            patch.object(pdf_statement_service, "is_local_ocr_enabled", return_value=True),
+            patch.object(
+                pdf_statement_service,
+                "ocr_pdf_page_images_with_local_tesseract",
+                return_value=pdf_statement_service.PdfOcrFallbackResult(
+                    text=(
+                        "Account Statement\n"
+                        "Statement period 12/28/2024 - 01/10/2025\n"
+                        "Jan 02 PAYROLL DEPOSIT $1,500.00"
+                    ),
+                    notes=(
+                        "Used free local Tesseract OCR on 1 scanned PDF page. Review extracted rows carefully.",
+                    ),
+                    candidate_pages=1,
+                    processed_pages=1,
+                ),
+            ),
+            patch.object(pdf_statement_service, "is_vision_ocr_enabled", return_value=False),
+        ):
+            response = self.client.post(
+                "/transactions/import/file",
+                data={"account_id": str(self.account_id)},
+                files={"file": ("scanned-ocr.pdf", pdf_bytes, "application/pdf")},
+            )
+
+        self.assertEqual(response.status_code, 200, response.text)
+        payload = response.json()
+        self.assertEqual(payload["status"], "table_review")
+        self.assertEqual(len(payload["preview_rows"]), 1)
+        self.assertEqual(payload["preview_rows"][0]["date"], "2025-01-02")
+        self.assertEqual(
+            payload["notes"],
+            [
+                "Used generic PDF parser. Accuracy may vary for this bank format.",
+                "Used free local Tesseract OCR on 1 scanned PDF page. Review extracted rows carefully.",
+            ],
+        )
+
+    def test_import_file_uses_openai_ocr_fallback_for_scanned_pdf(self) -> None:
+        pdf_bytes = build_text_pdf([])
+
+        with (
+            patch.object(
+                pdf_statement_service,
+                "extract_pdf_text_result",
+                return_value=pdf_statement_service.PdfTextExtractionResult(
+                    text="",
+                    total_pages=1,
+                    readable_text_pages=0,
+                    page_texts=("",),
+                ),
+            ),
+            patch.object(
+                pdf_statement_service,
+                "extract_pdf_page_image_candidates",
+                return_value=[
+                    pdf_statement_service.PdfPageImageCandidate(
+                        page_number=1,
+                        name="page-1.jpg",
+                        data=b"fake-image",
+                        mime_type="image/jpeg",
+                    )
+                ],
+            ),
+            patch.object(pdf_statement_service, "is_local_ocr_enabled", return_value=False),
             patch.object(pdf_statement_service, "is_vision_ocr_enabled", return_value=True),
             patch.object(
                 pdf_statement_service,
