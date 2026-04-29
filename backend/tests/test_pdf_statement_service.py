@@ -570,6 +570,43 @@ Statement period 12/28/2024 - 01/10/2025
                     file_bytes=b"fake-pdf",
                 )
 
+    def test_parse_pdf_statement_preview_reports_missing_tesseract_for_scanned_pdf(self) -> None:
+        with (
+            patch.object(
+                service,
+                "extract_pdf_text_result",
+                return_value=self.extraction_result(
+                    "",
+                    total_pages=1,
+                    readable_text_pages=0,
+                    page_texts=("",),
+                ),
+            ),
+            patch.object(
+                service,
+                "extract_pdf_page_image_candidates",
+                return_value=[
+                    service.PdfPageImageCandidate(
+                        page_number=1,
+                        name="rendered-page-1.png",
+                        data=b"fake-image",
+                        mime_type="image/png",
+                    )
+                ],
+            ),
+            patch.object(service, "is_local_ocr_enabled", return_value=False),
+            patch.object(service, "is_vision_ocr_enabled", return_value=False),
+        ):
+            with self.assertRaisesRegex(
+                ValueError,
+                "Deploy the backend with Docker so Tesseract is installed",
+            ):
+                service.parse_pdf_statement_preview(
+                    db=self.db,
+                    owner_id=123,
+                    file_bytes=b"fake-pdf",
+                )
+
     def test_parse_pdf_statement_preview_uses_local_ocr_fallback_for_scanned_pdf(self) -> None:
         ocr_text = """
 Account Statement

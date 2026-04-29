@@ -157,14 +157,16 @@ function ImportPage() {
 
     if (
       normalizedError.includes("no selectable text") ||
-      normalizedError.includes("image-only or scanned")
+      normalizedError.includes("image-only or scanned") ||
+      normalizedError.includes("tesseract was not found")
     ) {
       return {
         title: "What to try next",
         items: [
           "The backend now tries free local OCR first for scanned or screenshot-style PDFs.",
-          "If it still fails, the backend server needs Tesseract OCR installed, or OpenAI vision OCR can be enabled as a stronger paid fallback.",
+          "This live backend still needs to be deployed with Docker so the Tesseract command from the open-source OCR project is installed.",
           "Original downloadable statement PDFs still import more reliably than camera scans or screenshot-to-PDF exports.",
+          "OpenAI vision OCR can stay optional as a stronger paid fallback, not the default requirement.",
         ],
       };
     }

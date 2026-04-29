@@ -98,8 +98,14 @@ It is designed as a foundation for an intelligent financial assistant that:
 ### Free Scanned PDF OCR
 - Text-based statement PDFs work without OCR.
 - Scanned or screenshot-style PDFs are rendered with PyMuPDF, then read with Tesseract OCR when available.
-- For Render, use the backend Dockerfile if you want the free OCR path, because it installs the Tesseract system package.
+- For Render, deploy the backend with Docker so the service can install the Tesseract system package from `backend/Dockerfile`.
 - OpenAI vision OCR remains optional as a stronger paid fallback.
+
+Render setup for free OCR:
+- The repository includes `render.yaml` with `runtime: docker`, `dockerfilePath: backend/Dockerfile`, and `dockerContext: backend`.
+- If your existing Render service still says Tesseract was not found, the service is still using the native Python runtime.
+- In Render, switch/sync the backend service to Docker using the repository blueprint, or create a new Docker web service from this repo with Root Directory set to `backend`.
+- Keep your existing backend environment variables, especially `DATABASE_URL`, `SECRET_KEY`, `FRONTEND_URL`, and auth settings.
 
 ---
 

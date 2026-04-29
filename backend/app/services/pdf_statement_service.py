@@ -1096,8 +1096,8 @@ def build_no_readable_text_error(
         return (
             "This PDF appears to have no selectable text. It may be image-only or scanned. "
             "Free local OCR is not available on this backend because Tesseract was not found, "
-            "and OpenAI vision OCR is not configured. Install Tesseract on the backend or add "
-            "a valid OPENAI_API_KEY to enable scanned PDF support."
+            "and OpenAI vision OCR is not configured. Deploy the backend with Docker so "
+            "Tesseract is installed, or add a valid OPENAI_API_KEY to enable scanned PDF support."
         )
 
     return (

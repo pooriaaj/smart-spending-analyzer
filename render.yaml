@@ -1,0 +1,7 @@
+services:
+  - type: web
+    name: smart-spending-analyzer
+    runtime: docker
+    dockerfilePath: backend/Dockerfile
+    dockerContext: backend
+    autoDeploy: true
