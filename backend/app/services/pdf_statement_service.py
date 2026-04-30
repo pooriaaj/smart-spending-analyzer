@@ -746,6 +746,36 @@ def is_noise_line(line: str, extra_noise_prefixes: tuple[str, ...] = ()) -> bool
     return False
 
 
+def is_statement_disclosure_description(description: str) -> bool:
+    lowered = clean_statement_description(description).lower()
+    lowered = lowered.replace("&", " and ")
+    lowered = re.sub(r"\s+", " ", lowered).strip()
+
+    if not lowered:
+        return True
+
+    disclosure_markers = (
+        "time to pay",
+        "minimum payment each month",
+        "minimum payment",
+        "fully repay the outstanding balance",
+        "outstanding balance",
+        "not a recommended long term repayment plan",
+        "payments in arrears",
+        "credit limit",
+        "overlimit fee",
+        "credit privileges",
+        "authorize future transactions",
+        "rbc avion visa platinum",
+        "statement from",
+        "remaining balance",
+        "expiry date",
+        "purchases and fees",
+    )
+
+    return any(marker in lowered for marker in disclosure_markers)
+
+
 def is_income_description(description: str) -> bool:
     lowered = description.lower()
 
@@ -1171,6 +1201,8 @@ def finalize_pending_transaction(
         return
 
     description = clean_statement_description(raw_description)
+    if is_statement_disclosure_description(description):
+        return
 
     amount_text_1, amount_text_2, explicit_type = resolve_trailing_amount_columns(trailing_amounts)
     if not amount_text_1:

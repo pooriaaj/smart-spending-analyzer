@@ -20,8 +20,17 @@ function AccountsPage() {
   };
 
   useEffect(() => {
-    fetchAccounts();
-  }, []);
+    const loadAccounts = async () => {
+      try {
+        const response = await api.get("/accounts/");
+        setAccounts(response.data || []);
+      } catch (error) {
+        handleApiAuthError(error, navigate);
+      }
+    };
+
+    loadAccounts();
+  }, [navigate]);
 
   const handleCreate = async (e) => {
     e.preventDefault();

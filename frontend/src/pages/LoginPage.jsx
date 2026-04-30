@@ -43,7 +43,7 @@ function LoginPage() {
 
       localStorage.setItem("token", response.data.access_token);
       navigate("/dashboard", { replace: true });
-    } catch (err) {
+    } catch {
       setError("Login failed. Please check your email and password.");
     }
   };

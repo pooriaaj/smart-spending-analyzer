@@ -258,13 +258,20 @@ CATEGORY_MEMORY_STOPWORDS = {
     "authorized",
     "bank",
     "bill",
+    "balance",
+    "balances",
     "canada",
     "card",
     "cash",
     "chequing",
     "credit",
+    "date",
+    "dates",
     "debit",
     "deposit",
+    "deposits",
+    "description",
+    "descriptions",
     "etransfer",
     "e",
     "fee",
@@ -278,8 +285,13 @@ CATEGORY_MEMORY_STOPWORDS = {
     "memo",
     "monthly",
     "online",
+    "paid",
+    "pay",
+    "payee",
+    "payer",
     "payment",
     "payroll",
+    "period",
     "pos",
     "preauthorized",
     "purchase",
@@ -290,10 +302,13 @@ CATEGORY_MEMORY_STOPWORDS = {
     "service",
     "statement",
     "store",
+    "time",
+    "to",
     "transfer",
     "txn",
     "visa",
     "withdrawal",
+    "withdrawals",
 }
 
 MERCHANT_PROFILE_STOPWORDS = CATEGORY_MEMORY_STOPWORDS | {
@@ -919,7 +934,8 @@ def learnable_category_from_memory(
     description: str,
     tx_type: str,
 ) -> tuple[str, str] | None:
-    lowered = description.lower()
+    normalized_description = normalize_category_signal_text(description)
+    raw_description = description.lower()
 
     memories = (
         db.query(CategoryMemory)
@@ -933,7 +949,9 @@ def learnable_category_from_memory(
     best_match = None
     for item in memories:
         keyword = item.keyword.lower().strip()
-        if keyword and keyword in lowered:
+        if keyword in CATEGORY_MEMORY_STOPWORDS:
+            continue
+        if keyword and keyword_matches_description(keyword, normalized_description, raw_description):
             if best_match is None or len(keyword) > len(best_match[0]):
                 best_match = (keyword, item.category)
 

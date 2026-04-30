@@ -59,7 +59,7 @@ function TransactionForm({ onTransactionCreated, editingTransaction, onCancelEdi
 
       setSuggestion(response.data);
       setCategory(response.data.suggested_category);
-    } catch (err) {
+    } catch {
       setError("Failed to suggest a category.");
     } finally {
       setSuggestionLoading(false);
@@ -94,7 +94,7 @@ function TransactionForm({ onTransactionCreated, editingTransaction, onCancelEdi
       if (editingTransaction && onCancelEdit) {
         onCancelEdit();
       }
-    } catch (err) {
+    } catch {
       setError(
         editingTransaction
           ? "Failed to update transaction."

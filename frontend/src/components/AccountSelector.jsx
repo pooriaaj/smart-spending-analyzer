@@ -1,6 +1,14 @@
 import { useEffect, useState } from "react";
 import api from "../services/api";
-import { ALL_ACCOUNTS_VALUE, getSelectedAccountId, setSelectedAccountId } from "../services/accountStorage";
+import {
+  ALL_ACCOUNTS_VALUE,
+  getSelectedAccountId,
+  setSelectedAccountId as persistSelectedAccountId,
+} from "../services/accountStorage";
+
+function normalizeSelection(value, allowAll) {
+  return allowAll || value !== ALL_ACCOUNTS_VALUE ? String(value || "") : "";
+}
 
 function AccountSelector({
   onChange,
@@ -10,10 +18,20 @@ function AccountSelector({
   persistSelection = true,
 }) {
   const [accounts, setAccounts] = useState([]);
-  const [selected, setSelected] = useState(() => {
-    const requestedAccountId = value ?? getSelectedAccountId();
-    return allowAll || requestedAccountId !== ALL_ACCOUNTS_VALUE ? String(requestedAccountId || "") : "";
-  });
+  const [internalSelected, setInternalSelected] = useState(() =>
+    normalizeSelection(value ?? getSelectedAccountId(), allowAll)
+  );
+
+  const requestedSelected =
+    value === undefined ? internalSelected : normalizeSelection(value, allowAll);
+  const accountIds = accounts.map((account) => String(account.id));
+  const canUseAllAccounts = allowAll && requestedSelected === ALL_ACCOUNTS_VALUE;
+  const canUseSelectedAccount =
+    requestedSelected && accountIds.includes(String(requestedSelected));
+  const selected =
+    accounts.length > 0 && !canUseAllAccounts && !canUseSelectedAccount
+      ? accountIds[0]
+      : requestedSelected;
 
   useEffect(() => {
     const loadAccounts = async () => {
@@ -29,32 +47,23 @@ function AccountSelector({
   }, []);
 
   useEffect(() => {
-    if (value === undefined) return;
-
-    const nextSelected = allowAll || value !== ALL_ACCOUNTS_VALUE ? String(value || "") : "";
-    setSelected(nextSelected);
-  }, [allowAll, value]);
-
-  useEffect(() => {
-    if (!accounts.length) {
-      onChange?.(selected);
-      return;
-    }
-
-    const accountIds = accounts.map((account) => String(account.id));
-    const canUseAllAccounts = allowAll && selected === ALL_ACCOUNTS_VALUE;
-    const canUseSelectedAccount = selected && accountIds.includes(String(selected));
-
-    if (!canUseAllAccounts && !canUseSelectedAccount) {
-      setSelected(accountIds[0]);
+    if (!selected) {
       return;
     }
 
     if (persistSelection) {
-      setSelectedAccountId(selected);
+      persistSelectedAccountId(selected);
     }
     onChange?.(selected);
-  }, [accounts, allowAll, selected, onChange, persistSelection]);
+  }, [selected, onChange, persistSelection]);
+
+  const handleSelectionChange = (event) => {
+    const nextSelected = event.target.value;
+    setInternalSelected(nextSelected);
+    if (value !== undefined) {
+      onChange?.(nextSelected);
+    }
+  };
 
   return (
     <div className="account-selector-block">
@@ -62,7 +71,7 @@ function AccountSelector({
       <select
         id="account-selector"
         value={selected}
-        onChange={(e) => setSelected(e.target.value)}
+        onChange={handleSelectionChange}
       >
         {allowAll && <option value={ALL_ACCOUNTS_VALUE}>All Accounts</option>}
         {!allowAll && !accounts.length && <option value="">Loading accounts...</option>}

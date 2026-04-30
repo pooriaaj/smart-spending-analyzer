@@ -1093,6 +1093,80 @@ class SmartImportRouteTest(unittest.TestCase):
         self.assertEqual(profile.category, "beauty treat")
         self.assertGreaterEqual(profile.confirmation_count, 1)
 
+    def test_generic_statement_words_do_not_train_or_match_category_memory(self) -> None:
+        with self.session_local() as session:
+            session.add_all(
+                [
+                    CategoryMemory(
+                        keyword="time",
+                        category="rent",
+                        transaction_type="expense",
+                        owner_id=self.user_id,
+                    ),
+                    MerchantCategoryProfile(
+                        merchant_key="time",
+                        display_name="Time",
+                        category="rent",
+                        transaction_type="expense",
+                        confidence=0.97,
+                        confirmation_count=3,
+                        last_amount=20.99,
+                        owner_id=self.user_id,
+                    ),
+                    Transaction(
+                        amount=20.99,
+                        category="other",
+                        description="Time",
+                        date=date(2026, 4, 25),
+                        type="expense",
+                        owner_id=self.user_id,
+                        account_id=self.account_id,
+                    ),
+                ]
+            )
+            session.commit()
+
+        preview_response = self.client.get(
+            "/transactions/categorize/bulk-preview",
+            params={"account_id": self.account_id},
+        )
+        self.assertEqual(preview_response.status_code, 200, preview_response.text)
+        self.assertEqual(preview_response.json()["suggestions"], [])
+
+        create_response = self.client.post(
+            "/transactions/",
+            json={
+                "amount": 21.50,
+                "category": "rent",
+                "description": "Time",
+                "date": "2026-04-26",
+                "type": "expense",
+                "account_id": self.account_id,
+            },
+        )
+        self.assertEqual(create_response.status_code, 200, create_response.text)
+
+        with self.session_local() as session:
+            time_profiles = (
+                session.query(MerchantCategoryProfile)
+                .filter(
+                    MerchantCategoryProfile.owner_id == self.user_id,
+                    MerchantCategoryProfile.merchant_key == "time",
+                )
+                .all()
+            )
+            time_memories = (
+                session.query(CategoryMemory)
+                .filter(
+                    CategoryMemory.owner_id == self.user_id,
+                    CategoryMemory.keyword == "time",
+                )
+                .all()
+            )
+
+        self.assertEqual(len(time_profiles), 1)
+        self.assertEqual(len(time_memories), 1)
+
     def test_normalize_categories_route_backfills_category_memory(self) -> None:
         with self.session_local() as session:
             session.add_all(

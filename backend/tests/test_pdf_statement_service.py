@@ -219,6 +219,7 @@ RBC Avion Visa Platinum
 STATEMENT FROM FEB 12 TO MAR 11, 2026
 TRANSACTION DATE POSTING DATE ACTIVITY DESCRIPTION AMOUNT ($)
 MAR 11 MAR 11 PURCHASE INTEREST 20.99% $39.61
+MAR 11 Time to Pay If you make only the Minimum Payment each month, we estimate it will take 17 years to fully repay the outstanding balance Purchases & Fees 20.99
 TOTAL ACCOUNT BALANCE $2,092.07
 Time to Pay
 If you make only the Minimum Payment each month, we estimate it will take 17 years.
