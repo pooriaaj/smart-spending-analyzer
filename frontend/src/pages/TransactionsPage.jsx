@@ -46,6 +46,44 @@ const cleanRecurringDisplayName = (value = "") => {
   return cleaned.length > 92 ? `${cleaned.slice(0, 89)}...` : cleaned;
 };
 
+const TRANSACTIONS_PER_PAGE = 12;
+
+const buildPaginationItems = (currentPage, totalPages) => {
+  if (totalPages <= 7) {
+    return Array.from({ length: totalPages }, (_, index) => index + 1);
+  }
+
+  let windowStart = Math.max(2, currentPage - 1);
+  let windowEnd = Math.min(totalPages - 1, currentPage + 1);
+
+  if (currentPage <= 3) {
+    windowStart = 2;
+    windowEnd = 4;
+  }
+
+  if (currentPage >= totalPages - 2) {
+    windowStart = totalPages - 3;
+    windowEnd = totalPages - 1;
+  }
+
+  const items = [1];
+
+  if (windowStart > 2) {
+    items.push("start-ellipsis");
+  }
+
+  for (let page = windowStart; page <= windowEnd; page += 1) {
+    items.push(page);
+  }
+
+  if (windowEnd < totalPages - 1) {
+    items.push("end-ellipsis");
+  }
+
+  items.push(totalPages);
+  return items;
+};
+
 function TransactionsPage() {
   const [transactions, setTransactions] = useState([]);
   const [typeFilter, setTypeFilter] = useState("");
@@ -53,6 +91,7 @@ function TransactionsPage() {
   const [categoryFilter, setCategoryFilter] = useState("");
   const [searchFilter, setSearchFilter] = useState("");
   const [recurringOnlyFilter, setRecurringOnlyFilter] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
   const [selectedAccountId, setSelectedAccountId] = useState(getSelectedAccountId());
   const [loading, setLoading] = useState(true);
   const [recurringPatterns, setRecurringPatterns] = useState([]);
@@ -209,6 +248,39 @@ function TransactionsPage() {
     recurringDescriptionKeys,
   ]);
 
+  const totalPages = Math.max(
+    1,
+    Math.ceil(filteredTransactions.length / TRANSACTIONS_PER_PAGE)
+  );
+  const activePage = Math.min(currentPage, totalPages);
+  const pageStartIndex = (activePage - 1) * TRANSACTIONS_PER_PAGE;
+  const pageEndIndex = Math.min(
+    pageStartIndex + TRANSACTIONS_PER_PAGE,
+    filteredTransactions.length
+  );
+  const paginatedTransactions = filteredTransactions.slice(pageStartIndex, pageEndIndex);
+  const paginationItems = useMemo(
+    () => buildPaginationItems(activePage, totalPages),
+    [activePage, totalPages]
+  );
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [
+    typeFilter,
+    monthFilter,
+    categoryFilter,
+    searchFilter,
+    recurringOnlyFilter,
+    selectedAccountId,
+  ]);
+
+  useEffect(() => {
+    if (currentPage > totalPages) {
+      setCurrentPage(totalPages);
+    }
+  }, [currentPage, totalPages]);
+
   const applyRecurringFilter = (item) => {
     setSearchFilter(item.description || "");
     setRecurringOnlyFilter(true);
@@ -222,6 +294,7 @@ function TransactionsPage() {
     setCategoryFilter("");
     setSearchFilter("");
     setRecurringOnlyFilter(false);
+    setCurrentPage(1);
   };
 
   const getRecurringPriorityClass = (priority) => {
@@ -379,6 +452,52 @@ function TransactionsPage() {
     } finally {
       setFreshStartLoading(false);
     }
+  };
+
+  const renderTransactionPagination = (positionClass = "") => {
+    if (totalPages <= 1) return null;
+
+    return (
+      <nav className={`transaction-pagination ${positionClass}`} aria-label="Transaction pages">
+        <button
+          type="button"
+          className="pagination-button"
+          onClick={() => setCurrentPage(Math.max(1, activePage - 1))}
+          disabled={activePage === 1}
+        >
+          Previous
+        </button>
+
+        <div className="pagination-pages">
+          {paginationItems.map((item, index) =>
+            typeof item === "number" ? (
+              <button
+                type="button"
+                key={item}
+                className={`pagination-button pagination-number ${activePage === item ? "pagination-button-active" : ""}`}
+                onClick={() => setCurrentPage(item)}
+                aria-current={activePage === item ? "page" : undefined}
+              >
+                {item}
+              </button>
+            ) : (
+              <span key={`${item}-${index}`} className="pagination-ellipsis" aria-hidden="true">
+                ...
+              </span>
+            )
+          )}
+        </div>
+
+        <button
+          type="button"
+          className="pagination-button"
+          onClick={() => setCurrentPage(Math.min(totalPages, activePage + 1))}
+          disabled={activePage === totalPages}
+        >
+          Next
+        </button>
+      </nav>
+    );
   };
 
   if (loading) {
@@ -788,102 +907,120 @@ function TransactionsPage() {
               )}
             </div>
           ) : (
-            <div className="transactions-table-wrapper">
-              <table className="transactions-table">
-                <thead>
-                  <tr>
-                    <th>Date</th>
-                    <th>Type</th>
-                    <th>Category</th>
-                    <th>Description</th>
-                    <th>Amount</th>
-                    <th>Account</th>
-                    <th>Action</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredTransactions.map((transaction) => {
-                    const isEditing = editingId === transaction.id;
+            <div className="transaction-table-panel">
+              <div className="transaction-table-toolbar">
+                <div>
+                  <span className="transaction-page-kicker">
+                    {totalPages > 1 ? `Page ${activePage} of ${totalPages}` : "All transactions"}
+                  </span>
+                  <p className="transaction-page-summary">
+                    Showing {pageStartIndex + 1}-{pageEndIndex} of {filteredTransactions.length} filtered transaction
+                    {filteredTransactions.length === 1 ? "" : "s"}.
+                  </p>
+                </div>
 
-                    return (
-                      <tr key={transaction.id}>
-                        <td>
-                          {isEditing ? (
-                            <input type="date" value={editForm.date} onChange={(e) => setEditForm({ ...editForm, date: e.target.value })} />
-                          ) : transaction.date}
-                        </td>
+                {renderTransactionPagination("transaction-pagination-top")}
+              </div>
 
-                        <td>
-                          {isEditing ? (
-                            <select value={editForm.type} onChange={(e) => setEditForm({ ...editForm, type: e.target.value })}>
-                              <option value="income">Income</option>
-                              <option value="expense">Expense</option>
-                            </select>
-                          ) : transaction.type}
-                        </td>
+              <div className="transactions-table-wrapper">
+                <table className="transactions-table">
+                  <thead>
+                    <tr>
+                      <th>Date</th>
+                      <th>Type</th>
+                      <th>Category</th>
+                      <th>Description</th>
+                      <th>Amount</th>
+                      <th>Account</th>
+                      <th>Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {paginatedTransactions.map((transaction) => {
+                      const isEditing = editingId === transaction.id;
 
-                        <td>
-                          {isEditing ? (
-                            <input type="text" value={editForm.category} onChange={(e) => setEditForm({ ...editForm, category: e.target.value })} />
-                          ) : transaction.category}
-                        </td>
-
-                        <td>
-                          {isEditing ? (
-                            <input
-                              type="text"
-                              value={editForm.description}
-                              onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
-                            />
-                          ) : transaction.description}
-                        </td>
-
-                        <td className={!isEditing ? (transaction.type === "income" ? "income-text" : "expense-text") : ""}>
-                          {isEditing ? (
-                            <input type="number" step="0.01" value={editForm.amount} onChange={(e) => setEditForm({ ...editForm, amount: e.target.value })} />
-                          ) : (
-                            <>{transaction.type === "income" ? "+" : "-"}${transaction.amount.toFixed(2)}</>
-                          )}
-                        </td>
-
-                        <td>
-                          {isEditing ? (
-                            <input
-                              type="number"
-                              value={editForm.account_id}
-                              onChange={(e) => setEditForm({ ...editForm, account_id: e.target.value })}
-                            />
-                          ) : transaction.account_id || "Unassigned"}
-                        </td>
-
-                        <td>
-                          <div className="transaction-actions-inline">
+                      return (
+                        <tr key={transaction.id}>
+                          <td>
                             {isEditing ? (
-                              <>
-                                <button className="edit-button" onClick={() => saveEdit(transaction.id)}>
-                                  Save
-                                </button>
-                                <button className="secondary-button" onClick={cancelEdit}>
-                                  Cancel
-                                </button>
-                              </>
+                              <input type="date" value={editForm.date} onChange={(e) => setEditForm({ ...editForm, date: e.target.value })} />
+                            ) : transaction.date}
+                          </td>
+
+                          <td>
+                            {isEditing ? (
+                              <select value={editForm.type} onChange={(e) => setEditForm({ ...editForm, type: e.target.value })}>
+                                <option value="income">Income</option>
+                                <option value="expense">Expense</option>
+                              </select>
+                            ) : transaction.type}
+                          </td>
+
+                          <td>
+                            {isEditing ? (
+                              <input type="text" value={editForm.category} onChange={(e) => setEditForm({ ...editForm, category: e.target.value })} />
+                            ) : transaction.category}
+                          </td>
+
+                          <td>
+                            {isEditing ? (
+                              <input
+                                type="text"
+                                value={editForm.description}
+                                onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
+                              />
+                            ) : transaction.description}
+                          </td>
+
+                          <td className={!isEditing ? (transaction.type === "income" ? "income-text" : "expense-text") : ""}>
+                            {isEditing ? (
+                              <input type="number" step="0.01" value={editForm.amount} onChange={(e) => setEditForm({ ...editForm, amount: e.target.value })} />
                             ) : (
-                              <>
-                                <button className="edit-button" onClick={() => startEdit(transaction)}>
-                                  Edit
-                                </button>
-                                <button className="delete-button" onClick={() => handleDelete(transaction.id)}>
-                                  Delete
-                                </button>
-                              </>
+                              <>{transaction.type === "income" ? "+" : "-"}${transaction.amount.toFixed(2)}</>
                             )}
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+                          </td>
+
+                          <td>
+                            {isEditing ? (
+                              <input
+                                type="number"
+                                value={editForm.account_id}
+                                onChange={(e) => setEditForm({ ...editForm, account_id: e.target.value })}
+                              />
+                            ) : transaction.account_id || "Unassigned"}
+                          </td>
+
+                          <td>
+                            <div className="transaction-actions-inline">
+                              {isEditing ? (
+                                <>
+                                  <button className="edit-button" onClick={() => saveEdit(transaction.id)}>
+                                    Save
+                                  </button>
+                                  <button className="secondary-button" onClick={cancelEdit}>
+                                    Cancel
+                                  </button>
+                                </>
+                              ) : (
+                                <>
+                                  <button className="edit-button" onClick={() => startEdit(transaction)}>
+                                    Edit
+                                  </button>
+                                  <button className="delete-button" onClick={() => handleDelete(transaction.id)}>
+                                    Delete
+                                  </button>
+                                </>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+
+              {renderTransactionPagination("transaction-pagination-bottom")}
             </div>
           )}
         </div>
