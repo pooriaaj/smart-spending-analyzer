@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import api, { handleApiAuthError } from "../services/api";
 import AccountSelector from "../components/AccountSelector";
@@ -157,7 +157,7 @@ function TransactionsPage() {
     setRecurringOnlyFilter(searchParams.get("section") === "recurring");
   }, [searchParams]);
 
-  const fetchTransactions = async () => {
+  const fetchTransactions = useCallback(async () => {
     try {
       let [transactionsResponse, recurringResponse] = await Promise.all([
         api.get("/transactions/", {
@@ -202,11 +202,11 @@ function TransactionsPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [navigate, normalizedAccountId]);
 
   useEffect(() => {
     fetchTransactions();
-  }, [selectedAccountId]);
+  }, [fetchTransactions]);
 
   const availableMonths = useMemo(() => {
     const months = new Set(

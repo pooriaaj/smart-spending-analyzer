@@ -377,7 +377,10 @@ function AnalyticsPage() {
     };
   }, [themeMode]);
 
-  const rawCategoryBreakdown = dashboardData?.category_breakdown || [];
+  const rawCategoryBreakdown = useMemo(
+    () => dashboardData?.category_breakdown || [],
+    [dashboardData?.category_breakdown]
+  );
 
   const mergedCategoryBreakdown = useMemo(() => {
     return mergeCategoryBreakdown(rawCategoryBreakdown);

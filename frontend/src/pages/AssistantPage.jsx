@@ -8,24 +8,27 @@ import {
   setSelectedAccountId as persistSelectedAccountId,
 } from "../services/accountStorage";
 
+const INITIAL_ASSISTANT_MESSAGE = {
+  role: "assistant",
+  content:
+    "Hi - I'm your financial assistant. Ask me about your balance, spending changes, alerts, recent transactions, categories, or savings.",
+  data: null,
+};
+
+const FALLBACK_QUESTIONS = [
+  "What is my balance?",
+  "What is my top expense category?",
+  "Did my spending increase?",
+  "Show my recent transactions",
+  "Give me saving advice",
+  "Summarize my finances",
+];
+
 function AssistantPage() {
-  const initialAssistantMessage = {
-    role: "assistant",
-    content:
-      "Hi - I'm your financial assistant. Ask me about your balance, spending changes, alerts, recent transactions, categories, or savings.",
-    data: null,
-  };
   const [question, setQuestion] = useState("");
   const [assistantMode, setAssistantMode] = useState("balanced");
   const [selectedAccountId, setSelectedAccountId] = useState(getSelectedAccountId());
-  const [messages, setMessages] = useState([
-    {
-      role: "assistant",
-      content:
-        "Hi — I’m your financial assistant. Ask me about your balance, spending changes, alerts, recent transactions, categories, or savings.",
-      data: null,
-    },
-  ]);
+  const [messages, setMessages] = useState([INITIAL_ASSISTANT_MESSAGE]);
   const [smartSuggestions, setSmartSuggestions] = useState([]);
   const [loading, setLoading] = useState(false);
   const [suggestionsLoading, setSuggestionsLoading] = useState(true);
@@ -35,15 +38,6 @@ function AssistantPage() {
   const didMountScopeRef = useRef(false);
   const normalizedAccountId =
     selectedAccountId === ALL_ACCOUNTS_VALUE ? undefined : Number(selectedAccountId);
-
-  const fallbackQuestions = [
-    "What is my balance?",
-    "What is my top expense category?",
-    "Did my spending increase?",
-    "Show my recent transactions",
-    "Give me saving advice",
-    "Summarize my finances",
-  ];
 
   useEffect(() => {
     const savedMode = localStorage.getItem("assistantMode");
@@ -62,7 +56,7 @@ function AssistantPage() {
       return;
     }
 
-    setMessages([initialAssistantMessage]);
+    setMessages([INITIAL_ASSISTANT_MESSAGE]);
     setQuestion("");
     setError("");
   }, [selectedAccountId]);
@@ -81,7 +75,7 @@ function AssistantPage() {
         console.error("Failed to load assistant suggestions:", error);
 
         if (!handleApiAuthError(error, navigate)) {
-          setSmartSuggestions(fallbackQuestions);
+          setSmartSuggestions(FALLBACK_QUESTIONS);
         }
       } finally {
         setSuggestionsLoading(false);
@@ -252,7 +246,7 @@ function AssistantPage() {
   };
 
   const displayedSuggestions =
-    smartSuggestions.length > 0 ? smartSuggestions : fallbackQuestions;
+    smartSuggestions.length > 0 ? smartSuggestions : FALLBACK_QUESTIONS;
 
   const modeDescription =
     assistantMode === "strict"

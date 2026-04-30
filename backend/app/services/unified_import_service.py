@@ -12,6 +12,8 @@ from app.services.receipt_service import scan_receipt_file
 from app.services.transaction_service import (
     build_statement_match_key,
     build_duplicate_key,
+    describe_likely_statement_match,
+    find_likely_statement_match,
     get_existing_duplicate_keys,
     get_existing_statement_match_map,
     get_repeating_transaction_signal,
@@ -35,6 +37,7 @@ def annotate_preview_rows_for_duplicates(
     existing_statement_matches = get_existing_statement_match_map(db, owner_id, account_id=account_id)
     seen_in_preview: set[tuple] = set()
     seen_statement_matches: set[tuple] = set()
+    seen_matched_transaction_ids: set[int] = set()
     annotated_rows: list[StatementPreviewRow] = []
 
     for row in preview_rows:
@@ -72,6 +75,8 @@ def annotate_preview_rows_for_duplicates(
             )
             continue
 
+        reconciliation_status = "missing"
+
         if duplicate_key in existing_keys:
             duplicate_reason = "Already written in this account."
             matched_transaction = existing_statement_matches.get(statement_match_key)
@@ -82,7 +87,27 @@ def annotate_preview_rows_for_duplicates(
             matched_transaction = None
             duplicate_reason = "Duplicate of another row in this preview."
         else:
-            matched_transaction = None
+            matched_transaction = find_likely_statement_match(
+                db=db,
+                owner_id=owner_id,
+                account_id=account_id,
+                tx_date=tx_date,
+                amount=row.amount,
+                tx_type=row.type,
+            )
+            if matched_transaction and matched_transaction.id not in seen_matched_transaction_ids:
+                duplicate_reason = describe_likely_statement_match(tx_date, matched_transaction)
+            elif matched_transaction:
+                matched_transaction = None
+                duplicate_reason = "Duplicate of another row in this preview."
+            else:
+                matched_transaction = None
+
+        if matched_transaction:
+            seen_matched_transaction_ids.add(matched_transaction.id)
+            reconciliation_status = "matched"
+        elif duplicate_reason == "Already written in this account.":
+            reconciliation_status = "matched"
 
         seen_in_preview.add(duplicate_key)
         seen_statement_matches.add(statement_match_key)
@@ -101,10 +126,9 @@ def annotate_preview_rows_for_duplicates(
                     "is_duplicate": duplicate_reason is not None,
                     "duplicate_reason": duplicate_reason,
                     "matched_transaction_id": matched_transaction.id if matched_transaction else None,
-                    "reconciliation_status": "matched" if matched_transaction else "missing",
+                    "reconciliation_status": reconciliation_status,
                     "reconciliation_reason": duplicate_reason
-                    if matched_transaction
-                    else "Not found in your written transactions yet.",
+                    or "Not found in your written transactions yet.",
                     **(repeating_signal or {}),
                 }
             )

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import {
   CartesianGrid,
@@ -633,7 +633,7 @@ function SimulatorPage() {
       setLinkedComparisonScenarioId(null);
       setComparisonScenarioId(null);
     }
-  }, [searchParams]);
+  }, [activeSavedScenarioId, searchParams]);
 
   useEffect(() => {
     const params = new URLSearchParams();
@@ -700,7 +700,7 @@ function SimulatorPage() {
     return () => observer.disconnect();
   }, []);
 
-  const fetchSavedScenarios = async () => {
+  const fetchSavedScenarios = useCallback(async () => {
     try {
       setSavedScenariosLoading(true);
       setSavedScenarioError("");
@@ -717,13 +717,13 @@ function SimulatorPage() {
     } finally {
       setSavedScenariosLoading(false);
     }
-  };
+  }, [navigate, normalizedAccountId]);
 
   useEffect(() => {
     fetchSavedScenarios();
-  }, [navigate, normalizedAccountId]);
+  }, [fetchSavedScenarios]);
 
-  const fetchRecommendations = async () => {
+  const fetchRecommendations = useCallback(async () => {
     try {
       setRecommendationsLoading(true);
       setRecommendationsError("");
@@ -742,11 +742,11 @@ function SimulatorPage() {
     } finally {
       setRecommendationsLoading(false);
     }
-  };
+  }, [months, navigate, normalizedAccountId]);
 
   useEffect(() => {
     fetchRecommendations();
-  }, [navigate, normalizedAccountId, months]);
+  }, [fetchRecommendations]);
 
   useEffect(() => {
     const fetchRecurringExpenses = async () => {
@@ -1431,14 +1431,14 @@ function SimulatorPage() {
     setComparisonError("");
   };
 
-  const handleClearScenarioComparison = () => {
+  const handleClearScenarioComparison = useCallback(() => {
     setLinkedComparisonScenarioId(null);
     setComparisonScenarioId(null);
     setComparisonData(null);
     setComparisonError("");
-  };
+  }, []);
 
-  const handleLoadSavedScenario = (scenario) => {
+  const handleLoadSavedScenario = useCallback((scenario) => {
     setActiveSavedScenarioId(scenario.id);
     setLinkedSavedScenarioId(scenario.id);
     setSavedScenarioName(scenario.name || "");
@@ -1460,7 +1460,7 @@ function SimulatorPage() {
     setSavedScenarioMessage(`Loaded "${scenario.name}".`);
     setSavedScenarioError("");
     window.scrollTo({ top: 0, behavior: "smooth" });
-  };
+  }, [comparisonScenarioId, handleClearScenarioComparison]);
 
   useEffect(() => {
     if (!linkedSavedScenarioId || savedScenariosLoading || activeSavedScenarioId === linkedSavedScenarioId) {
@@ -1476,6 +1476,7 @@ function SimulatorPage() {
     savedScenariosLoading,
     savedScenarios,
     activeSavedScenarioId,
+    handleLoadSavedScenario,
   ]);
 
   useEffect(() => {

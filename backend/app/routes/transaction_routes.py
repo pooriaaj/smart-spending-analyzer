@@ -27,6 +27,7 @@ from app.services.transaction_service import (
     build_statement_match_key,
     categorize_transaction,
     categorize_transaction_details,
+    find_likely_statement_match,
     get_existing_duplicate_keys,
     get_existing_statement_match_map,
     get_transactions_for_user,
@@ -328,6 +329,7 @@ def confirm_preview_import(
     )
     seen_in_request = set()
     seen_statement_matches = set()
+    seen_matched_transaction_ids = set()
 
     imported = 0
     duplicates_skipped = 0
@@ -362,6 +364,22 @@ def confirm_preview_import(
                 or statement_match_key in existing_statement_matches
                 or statement_match_key in seen_statement_matches
             ):
+                duplicates_skipped += 1
+                continue
+
+            likely_match = find_likely_statement_match(
+                db=db,
+                owner_id=current_user.id,
+                account_id=payload.account_id,
+                tx_date=tx_date,
+                amount=row.amount,
+                tx_type=row.type,
+            )
+            if likely_match and likely_match.id not in seen_matched_transaction_ids:
+                seen_matched_transaction_ids.add(likely_match.id)
+                duplicates_skipped += 1
+                continue
+            if likely_match:
                 duplicates_skipped += 1
                 continue
 

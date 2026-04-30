@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import api, { handleApiAuthError } from "../services/api";
 import AccountSelector from "../components/AccountSelector";
@@ -61,7 +61,7 @@ function BudgetsPage() {
   const normalizedAccountId =
     selectedAccountId === ALL_ACCOUNTS_VALUE ? undefined : Number(selectedAccountId);
 
-  const fetchBudgets = async () => {
+  const fetchBudgets = useCallback(async () => {
     try {
       setLoading(true);
       setError("");
@@ -79,11 +79,11 @@ function BudgetsPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [month, navigate, normalizedAccountId]);
 
   useEffect(() => {
     fetchBudgets();
-  }, [month, normalizedAccountId]);
+  }, [fetchBudgets]);
 
   useEffect(() => {
     const urlMonth = searchParams.get("month");

@@ -605,6 +605,144 @@ class SmartImportRouteTest(unittest.TestCase):
         self.assertEqual(confirm_response.json()["imported"], 0)
         self.assertEqual(confirm_response.json()["duplicates_skipped"], 1)
 
+    def test_statement_reconciliation_likely_matches_nearby_manual_transaction(self) -> None:
+        with self.session_local() as session:
+            session.add(
+                Transaction(
+                    amount=26.4,
+                    category="restaurant",
+                    description="Dinner with friend",
+                    date=date(2025, 1, 4),
+                    type="expense",
+                    owner_id=self.user_id,
+                    account_id=self.account_id,
+                )
+            )
+            session.commit()
+
+        pdf_bytes = build_text_pdf(
+            [
+                "Account Statement",
+                "From January 1, 2025 to January 31, 2025",
+                "06 Jan THAI ISLAND RES $26.40",
+            ]
+        )
+
+        response = self.client.post(
+            "/transactions/import/file",
+            data={"account_id": str(self.account_id)},
+            files={"file": ("posted-date-check.pdf", pdf_bytes, "application/pdf")},
+        )
+
+        self.assertEqual(response.status_code, 200, response.text)
+        preview_row = response.json()["preview_rows"][0]
+        self.assertTrue(preview_row["is_duplicate"])
+        self.assertEqual(preview_row["reconciliation_status"], "matched")
+        self.assertIn("Likely already written as Dinner with friend", preview_row["duplicate_reason"])
+        self.assertIsNotNone(preview_row["matched_transaction_id"])
+
+        confirm_response = self.client.post(
+            "/transactions/import/confirm-preview",
+            json={
+                "account_id": self.account_id,
+                "rows": [preview_row],
+            },
+        )
+
+        self.assertEqual(confirm_response.status_code, 200, confirm_response.text)
+        self.assertEqual(confirm_response.json()["imported"], 0)
+        self.assertEqual(confirm_response.json()["duplicates_skipped"], 1)
+
+    def test_confirm_preview_import_skips_likely_nearby_match_even_without_preview_flag(self) -> None:
+        with self.session_local() as session:
+            session.add(
+                Transaction(
+                    amount=68.15,
+                    category="groceries",
+                    description="Weekend groceries",
+                    date=date(2025, 1, 10),
+                    type="expense",
+                    owner_id=self.user_id,
+                    account_id=self.account_id,
+                )
+            )
+            session.commit()
+
+        confirm_response = self.client.post(
+            "/transactions/import/confirm-preview",
+            json={
+                "account_id": self.account_id,
+                "rows": [
+                    {
+                        "date": "2025-01-12",
+                        "description": "FOOD BASICS",
+                        "amount": 68.15,
+                        "type": "expense",
+                        "category": "groceries",
+                    }
+                ],
+            },
+        )
+
+        self.assertEqual(confirm_response.status_code, 200, confirm_response.text)
+        self.assertEqual(confirm_response.json()["imported"], 0)
+        self.assertEqual(confirm_response.json()["duplicates_skipped"], 1)
+
+        with self.session_local() as session:
+            transaction_count = (
+                session.query(Transaction)
+                .filter(Transaction.owner_id == self.user_id)
+                .count()
+            )
+
+        self.assertEqual(transaction_count, 1)
+
+    def test_statement_reconciliation_does_not_likely_match_ambiguous_nearby_amounts(self) -> None:
+        with self.session_local() as session:
+            session.add_all(
+                [
+                    Transaction(
+                        amount=9.99,
+                        category="cafe",
+                        description="Morning coffee",
+                        date=date(2025, 1, 4),
+                        type="expense",
+                        owner_id=self.user_id,
+                        account_id=self.account_id,
+                    ),
+                    Transaction(
+                        amount=9.99,
+                        category="cafe",
+                        description="Afternoon coffee",
+                        date=date(2025, 1, 5),
+                        type="expense",
+                        owner_id=self.user_id,
+                        account_id=self.account_id,
+                    ),
+                ]
+            )
+            session.commit()
+
+        pdf_bytes = build_text_pdf(
+            [
+                "Account Statement",
+                "From January 1, 2025 to January 31, 2025",
+                "06 Jan COFFEE SHOP $9.99",
+            ]
+        )
+
+        response = self.client.post(
+            "/transactions/import/file",
+            data={"account_id": str(self.account_id)},
+            files={"file": ("ambiguous-nearby-match.pdf", pdf_bytes, "application/pdf")},
+        )
+
+        self.assertEqual(response.status_code, 200, response.text)
+        preview_row = response.json()["preview_rows"][0]
+        self.assertFalse(preview_row["is_duplicate"])
+        self.assertEqual(preview_row["reconciliation_status"], "missing")
+        self.assertIsNone(preview_row["matched_transaction_id"])
+
     def test_statement_preview_flags_repeating_income_and_expense_patterns(self) -> None:
         with self.session_local() as session:
             session.add_all(

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import api, { handleApiAuthError } from "../services/api";
 import AccountSelector from "../components/AccountSelector";
@@ -85,7 +85,7 @@ function DashboardPage() {
   const currentBudgetMonth = new Date().toISOString().slice(0, 7);
   const currentMonthLabel = formatMonthLabel(currentBudgetMonth);
 
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     try {
       const accountsRes = await api.get("/accounts/");
       const loadedAccounts = accountsRes.data || [];
@@ -201,11 +201,11 @@ function DashboardPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [currentBudgetMonth, navigate, selectedAccountId]);
 
   useEffect(() => {
     fetchData();
-  }, [selectedAccountId]);
+  }, [fetchData]);
 
   useEffect(() => {
     if (!accounts.length) {

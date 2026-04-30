@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import api, { handleApiAuthError } from "../services/api";
 import AccountSelector from "../components/AccountSelector";
@@ -42,7 +42,7 @@ function MoneyMapPage() {
   const normalizedAccountId =
     selectedAccountId === ALL_ACCOUNTS_VALUE ? undefined : Number(selectedAccountId);
 
-  const loadMoneyMap = async () => {
+  const loadMoneyMap = useCallback(async () => {
     try {
       setLoading(true);
       setError("");
@@ -59,7 +59,7 @@ function MoneyMapPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [navigate, normalizedAccountId]);
 
   useEffect(() => {
     persistSelectedAccountId(String(selectedAccountId || ALL_ACCOUNTS_VALUE));
@@ -67,7 +67,7 @@ function MoneyMapPage() {
 
   useEffect(() => {
     loadMoneyMap();
-  }, [normalizedAccountId]);
+  }, [loadMoneyMap]);
 
   const topCategoryTotal = useMemo(
     () => (moneyMap?.top_categories || []).reduce((sum, item) => sum + Number(item.total || 0), 0),

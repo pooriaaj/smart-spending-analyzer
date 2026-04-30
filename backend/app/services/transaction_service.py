@@ -4,7 +4,7 @@ import csv
 import io
 import re
 from dataclasses import dataclass
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from typing import Iterable
 
 from sqlalchemy import inspect
@@ -26,6 +26,8 @@ from app.schemas import StatementPreviewRow
 
 SUPPORTED_ENCODINGS = ["utf-8-sig", "utf-8", "cp1252", "latin-1"]
 UNCATEGORIZED_VALUES = {"other", "misc", "uncategorized", "unknown"}
+STATEMENT_RECONCILIATION_DATE_WINDOW_DAYS = 3
+STATEMENT_RECONCILIATION_AMOUNT_TOLERANCE = 0.01
 
 HEADER_ALIASES = {
     "date": {"date", "transaction_date", "posted_date"},
@@ -1174,6 +1176,57 @@ def get_existing_statement_match_map(
         match_map.setdefault(key, transaction)
 
     return match_map
+
+
+def find_likely_statement_match(
+    db: Session,
+    owner_id: int,
+    account_id: int,
+    tx_date: date,
+    amount: float,
+    tx_type: str,
+) -> Transaction | None:
+    """Find one safe near-date match for month-end statement reconciliation.
+
+    Bank posted dates often drift 1-3 days from the day a user manually wrote a
+    transaction. We only auto-match when there is exactly one same-account,
+    same-type, same-amount candidate in the nearby date window.
+    """
+
+    window_start = tx_date - timedelta(days=STATEMENT_RECONCILIATION_DATE_WINDOW_DAYS)
+    window_end = tx_date + timedelta(days=STATEMENT_RECONCILIATION_DATE_WINDOW_DAYS)
+    target_amount = round(abs(float(amount)), 2)
+
+    candidates = (
+        db.query(Transaction)
+        .filter(
+            Transaction.owner_id == owner_id,
+            Transaction.account_id == account_id,
+            Transaction.type == tx_type,
+            Transaction.date >= window_start,
+            Transaction.date <= window_end,
+        )
+        .order_by(Transaction.date.asc(), Transaction.id.asc())
+        .all()
+    )
+
+    amount_matches = [
+        transaction
+        for transaction in candidates
+        if abs(round(abs(float(transaction.amount)), 2) - target_amount)
+        <= STATEMENT_RECONCILIATION_AMOUNT_TOLERANCE
+    ]
+
+    if len(amount_matches) != 1:
+        return None
+
+    return amount_matches[0]
+
+
+def describe_likely_statement_match(statement_date: date, transaction: Transaction) -> str:
+    days_apart = abs((statement_date - transaction.date).days)
+    day_text = "same day" if days_apart == 0 else f"{days_apart} day{'' if days_apart == 1 else 's'} apart"
+    return f"Likely already written as {transaction.description} ({day_text}, same amount)."
 
 
 def import_transactions_from_csv(
