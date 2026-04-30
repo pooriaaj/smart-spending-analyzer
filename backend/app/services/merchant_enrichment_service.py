@@ -16,6 +16,7 @@ from app.services.category_taxonomy import (
     GOOGLE_PLACE_TYPE_CATEGORY_EXPANSION,
     NORTH_AMERICA_LOCATION_STOPWORDS,
     SEMANTIC_CATEGORY_MARKER_EXPANSION,
+    match_merchant_category_override,
     normalize_category_signal_text,
 )
 
@@ -49,7 +50,9 @@ LOOKUP_STOPWORDS |= NORTH_AMERICA_LOCATION_STOPWORDS
 
 SEMANTIC_CATEGORY_MARKERS: dict[str, tuple[str, ...]] = {
     "groceries": (
-        "ambrosia",
+        "ambrosia natural foods",
+        "ambrosia thornh",
+        "ambrosia vaughan",
         "asian grocery",
         "arzon",
         "butcher",
@@ -322,7 +325,7 @@ GOOGLE_PLACE_TYPE_CATEGORY_MAP: dict[str, tuple[str, float]] = {
     "drugstore": ("health", 0.88),
     "fast_food_restaurant": ("restaurant", 0.9),
     "food": ("restaurant", 0.76),
-    "gas_station": ("transport", 0.9),
+    "gas_station": ("gas", 0.9),
     "grocery_store": ("groceries", 0.94),
     "meal_delivery": ("restaurant", 0.88),
     "meal_takeaway": ("restaurant", 0.88),
@@ -516,6 +519,24 @@ def infer_payment_processor_category(description: str) -> MerchantEnrichmentResu
     )
 
 
+def infer_known_merchant_override(description: str) -> MerchantEnrichmentResult | None:
+    matched_override = match_merchant_category_override(description)
+    if not matched_override:
+        return None
+
+    category, confidence, matched_phrase = matched_override
+    return MerchantEnrichmentResult(
+        category=category,
+        confidence=confidence,
+        matched_keyword=matched_phrase,
+        reason=(
+            "Matched a verified merchant override for a known business whose name can be "
+            "misclassified by generic similarity rules."
+        ),
+        source="merchant_override",
+    )
+
+
 def get_cached_merchant_enrichment(
     db: Session,
     merchant_key: str,
@@ -678,6 +699,10 @@ def enrich_merchant_category(
 ) -> MerchantEnrichmentResult | None:
     if tx_type != "expense":
         return None
+
+    known_merchant = infer_known_merchant_override(description)
+    if known_merchant:
+        return known_merchant
 
     processor_only = infer_payment_processor_category(description)
     if processor_only:

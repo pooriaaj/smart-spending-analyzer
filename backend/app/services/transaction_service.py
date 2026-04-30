@@ -16,6 +16,7 @@ from app.services.category_taxonomy import (
     CATEGORY_KEYWORD_EXPANSION,
     MERCHANT_ALIAS_EXPANSION,
     NORTH_AMERICA_LOCATION_STOPWORDS,
+    match_merchant_category_override,
     normalize_category_signal_text,
     strip_location_and_bank_noise_tokens,
 )
@@ -55,7 +56,9 @@ CATEGORY_RULES = {
 }
 
 CATEGORY_RULES["groceries"].extend([
-    "ambrosia",
+    "ambrosia natural foods",
+    "ambrosia thornh",
+    "ambrosia vaughan",
     "arzon",
     "asian grocery",
     "butcher",
@@ -1013,6 +1016,20 @@ def categorize_transaction_details(
             matched_keyword=None,
             reason="Defaulted to income because the transaction type is income and no stronger rule matched.",
             source="fallback",
+        )
+
+    merchant_override = match_merchant_category_override(description)
+    if merchant_override:
+        category, confidence, matched_phrase = merchant_override
+        return CategoryDecision(
+            category=normalize_category_name(category),
+            confidence=confidence,
+            matched_keyword=matched_phrase,
+            reason=(
+                "Matched a verified merchant override for a known business whose name can be "
+                "misclassified by generic similarity rules."
+            ),
+            source="merchant_override",
         )
 
     for category, keywords in CATEGORY_RULES.items():

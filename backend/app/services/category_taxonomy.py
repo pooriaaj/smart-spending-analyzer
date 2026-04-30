@@ -293,6 +293,9 @@ TERM_REPLACEMENTS: tuple[tuple[str, str], ...] = (
 
 MERCHANT_ALIAS_EXPANSION = {
     "abc fine wine": "abc fine wine",
+    "ambrosia natural foods": "ambrosia natural foods",
+    "ambrosia thornh": "ambrosia thornh",
+    "ambrosia vaughan": "ambrosia vaughan",
     "apple com bill": "apple com bill",
     "bcl liquor": "bcl liquor",
     "canna cabana": "canna cabana",
@@ -306,6 +309,23 @@ MERCHANT_ALIAS_EXPANSION = {
     "tokyo smoke": "tokyo smoke",
     "value buds": "value buds",
     "wholefds": "whole foods",
+}
+
+
+MERCHANT_CATEGORY_OVERRIDES: dict[str, tuple[str, float]] = {
+    "ambrosia natural foods": ("groceries", 0.97),
+    "ambrosia thornh": ("groceries", 0.96),
+    "ambrosia vaughan": ("groceries", 0.96),
+    "ambrosia newmarket": ("groceries", 0.96),
+    "ambrosia avenue": ("groceries", 0.96),
+    "ambrosia leslieville": ("groceries", 0.96),
+    "arzon supermarket": ("groceries", 0.94),
+    "food basics": ("groceries", 0.96),
+    "foodbasics": ("groceries", 0.96),
+    "khorak super": ("groceries", 0.94),
+    "khorak supermarket": ("groceries", 0.94),
+    "kourosh super": ("groceries", 0.94),
+    "orange mart": ("groceries", 0.92),
 }
 
 
@@ -740,6 +760,27 @@ def normalize_category_signal_text(value: str) -> str:
     normalized = re.sub(r"[^a-z0-9 ]+", " ", normalized)
     normalized = re.sub(r"\s+", " ", normalized).strip()
     return normalized
+
+
+def phrase_matches_normalized_text(phrase: str, normalized_text: str) -> bool:
+    normalized_phrase = normalize_category_signal_text(phrase)
+    if not normalized_phrase or not normalized_text:
+        return False
+
+    return f" {normalized_phrase} " in f" {normalized_text} "
+
+
+def match_merchant_category_override(description: str) -> tuple[str, float, str] | None:
+    normalized_description = normalize_category_signal_text(description)
+    for phrase, (category, confidence) in sorted(
+        MERCHANT_CATEGORY_OVERRIDES.items(),
+        key=lambda item: len(item[0]),
+        reverse=True,
+    ):
+        if phrase_matches_normalized_text(phrase, normalized_description):
+            return category, confidence, phrase
+
+    return None
 
 
 def strip_location_and_bank_noise_tokens(value: str) -> str:

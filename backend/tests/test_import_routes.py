@@ -241,7 +241,8 @@ class SmartImportRouteTest(unittest.TestCase):
         )
         self.assertTrue(
             all(
-                row["category_source"] in {"rule", "merchant_semantic", "merchant_lookup_cache"}
+                row["category_source"]
+                in {"rule", "merchant_override", "merchant_semantic", "merchant_lookup_cache"}
                 for row in preview_rows
             )
         )
@@ -283,6 +284,34 @@ class SmartImportRouteTest(unittest.TestCase):
         paypal_row = preview_rows[-1]
         self.assertEqual(paypal_row["category_source"], "payment_processor")
         self.assertLess(paypal_row["category_confidence"], 0.7)
+        self.assertEqual(preview_rows[3]["category_source"], "merchant_override")
+
+    def test_ambrosia_food_shop_does_not_pollute_ambrosia_restaurant_names(self) -> None:
+        pdf_bytes = build_text_pdf(
+            [
+                "Royal Bank of Canada",
+                "Details of your account activity",
+                "From March 2, 2026 to April 2, 2026",
+                "Date Description Withdrawals ($) Deposits ($) Balance ($)",
+                "3 Mar Contactless Interac purchase - 2101",
+                "AMBROSIA THORNH 42.40 100.00",
+                "4 Mar Contactless Interac purchase - 2102",
+                "AMBROSIA RESTAURANT NEW YORK NY 28.80 71.20",
+            ]
+        )
+
+        response = self.client.post(
+            "/transactions/import/file",
+            data={"account_id": str(self.account_id)},
+            files={"file": ("ambrosia-accuracy.pdf", pdf_bytes, "application/pdf")},
+        )
+
+        self.assertEqual(response.status_code, 200, response.text)
+        preview_rows = response.json()["preview_rows"]
+
+        self.assertEqual([row["category"] for row in preview_rows], ["groceries", "restaurant"])
+        self.assertEqual(preview_rows[0]["category_source"], "merchant_override")
+        self.assertEqual(preview_rows[1]["category_source"], "rule")
 
     def test_import_file_uses_north_america_merchant_taxonomy(self) -> None:
         pdf_bytes = build_text_pdf(
