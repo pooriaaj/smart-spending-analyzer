@@ -284,6 +284,8 @@ class SmartImportRouteTest(unittest.TestCase):
         paypal_row = preview_rows[-1]
         self.assertEqual(paypal_row["category_source"], "payment_processor")
         self.assertLess(paypal_row["category_confidence"], 0.7)
+        self.assertTrue(paypal_row["category_review_required"])
+        self.assertIn("weak or generic signal", paypal_row["category_review_reason"])
         self.assertEqual(preview_rows[3]["category_source"], "merchant_override")
 
     def test_ambrosia_food_shop_does_not_pollute_ambrosia_restaurant_names(self) -> None:
@@ -481,12 +483,21 @@ class SmartImportRouteTest(unittest.TestCase):
         preview_payload = preview_response.json()
         self.assertEqual(preview_payload["notes"], ["Used generic PDF parser. Accuracy may vary for this bank format."])
         self.assertEqual(len(preview_payload["preview_rows"]), 2)
+        reviewed_rows = [
+            {
+                **row,
+                "category_review_required": False,
+                "category_review_reason": None,
+                "category_source": row.get("category_source") or "user_review",
+            }
+            for row in preview_payload["preview_rows"]
+        ]
 
         confirm_response = self.client.post(
             "/transactions/import/confirm-preview",
             json={
                 "account_id": self.account_id,
-                "rows": preview_payload["preview_rows"],
+                "rows": reviewed_rows,
             },
         )
 
@@ -510,6 +521,79 @@ class SmartImportRouteTest(unittest.TestCase):
         self.assertEqual(transactions[0].type, "expense")
         self.assertEqual(transactions[1].date.isoformat(), "2025-01-02")
         self.assertEqual(transactions[1].type, "income")
+
+    def test_confirm_preview_import_skips_unreviewed_low_confidence_category_rows(self) -> None:
+        confirm_response = self.client.post(
+            "/transactions/import/confirm-preview",
+            json={
+                "account_id": self.account_id,
+                "rows": [
+                    {
+                        "date": "2025-01-03",
+                        "description": "PAYPAL UNKNOWN MERCHANT",
+                        "amount": 22.15,
+                        "type": "expense",
+                        "category": "transfer",
+                        "category_confidence": 0.58,
+                        "category_source": "payment_processor",
+                        "category_review_required": True,
+                        "category_review_reason": "Review this generic processor row before importing.",
+                    }
+                ],
+            },
+        )
+
+        self.assertEqual(confirm_response.status_code, 200, confirm_response.text)
+        payload = confirm_response.json()
+        self.assertEqual(payload["imported"], 0)
+        self.assertEqual(payload["invalid_rows_skipped"], 1)
+
+        with self.session_local() as session:
+            transaction_count = (
+                session.query(Transaction)
+                .filter(Transaction.owner_id == self.user_id)
+                .count()
+            )
+
+        self.assertEqual(transaction_count, 0)
+
+    def test_confirm_preview_import_allows_approved_category_review_rows(self) -> None:
+        confirm_response = self.client.post(
+            "/transactions/import/confirm-preview",
+            json={
+                "account_id": self.account_id,
+                "rows": [
+                    {
+                        "date": "2025-01-03",
+                        "description": "PAYPAL BAGEL NASH",
+                        "amount": 22.15,
+                        "type": "expense",
+                        "category": "restaurant",
+                        "category_confidence": 0.9,
+                        "category_source": "user_review",
+                        "category_review_required": False,
+                    }
+                ],
+            },
+        )
+
+        self.assertEqual(confirm_response.status_code, 200, confirm_response.text)
+        payload = confirm_response.json()
+        self.assertEqual(payload["imported"], 1)
+        self.assertEqual(payload["invalid_rows_skipped"], 0)
+
+        with self.session_local() as session:
+            imported_transaction = (
+                session.query(Transaction)
+                .filter(
+                    Transaction.owner_id == self.user_id,
+                    Transaction.description == "PAYPAL BAGEL NASH",
+                )
+                .one_or_none()
+            )
+
+        self.assertIsNotNone(imported_transaction)
+        self.assertEqual(imported_transaction.category, "restaurant")
 
     def test_import_file_marks_existing_and_in_preview_duplicates(self) -> None:
         with self.session_local() as session:

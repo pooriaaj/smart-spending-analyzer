@@ -341,6 +341,10 @@ def confirm_preview_import(
             tx_date = date.fromisoformat(row.date)
             normalized_category = normalize_category_name(row.category)
 
+            if row.category_review_required:
+                invalid_rows_skipped += 1
+                continue
+
             duplicate_key = build_duplicate_key(
                 owner_id=current_user.id,
                 account_id=payload.account_id,

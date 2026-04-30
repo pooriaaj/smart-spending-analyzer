@@ -636,6 +636,8 @@ class StatementPreviewRow(BaseModel):
     category_confidence: float = 0.0
     category_source: str | None = None
     category_reason: str | None = None
+    category_review_required: bool = False
+    category_review_reason: str | None = None
     is_duplicate: bool = False
     duplicate_reason: str | None = None
     matched_transaction_id: int | None = None

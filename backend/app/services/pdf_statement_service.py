@@ -12,7 +12,10 @@ from sqlalchemy.orm import Session
 
 from app.schemas import StatementPreviewRow
 from app.services.local_ocr_service import is_local_ocr_enabled, run_local_ocr_image
-from app.services.transaction_service import categorize_transaction_details
+from app.services.transaction_service import (
+    build_category_review_metadata,
+    categorize_transaction_details,
+)
 from app.services.vision_ocr_service import (
     build_input_image_part,
     is_vision_ocr_enabled,
@@ -1228,6 +1231,7 @@ def finalize_pending_transaction(
         tx_type=tx_type,
     )
     category = category_decision.category
+    category_review_required, category_review_reason = build_category_review_metadata(category_decision)
 
     source_line = raw_description
     if amount_text_2:
@@ -1248,6 +1252,8 @@ def finalize_pending_transaction(
             category_confidence=category_decision.confidence,
             category_source=category_decision.source,
             category_reason=category_decision.reason,
+            category_review_required=category_review_required,
+            category_review_reason=category_review_reason,
         )
     )
 

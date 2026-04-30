@@ -71,6 +71,8 @@ const buildManualPreviewRow = (fallbackDate) => ({
   type: "expense",
   category: "other",
   source_line: "Added manually during review.",
+  category_review_required: false,
+  category_review_reason: null,
   is_duplicate: false,
   duplicate_reason: null,
 });
@@ -107,6 +109,8 @@ const getPreviewCategoryConfidence = (row) => {
   }
   return Math.max(0, Math.min(confidence, 1));
 };
+
+const isCategoryReviewRequired = (row) => Boolean(row?.category_review_required);
 
 const getFileExtension = (fileName = "") => fileName.split(".").pop()?.toLowerCase() || "";
 
@@ -215,7 +219,9 @@ function ImportPage() {
   const previewRowItems = previewRows.map((row, index) => {
     const confidence = getPreviewRowConfidence(row);
     const categoryConfidence = getPreviewCategoryConfidence(row);
+    const categoryReviewRequired = isCategoryReviewRequired(row);
     const categoryReason =
+      row.category_review_reason ||
       row.category_reason ||
       (categoryConfidence != null && categoryConfidence < 0.75
         ? "Category confidence is low; verify this label before importing."
@@ -233,6 +239,7 @@ function ImportPage() {
       confidence,
       categoryConfidence,
       categoryReason,
+      categoryReviewRequired,
       confidenceReason,
       duplicateReason:
         row.is_duplicate && row.duplicate_reason
@@ -253,8 +260,12 @@ function ImportPage() {
   const matchedPreviewRowCount = previewRowItems.filter(
     (item) => item.row.reconciliation_status === "matched"
   ).length;
-  const missingPreviewRowCount = previewRowItems.filter(
-    ({ duplicateReason, validation }) => !duplicateReason && validation.messages.length === 0
+  const categoryReviewRowCount = previewRowItems.filter(
+    (item) => item.categoryReviewRequired && !item.duplicateReason
+  ).length;
+  const importReadyPreviewRowCount = previewRowItems.filter(
+    ({ duplicateReason, validation, categoryReviewRequired }) =>
+      !duplicateReason && validation.messages.length === 0 && !categoryReviewRequired
   ).length;
   const repeatingPreviewRowCount = previewRowItems.filter(
     (item) => item.row.is_repeating_pattern
@@ -266,15 +277,15 @@ function ImportPage() {
     (row) => row.source_line === "Added manually during review."
   ).length;
   const previewImportDisabled =
-    confirmingPreview || missingPreviewRowCount === 0 || invalidPreviewRowCount > 0;
+    confirmingPreview || importReadyPreviewRowCount === 0 || invalidPreviewRowCount > 0;
   const receiptDraftValidation = validateReceiptDraft(receiptDraft);
   const filteredPreviewRows = previewRowItems.filter(
-    ({ duplicateReason, validation, confidenceReason, row }) => {
+    ({ duplicateReason, validation, confidenceReason, row, categoryReviewRequired }) => {
       if (previewFilter === "missing") {
-        return !duplicateReason && validation.messages.length === 0;
+        return !duplicateReason && validation.messages.length === 0 && !categoryReviewRequired;
       }
       if (previewFilter === "needs_review") {
-        return validation.messages.length > 0;
+        return validation.messages.length > 0 || categoryReviewRequired;
       }
       if (previewFilter === "duplicates") {
         return Boolean(duplicateReason);
@@ -283,7 +294,7 @@ function ImportPage() {
         return Boolean(row.is_repeating_pattern);
       }
       if (previewFilter === "confidence") {
-        return Boolean(confidenceReason);
+        return Boolean(confidenceReason || categoryReviewRequired);
       }
       return true;
     }
@@ -389,6 +400,15 @@ function ImportPage() {
           ? {
               ...row,
               [field]: field === "amount" ? (value === "" ? "" : Number(value)) : value,
+              ...(field === "category"
+                ? {
+                    category_review_required: false,
+                    category_review_reason: null,
+                    category_confidence: 1,
+                    category_source: "user_review",
+                    category_reason: "Reviewed or edited by you during import.",
+                  }
+                : {}),
               is_duplicate: false,
               duplicate_reason: null,
               matched_transaction_id: null,
@@ -401,6 +421,23 @@ function ImportPage() {
               repeating_pattern_average_amount: null,
               repeating_pattern_cadence: null,
               repeating_pattern_confidence: null,
+            }
+          : row
+      )
+    );
+  };
+
+  const handleApprovePreviewCategory = (index) => {
+    setPreviewRows((prev) =>
+      prev.map((row, rowIndex) =>
+        rowIndex === index
+          ? {
+              ...row,
+              category_review_required: false,
+              category_review_reason: null,
+              category_confidence: Math.max(Number(row.category_confidence || 0), 0.9),
+              category_source: row.category_source || "user_review",
+              category_reason: "Reviewed and approved by you during import.",
             }
           : row
       )
@@ -440,7 +477,10 @@ function ImportPage() {
 
   const handleConfirmPreviewImport = async () => {
     const rowsToImport = previewRowItems
-      .filter(({ duplicateReason, validation }) => !duplicateReason && validation.messages.length === 0)
+      .filter(
+        ({ duplicateReason, validation, categoryReviewRequired }) =>
+          !duplicateReason && validation.messages.length === 0 && !categoryReviewRequired
+      )
       .map(({ row }) => row);
 
     if (!normalizedAccountId || rowsToImport.length === 0) return;
@@ -790,8 +830,10 @@ function ImportPage() {
                 <p>
                   {invalidPreviewRowCount > 0
                     ? `${invalidPreviewRowCount} row${invalidPreviewRowCount === 1 ? "" : "s"} still need attention before you can import.`
+                    : categoryReviewRowCount > 0
+                    ? `${categoryReviewRowCount} row${categoryReviewRowCount === 1 ? "" : "s"} need category review. ${importReadyPreviewRowCount} row${importReadyPreviewRowCount === 1 ? "" : "s"} are ready to import.`
                     : matchedPreviewRowCount > 0
-                    ? `${matchedPreviewRowCount} row${matchedPreviewRowCount === 1 ? "" : "s"} already match your written transactions. ${missingPreviewRowCount} missing row${missingPreviewRowCount === 1 ? "" : "s"} can be imported if needed.`
+                    ? `${matchedPreviewRowCount} row${matchedPreviewRowCount === 1 ? "" : "s"} already match your written transactions. ${importReadyPreviewRowCount} row${importReadyPreviewRowCount === 1 ? "" : "s"} are ready to import if needed.`
                     : repeatingPreviewRowCount > 0
                     ? `${repeatingPreviewRowCount} row${repeatingPreviewRowCount === 1 ? "" : "s"} look repetitive based on your written history.`
                     : confidencePreviewRowCount > 0
@@ -813,7 +855,7 @@ function ImportPage() {
                 >
                   {confirmingPreview
                     ? "Importing..."
-                    : `Import Missing Rows (${missingPreviewRowCount})`}
+                    : `Import Ready Rows (${importReadyPreviewRowCount})`}
                 </button>
                 <button
                   type="button"
@@ -860,12 +902,16 @@ function ImportPage() {
 
             <div className="import-preview-stats-grid">
               <div className="import-preview-stat-card">
-                <span className="import-preview-stat-label">Missing</span>
-                <strong>{missingPreviewRowCount}</strong>
+                <span className="import-preview-stat-label">Ready</span>
+                <strong>{importReadyPreviewRowCount}</strong>
               </div>
               <div className="import-preview-stat-card">
                 <span className="import-preview-stat-label">Needs Review</span>
-                <strong>{invalidPreviewRowCount}</strong>
+                <strong>{invalidPreviewRowCount + categoryReviewRowCount}</strong>
+              </div>
+              <div className="import-preview-stat-card">
+                <span className="import-preview-stat-label">Category Review</span>
+                <strong>{categoryReviewRowCount}</strong>
               </div>
               <div className="import-preview-stat-card">
                 <span className="import-preview-stat-label">Already Written</span>
@@ -902,14 +948,14 @@ function ImportPage() {
                 className={`import-filter-chip ${previewFilter === "missing" ? "import-filter-chip-active" : ""}`}
                 onClick={() => setPreviewFilter("missing")}
               >
-                Missing ({missingPreviewRowCount})
+                Ready ({importReadyPreviewRowCount})
               </button>
               <button
                 type="button"
                 className={`import-filter-chip ${previewFilter === "needs_review" ? "import-filter-chip-active" : ""}`}
                 onClick={() => setPreviewFilter("needs_review")}
               >
-                Needs Review ({invalidPreviewRowCount})
+                Needs Review ({invalidPreviewRowCount + categoryReviewRowCount})
               </button>
               <button
                 type="button"
@@ -957,10 +1003,10 @@ function ImportPage() {
             {confidencePreviewRowCount > 0 && (
               <div className="import-confidence-box">
                 <strong>
-                  {confidencePreviewRowCount} parser confidence check{confidencePreviewRowCount === 1 ? "" : "s"}
+                  {confidencePreviewRowCount} confidence check{confidencePreviewRowCount === 1 ? "" : "s"}
                 </strong>
                 <p>
-                  These rows are still importable, but the parser is telling us to verify the amount or income/expense direction before saving.
+                  These rows need a quick review before they become import-ready. Edit the category, or approve it when the current label is correct.
                 </p>
               </div>
             )}
@@ -999,6 +1045,7 @@ function ImportPage() {
                         confidence,
                         categoryConfidence,
                         categoryReason,
+                        categoryReviewRequired,
                         confidenceReason,
                       }) => {
                         return (
@@ -1092,6 +1139,16 @@ function ImportPage() {
                               >
                                 Remove
                               </button>
+                              {categoryReviewRequired && validation.messages.length === 0 && !duplicateReason && (
+                                <button
+                                  type="button"
+                                  className="import-remove-row-button"
+                                  onClick={() => handleApprovePreviewCategory(index)}
+                                  disabled={confirmingPreview}
+                                >
+                                  Approve Category
+                                </button>
+                              )}
                               {row.source_line === "Added manually during review." && (
                                 <span className="import-row-status import-row-status-manual">Manual row</span>
                               )}
@@ -1101,7 +1158,9 @@ function ImportPage() {
                                 </span>
                               )}
                               {confidenceReason && (
-                                <span className="import-row-status import-row-status-confidence">Check parser</span>
+                                <span className="import-row-status import-row-status-confidence">
+                                  {categoryReviewRequired ? "Review category" : "Check parser"}
+                                </span>
                               )}
                               {row.is_repeating_pattern && (
                                 <span className="import-row-status import-row-status-confidence">
@@ -1163,7 +1222,7 @@ function ImportPage() {
                 onClick={handleConfirmPreviewImport}
                 disabled={previewImportDisabled}
               >
-                {confirmingPreview ? "Importing..." : "Import Missing Rows"}
+                {confirmingPreview ? "Importing..." : "Import Ready Rows"}
               </button>
             </div>
 

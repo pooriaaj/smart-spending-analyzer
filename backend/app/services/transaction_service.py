@@ -28,6 +28,8 @@ SUPPORTED_ENCODINGS = ["utf-8-sig", "utf-8", "cp1252", "latin-1"]
 UNCATEGORIZED_VALUES = {"other", "misc", "uncategorized", "unknown"}
 STATEMENT_RECONCILIATION_DATE_WINDOW_DAYS = 3
 STATEMENT_RECONCILIATION_AMOUNT_TOLERANCE = 0.01
+CATEGORY_REVIEW_CONFIDENCE_THRESHOLD = 0.75
+CATEGORY_REVIEW_REQUIRED_SOURCES = {"fallback", "payment_processor"}
 
 HEADER_ALIASES = {
     "date": {"date", "transaction_date", "posted_date"},
@@ -376,6 +378,35 @@ class CategoryDecision:
     matched_keyword: str | None
     reason: str
     source: str
+
+
+def build_category_review_metadata(decision: CategoryDecision) -> tuple[bool, str | None]:
+    category = normalize_category_name(decision.category)
+    if category in UNCATEGORIZED_VALUES:
+        return (
+            True,
+            "No reliable category was found. Choose the real category before importing this row.",
+        )
+
+    if decision.source in CATEGORY_REVIEW_REQUIRED_SOURCES:
+        return (
+            True,
+            (
+                "This category came from a weak or generic signal. Review the merchant and approve "
+                "or edit the category before importing."
+            ),
+        )
+
+    if float(decision.confidence or 0) < CATEGORY_REVIEW_CONFIDENCE_THRESHOLD:
+        return (
+            True,
+            (
+                f"Category confidence is below {int(CATEGORY_REVIEW_CONFIDENCE_THRESHOLD * 100)}%. "
+                "Review or edit the category before importing."
+            ),
+        )
+
+    return False, None
 
 
 def decode_file_bytes(file_bytes: bytes) -> str:
@@ -1337,6 +1368,8 @@ def parse_csv_statement_preview(
                 category_confidence = 1.0
                 category_source = "statement"
                 category_reason = "Used the category supplied by the statement file."
+                category_review_required = False
+                category_review_reason = None
             else:
                 decision = categorize_transaction_details(
                     db=db,
@@ -1348,6 +1381,7 @@ def parse_csv_statement_preview(
                 category_confidence = decision.confidence
                 category_source = decision.source
                 category_reason = decision.reason
+                category_review_required, category_review_reason = build_category_review_metadata(decision)
 
             if not description or not category:
                 raise ValueError("Description and category are required.")
@@ -1365,6 +1399,8 @@ def parse_csv_statement_preview(
                     category_confidence=category_confidence,
                     category_source=category_source,
                     category_reason=category_reason,
+                    category_review_required=category_review_required,
+                    category_review_reason=category_review_reason,
                 )
             )
         except Exception:
