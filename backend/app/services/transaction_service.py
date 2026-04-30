@@ -30,6 +30,7 @@ STATEMENT_RECONCILIATION_DATE_WINDOW_DAYS = 3
 STATEMENT_RECONCILIATION_AMOUNT_TOLERANCE = 0.01
 CATEGORY_REVIEW_CONFIDENCE_THRESHOLD = 0.75
 CATEGORY_REVIEW_REQUIRED_SOURCES = {"fallback", "payment_processor"}
+EXPENSE_INCOMPATIBLE_CATEGORIES = {"income", "salary", "refund"}
 
 HEADER_ALIASES = {
     "date": {"date", "transaction_date", "posted_date"},
@@ -460,6 +461,41 @@ def normalize_type(value: str) -> str:
     raise ValueError(f"Invalid transaction type: {value}")
 
 
+def strip_statement_header_noise(value: str) -> str:
+    cleaned = re.sub(r"\s+", " ", value.strip())
+    cleaned = re.sub(
+        r"(?i)^from\s+.+?\s+to\s+.+?\s+date\s+description\s*withdrawals\s*\(\$?\)\s*"
+        r"deposits\s*\(\$?\)\s*balance\s*\(\$?\)\s*",
+        "",
+        cleaned,
+    )
+    cleaned = re.sub(
+        r"(?i)^date\s+description\s*withdrawals\s*\(\$?\)\s*deposits\s*\(\$?\)\s*balance\s*\(\$?\)\s*",
+        "",
+        cleaned,
+    )
+    return re.sub(r"\s+", " ", cleaned).strip(" -|")
+
+
+def strip_statement_transaction_prefixes(value: str) -> str:
+    cleaned = value.strip()
+    replacements = (
+        (r"(?i)^contactless\s+interac\s+purchase\s*-\s*\d+\s+", ""),
+        (r"(?i)^interac\s+purchase\s*-\s*\d+\s+", ""),
+        (
+            r"(?i)^contactless\s+interac\s+transit\s*-\s*\d+\s+(?:pres/[a-z0-9]+)?\s*",
+            "Transit",
+        ),
+        (r"(?i)^online\s+banking\s+payment\s*-\s*\d+\s+", ""),
+        (r"(?i)^atm\s+deposit\s*-\s*[a-z0-9]+\s*", "ATM deposit"),
+    )
+
+    for pattern, replacement in replacements:
+        cleaned = re.sub(pattern, replacement, cleaned).strip()
+
+    return re.sub(r"\s+", " ", cleaned).strip(" -|")
+
+
 def normalize_category_name(value: str | None) -> str:
     if not value:
         return "other"
@@ -792,6 +828,8 @@ def infer_type_and_amount(row: dict, header_mapping: dict[str, str]) -> tuple[st
 
 def normalize_description(value: str) -> str:
     text = re.sub(r"\s+", " ", value.strip())
+    text = strip_statement_header_noise(text)
+    text = strip_statement_transaction_prefixes(text)
     text = re.sub(r"\bpos\b|\bpurchase\b|\bpayment\b|\bdebit\b|\bcredit\b", "", text, flags=re.IGNORECASE)
     text = re.sub(r"\s+", " ", text).strip(" -")
     return text or value.strip()
@@ -1124,6 +1162,28 @@ def categorize_transaction(db: Session, owner_id: int, description: str, tx_type
     ).category
 
 
+def resolve_import_category_for_transaction(
+    db: Session,
+    owner_id: int,
+    description: str,
+    tx_type: str,
+    category: str | None,
+) -> str:
+    normalized_category = normalize_category_name(category)
+    if tx_type == "expense" and normalized_category in EXPENSE_INCOMPATIBLE_CATEGORIES:
+        decision = categorize_transaction_details(
+            db=db,
+            owner_id=owner_id,
+            description=description,
+            tx_type=tx_type,
+        )
+        if decision.category not in EXPENSE_INCOMPATIBLE_CATEGORIES:
+            return decision.category
+        return "other"
+
+    return normalized_category
+
+
 def build_duplicate_key(
     owner_id: int,
     account_id: int,
@@ -1286,7 +1346,13 @@ def import_transactions_from_csv(
             tx_type, amount = infer_type_and_amount(row, header_mapping)
 
             if header_mapping.get("category") and row.get(header_mapping["category"]):
-                category = normalize_category_name(row[header_mapping["category"]])
+                category = resolve_import_category_for_transaction(
+                    db=db,
+                    owner_id=owner_id,
+                    description=description,
+                    tx_type=tx_type,
+                    category=row[header_mapping["category"]],
+                )
             else:
                 category = categorize_transaction(db, owner_id, description, tx_type)
 
@@ -1364,10 +1430,24 @@ def parse_csv_statement_preview(
             tx_type, amount = infer_type_and_amount(row, header_mapping)
 
             if header_mapping.get("category") and row.get(header_mapping["category"]):
-                category = normalize_category_name(row[header_mapping["category"]])
-                category_confidence = 1.0
-                category_source = "statement"
-                category_reason = "Used the category supplied by the statement file."
+                supplied_category = normalize_category_name(row[header_mapping["category"]])
+                category = resolve_import_category_for_transaction(
+                    db=db,
+                    owner_id=owner_id,
+                    description=description,
+                    tx_type=tx_type,
+                    category=supplied_category,
+                )
+                if category != supplied_category:
+                    category_confidence = 0.88
+                    category_source = "rule"
+                    category_reason = (
+                        "Corrected a statement category that conflicted with the transaction direction."
+                    )
+                else:
+                    category_confidence = 1.0
+                    category_source = "statement"
+                    category_reason = "Used the category supplied by the statement file."
                 category_review_required = False
                 category_review_reason = None
             else:

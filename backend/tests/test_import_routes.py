@@ -522,6 +522,40 @@ class SmartImportRouteTest(unittest.TestCase):
         self.assertEqual(transactions[1].date.isoformat(), "2025-01-02")
         self.assertEqual(transactions[1].type, "income")
 
+    def test_confirm_preview_import_repairs_header_polluted_expense_category(self) -> None:
+        confirm_response = self.client.post(
+            "/transactions/import/confirm-preview",
+            json={
+                "account_id": self.account_id,
+                "rows": [
+                    {
+                        "date": "2026-03-26",
+                        "description": (
+                            "From March 2, 2026 to April 2, 2026 Date DescriptionWithdrawals ($) "
+                            "Deposits ($) Balance ($) Contactless Interac purchase - 2653 ORANGE MART"
+                        ),
+                        "amount": 10.99,
+                        "type": "expense",
+                        "category": "income",
+                    }
+                ],
+            },
+        )
+
+        self.assertEqual(confirm_response.status_code, 200, confirm_response.text)
+        self.assertEqual(confirm_response.json()["imported"], 1)
+
+        with self.session_local() as session:
+            transaction = (
+                session.query(Transaction)
+                .filter(Transaction.owner_id == self.user_id)
+                .one()
+            )
+
+        self.assertEqual(transaction.description, "ORANGE MART")
+        self.assertEqual(transaction.type, "expense")
+        self.assertEqual(transaction.category, "groceries")
+
     def test_confirm_preview_import_skips_unreviewed_low_confidence_category_rows(self) -> None:
         confirm_response = self.client.post(
             "/transactions/import/confirm-preview",

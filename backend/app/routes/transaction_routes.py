@@ -34,6 +34,8 @@ from app.services.transaction_service import (
     get_uncategorized_candidates,
     normalize_category_name,
     normalize_existing_categories_for_user,
+    normalize_description,
+    resolve_import_category_for_transaction,
     save_category_memory,
 )
 from app.services.unified_import_service import FREE_BATCH_IMPORT_FILE_LIMIT, process_smart_import, process_smart_import_batch
@@ -339,7 +341,14 @@ def confirm_preview_import(
     for row in payload.rows:
         try:
             tx_date = date.fromisoformat(row.date)
-            normalized_category = normalize_category_name(row.category)
+            description = normalize_description(row.description)
+            normalized_category = resolve_import_category_for_transaction(
+                db=db,
+                owner_id=current_user.id,
+                description=description,
+                tx_type=row.type,
+                category=row.category,
+            )
 
             if row.category_review_required:
                 invalid_rows_skipped += 1
@@ -349,7 +358,7 @@ def confirm_preview_import(
                 owner_id=current_user.id,
                 account_id=payload.account_id,
                 tx_date=tx_date,
-                description=row.description,
+                description=description,
                 amount=row.amount,
                 tx_type=row.type,
                 category=normalized_category,
@@ -393,7 +402,7 @@ def confirm_preview_import(
             transaction = Transaction(
                 amount=row.amount,
                 category=normalized_category,
-                description=row.description,
+                description=description,
                 date=tx_date,
                 type=row.type,
                 owner_id=current_user.id,
@@ -402,7 +411,7 @@ def confirm_preview_import(
             db.add(transaction)
             category_memory_events.append(
                 {
-                    "description": row.description,
+                    "description": description,
                     "category": normalized_category,
                     "tx_type": row.type,
                     "amount": row.amount,
