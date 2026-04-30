@@ -284,6 +284,56 @@ class SmartImportRouteTest(unittest.TestCase):
         self.assertEqual(paypal_row["category_source"], "payment_processor")
         self.assertLess(paypal_row["category_confidence"], 0.7)
 
+    def test_import_file_uses_north_america_merchant_taxonomy(self) -> None:
+        pdf_bytes = build_text_pdf(
+            [
+                "Royal Bank of Canada",
+                "Details of your account activity",
+                "From March 2, 2026 to April 2, 2026",
+                "Date Description Withdrawals ($) Deposits ($) Balance ($)",
+                "3 Mar Contactless Interac purchase - 3001",
+                "PUBLIX #221 MIAMI FL 42.50 200.00",
+                "4 Mar Contactless Interac purchase - 3002",
+                "WALGREENS 1234 NEW YORK NY 16.20 183.80",
+                "5 Mar Contactless Interac purchase - 3003",
+                "SHEETZ FUEL PITTSBURGH PA 51.12 132.68",
+                "6 Mar Contactless Interac purchase - 3004",
+                "TOKYO SMOKE TORONTO ON 19.99 112.69",
+                "7 Mar Contactless Interac purchase - 3005",
+                "SAQ MONTREAL QC 28.40 84.29",
+                "8 Mar Contactless Interac purchase - 3006",
+                "PARAMOUNT PLUS CA 11.29 73.00",
+                "9 Mar Contactless Interac purchase - 3007",
+                "IN-N-OUT BURGER LOS ANGELES CA 13.45 59.55",
+                "10 Mar Preauthorized Payment",
+                "HYDRO QUEBEC MONTREAL QC 66.20 6.65",
+            ]
+        )
+
+        response = self.client.post(
+            "/transactions/import/file",
+            data={"account_id": str(self.account_id)},
+            files={"file": ("north-america-taxonomy.pdf", pdf_bytes, "application/pdf")},
+        )
+
+        self.assertEqual(response.status_code, 200, response.text)
+        preview_rows = response.json()["preview_rows"]
+
+        self.assertEqual(
+            [row["category"] for row in preview_rows],
+            [
+                "groceries",
+                "health",
+                "gas",
+                "smoking",
+                "alcohol",
+                "subscriptions",
+                "restaurant",
+                "utilities",
+            ],
+        )
+        self.assertTrue(all(row["category_source"] == "rule" for row in preview_rows))
+
     def test_batch_statement_import_accepts_up_to_six_files(self) -> None:
         csv_one = (
             "Date,Description,Amount,Type,Category\n"

@@ -12,6 +12,12 @@ from sqlalchemy import inspect
 from sqlalchemy.orm import Session
 
 from app.models import MerchantLookupCache
+from app.services.category_taxonomy import (
+    GOOGLE_PLACE_TYPE_CATEGORY_EXPANSION,
+    NORTH_AMERICA_LOCATION_STOPWORDS,
+    SEMANTIC_CATEGORY_MARKER_EXPANSION,
+    normalize_category_signal_text,
+)
 
 
 GOOGLE_PLACES_TEXT_SEARCH_URL = "https://places.googleapis.com/v1/places:searchText"
@@ -39,6 +45,7 @@ LOOKUP_STOPWORDS = {
     "transaction",
     "visa",
 }
+LOOKUP_STOPWORDS |= NORTH_AMERICA_LOCATION_STOPWORDS
 
 SEMANTIC_CATEGORY_MARKERS: dict[str, tuple[str, ...]] = {
     "groceries": (
@@ -407,6 +414,11 @@ GOOGLE_PLACE_TYPE_CATEGORY_MAP.update(
         "winery": ("alcohol", 0.9),
     }
 )
+GOOGLE_PLACE_TYPE_CATEGORY_MAP.update(GOOGLE_PLACE_TYPE_CATEGORY_EXPANSION)
+
+for expanded_category, expanded_markers in SEMANTIC_CATEGORY_MARKER_EXPANSION.items():
+    existing_markers = SEMANTIC_CATEGORY_MARKERS.get(expanded_category, ())
+    SEMANTIC_CATEGORY_MARKERS[expanded_category] = (*existing_markers, *expanded_markers)
 
 
 @dataclass(frozen=True)
@@ -430,16 +442,9 @@ def title_case_merchant(value: str) -> str:
 
 
 def normalize_merchant_lookup_query(description: str) -> str | None:
-    value = description.lower()
-    value = value.replace("&", " and ")
+    value = normalize_category_signal_text(description)
     value = re.sub(r"\bpaypal\s*[*#:-]?\s*", " ", value)
     value = re.sub(r"\b(?:misc(?:ellaneous)?\s+)?payment\b", " ", value)
-    value = re.sub(r"\bsupermar\w*\b", "supermarket", value)
-    value = re.sub(r"\bsuper\s*$", "supermarket", value)
-    value = re.sub(r"\bres\b", "restaurant", value)
-    value = re.sub(r"\brest\b", "restaurant", value)
-    value = re.sub(r"[^a-z0-9 ]+", " ", value)
-    value = re.sub(r"\b\d+[a-z]*\b", " ", value)
     value = re.sub(r"\s+", " ", value).strip()
 
     if not value:
@@ -457,13 +462,22 @@ def normalize_merchant_lookup_query(description: str) -> str | None:
     return query[:160] or None
 
 
+def semantic_marker_matches_query(marker: str, query: str) -> bool:
+    normalized_marker = normalize_category_signal_text(marker)
+    normalized_query = normalize_category_signal_text(query)
+    if not normalized_marker or not normalized_query:
+        return False
+
+    return f" {normalized_marker} " in f" {normalized_query} "
+
+
 def infer_semantic_category(query: str) -> MerchantEnrichmentResult | None:
     padded_query = f" {query.lower()} "
 
     for category, markers in SEMANTIC_CATEGORY_MARKERS.items():
         for marker in markers:
             padded_marker = f" {marker.lower()} "
-            if padded_marker in padded_query or marker.lower() in query.lower():
+            if padded_marker in padded_query or semantic_marker_matches_query(marker, query):
                 confidence = 0.84
                 if marker in {"grocery", "grocer", "supermarket", "restaurant", "thai"}:
                     confidence = 0.88

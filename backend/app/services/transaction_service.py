@@ -11,6 +11,14 @@ from sqlalchemy import inspect
 from sqlalchemy.orm import Session
 
 from app.models import CategoryMemory, MerchantCategoryProfile, Transaction
+from app.services.category_taxonomy import (
+    CATEGORY_ALIAS_EXPANSION,
+    CATEGORY_KEYWORD_EXPANSION,
+    MERCHANT_ALIAS_EXPANSION,
+    NORTH_AMERICA_LOCATION_STOPWORDS,
+    normalize_category_signal_text,
+    strip_location_and_bank_noise_tokens,
+)
 from app.services.merchant_enrichment_service import enrich_merchant_category
 from app.schemas import StatementPreviewRow
 
@@ -168,6 +176,9 @@ CATEGORY_RULES["utilities"].extend(["metergy", "ez-pay", "ez pay"])
 CATEGORY_RULES["utilities"].extend(["alectra", "enbridge", "toronto hydro"])
 CATEGORY_RULES["phone"].extend(["bell mobility", "koodo", "phone bill"])
 CATEGORY_RULES["internet"].extend(["teksavvy", "internet provider"])
+for expanded_category, expanded_keywords in CATEGORY_KEYWORD_EXPANSION.items():
+    CATEGORY_RULES.setdefault(expanded_category, [])
+    CATEGORY_RULES[expanded_category].extend(expanded_keywords)
 
 CATEGORY_ALIASES = {
     "grocery": "groceries",
@@ -237,6 +248,7 @@ CATEGORY_ALIASES = {
     "subscriptions": "subscriptions",
     "subscription": "subscriptions",
 }
+CATEGORY_ALIASES.update(CATEGORY_ALIAS_EXPANSION)
 
 CATEGORY_MEMORY_STOPWORDS = {
     "account",
@@ -298,6 +310,7 @@ MERCHANT_PROFILE_STOPWORDS = CATEGORY_MEMORY_STOPWORDS | {
     "toronto",
     "vancouver",
 }
+MERCHANT_PROFILE_STOPWORDS |= NORTH_AMERICA_LOCATION_STOPWORDS
 
 MERCHANT_PHRASE_ALIASES = {
     "ambrosia": "ambrosia",
@@ -322,6 +335,7 @@ MERCHANT_PHRASE_ALIASES = {
     "moksha cannabis": "moksha cannabis",
     "the ups store": "the ups store",
 }
+MERCHANT_PHRASE_ALIASES.update(MERCHANT_ALIAS_EXPANSION)
 
 AMBIGUOUS_PRIMARY_MERCHANTS = {"apple", "google", "amazon", "bell", "rogers", "td", "rbc"}
 REPEATING_DESCRIPTION_STOPWORDS = MERCHANT_PROFILE_STOPWORDS - {
@@ -427,6 +441,24 @@ def should_store_category_memory(category: str | None) -> bool:
     return normalized not in UNCATEGORIZED_VALUES
 
 
+def keyword_matches_description(keyword: str, normalized_description: str, raw_description: str = "") -> bool:
+    normalized_keyword = normalize_category_signal_text(keyword)
+    if not normalized_keyword:
+        return False
+
+    padded_description = f" {normalized_description} "
+    padded_keyword = f" {normalized_keyword} "
+    if padded_keyword in padded_description:
+        return True
+
+    if raw_description:
+        raw_keyword = keyword.lower().strip()
+        if raw_keyword:
+            return re.search(rf"(?<![a-z0-9]){re.escape(raw_keyword)}(?![a-z0-9])", raw_description) is not None
+
+    return False
+
+
 def derive_category_memory_keywords(description: str) -> list[str]:
     normalized_description = normalize_description(description).lower()
     normalized_description = re.sub(r"[^a-z0-9& ]+", " ", normalized_description)
@@ -468,10 +500,7 @@ def title_case_merchant_key(value: str) -> str:
 
 
 def extract_merchant_fingerprint(description: str) -> tuple[str, str] | None:
-    normalized_description = normalize_description(description).lower()
-    normalized_description = normalized_description.replace("&", " and ")
-    normalized_description = re.sub(r"[^a-z0-9 ]+", " ", normalized_description)
-    normalized_description = re.sub(r"\s+", " ", normalized_description).strip()
+    normalized_description = strip_location_and_bank_noise_tokens(normalize_description(description))
 
     if not normalized_description:
         return None
@@ -948,11 +977,12 @@ def categorize_transaction_details(
             source="memory",
         )
 
-    lowered = description.lower()
+    lowered = normalize_category_signal_text(description)
+    raw_lowered = description.lower()
 
     if tx_type == "income":
         for keyword in CATEGORY_RULES["salary"]:
-            if keyword in lowered:
+            if keyword_matches_description(keyword, lowered, raw_lowered):
                 return CategoryDecision(
                     category="salary",
                     confidence=0.94,
@@ -961,7 +991,7 @@ def categorize_transaction_details(
                     source="rule",
                 )
         for keyword in ("e-transfer received", "atm deposit", "deposit", "interest"):
-            if keyword in lowered:
+            if keyword_matches_description(keyword, lowered, raw_lowered):
                 return CategoryDecision(
                     category="income",
                     confidence=0.86,
@@ -969,7 +999,7 @@ def categorize_transaction_details(
                     reason="Matched a general income/deposit rule in the transaction description.",
                     source="rule",
                 )
-        if "refund" in lowered:
+        if "refund" in lowered or "refund" in raw_lowered:
             return CategoryDecision(
                 category="refund",
                 confidence=0.9,
@@ -989,7 +1019,7 @@ def categorize_transaction_details(
         if category == "salary":
             continue
         for keyword in keywords:
-            if keyword in lowered:
+            if keyword_matches_description(keyword, lowered, raw_lowered):
                 return CategoryDecision(
                     category=normalize_category_name(category),
                     confidence=0.88,
