@@ -48,6 +48,19 @@ const cleanRecurringDisplayName = (value = "") => {
 
 const TRANSACTIONS_PER_PAGE = 12;
 
+const AMOUNT_RANGE_OPTIONS = [
+  { value: "0-10", label: "$0-$10", min: 0, max: 10 },
+  { value: "10-50", label: "$10-$50", min: 10, max: 50 },
+  { value: "50-100", label: "$50-$100", min: 50, max: 100 },
+  { value: "100-200", label: "$100-$200", min: 100, max: 200 },
+  { value: "200-500", label: "$200-$500", min: 200, max: 500 },
+  { value: "500-1000", label: "$500-$1,000", min: 500, max: 1000 },
+  { value: "1000-2500", label: "$1,000-$2,500", min: 1000, max: 2500 },
+  { value: "2500-5000", label: "$2,500-$5,000", min: 2500, max: 5000 },
+  { value: "5000-10000", label: "$5,000-$10,000", min: 5000, max: 10000 },
+  { value: "10000-plus", label: "Over $10,000", min: 10000, max: null, minExclusive: true },
+];
+
 const buildPaginationItems = (currentPage, totalPages) => {
   if (totalPages <= 7) {
     return Array.from({ length: totalPages }, (_, index) => index + 1);
@@ -90,6 +103,7 @@ function TransactionsPage() {
   const [monthFilter, setMonthFilter] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("");
   const [searchFilter, setSearchFilter] = useState("");
+  const [amountRangeFilter, setAmountRangeFilter] = useState("");
   const [recurringOnlyFilter, setRecurringOnlyFilter] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [selectedAccountId, setSelectedAccountId] = useState(getSelectedAccountId());
@@ -139,6 +153,7 @@ function TransactionsPage() {
     setMonthFilter(searchParams.get("month") || "");
     setCategoryFilter(searchParams.get("category") || "");
     setSearchFilter(searchParams.get("description") || "");
+    setAmountRangeFilter(searchParams.get("amountRange") || "");
     setRecurringOnlyFilter(searchParams.get("section") === "recurring");
   }, [searchParams]);
 
@@ -222,10 +237,23 @@ function TransactionsPage() {
         const recurringDescription = normalizeRecurringDescription(transaction.description);
         const normalizedSearch = normalizeTextForMatching(searchFilter);
         const recurringSearch = normalizeRecurringDescription(searchFilter);
+        const selectedAmountRange = AMOUNT_RANGE_OPTIONS.find(
+          (option) => option.value === amountRangeFilter
+        );
+        const absoluteAmount = Math.abs(Number(transaction.amount || 0));
 
         if (typeFilter && transaction.type !== typeFilter) return false;
         if (monthFilter && transactionMonth !== monthFilter) return false;
         if (categoryFilter && transaction.category !== categoryFilter) return false;
+        if (selectedAmountRange) {
+          const belowMinimum = selectedAmountRange.minExclusive
+            ? absoluteAmount <= selectedAmountRange.min
+            : absoluteAmount < selectedAmountRange.min;
+          const atOrAboveMaximum =
+            selectedAmountRange.max != null && absoluteAmount >= selectedAmountRange.max;
+
+          if (belowMinimum || atOrAboveMaximum) return false;
+        }
         if (
           searchFilter &&
           !normalizedDescription.includes(normalizedSearch) &&
@@ -244,6 +272,7 @@ function TransactionsPage() {
     monthFilter,
     categoryFilter,
     searchFilter,
+    amountRangeFilter,
     recurringOnlyFilter,
     recurringDescriptionKeys,
   ]);
@@ -271,6 +300,7 @@ function TransactionsPage() {
     monthFilter,
     categoryFilter,
     searchFilter,
+    amountRangeFilter,
     recurringOnlyFilter,
     selectedAccountId,
   ]);
@@ -293,6 +323,7 @@ function TransactionsPage() {
     setMonthFilter("");
     setCategoryFilter("");
     setSearchFilter("");
+    setAmountRangeFilter("");
     setRecurringOnlyFilter(false);
     setCurrentPage(1);
   };
@@ -848,6 +879,21 @@ function TransactionsPage() {
             </div>
 
             <div>
+              <label>Amount Range</label>
+              <select
+                value={amountRangeFilter}
+                onChange={(e) => setAmountRangeFilter(e.target.value)}
+              >
+                <option value="">All amounts</option>
+                {AMOUNT_RANGE_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
               <label>Description</label>
               <input
                 type="text"
@@ -867,7 +913,12 @@ function TransactionsPage() {
               {recurringOnlyFilter ? "Showing Recurring Matches" : "Only Recurring Matches"}
             </button>
 
-            {(typeFilter || monthFilter || categoryFilter || searchFilter || recurringOnlyFilter) && (
+            {(typeFilter ||
+              monthFilter ||
+              categoryFilter ||
+              amountRangeFilter ||
+              searchFilter ||
+              recurringOnlyFilter) && (
               <button type="button" className="secondary-button" onClick={clearFilters}>
                 Clear Filters
               </button>
