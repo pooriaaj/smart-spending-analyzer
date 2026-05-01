@@ -3,6 +3,7 @@ from __future__ import annotations
 import io
 import os
 import re
+import unicodedata
 from dataclasses import dataclass
 from datetime import date, datetime
 from typing import Any
@@ -23,22 +24,32 @@ from app.services.vision_ocr_service import (
 )
 
 
+MONTH_WORD_PATTERN = r"[^\W\d_]{3,12}\.?"
 DAY_MONTH_DATE_START_REGEX = re.compile(
-    r"^(?P<day>\d{1,2})\s+(?P<mon>[A-Za-z]{3,9})(?:,\s*|\s+)?(?:(?P<year>\d{2,4})\s+)?(?P<rest>.*)$"
+    rf"^(?P<day>\d{{1,2}})\s+(?P<mon>{MONTH_WORD_PATTERN})(?:,\s*|\s+)?(?:(?P<year>\d{{2,4}})\s+)?(?P<rest>.*)$",
+    flags=re.IGNORECASE,
 )
 MONTH_DAY_DATE_START_REGEX = re.compile(
-    r"^(?P<mon>[A-Za-z]{3,9})\s+(?P<day>\d{1,2})(?:,\s*|\s+)?(?:(?P<year>\d{2,4})\s+)?(?P<rest>.*)$"
+    rf"^(?P<mon>{MONTH_WORD_PATTERN})\s+(?P<day>\d{{1,2}})(?:,\s*|\s+)?(?:(?P<year>\d{{2,4}})\s+)?(?P<rest>.*)$",
+    flags=re.IGNORECASE,
 )
 NUMERIC_DATE_START_REGEX = re.compile(
     r"^(?P<n1>\d{1,2})[/-](?P<n2>\d{1,2})(?:[/-](?P<year>\d{2,4}))?\s+(?P<rest>.*)$"
 )
+AMOUNT_TOKEN_PATTERN = (
+    r"\(?[+-]?\$?(?:(?:\d{1,3}(?:[ ,\.]\d{3})+)|\d+)[,.]\d{2}\)?(?:cr|dr)?"
+    r"|\$?(?:(?:\d{1,3}(?:[ ,\.]\d{3})+)|\d+)[,.]\d{2}-"
+)
 TRAILING_AMOUNT_TOKEN_REGEX = re.compile(
-    r"(?i)(?:\(?[+-]?\$?\d[\d,]*\.\d{2}\)?(?:cr|dr)?|\$?\d[\d,]*\.\d{2}-)$"
+    rf"(?i)(?:{AMOUNT_TOKEN_PATTERN})$"
+)
+TRAILING_AMOUNT_CAPTURE_REGEX = re.compile(
+    rf"(?i)(?<![\d,.-])(?P<amount>{AMOUNT_TOKEN_PATTERN}|[-â€“â€”]+)\s*$"
 )
 PLACEHOLDER_AMOUNT_TOKEN_REGEX = re.compile(r"^[-–—]+$")
 WORD_STATEMENT_RANGE_REGEX = re.compile(
-    r"From\s+(?P<m1>[A-Za-z]+)\s+(?P<d1>\d{1,2}),\s+(?P<y1>\d{4})\s+to\s+"
-    r"(?P<m2>[A-Za-z]+)\s+(?P<d2>\d{1,2}),\s+(?P<y2>\d{4})",
+    rf"From\s+(?P<m1>{MONTH_WORD_PATTERN})\s+(?P<d1>\d{{1,2}}),\s+(?P<y1>\d{{4}})\s+to\s+"
+    rf"(?P<m2>{MONTH_WORD_PATTERN})\s+(?P<d2>\d{{1,2}}),\s+(?P<y2>\d{{4}})",
     flags=re.IGNORECASE,
 )
 NUMERIC_STATEMENT_RANGE_REGEX = re.compile(
@@ -47,31 +58,89 @@ NUMERIC_STATEMENT_RANGE_REGEX = re.compile(
     r"(?P<end>\d{1,2}[/-]\d{1,2}[/-]\d{2,4})",
     flags=re.IGNORECASE,
 )
+FRENCH_STATEMENT_END_DATE_REGEX = re.compile(
+    rf"periode\s+terminee\s+le\s+(?P<day>\d{{1,2}})\s+(?P<mon>{MONTH_WORD_PATTERN})\s+(?P<year>\d{{4}})",
+    flags=re.IGNORECASE,
+)
 MONTH_MAP = {
     "jan": 1,
+    "janv": 1,
+    "janvier": 1,
     "january": 1,
     "feb": 2,
+    "fev": 2,
+    "fevr": 2,
+    "fevrier": 2,
     "february": 2,
     "mar": 3,
+    "mars": 3,
     "march": 3,
     "apr": 4,
+    "avr": 4,
+    "avril": 4,
     "april": 4,
     "may": 5,
+    "mai": 5,
     "jun": 6,
+    "juin": 6,
     "june": 6,
     "jul": 7,
+    "juil": 7,
+    "juillet": 7,
     "july": 7,
     "aug": 8,
+    "aout": 8,
     "august": 8,
     "sep": 9,
     "sept": 9,
+    "septembre": 9,
     "september": 9,
     "oct": 10,
+    "octobre": 10,
     "october": 10,
     "nov": 11,
+    "novembre": 11,
     "november": 11,
     "dec": 12,
+    "decembre": 12,
     "december": 12,
+}
+PDF_TEXT_ESCAPE_REPLACEMENTS = {
+    "/20": " ",
+    "/21": "!",
+    "/22": '"',
+    "/23": "#",
+    "/24": "$",
+    "/25": "%",
+    "/26": "&",
+    "/27": "'",
+    "/28": "(",
+    "/29": ")",
+    "/2a": "*",
+    "/2b": "+",
+    "/2c": ",",
+    "/2d": "-",
+    "/2e": ".",
+    "/2f": "/",
+    "/3a": ":",
+    "/3b": ";",
+    "/3c": "<",
+    "/3d": "=",
+    "/3e": ">",
+    "/3f": "?",
+    "/e0": "\u00e0",
+    "/e2": "\u00e2",
+    "/e7": "\u00e7",
+    "/e8": "\u00e8",
+    "/e9": "\u00e9",
+    "/ea": "\u00ea",
+    "/eb": "\u00eb",
+    "/ee": "\u00ee",
+    "/ef": "\u00ef",
+    "/f4": "\u00f4",
+    "/f9": "\u00f9",
+    "/fb": "\u00fb",
+    "/fc": "\u00fc",
 }
 GENERIC_NOISE_PREFIXES = (
     "important information about your account",
@@ -96,6 +165,20 @@ GENERIC_NOISE_PREFIXES = (
     "stay informed",
     "please check this account statement",
     "time to pay",
+    "adresse de votre succursale",
+    "banque de montreal",
+    "bmo banque de montreal",
+    "compte de cheques",
+    "date description",
+    "montants ajoutes",
+    "montants deduits",
+    "periode terminee",
+    "releve de services bancaires courants",
+    "services bancaires courants",
+    "sommaire de votre compte",
+    "titulaire du compte",
+    "voici les mouvements",
+    "vous pouvez nous joindre",
 )
 GENERIC_BALANCE_MARKERS = (
     "opening balance",
@@ -104,6 +187,12 @@ GENERIC_BALANCE_MARKERS = (
     "balance carried forward",
     "daily closing balance",
     "total account balance",
+    "solde d'ouverture",
+    "solde de fermeture",
+    "solde de cloture",
+    "solde total",
+    "solde des montants",
+    "totaux a la fermeture",
 )
 HEADER_ONLY_WORDS = {
     "account",
@@ -130,6 +219,11 @@ HEADER_ONLY_WORDS = {
     "transactions",
     "withdrawal",
     "withdrawals",
+    "ajoutes",
+    "compte",
+    "deduits",
+    "montants",
+    "solde",
 }
 
 
@@ -200,6 +294,30 @@ STATEMENT_PROFILES = (
         ),
         extra_balance_markers=("opening balance", "closing balance"),
     ),
+    StatementProfile(
+        profile_id="bmo_french",
+        display_name="BMO French",
+        detection_markers=("banque de montreal", "montants deduits", "montants ajoutes"),
+        extra_noise_prefixes=(
+            "bmo banque de montreal",
+            "releve de services bancaires courants",
+            "services bancaires courants",
+            "adresse de votre succursale",
+            "periode terminee",
+            "sommaire de votre compte",
+            "compte de cheques",
+            "voici les mouvements",
+            "date description",
+            "montants deduits",
+            "montants ajoutes",
+        ),
+        extra_balance_markers=(
+            "solde d'ouverture",
+            "solde de fermeture",
+            "solde de cloture",
+        ),
+        match_all_markers=True,
+    ),
 )
 GENERIC_STATEMENT_PROFILE = StatementProfile(
     profile_id="generic",
@@ -229,6 +347,47 @@ class PdfOcrFallbackResult:
     processed_pages: int = 0
 
 
+def strip_accents(value: str) -> str:
+    return "".join(
+        char
+        for char in unicodedata.normalize("NFKD", value)
+        if not unicodedata.combining(char)
+    )
+
+
+def normalize_month_token(value: str) -> str:
+    return strip_accents(value.strip().lower().rstrip("."))
+
+
+def looks_like_pypdf_slash_escaped_text(text: str) -> bool:
+    if re.search(r"/e[0-9a-f]", text, flags=re.IGNORECASE):
+        return True
+
+    if re.search(r"(?:/\d){2,}", text):
+        return True
+
+    punctuation_escape_count = len(re.findall(r"/(?:2[a-f]|3[a-f])", text, flags=re.IGNORECASE))
+    return punctuation_escape_count >= 3
+
+
+def normalize_extracted_pdf_text(text: str) -> str:
+    """Decode common pypdf slash escapes seen in some Canadian bank PDFs."""
+    if not text:
+        return ""
+
+    if not looks_like_pypdf_slash_escaped_text(text):
+        return text.replace("\xa0", " ")
+
+    normalized = text
+    for escaped, replacement in PDF_TEXT_ESCAPE_REPLACEMENTS.items():
+        normalized = normalized.replace(escaped, replacement)
+        normalized = normalized.replace(escaped.upper(), replacement)
+
+    normalized = re.sub(r"/(?=\d)", "", normalized)
+    normalized = normalized.replace("\xa0", " ")
+    return normalized
+
+
 def get_pdf_ocr_render_dpi() -> int:
     raw_value = os.getenv("PDF_OCR_RENDER_DPI")
     if not raw_value:
@@ -250,12 +409,12 @@ def extract_pdf_text_result(file_bytes: bytes) -> PdfTextExtractionResult:
     page_texts: list[str] = []
 
     for page in reader.pages:
-        page_text = page.extract_text() or ""
+        page_text = normalize_extracted_pdf_text(page.extract_text() or "")
         normalized_page_text = page_text.strip()
         page_texts.append(normalized_page_text)
-        if page_text.strip():
+        if normalized_page_text:
             readable_text_pages += 1
-            text_parts.append(page_text)
+            text_parts.append(normalized_page_text)
 
     return PdfTextExtractionResult(
         text="\n".join(text_parts).strip(),
@@ -601,6 +760,16 @@ def extract_statement_period(text: str) -> tuple[date | None, date | None]:
         )
         return start_date, end_date
 
+    accentless_text = strip_accents(text)
+    french_end_match = FRENCH_STATEMENT_END_DATE_REGEX.search(accentless_text)
+    if french_end_match:
+        end_date = normalize_statement_date(
+            french_end_match.group("day"),
+            french_end_match.group("mon"),
+            int(french_end_match.group("year")),
+        )
+        return None, end_date
+
     numeric_match = NUMERIC_STATEMENT_RANGE_REGEX.search(text)
     if not numeric_match:
         return None, None
@@ -639,13 +808,13 @@ def extract_statement_year(text: str) -> int:
 
 def extract_statement_year_range(text: str) -> tuple[int | None, int | None]:
     start_date, end_date = extract_statement_period(text)
-    if not start_date or not end_date:
+    if not start_date and not end_date:
         return None, None
-    return start_date.year, end_date.year
+    return (start_date.year if start_date else None), (end_date.year if end_date else None)
 
 
 def normalize_statement_date(day: str, mon: str, year: int) -> date | None:
-    month_num = MONTH_MAP.get(mon.strip().lower())
+    month_num = MONTH_MAP.get(normalize_month_token(mon))
     if not month_num:
         return None
 
@@ -681,6 +850,30 @@ def clean_statement_description(value: str) -> str:
             r"(?i)^atm\s+deposit\s*-\s*[a-z0-9]+\s*",
             "ATM deposit",
         ),
+        (
+            r"(?i)^achat\s+par\s+carte\s+de\s+d(?:\u00e8|\u00e9|e)bit,\s*",
+            "",
+        ),
+        (
+            r"(?i)^d(?:\u00e8|\u00e9|e)p(?:\u00f4|o)t\s+direct,\s*",
+            "Direct deposit ",
+        ),
+        (
+            r"(?i)^virement\s+interac\s+re(?:\u00e7|c)u\s*",
+            "Interac received ",
+        ),
+        (
+            r"(?i)^virement\s+interac\s+envoy(?:\u00e8|\u00e9|e)\s*",
+            "Interac sent ",
+        ),
+        (
+            r"(?i)^r(?:\u00e8|e)gl\.\s+de\s+fact\.\s+en\s+ligne,?\s*(?:\d+\s*)?",
+            "Online bill payment ",
+        ),
+        (
+            r"(?i)^virement\s+en\s+ligne,\s*tf\s+\d+\s*",
+            "Online transfer ",
+        ),
     )
 
     for pattern, replacement in replacements:
@@ -702,7 +895,7 @@ def statement_has_no_activity(text: str) -> bool:
 
 
 def detect_statement_profile(text: str) -> StatementProfile:
-    lowered = text.lower()
+    lowered = strip_accents(text.lower())
 
     for profile in STATEMENT_PROFILES:
         if profile.match_all_markers:
@@ -717,14 +910,14 @@ def detect_statement_profile(text: str) -> StatementProfile:
 
 
 def looks_like_column_header_line(line: str) -> bool:
-    words = re.findall(r"[a-z]+", line.lower())
+    words = re.findall(r"[a-z]+", strip_accents(line.lower()))
     if not 2 <= len(words) <= 10:
         return False
     return all(word in HEADER_ONLY_WORDS for word in words)
 
 
 def is_noise_line(line: str, extra_noise_prefixes: tuple[str, ...] = ()) -> bool:
-    lowered = line.lower().strip()
+    lowered = strip_accents(line.lower().strip())
 
     if not lowered:
         return True
@@ -780,7 +973,7 @@ def is_statement_disclosure_description(description: str) -> bool:
 
 
 def is_income_description(description: str) -> bool:
-    lowered = description.lower()
+    lowered = strip_accents(description.lower())
 
     if any(marker in lowered for marker in ("purchase interest", "interest charged")):
         return False
@@ -796,20 +989,28 @@ def is_income_description(description: str) -> bool:
         "interest",
         "income tax refund",
         "direct deposit",
+        "depot direct",
+        "interac recu",
+        "virement interac recu",
+        "recu",
     ]
 
     return any(marker in lowered for marker in income_markers)
 
 
 def is_expense_description(description: str) -> bool:
-    lowered = description.lower()
+    lowered = strip_accents(description.lower())
     expense_markers = [
         "purchase interest",
         "interest charged",
         "purchase",
         "pos",
         "debit",
+        "achat par carte",
+        "achat par carte de debit",
         "bill payment",
+        "regl. de fact. en ligne",
+        "reglement de facture",
         "withdrawal",
         "fee",
         "service charge",
@@ -817,6 +1018,8 @@ def is_expense_description(description: str) -> bool:
         "subscription",
         "payment sent",
         "e-transfer sent",
+        "interac envoye",
+        "virement interac envoye",
         "cheque",
         "insurance",
         "investment",
@@ -824,6 +1027,7 @@ def is_expense_description(description: str) -> bool:
         "monthly fee",
         "online banking payment",
         "online banking transfer",
+        "virement en ligne",
         "transit",
         "presto",
     ]
@@ -831,7 +1035,7 @@ def is_expense_description(description: str) -> bool:
 
 
 def looks_like_balance_only_line(line: str, extra_balance_markers: tuple[str, ...] = ()) -> bool:
-    lowered = line.lower()
+    lowered = strip_accents(line.lower())
     balance_markers = GENERIC_BALANCE_MARKERS + tuple(extra_balance_markers)
     return any(marker in lowered for marker in balance_markers)
 
@@ -859,7 +1063,7 @@ def infer_amount_token_type(value: str) -> str | None:
 
 def parse_amount_token(value: str) -> float | None:
     direction = infer_amount_token_type(value)
-    cleaned = value.strip().replace("$", "").replace(",", "")
+    cleaned = value.strip().replace("$", "").replace("\xa0", " ")
     if not cleaned:
         return None
 
@@ -871,6 +1075,21 @@ def parse_amount_token(value: str) -> float | None:
 
     if cleaned.startswith("(") and cleaned.endswith(")"):
         cleaned = f"-{cleaned[1:-1]}"
+
+    cleaned = cleaned.replace(" ", "")
+    last_dot_index = cleaned.rfind(".")
+    last_comma_index = cleaned.rfind(",")
+    if last_dot_index >= 0 and last_comma_index >= 0:
+        decimal_separator = "." if last_dot_index > last_comma_index else ","
+    elif last_comma_index >= 0:
+        decimal_separator = ","
+    else:
+        decimal_separator = "."
+
+    if decimal_separator == ",":
+        cleaned = cleaned.replace(".", "").replace(",", ".")
+    else:
+        cleaned = cleaned.replace(",", "")
 
     try:
         parsed = float(cleaned)
@@ -885,18 +1104,22 @@ def parse_amount_token(value: str) -> float | None:
 
 
 def split_line_and_trailing_amounts(line: str) -> tuple[str, list[str]]:
-    tokens = line.split()
+    body = line.strip()
     trailing_amounts_reversed: list[str] = []
 
-    for token in reversed(tokens):
-        if TRAILING_AMOUNT_TOKEN_REGEX.fullmatch(token) or is_placeholder_amount_token(token):
-            trailing_amounts_reversed.append(token)
-        else:
+    while body:
+        match = TRAILING_AMOUNT_CAPTURE_REGEX.search(body)
+        if not match:
             break
 
+        token = match.group("amount").strip()
+        if not token:
+            break
+
+        trailing_amounts_reversed.append(token)
+        body = body[: match.start()].rstrip()
+
     trailing_amounts = list(reversed(trailing_amounts_reversed))
-    body_token_count = len(tokens) - len(trailing_amounts)
-    body = " ".join(tokens[:body_token_count]).strip()
     return body, trailing_amounts
 
 
@@ -1027,12 +1250,19 @@ def extract_transaction_date_from_line(
     start_date: date | None = None,
     end_date: date | None = None,
 ) -> tuple[date, str] | None:
+    line = re.sub(
+        rf"^(\d{{1,2}})\s+er\s+(?={MONTH_WORD_PATTERN}\b)",
+        r"\1 ",
+        line,
+        flags=re.IGNORECASE,
+    )
+
     for regex in (DAY_MONTH_DATE_START_REGEX, MONTH_DAY_DATE_START_REGEX):
         match = regex.match(line)
         if not match:
             continue
 
-        month_num = MONTH_MAP.get(match.group("mon").strip().lower())
+        month_num = MONTH_MAP.get(normalize_month_token(match.group("mon")))
         if not month_num:
             continue
 
@@ -1203,6 +1433,9 @@ def finalize_pending_transaction(
     if not raw_description:
         return
 
+    if looks_like_balance_only_line(raw_description):
+        return
+
     description = clean_statement_description(raw_description)
     if is_statement_disclosure_description(description):
         return
@@ -1266,6 +1499,7 @@ def parse_rbc_statement_preview(
     additional_notes: list[str] | None = None,
     empty_result_message: str | None = None,
 ) -> dict[str, Any]:
+    text = normalize_extracted_pdf_text(text)
     statement_start_date, statement_end_date = extract_statement_period(text)
     profile = profile or detect_statement_profile(text)
     statement_start_year, statement_end_year = extract_statement_year_range(text)
@@ -1363,7 +1597,7 @@ def parse_pdf_statement_preview(
     file_bytes: bytes,
 ) -> dict[str, Any]:
     extraction_result = extract_pdf_text_result(file_bytes)
-    text = extraction_result.text
+    text = normalize_extracted_pdf_text(extraction_result.text)
     image_candidates: list[PdfPageImageCandidate] = []
     ocr_result = PdfOcrFallbackResult()
 

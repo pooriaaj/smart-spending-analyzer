@@ -16,6 +16,8 @@ class PdfStatementServiceHelpersTest(unittest.TestCase):
         self.assertAlmostEqual(service.parse_amount_token("$1,500.00CR") or 0.0, 1500.00)
         self.assertAlmostEqual(service.parse_amount_token("$15.99DR") or 0.0, -15.99)
         self.assertAlmostEqual(service.parse_amount_token("12.34-") or 0.0, -12.34)
+        self.assertAlmostEqual(service.parse_amount_token("1 320,00") or 0.0, 1320.00)
+        self.assertAlmostEqual(service.parse_amount_token("6,21") or 0.0, 6.21)
 
     def test_split_line_and_trailing_amounts_extracts_multiple_tokens(self) -> None:
         body, trailing_amounts = service.split_line_and_trailing_amounts(
@@ -24,6 +26,21 @@ class PdfStatementServiceHelpersTest(unittest.TestCase):
 
         self.assertEqual(body, "GROCERY STORE TORONTO")
         self.assertEqual(trailing_amounts, ["$45.67", "$1,234.56"])
+
+    def test_split_line_and_trailing_amounts_handles_comma_decimal_balance_layout(self) -> None:
+        body, trailing_amounts = service.split_line_and_trailing_amounts(
+            "Achat par carte de d\u00e8bit, MCDONALD'S #400 6,21 260,05"
+        )
+
+        self.assertEqual(body, "Achat par carte de d\u00e8bit, MCDONALD'S #400")
+        self.assertEqual(trailing_amounts, ["6,21", "260,05"])
+
+    def test_normalize_extracted_pdf_text_decodes_french_statement_escapes(self) -> None:
+        text = service.normalize_extracted_pdf_text(
+            "/1/3 Avril /2/0/2/6 Achat par carte de d/e8bit/2c MCDONALD/27S /6/2c/2/1"
+        )
+
+        self.assertEqual(text, "13 Avril 2026 Achat par carte de d\u00e8bit, MCDONALD'S 6,21")
 
     def test_resolve_trailing_amount_columns_handles_debit_credit_balance_layout(self) -> None:
         amount_text, balance_text, explicit_type = service.resolve_trailing_amount_columns(
@@ -336,6 +353,52 @@ Jan 02 PAYROLL DEPOSIT $1,500.00
         )
         self.assertEqual(len(result["preview_rows"]), 1)
         self.assertEqual(result["preview_rows"][0].date, "2025-01-02")
+
+    def test_parse_pdf_statement_preview_supports_bmo_french_rows(self) -> None:
+        text = """
+BMO Banque de Montr/e8al
+Relev/e8 de Services bancaires courants
+P/e8riode termin/e8e le /1/3 Avril /2/0/2/6
+Montants d/e8duits Montants ajout/e8s
+Date Description de votre compte /28$/29 /e0 votre compte /28$/29 Solde /28$/29
+/1/6 Mars Achat par carte de d/e8bit/2c MCDONALD/27S #/4/0/0 /6/2c/2/1 /2/6/0/2c/0/5
+/1/7 Mars Virement INTERAC re/e7u /3/6/2/2c/0/0 /5/1/0/2c/8/2
+/0/1 er Avr R/e8gl/2e de fact/2e en ligne/2c HAZELVIEW PROP /1 /3/8/8/2c/0/0 /1/5/2c/8/4
+/1/3 Avr Totaux /e0 la fermeture /7 /1/5/4/2c/9/4 /6 /6/9/3/2c/5/2
+        """.strip()
+
+        with (
+            patch.object(
+                service,
+                "extract_pdf_text_result",
+                return_value=self.extraction_result(text),
+            ),
+            patch.object(service, "categorize_transaction_details", side_effect=self.categorize),
+        ):
+            result = service.parse_pdf_statement_preview(
+                db=self.db,
+                owner_id=123,
+                file_bytes=b"fake-pdf",
+            )
+
+        self.assertEqual(
+            result["notes"],
+            [
+                "Detected bank profile: BMO French. Using generic parser with bank-aware noise filtering; review carefully."
+            ],
+        )
+        preview_rows = result["preview_rows"]
+        self.assertEqual(len(preview_rows), 3)
+        self.assertEqual(preview_rows[0].date, "2026-03-16")
+        self.assertEqual(preview_rows[0].description, "MCDONALD'S #400")
+        self.assertEqual(preview_rows[0].amount, 6.21)
+        self.assertEqual(preview_rows[0].type, "expense")
+        self.assertEqual(preview_rows[1].date, "2026-03-17")
+        self.assertEqual(preview_rows[1].type, "income")
+        self.assertEqual(preview_rows[1].amount, 362.00)
+        self.assertEqual(preview_rows[2].date, "2026-04-01")
+        self.assertEqual(preview_rows[2].description, "Online bill payment HAZELVIEW PROP")
+        self.assertEqual(preview_rows[2].amount, 1388.00)
 
     def test_parse_pdf_statement_preview_supports_transaction_and_posted_dates(self) -> None:
         text = """
