@@ -2,9 +2,11 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import api, { handleApiAuthError } from "../services/api";
 import { setSelectedAccountId } from "../services/accountStorage";
+import { useLanguage } from "../i18n/LanguageContext";
 
 function AccountsPage() {
   const navigate = useNavigate();
+  const { t } = useLanguage();
   const [accounts, setAccounts] = useState([]);
   const [name, setName] = useState("");
   const [type, setType] = useState("chequing");
@@ -43,7 +45,7 @@ function AccountsPage() {
       await fetchAccounts();
     } catch (error) {
       if (!handleApiAuthError(error, navigate)) {
-        setError(error?.response?.data?.detail || "Failed to create account.");
+        setError(error?.response?.data?.detail || t("accounts.createFailed"));
       }
     }
   };
@@ -54,7 +56,7 @@ function AccountsPage() {
       await fetchAccounts();
     } catch (error) {
       if (!handleApiAuthError(error, navigate)) {
-        setError(error?.response?.data?.detail || "Failed to delete account.");
+        setError(error?.response?.data?.detail || t("accounts.deleteFailed"));
       }
     }
   };
@@ -69,45 +71,43 @@ function AccountsPage() {
       <div className="dashboard-wrapper">
         <div className="dashboard-hero">
           <div>
-            <p className="eyebrow-text">Smart Spending Analyzer</p>
-            <h1>Accounts</h1>
-            <p className="hero-subtitle">
-              Create separate accounts and switch between combined and account-specific views.
-            </p>
+            <p className="eyebrow-text">{t("common.appName")}</p>
+            <h1>{t("common.accounts")}</h1>
+            <p className="hero-subtitle">{t("headers.accountsSubtitle")}</p>
           </div>
 
           <div className="header-actions">
             <button className="secondary-button" onClick={() => navigate("/dashboard")}>
-              Back to Dashboard
+              {t("common.backToDashboard")}
             </button>
           </div>
         </div>
 
         <div className="dashboard-card large-card">
           <div className="section-header">
-            <h2>Create Account</h2>
-            <p>Add a new financial account for tracking.</p>
+            <h2>{t("accounts.createAccount")}</h2>
+            <p>{t("accounts.createAccountDetail")}</p>
           </div>
 
           <form className="transaction-form" onSubmit={handleCreate}>
             <input
               type="text"
-              placeholder="Account name"
+              placeholder={t("accounts.accountName")}
               value={name}
               onChange={(e) => setName(e.target.value)}
               required
             />
 
             <select value={type} onChange={(e) => setType(e.target.value)}>
-              <option value="chequing">Chequing</option>
-              <option value="savings">Savings</option>
-              <option value="credit_card">Credit Card</option>
-              <option value="cash">Cash</option>
-              <option value="business">Business</option>
-              <option value="other">Other</option>
+              <option value="chequing">{t("accounts.chequing")}</option>
+              <option value="savings">{t("accounts.savings")}</option>
+              <option value="credit_card">{t("accounts.creditCard")}</option>
+              <option value="cash">{t("accounts.cash")}</option>
+              <option value="business">{t("accounts.business")}</option>
+              <option value="other">{t("accounts.other")}</option>
             </select>
 
-            <button type="submit">Create Account</button>
+            <button type="submit">{t("accounts.createAccount")}</button>
           </form>
 
           {error && <p className="error-text">{error}</p>}
@@ -115,11 +115,11 @@ function AccountsPage() {
 
         <div className="dashboard-card">
           <div className="section-header">
-            <h2>Your Accounts</h2>
+            <h2>{t("accounts.yourAccounts")}</h2>
           </div>
 
           {accounts.length === 0 ? (
-            <div className="empty-state"><p>No accounts found.</p></div>
+            <div className="empty-state"><p>{t("accounts.noAccounts")}</p></div>
           ) : (
             <div className="account-summary-list">
               {accounts.map((account) => (
@@ -135,28 +135,28 @@ function AccountsPage() {
                         className="secondary-button"
                         onClick={() => handleReviewAccount(account.id)}
                       >
-                        Review
+                        {t("accounts.review")}
                       </button>
                       <button
                         className="delete-button"
                         onClick={() => handleDelete(account.id)}
                       >
-                        Delete
+                        {t("accounts.delete")}
                       </button>
                     </div>
                   </div>
 
                   <div className="account-summary-metrics">
                     <div>
-                      <span>Income</span>
+                      <span>{t("common.income")}</span>
                       <strong>${Number(account.total_income || 0).toFixed(2)}</strong>
                     </div>
                     <div>
-                      <span>Expenses</span>
+                      <span>{t("common.expenses")}</span>
                       <strong>${Number(account.total_expenses || 0).toFixed(2)}</strong>
                     </div>
                     <div>
-                      <span>Balance</span>
+                      <span>{t("common.balance")}</span>
                       <strong>${Number(account.balance || 0).toFixed(2)}</strong>
                     </div>
                   </div>

@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useLanguage } from "../i18n/LanguageContext";
 
 function PasswordField({
   label,
@@ -10,6 +11,9 @@ function PasswordField({
   required = false,
 }) {
   const [showPassword, setShowPassword] = useState(false);
+  const { isFrench } = useLanguage();
+  const showText = isFrench ? "Afficher" : "Show";
+  const hideText = isFrench ? "Masquer" : "Hide";
 
   return (
     <div className="auth-field">
@@ -31,10 +35,10 @@ function PasswordField({
           type="button"
           className="password-toggle-button"
           onClick={() => setShowPassword((prev) => !prev)}
-          aria-label={showPassword ? `Hide ${label}` : `Show ${label}`}
+          aria-label={`${showPassword ? hideText : showText} ${label}`}
           aria-pressed={showPassword}
         >
-          {showPassword ? "Hide" : "Show"}
+          {showPassword ? hideText : showText}
         </button>
       </div>
     </div>

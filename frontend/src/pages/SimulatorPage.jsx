@@ -11,6 +11,7 @@ import {
 } from "recharts";
 import api, { handleApiAuthError } from "../services/api";
 import AccountSelector from "../components/AccountSelector";
+import { useLanguage } from "../i18n/LanguageContext";
 import {
   ALL_ACCOUNTS_VALUE,
   getSelectedAccountId,
@@ -500,6 +501,7 @@ function buildScenarioCheckpoints(simulationData) {
 
 function SimulatorPage() {
   const navigate = useNavigate();
+  const { t } = useLanguage();
   const [searchParams, setSearchParams] = useSearchParams();
   const [selectedAccountId, setSelectedAccountId] = useState(getSelectedAccountId());
   const [months, setMonths] = useState(
@@ -1083,8 +1085,8 @@ function SimulatorPage() {
 
   const scopeDescription =
     normalizedAccountId == null
-      ? "Projection uses all accounts combined."
-      : "Projection uses only the selected account.";
+      ? t("simulator.scopeAll")
+      : t("simulator.scopeOne");
 
   const riskMeta = useMemo(() => {
     const riskLevel = simulatorData?.risk_level;
@@ -1528,29 +1530,28 @@ function SimulatorPage() {
       <div className="dashboard-wrapper">
         <div className="dashboard-hero">
           <div>
-            <p className="eyebrow-text">Smart Spending Analyzer</p>
-            <h1>Future Simulator</h1>
+            <p className="eyebrow-text">{t("common.appName")}</p>
+            <h1>{t("common.futureSimulator")}</h1>
             <p className="hero-subtitle">
-              Project your balance forward, test monthly changes, and see how today&apos;s pace
-              could play out over the next few months.
+              {t("headers.simulatorSubtitle")}
             </p>
           </div>
 
           <div className="header-actions">
             <button className="secondary-button" onClick={() => navigate("/dashboard")}>
-              Back to Dashboard
+              {t("common.backToDashboard")}
             </button>
             <button className="secondary-button" onClick={() => navigate("/analytics")}>
-              Analytics
+              {t("common.analytics")}
             </button>
             <button className="secondary-button" onClick={() => navigate("/money-map")}>
-              Money Map
+              {t("common.moneyMap")}
             </button>
             <button className="secondary-button" onClick={() => navigate("/budgets")}>
-              Budgets
+              {t("common.budgets")}
             </button>
             <button className="secondary-button" onClick={() => navigate("/assistant")}>
-              Assistant
+              {t("common.assistant")}
             </button>
           </div>
         </div>
@@ -1558,20 +1559,20 @@ function SimulatorPage() {
         <div className="dashboard-card">
           <div className="section-header">
             <div>
-              <h2>Scenario Controls</h2>
+              <h2>{t("simulator.scenarioControls")}</h2>
               <p>{scopeDescription}</p>
             </div>
             <div className="budget-section-actions">
               <button type="button" className="secondary-button" onClick={handleCopyScenarioLink}>
-                Copy Scenario Link
+                {t("simulator.copyScenarioLink")}
               </button>
             </div>
           </div>
 
           <div className="section-header simulator-recommendations-header">
             <div>
-              <h2>Recommended Plans</h2>
-              <p>Backend-ranked simulator ideas based on recurring costs, cash-flow pressure, and current budget risk.</p>
+              <h2>{t("simulator.recommendedPlans")}</h2>
+              <p>{t("simulator.recommendedPlansDetail")}</p>
             </div>
           </div>
 

@@ -5,6 +5,7 @@ import AccountSelector from "../components/AccountSelector";
 import PageHeader from "../components/PageHeader";
 import { ALL_ACCOUNTS_VALUE, getSelectedAccountId, setSelectedAccountId as persistSelectedAccountId } from "../services/accountStorage";
 import { buildBudgetForecastSummary } from "../utils/budgetDisplay";
+import { useLanguage } from "../i18n/LanguageContext";
 
 const CATEGORY_RULES = {
   groceries: ["walmart", "costco", "freshco", "nofrills", "grocery", "supermarket"],
@@ -56,6 +57,7 @@ const formatMonthLabel = (monthValue) => {
 };
 
 function DashboardPage() {
+  const { t } = useLanguage();
   const [dashboardData, setDashboardData] = useState(null);
   const [allTransactions, setAllTransactions] = useState([]);
   const [accounts, setAccounts] = useState([]);
@@ -389,8 +391,8 @@ function DashboardPage() {
       <div className="page-container dashboard-page">
         <div className="dashboard-wrapper">
           <div className="status-card">
-            <h2>Loading dashboard...</h2>
-            <p>Please wait while your financial overview is being prepared.</p>
+            <h2>{t("dashboard.loadingTitle")}</h2>
+            <p>{t("dashboard.loadingDetail")}</p>
           </div>
         </div>
       </div>
@@ -402,8 +404,8 @@ function DashboardPage() {
       <div className="dashboard-wrapper">
         <PageHeader
           icon="$"
-          title="Dashboard"
-          subtitle="Your current-month command center. Start here each day, record what happened, and jump into deeper tools only when you need them."
+          titleKey="common.dashboard"
+          subtitleKey="headers.dashboardSubtitle"
           actions={(
             <button
               className="logout-button"
@@ -412,54 +414,42 @@ function DashboardPage() {
                 navigate("/", { replace: true });
               }}
             >
-              Logout
+              {t("common.logout")}
             </button>
           )}
         />
 
         <div className="dashboard-card product-guide-card">
           <div className="section-header">
-            <h2>How to use this dashboard</h2>
-            <p>
-              This page is intentionally simple: it shows this month only, helps you add today&apos;s
-              transaction, and gives you a quick future warning before you go deeper.
-            </p>
+            <h2>{t("dashboard.howTitle")}</h2>
+            <p>{t("dashboard.howDetail")}</p>
           </div>
 
           <div className="feature-guide-grid">
             <div className="feature-guide-item">
               <span className="feature-step">1</span>
-              <h3>Choose your view</h3>
-              <p>
-                Use Account View to see all accounts together or focus on one account when you only
-                want one bank card, chequing account, or cash account.
-              </p>
+              <h3>{t("dashboard.chooseViewTitle")}</h3>
+              <p>{t("dashboard.chooseViewDetail")}</p>
             </div>
 
             <div className="feature-guide-item">
               <span className="feature-step">2</span>
-              <h3>Write daily transactions</h3>
-              <p>
-                Add expenses and income when they happen. At month-end, Smart Import compares your
-                bank statement against this written history and helps find anything you missed.
-              </p>
+              <h3>{t("dashboard.writeDailyTitle")}</h3>
+              <p>{t("dashboard.writeDailyDetail")}</p>
             </div>
 
             <div className="feature-guide-item">
               <span className="feature-step">3</span>
-              <h3>Watch the month</h3>
-              <p>
-                The overview and Future Outlook tell you whether the current month is healthy.
-                For detailed charts, open Analytics instead of crowding the dashboard.
-              </p>
+              <h3>{t("dashboard.watchMonthTitle")}</h3>
+              <p>{t("dashboard.watchMonthDetail")}</p>
             </div>
           </div>
         </div>
 
         <div className="filter-card">
           <div className="section-header">
-            <h2>Account View</h2>
-            <p>Switch between all accounts combined or one specific account.</p>
+            <h2>{t("dashboard.accountView")}</h2>
+            <p>{t("dashboard.accountViewDetail")}</p>
           </div>
           <AccountSelector value={selectedAccountId} onChange={setSelectedAccountId} allowAll={true} />
           {scopeNotice && <div className="bulk-message-box">{scopeNotice}</div>}
@@ -470,21 +460,18 @@ function DashboardPage() {
             <div className="money-map-command-top">
               <div>
                 <span className="money-map-confidence-pill money-map-confidence-low">
-                  Day-0 setup
+                  {t("dashboard.dayZero")}
                 </span>
-                <h2>Build your Money Map from one statement</h2>
-                <p>
-                  Instead of staring at zero charts, upload a bank statement and let the app
-                  learn categories, recurring bills, and simulator assumptions from real activity.
-                </p>
+                <h2>{t("dashboard.moneyMapTitle")}</h2>
+                <p>{t("dashboard.moneyMapDetail")}</p>
               </div>
             </div>
             <div className="budget-section-actions">
               <button className="secondary-button" onClick={() => navigate("/import")}>
-                Upload Statement
+                {t("common.uploadStatement")}
               </button>
               <button className="secondary-button" onClick={() => navigate("/money-map")}>
-                Open Money Map
+                {t("dashboard.openMoneyMap")}
               </button>
             </div>
           </div>
@@ -492,41 +479,38 @@ function DashboardPage() {
 
         <div className="dashboard-card">
           <div className="section-header">
-            <h2>{currentMonthLabel} Overview</h2>
-            <p>
-              A simple current-month snapshot. For daily, weekly, monthly, 3-month, and 6-month analysis,
-              open Analytics.
-            </p>
+            <h2>{currentMonthLabel} {t("dashboard.overview")}</h2>
+            <p>{t("dashboard.overviewDetail")}</p>
           </div>
 
           <div className="summary-grid">
             <div className="summary-card income-card">
-              <span className="card-label">Income</span>
+              <span className="card-label">{t("common.income")}</span>
               <div className="summary-card-content">
                 <p>${summary.total_income.toFixed(2)}</p>
-                <small className="summary-card-note">Income recorded this month</small>
+                <small className="summary-card-note">{t("dashboard.incomeNote")}</small>
               </div>
             </div>
 
             <div className="summary-card expense-card">
-              <span className="card-label">Expenses</span>
+              <span className="card-label">{t("common.expenses")}</span>
               <div className="summary-card-content">
                 <p>${summary.total_expenses.toFixed(2)}</p>
-                <small className="summary-card-note">Expenses recorded this month</small>
+                <small className="summary-card-note">{t("dashboard.expenseNote")}</small>
               </div>
             </div>
 
             <div className="summary-card balance-card">
-              <span className="card-label">Balance</span>
+              <span className="card-label">{t("common.balance")}</span>
               <div className="summary-card-content">
                 <p>${summary.balance.toFixed(2)}</p>
-                <small className="summary-card-note">Current-month net</small>
+                <small className="summary-card-note">{t("dashboard.balanceNote")}</small>
               </div>
             </div>
           </div>
           <div className="budget-section-actions">
             <button className="secondary-button" onClick={() => navigate("/analytics")}>
-              Open Detailed Analytics
+              {t("dashboard.openDetailedAnalytics")}
             </button>
           </div>
         </div>
@@ -534,28 +518,28 @@ function DashboardPage() {
         {simulatorData && (
           <div className="dashboard-card">
             <div className="section-header">
-              <h2>Future Outlook</h2>
-              <p>A quick 3-month projection for the current account scope.</p>
+              <h2>{t("dashboard.futureOutlook")}</h2>
+              <p>{t("dashboard.futureOutlookDetail")}</p>
             </div>
 
             <div className="summary-grid">
               <div className="summary-card balance-card">
-                <span className="card-label">Starting Balance</span>
+                <span className="card-label">{t("dashboard.startingBalance")}</span>
                 <p>${simulatorData.starting_balance.toFixed(2)}</p>
               </div>
 
               <div className="summary-card income-card">
-                <span className="card-label">Monthly Net</span>
+                <span className="card-label">{t("dashboard.monthlyNet")}</span>
                 <p>${simulatorData.monthly_net_change.toFixed(2)}</p>
               </div>
 
               <div className="summary-card top-card">
-                <span className="card-label">3-Month Impact</span>
+                <span className="card-label">{t("dashboard.threeMonthImpact")}</span>
                 <p>${simulatorData.projected_change_amount.toFixed(2)}</p>
               </div>
 
               <div className="summary-card expense-card">
-                <span className="card-label">Projected Balance</span>
+                <span className="card-label">{t("dashboard.projectedBalance")}</span>
                 <p>${simulatorData.projected_end_balance.toFixed(2)}</p>
               </div>
             </div>
@@ -567,7 +551,7 @@ function DashboardPage() {
                 className="secondary-button"
                 onClick={() => navigate("/simulator")}
               >
-                Open Full Simulator
+                {t("dashboard.openFullSimulator")}
               </button>
             </div>
           </div>
@@ -575,44 +559,40 @@ function DashboardPage() {
 
         <div className="dashboard-card premium-promo-card">
           <div>
-            <p className="eyebrow-text">Premium planning layer</p>
-            <h2>Turn your spending history into a financial operating system.</h2>
-            <p>
-              Premium is where advanced forecasting, larger statement batches, category learning history,
-              custom money rules, and guided monthly plans will live. Free stays clean and useful; Premium
-              becomes the cockpit for people who want smarter decisions every month.
-            </p>
+            <p className="eyebrow-text">{t("dashboard.premiumEyebrow")}</p>
+            <h2>{t("dashboard.premiumTitle")}</h2>
+            <p>{t("dashboard.premiumDetail")}</p>
           </div>
           <div className="premium-feature-grid">
-            <span>6+ statement batch import</span>
-            <span>3 and 6 month trend packs</span>
-            <span>Advanced simulator scenarios</span>
-            <span>Category learning controls</span>
+            <span>{t("dashboard.statementBatch")}</span>
+            <span>{t("dashboard.trendPacks")}</span>
+            <span>{t("dashboard.simulatorScenarios")}</span>
+            <span>{t("dashboard.categoryControls")}</span>
           </div>
           <div className="budget-section-actions">
             <button className="premium-header-button" onClick={() => navigate("/profile#plans")}>
-              See Plans
+              {t("dashboard.seePlans")}
             </button>
             <button className="secondary-button" onClick={() => navigate("/simulator")}>
-              Preview Simulator
+              {t("dashboard.previewSimulator")}
             </button>
           </div>
         </div>
 
         <div className="dashboard-card">
           <div className="section-header">
-            <h2>Budget Health</h2>
-            <p>Quick budget status for {currentBudgetMonth} in the current scope.</p>
+            <h2>{t("dashboard.budgetHealth")}</h2>
+            <p>{t("dashboard.budgetHealthDetail", { month: currentBudgetMonth })}</p>
           </div>
 
           {!hasBudgets ? (
             <div className="empty-state">
-              <p>No budgets are set for this month yet.</p>
+              <p>{t("dashboard.noBudgets")}</p>
               <button
                 className="secondary-button"
                 onClick={() => navigate(`/budgets?month=${currentBudgetMonth}`)}
               >
-                Create Budgets
+                {t("dashboard.createBudgets")}
               </button>
             </div>
           ) : (

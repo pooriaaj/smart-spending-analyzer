@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import api from "../services/api";
+import { useLanguage } from "../i18n/LanguageContext";
 
 function TransactionForm({ onTransactionCreated, editingTransaction, onCancelEdit }) {
   const [amount, setAmount] = useState("");
@@ -10,6 +11,7 @@ function TransactionForm({ onTransactionCreated, editingTransaction, onCancelEdi
   const [error, setError] = useState("");
   const [suggestion, setSuggestion] = useState(null);
   const [suggestionLoading, setSuggestionLoading] = useState(false);
+  const { t } = useLanguage();
 
   useEffect(() => {
     if (editingTransaction) {
@@ -45,7 +47,7 @@ function TransactionForm({ onTransactionCreated, editingTransaction, onCancelEdi
     setSuggestion(null);
 
     if (!description.trim()) {
-      setError("Please enter a description before requesting a category suggestion.");
+      setError(t("transactionForm.descriptionRequired"));
       return;
     }
 
@@ -60,7 +62,7 @@ function TransactionForm({ onTransactionCreated, editingTransaction, onCancelEdi
       setSuggestion(response.data);
       setCategory(response.data.suggested_category);
     } catch {
-      setError("Failed to suggest a category.");
+      setError(t("transactionForm.suggestFailed"));
     } finally {
       setSuggestionLoading(false);
     }
@@ -97,21 +99,21 @@ function TransactionForm({ onTransactionCreated, editingTransaction, onCancelEdi
     } catch {
       setError(
         editingTransaction
-          ? "Failed to update transaction."
-          : "Failed to create transaction."
+          ? t("transactionForm.updateFailed")
+          : t("transactionForm.createFailed")
       );
     }
   };
 
   return (
     <div className="dashboard-card">
-      <h2>{editingTransaction ? "Edit Transaction" : "Add Transaction"}</h2>
+      <h2>{editingTransaction ? t("transactionForm.editTitle") : t("transactionForm.addTitle")}</h2>
 
       <form onSubmit={handleSubmit} className="transaction-form">
         <input
           type="number"
           step="0.01"
-          placeholder="Amount"
+          placeholder={t("common.amount")}
           value={amount}
           onChange={(e) => setAmount(e.target.value)}
           required
@@ -119,7 +121,7 @@ function TransactionForm({ onTransactionCreated, editingTransaction, onCancelEdi
 
         <input
           type="text"
-          placeholder="Category"
+          placeholder={t("common.category")}
           value={category}
           onChange={(e) => setCategory(e.target.value)}
           required
@@ -127,7 +129,7 @@ function TransactionForm({ onTransactionCreated, editingTransaction, onCancelEdi
 
         <input
           type="text"
-          placeholder="Description"
+          placeholder={t("common.description")}
           value={description}
           onChange={(e) => setDescription(e.target.value)}
           required
@@ -141,8 +143,8 @@ function TransactionForm({ onTransactionCreated, editingTransaction, onCancelEdi
         />
 
         <select value={type} onChange={(e) => setType(e.target.value)}>
-          <option value="expense">Expense</option>
-          <option value="income">Income</option>
+          <option value="expense">{t("common.expense")}</option>
+          <option value="income">{t("common.income")}</option>
         </select>
 
         <button
@@ -151,11 +153,11 @@ function TransactionForm({ onTransactionCreated, editingTransaction, onCancelEdi
           onClick={handleSuggestCategory}
           disabled={suggestionLoading}
         >
-          {suggestionLoading ? "Suggesting..." : "Suggest Category"}
+          {suggestionLoading ? t("transactionForm.suggesting") : t("transactionForm.suggestCategory")}
         </button>
 
         <button type="submit">
-          {editingTransaction ? "Update Transaction" : "Add Transaction"}
+          {editingTransaction ? t("transactionForm.update") : t("transactionForm.add")}
         </button>
 
         {editingTransaction && (
@@ -167,21 +169,21 @@ function TransactionForm({ onTransactionCreated, editingTransaction, onCancelEdi
               onCancelEdit();
             }}
           >
-            Cancel
+            {t("transactionForm.cancel")}
           </button>
         )}
       </form>
 
       {suggestion && (
         <div className="suggestion-box">
-          <h3>Suggested Category</h3>
+          <h3>{t("transactionForm.suggestedCategory")}</h3>
           <p>
             <strong>{suggestion.suggested_category}</strong>
           </p>
-          <p>Confidence: {(suggestion.confidence * 100).toFixed(0)}%</p>
+          <p>{t("transactionForm.confidence")}: {(suggestion.confidence * 100).toFixed(0)}%</p>
           <p>{suggestion.reason}</p>
           {suggestion.matched_keyword && (
-            <p>Matched keyword: {suggestion.matched_keyword}</p>
+            <p>{t("transactionForm.matchedKeyword")}: {suggestion.matched_keyword}</p>
           )}
         </div>
       )}

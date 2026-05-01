@@ -1,6 +1,8 @@
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { Suspense, lazy, useEffect, useState } from "react";
 import ThemeToggle from "./components/ThemeToggle";
+import LanguageToggle from "./components/LanguageToggle";
+import { LanguageProvider, useLanguage } from "./i18n/LanguageContext";
 
 const LoginPage = lazy(() => import("./pages/LoginPage"));
 const RegisterPage = lazy(() => import("./pages/RegisterPage"));
@@ -23,12 +25,14 @@ function ProtectedRoute({ children }) {
 }
 
 function RouteLoader() {
+  const { t } = useLanguage();
+
   return (
     <div className="page-container dashboard-page">
       <div className="dashboard-wrapper">
         <div className="status-card">
-          <h2>Loading page...</h2>
-          <p>Preparing the next screen for you.</p>
+          <h2>{t("common.loadingPage")}</h2>
+          <p>{t("common.loadingPageDetail")}</p>
         </div>
       </div>
     </div>
@@ -40,7 +44,7 @@ function PublicHomeRoute() {
   return token ? <Navigate to="/dashboard" replace /> : <LoginPage />;
 }
 
-function App() {
+function AppRoutes() {
   const [theme, setTheme] = useState(localStorage.getItem("theme") || "light");
 
   useEffect(() => {
@@ -50,10 +54,13 @@ function App() {
 
   return (
     <BrowserRouter>
-      <ThemeToggle
-        theme={theme}
-        onToggle={() => setTheme((prev) => (prev === "light" ? "dark" : "light"))}
-      />
+      <div className="app-floating-controls">
+        <LanguageToggle />
+        <ThemeToggle
+          theme={theme}
+          onToggle={() => setTheme((prev) => (prev === "light" ? "dark" : "light"))}
+        />
+      </div>
 
       <Suspense fallback={<RouteLoader />}>
         <Routes>
@@ -75,6 +82,14 @@ function App() {
         </Routes>
       </Suspense>
     </BrowserRouter>
+  );
+}
+
+function App() {
+  return (
+    <LanguageProvider>
+      <AppRoutes />
+    </LanguageProvider>
   );
 }
 

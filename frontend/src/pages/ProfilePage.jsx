@@ -2,9 +2,11 @@ import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import api, { handleApiAuthError } from "../services/api";
 import PasswordField from "../components/PasswordField";
+import { useLanguage } from "../i18n/LanguageContext";
 
 function ProfilePage() {
   const navigate = useNavigate();
+  const { t } = useLanguage();
 
   const [email, setEmail] = useState("");
   const [profileLoading, setProfileLoading] = useState(true);
@@ -119,8 +121,8 @@ function ProfilePage() {
       <div className="page-container dashboard-page">
         <div className="dashboard-wrapper">
           <div className="status-card">
-            <h2>Loading profile...</h2>
-            <p>Please wait while your account settings are being prepared.</p>
+            <h2>{t("profile.loadingTitle")}</h2>
+            <p>{t("profile.loadingDetail")}</p>
           </div>
         </div>
       </div>
@@ -132,10 +134,10 @@ function ProfilePage() {
       <div className="dashboard-wrapper">
         <div className="dashboard-hero">
           <div>
-            <p className="eyebrow-text">Account Settings</p>
-            <h1>Profile</h1>
+            <p className="eyebrow-text">{t("profile.eyebrow")}</p>
+            <h1>{t("profile.title")}</h1>
             <p className="hero-subtitle">
-              Manage your account details, security settings, and account access.
+              {t("profile.subtitle")}
             </p>
           </div>
 
@@ -144,31 +146,31 @@ function ProfilePage() {
               className="secondary-button"
               onClick={() => navigate("/dashboard")}
             >
-              Dashboard
+              {t("common.dashboard")}
             </button>
 
             <button className="logout-button" onClick={handleLogout}>
-              Logout
+              {t("common.logout")}
             </button>
           </div>
         </div>
 
         <div className="dashboard-card large-card">
           <div className="section-header">
-            <h2>Profile Information</h2>
-            <p>Update the email address linked to your account.</p>
+            <h2>{t("profile.infoTitle")}</h2>
+            <p>{t("profile.infoDetail")}</p>
           </div>
 
           <form className="transaction-form" onSubmit={handleUpdateProfile}>
             <input
               type="email"
-              placeholder="Email address"
+              placeholder={t("profile.emailAddress")}
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
             />
 
-            <button type="submit">Save Profile</button>
+            <button type="submit">{t("profile.saveProfile")}</button>
           </form>
 
           {profileMessage && <p style={{ color: "green" }}>{profileMessage}</p>}
@@ -177,15 +179,15 @@ function ProfilePage() {
 
         <div className="dashboard-card large-card">
           <div className="section-header">
-            <h2>Change Password</h2>
-            <p>Update your password to keep your account secure.</p>
+            <h2>{t("profile.changePassword")}</h2>
+            <p>{t("profile.changePasswordDetail")}</p>
           </div>
 
           <form className="auth-form" onSubmit={handleChangePassword}>
             <PasswordField
-              label="Current Password"
+              label={t("profile.currentPassword")}
               name="current-password"
-              placeholder="Enter your current password"
+              placeholder={t("profile.currentPasswordPlaceholder")}
               value={currentPassword}
               onChange={(e) => setCurrentPassword(e.target.value)}
               autoComplete="current-password"
@@ -193,9 +195,9 @@ function ProfilePage() {
             />
 
             <PasswordField
-              label="New Password"
+              label={t("profile.newPassword")}
               name="new-password"
-              placeholder="Enter your new password"
+              placeholder={t("profile.newPasswordPlaceholder")}
               value={newPassword}
               onChange={(e) => setNewPassword(e.target.value)}
               autoComplete="new-password"
@@ -203,7 +205,7 @@ function ProfilePage() {
             />
 
             <button type="submit" className="auth-submit-button">
-              Change Password
+              {t("profile.changePassword")}
             </button>
           </form>
 

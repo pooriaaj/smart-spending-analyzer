@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import api from "../services/api";
 import PasswordField from "../components/PasswordField";
+import { useLanguage } from "../i18n/LanguageContext";
 
 function RegisterPage() {
   const [email, setEmail] = useState("");
@@ -9,6 +10,7 @@ function RegisterPage() {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [error, setError] = useState("");
   const navigate = useNavigate();
+  const { t } = useLanguage();
 
   useEffect(() => {
     const token = localStorage.getItem("token");
@@ -22,7 +24,7 @@ function RegisterPage() {
     setError("");
 
     if (password !== confirmPassword) {
-      setError("Passwords do not match.");
+      setError(t("auth.passwordMismatch"));
       return;
     }
 
@@ -35,7 +37,7 @@ function RegisterPage() {
       localStorage.setItem("token", response.data.access_token);
       navigate("/money-map", { replace: true });
     } catch {
-      setError("Registration failed. Email may already be in use.");
+      setError(t("auth.registrationFailed"));
     }
   };
 
@@ -44,35 +46,32 @@ function RegisterPage() {
       <div className="auth-layout">
         <div className="auth-showcase">
           <div className="auth-showcase-content">
-            <p className="auth-eyebrow">Smart Spending Analyzer</p>
-            <h1>Build a better view of your spending from day one.</h1>
-            <p className="auth-description">
-              Create your account to import transactions, explore analytics, and
-              use intelligent guidance designed around your financial behavior.
-            </p>
+            <p className="auth-eyebrow">{t("common.appName")}</p>
+            <h1>{t("auth.registerHeroTitle")}</h1>
+            <p className="auth-description">{t("auth.registerHeroDetail")}</p>
 
             <div className="auth-feature-list">
               <div className="auth-feature-item">
                 <span className="auth-feature-dot" />
                 <div>
-                  <strong>Simple onboarding</strong>
-                  <p>Start with manual entries or import your existing records.</p>
+                  <strong>{t("auth.simpleOnboarding")}</strong>
+                  <p>{t("auth.simpleOnboardingDetail")}</p>
                 </div>
               </div>
 
               <div className="auth-feature-item">
                 <span className="auth-feature-dot" />
                 <div>
-                  <strong>Actionable analytics</strong>
-                  <p>See what changed, what dominates spending, and where to improve.</p>
+                  <strong>{t("auth.actionableAnalytics")}</strong>
+                  <p>{t("auth.actionableAnalyticsDetail")}</p>
                 </div>
               </div>
 
               <div className="auth-feature-item">
                 <span className="auth-feature-dot" />
                 <div>
-                  <strong>Assistant-guided exploration</strong>
-                  <p>Ask questions and move naturally through your data.</p>
+                  <strong>{t("auth.guidedExploration")}</strong>
+                  <p>{t("auth.guidedExplorationDetail")}</p>
                 </div>
               </div>
             </div>
@@ -82,18 +81,18 @@ function RegisterPage() {
         <div className="auth-panel">
           <div className="auth-card">
             <div className="auth-card-header">
-              <p className="auth-card-kicker">Get started</p>
-              <h2>Create account</h2>
-              <p>Set up your account and start using the full platform.</p>
+              <p className="auth-card-kicker">{t("auth.getStarted")}</p>
+              <h2>{t("auth.createAccount")}</h2>
+              <p>{t("auth.createAccountDetail")}</p>
             </div>
 
             <form onSubmit={handleRegister} className="auth-form">
               <div className="auth-field">
-                <label htmlFor="register-email">Email</label>
+                <label htmlFor="register-email">{t("auth.email")}</label>
                 <input
                   id="register-email"
                   type="email"
-                  placeholder="Enter your email"
+                  placeholder={t("auth.emailPlaceholder")}
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   autoComplete="email"
@@ -102,9 +101,9 @@ function RegisterPage() {
               </div>
 
               <PasswordField
-                label="Password"
+                label={t("auth.password")}
                 name="register-password"
-                placeholder="Create a password"
+                placeholder={t("auth.createPassword")}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 autoComplete="new-password"
@@ -112,9 +111,9 @@ function RegisterPage() {
               />
 
               <PasswordField
-                label="Confirm Password"
+                label={t("auth.confirmPassword")}
                 name="register-confirm-password"
-                placeholder="Confirm your password"
+                placeholder={t("auth.confirmPasswordPlaceholder")}
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
                 autoComplete="new-password"
@@ -122,7 +121,7 @@ function RegisterPage() {
               />
 
               <button type="submit" className="auth-submit-button">
-                Create Account
+                {t("auth.createAccountButton")}
               </button>
             </form>
 
@@ -130,7 +129,7 @@ function RegisterPage() {
 
             <div className="auth-footer">
               <p>
-                Already have an account? <Link to="/">Login</Link>
+                {t("auth.alreadyHaveAccount")} <Link to="/">{t("auth.login")}</Link>
               </p>
             </div>
           </div>

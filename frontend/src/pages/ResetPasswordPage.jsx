@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import api from "../services/api";
 import PasswordField from "../components/PasswordField";
+import { useLanguage } from "../i18n/LanguageContext";
 
 function ResetPasswordPage() {
   const [searchParams] = useSearchParams();
@@ -14,6 +15,7 @@ function ResetPasswordPage() {
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const { t } = useLanguage();
 
   const handleResetPassword = async (e) => {
     e.preventDefault();
@@ -21,12 +23,12 @@ function ResetPasswordPage() {
     setError("");
 
     if (!token) {
-      setError("Missing reset token.");
+      setError(t("auth.missingResetToken"));
       return;
     }
 
     if (newPassword !== confirmPassword) {
-      setError("Passwords do not match.");
+      setError(t("auth.passwordMismatch"));
       return;
     }
 
@@ -38,13 +40,13 @@ function ResetPasswordPage() {
         new_password: newPassword,
       });
 
-      setMessage(response.data.message || "Password reset successfully.");
+      setMessage(response.data.message || t("auth.passwordResetSuccess"));
       setTimeout(() => {
         navigate("/", { replace: true });
       }, 1500);
     } catch (err) {
       setError(
-        err?.response?.data?.detail || "Failed to reset password."
+        err?.response?.data?.detail || t("auth.resetFailed")
       );
     } finally {
       setSubmitting(false);
@@ -57,16 +59,16 @@ function ResetPasswordPage() {
         <div className="auth-panel auth-panel-centered">
           <div className="auth-card">
             <div className="auth-card-header">
-              <p className="auth-card-kicker">Account recovery</p>
-              <h2>Reset password</h2>
-              <p>Create a new password for your account.</p>
+              <p className="auth-card-kicker">{t("auth.accountRecovery")}</p>
+              <h2>{t("auth.resetPasswordTitle")}</h2>
+              <p>{t("auth.resetPasswordDetail")}</p>
             </div>
 
             <form onSubmit={handleResetPassword} className="auth-form">
               <PasswordField
-                label="New Password"
+                label={t("auth.newPassword")}
                 name="reset-new-password"
-                placeholder="Enter your new password"
+                placeholder={t("auth.newPasswordPlaceholder")}
                 value={newPassword}
                 onChange={(e) => setNewPassword(e.target.value)}
                 autoComplete="new-password"
@@ -74,9 +76,9 @@ function ResetPasswordPage() {
               />
 
               <PasswordField
-                label="Confirm New Password"
+                label={t("auth.confirmNewPassword")}
                 name="reset-confirm-password"
-                placeholder="Confirm your new password"
+                placeholder={t("auth.confirmNewPasswordPlaceholder")}
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
                 autoComplete="new-password"
@@ -88,7 +90,7 @@ function ResetPasswordPage() {
                 className="auth-submit-button"
                 disabled={submitting}
               >
-                {submitting ? "Resetting..." : "Reset Password"}
+                {submitting ? t("auth.resetting") : t("auth.resetPasswordButton")}
               </button>
             </form>
 
@@ -97,7 +99,7 @@ function ResetPasswordPage() {
 
             <div className="auth-footer">
               <p>
-                Back to <Link to="/">Login</Link>
+                {t("auth.backTo")} <Link to="/">{t("auth.login")}</Link>
               </p>
             </div>
           </div>

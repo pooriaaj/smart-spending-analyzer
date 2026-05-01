@@ -4,6 +4,7 @@ import api from "../services/api";
 import AccountSelector from "../components/AccountSelector";
 import PageHeader from "../components/PageHeader";
 import { ALL_ACCOUNTS_VALUE, getSelectedAccountId } from "../services/accountStorage";
+import { useLanguage } from "../i18n/LanguageContext";
 import {
   BarChart,
   Bar,
@@ -250,6 +251,7 @@ function buildSpendingPatternPulse(transactions) {
 }
 
 function AnalyticsPage() {
+  const { t } = useLanguage();
   const [dashboardData, setDashboardData] = useState(null);
   const [transactions, setTransactions] = useState([]);
   const [selectedAccountId, setSelectedAccountId] = useState(getSelectedAccountId());
@@ -504,64 +506,52 @@ function AnalyticsPage() {
       <div className="dashboard-wrapper">
         <PageHeader
           icon="AN"
-          title="Analytics & Insights"
-          subtitle="Learn what changed, what is driving your spending, and whether your recent pace is getting better or worse."
+          titleKey="common.analyticsInsights"
+          subtitleKey="headers.analyticsSubtitle"
           actions={(
             <button className="secondary-button" onClick={() => navigate("/transactions")}>
-              View Ledger
+              {t("common.viewLedger")}
             </button>
           )}
         />
 
         <div className="dashboard-card product-guide-card">
           <div className="section-header">
-            <h2>How to read Analytics</h2>
-            <p>
-              Analytics is the deeper learning page. Use the quick ranges first, then read the
-              pattern chart to see whether spending is rising, dropping, or staying stable.
-            </p>
+            <h2>{t("analytics.howTitle")}</h2>
+            <p>{t("analytics.howDetail")}</p>
           </div>
 
           <div className="feature-guide-grid">
             <div className="feature-guide-item">
               <span className="feature-step">Daily</span>
-              <h3>Short-term pace</h3>
-              <p>
-                Last 7 Days shows the newest spending pulse. Use it when you want to know if this
-                week is heavier than normal.
-              </p>
+              <h3>{t("analytics.shortTermPace")}</h3>
+              <p>{t("analytics.shortTermDetail")}</p>
             </div>
 
             <div className="feature-guide-item">
               <span className="feature-step">Monthly</span>
-              <h3>Current month control</h3>
-              <p>
-                Current Month keeps the view focused on the month you are living in right now,
-                which is the best range for budgeting decisions.
-              </p>
+              <h3>{t("analytics.currentMonthControl")}</h3>
+              <p>{t("analytics.currentMonthDetail")}</p>
             </div>
 
             <div className="feature-guide-item">
               <span className="feature-step">3 / 6</span>
-              <h3>Longer-term direction</h3>
-              <p>
-                Last 3 Months catches recent behavior changes. Last 6 Months shows the bigger
-                baseline so you can tell whether the change is real or just one odd month.
-              </p>
+              <h3>{t("analytics.longerDirection")}</h3>
+              <p>{t("analytics.longerDirectionDetail")}</p>
             </div>
           </div>
         </div>
 
         <div className="filter-card">
           <div className="section-header">
-            <h2>Analytics Filters</h2>
-            <p>Refine the analysis using account scope, month, date range, type, and category.</p>
+            <h2>{t("analytics.filtersTitle")}</h2>
+            <p>{t("analytics.filtersDetail")}</p>
           </div>
 
           <div className="filter-bar">
             <AccountSelector
               value={selectedAccountId}
-              label="Account scope"
+              label={t("common.accountScope")}
               onChange={setSelectedAccountId}
             />
 
@@ -634,42 +624,42 @@ function AnalyticsPage() {
 
           <div className="analytics-preset-row">
             <button type="button" className="secondary-button" onClick={() => applyDatePreset("week")}>
-              Last 7 Days
+              {t("analytics.last7Days")}
             </button>
             <button type="button" className="secondary-button" onClick={() => applyDatePreset("month")}>
-              Current Month
+              {t("analytics.currentMonth")}
             </button>
             <button type="button" className="secondary-button" onClick={() => applyDatePreset("3m")}>
-              Last 3 Months
+              {t("analytics.last3Months")}
             </button>
             <button type="button" className="secondary-button" onClick={() => applyDatePreset("6m")}>
-              Last 6 Months
+              {t("analytics.last6Months")}
             </button>
           </div>
         </div>
 
         <div className="summary-grid">
           <div className="summary-card income-card">
-            <span className="card-label">Total Income</span>
+            <span className="card-label">{t("analytics.totalIncome")}</span>
             <p>${summary.total_income.toFixed(2)}</p>
           </div>
 
           <div className="summary-card expense-card">
-            <span className="card-label">Total Expenses</span>
+            <span className="card-label">{t("analytics.totalExpenses")}</span>
             <p>${summary.total_expenses.toFixed(2)}</p>
           </div>
 
           <div className="summary-card balance-card">
-            <span className="card-label">Balance</span>
+            <span className="card-label">{t("common.balance")}</span>
             <p>${summary.balance.toFixed(2)}</p>
           </div>
 
           <div className="summary-card top-card">
-            <span className="card-label">Top Expense Category</span>
+            <span className="card-label">{t("analytics.topExpenseCategory")}</span>
             <p>
               {normalizedTopCategory
                 ? `${normalizedTopCategory.category} ($${normalizedTopCategory.total.toFixed(2)})`
-                : "No expense data"}
+                : t("analytics.noExpenseData")}
             </p>
           </div>
         </div>
@@ -677,11 +667,8 @@ function AnalyticsPage() {
         <div className="dashboard-card spending-pattern-card">
           <div className="section-header">
             <div>
-              <h2>Spending Pattern Pulse</h2>
-              <p>
-                Dot-and-line view of your expense movement. It compares this week against the
-                current month, then recent 3-month behavior against the 6-month baseline.
-              </p>
+              <h2>{t("analytics.spendingPulse")}</h2>
+              <p>{t("analytics.spendingPulseDetail")}</p>
             </div>
             <span className={`pattern-status-pill pattern-status-${spendingPatternPulse.tone}`}>
               {spendingPatternPulse.status}

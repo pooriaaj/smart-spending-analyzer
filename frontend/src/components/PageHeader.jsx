@@ -1,26 +1,39 @@
 import { useNavigate } from "react-router-dom";
+import { useLanguage } from "../i18n/LanguageContext";
 
 const APP_DESTINATIONS = [
-  { label: "Dashboard", path: "/dashboard" },
-  { label: "Transactions", path: "/transactions" },
-  { label: "Smart Import", path: "/import" },
-  { label: "Money Map", path: "/money-map" },
-  { label: "Analytics", path: "/analytics" },
-  { label: "Budgets", path: "/budgets" },
-  { label: "Simulator", path: "/simulator" },
-  { label: "Assistant", path: "/assistant" },
-  { label: "Accounts", path: "/accounts" },
-  { label: "Profile & Settings", path: "/profile" },
+  { labelKey: "common.dashboard", path: "/dashboard" },
+  { labelKey: "common.transactions", path: "/transactions" },
+  { labelKey: "common.smartImport", path: "/import" },
+  { labelKey: "common.moneyMap", path: "/money-map" },
+  { labelKey: "common.analytics", path: "/analytics" },
+  { labelKey: "common.budgets", path: "/budgets" },
+  { labelKey: "common.simulator", path: "/simulator" },
+  { labelKey: "common.assistant", path: "/assistant" },
+  { labelKey: "common.accounts", path: "/accounts" },
+  { labelKey: "common.profileSettings", path: "/profile" },
 ];
 
 function PageHeader({
   icon = "$",
   eyebrow = "Smart Spending Analyzer",
+  eyebrowKey,
   title,
+  titleKey,
   subtitle,
+  subtitleKey,
   actions,
 }) {
   const navigate = useNavigate();
+  const { t } = useLanguage();
+  const resolvedTitle = titleKey ? t(titleKey) : title;
+  const resolvedSubtitle = subtitleKey ? t(subtitleKey) : subtitle;
+  const resolvedEyebrow = eyebrowKey
+    ? t(eyebrowKey)
+    : eyebrow === "Smart Spending Analyzer"
+    ? t("common.appName")
+    : eyebrow;
+  const navId = `nav-${String(resolvedTitle || "page").replace(/\s+/g, "-").toLowerCase()}`;
 
   const handleDestinationChange = (event) => {
     const nextPath = event.target.value;
@@ -38,34 +51,34 @@ function PageHeader({
         </div>
 
         <div>
-          <p className="eyebrow-text">{eyebrow}</p>
-          <h1>{title}</h1>
-          <p className="hero-subtitle">{subtitle}</p>
+          <p className="eyebrow-text">{resolvedEyebrow}</p>
+          <h1>{resolvedTitle}</h1>
+          <p className="hero-subtitle">{resolvedSubtitle}</p>
         </div>
       </div>
 
       <div className="header-actions professional-header-actions">
-        <label className="nav-dropdown-label" htmlFor={`nav-${title.replace(/\s+/g, "-").toLowerCase()}`}>
-          App Menu
+        <label className="nav-dropdown-label" htmlFor={navId}>
+          {t("common.appMenu")}
         </label>
         <select
-          id={`nav-${title.replace(/\s+/g, "-").toLowerCase()}`}
+          id={navId}
           className="nav-dropdown"
           defaultValue=""
           onChange={handleDestinationChange}
         >
           <option value="" disabled>
-            Open a page
+            {t("common.openPage")}
           </option>
           {APP_DESTINATIONS.map((item) => (
             <option key={item.path} value={item.path}>
-              {item.label}
+              {t(item.labelKey)}
             </option>
           ))}
         </select>
 
         <button className="premium-header-button" type="button" onClick={() => navigate("/profile#plans")}>
-          View Premium
+          {t("common.viewPremium")}
         </button>
 
         {actions}

@@ -7,6 +7,7 @@ import {
   getSelectedAccountId,
   setSelectedAccountId as persistSelectedAccountId,
 } from "../services/accountStorage";
+import { useLanguage } from "../i18n/LanguageContext";
 
 function formatMoney(value) {
   return `$${Number(value || 0).toFixed(2)}`;
@@ -34,6 +35,7 @@ function getConfidenceClass(level) {
 
 function MoneyMapPage() {
   const navigate = useNavigate();
+  const { t } = useLanguage();
   const [selectedAccountId, setSelectedAccountId] = useState(getSelectedAccountId());
   const [moneyMap, setMoneyMap] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -93,8 +95,8 @@ function MoneyMapPage() {
       <div className="page-container dashboard-page">
         <div className="dashboard-wrapper">
           <div className="status-card">
-            <h2>Building Money Map...</h2>
-            <p>Reading your learned patterns and financial signals.</p>
+            <h2>{t("moneyMap.loadingTitle")}</h2>
+            <p>{t("moneyMap.loadingDetail")}</p>
           </div>
         </div>
       </div>
@@ -113,34 +115,33 @@ function MoneyMapPage() {
       <div className="dashboard-wrapper">
         <div className="dashboard-hero money-map-hero">
           <div>
-            <p className="eyebrow-text">Smart Money Twin</p>
-            <h1>Money Map</h1>
+            <p className="eyebrow-text">{t("headers.moneyMapEyebrow")}</p>
+            <h1>{t("common.moneyMap")}</h1>
             <p className="hero-subtitle">
-              Upload real statements and this page becomes your learned spending model:
-              categories, recurring bills, confidence, and next best actions.
+              {t("headers.moneyMapSubtitle")}
             </p>
           </div>
 
           <div className="header-actions">
             <button className="secondary-button" onClick={() => navigate("/import")}>
-              Upload Statement
+              {t("common.uploadStatement")}
             </button>
             <button className="secondary-button" onClick={() => navigate("/dashboard")}>
-              Dashboard
+              {t("common.dashboard")}
             </button>
             <button className="secondary-button" onClick={() => navigate("/simulator")}>
-              Simulator
+              {t("common.simulator")}
             </button>
             <button className="secondary-button" onClick={() => navigate("/assistant")}>
-              Assistant
+              {t("common.assistant")}
             </button>
           </div>
         </div>
 
         <div className="filter-card">
           <div className="section-header">
-            <h2>Money Map Scope</h2>
-            <p>Switch between all accounts or one account-specific learned model.</p>
+            <h2>{t("moneyMap.scopeTitle")}</h2>
+            <p>{t("moneyMap.scopeDetail")}</p>
           </div>
           <AccountSelector value={selectedAccountId} onChange={setSelectedAccountId} allowAll={true} />
         </div>
@@ -151,14 +152,14 @@ function MoneyMapPage() {
           <div className="money-map-command-top">
             <div>
               <span className={`money-map-confidence-pill ${getConfidenceClass(moneyMap?.confidence_level)}`}>
-                {moneyMap?.confidence_level || "Low"} confidence
+                {moneyMap?.confidence_level ? `${moneyMap.confidence_level} confidence` : t("moneyMap.lowConfidence")}
               </span>
-              <h2>{isEmpty ? "Start with one statement" : "Your learned financial model"}</h2>
+              <h2>{isEmpty ? t("moneyMap.startStatement") : t("moneyMap.learnedModel")}</h2>
               <p>{moneyMap?.narrative}</p>
             </div>
             <div className="money-map-score-ring">
               <strong>{formatPercent(moneyMap?.confidence_score)}</strong>
-              <span>model confidence</span>
+              <span>{t("moneyMap.modelConfidence")}</span>
             </div>
           </div>
 
@@ -180,29 +181,25 @@ function MoneyMapPage() {
         {isEmpty ? (
           <div className="dashboard-card large-card money-map-empty-card">
             <div>
-              <p className="eyebrow-text">The day-0 hook</p>
-              <h2>Upload one bank statement. Get a Money Map in under a minute.</h2>
-              <p>
-                Banks show transactions. This app should learn what those transactions mean:
-                your merchant habits, your category language, recurring leaks, and simulator-ready
-                assumptions.
-              </p>
+              <p className="eyebrow-text">{t("moneyMap.dayZero")}</p>
+              <h2>{t("moneyMap.dayZeroTitle")}</h2>
+              <p>{t("moneyMap.dayZeroDetail")}</p>
             </div>
             <div className="money-map-empty-steps">
               <div>
                 <span>1</span>
-                <strong>Import statement</strong>
-                <p>PDF or CSV becomes reviewed transactions.</p>
+                <strong>{t("moneyMap.importStatement")}</strong>
+                <p>{t("moneyMap.importStatementDetail")}</p>
               </div>
               <div>
                 <span>2</span>
-                <strong>Teach categories</strong>
-                <p>Corrections train your merchant and slang memory.</p>
+                <strong>{t("moneyMap.teachCategories")}</strong>
+                <p>{t("moneyMap.teachCategoriesDetail")}</p>
               </div>
               <div>
                 <span>3</span>
-                <strong>Unlock planning</strong>
-                <p>Budgets and simulator stop being empty.</p>
+                <strong>{t("moneyMap.unlockPlanning")}</strong>
+                <p>{t("moneyMap.unlockPlanningDetail")}</p>
               </div>
             </div>
           </div>
@@ -210,19 +207,19 @@ function MoneyMapPage() {
           <>
             <div className="summary-grid">
               <div className="summary-card income-card">
-                <span className="card-label">Income</span>
+                <span className="card-label">{t("common.income")}</span>
                 <p>{formatMoney(summary.total_income)}</p>
               </div>
               <div className="summary-card expense-card">
-                <span className="card-label">Expenses</span>
+                <span className="card-label">{t("common.expenses")}</span>
                 <p>{formatMoney(summary.total_expenses)}</p>
               </div>
               <div className="summary-card balance-card">
-                <span className="card-label">Balance</span>
+                <span className="card-label">{t("common.balance")}</span>
                 <p>{formatMoney(summary.balance)}</p>
               </div>
               <div className="summary-card top-card">
-                <span className="card-label">Learned Merchants</span>
+                <span className="card-label">{t("moneyMap.learnedMerchants")}</span>
                 <p>{moneyMap?.learned_merchant_count || 0}</p>
               </div>
             </div>
@@ -230,8 +227,8 @@ function MoneyMapPage() {
             <div className="dashboard-card">
               <div className="section-header">
                 <div>
-                  <h2>Learning Signals</h2>
-                  <p>How much the Money Map trusts the current data.</p>
+                  <h2>{t("moneyMap.learningSignals")}</h2>
+                  <p>{t("moneyMap.learningSignalsDetail")}</p>
                 </div>
               </div>
               <div className="money-map-signal-grid">

@@ -2,12 +2,14 @@ import { useState, useEffect } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import api from "../services/api";
 import PasswordField from "../components/PasswordField";
+import { useLanguage } from "../i18n/LanguageContext";
 
 function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const navigate = useNavigate();
+  const { t } = useLanguage();
 
   const handleExploreChange = (event) => {
     const value = event.target.value;
@@ -44,7 +46,7 @@ function LoginPage() {
       localStorage.setItem("token", response.data.access_token);
       navigate("/dashboard", { replace: true });
     } catch {
-      setError("Login failed. Please check your email and password.");
+      setError(t("auth.loginFailed"));
     }
   };
 
@@ -53,20 +55,19 @@ function LoginPage() {
       <div className="auth-layout">
         <div className="auth-showcase">
           <div className="auth-showcase-content">
-            <p className="auth-eyebrow">Smart Spending Analyzer</p>
-            <h1>Understand your money with a cleaner, smarter workflow.</h1>
+            <p className="auth-eyebrow">{t("common.appName")}</p>
+            <h1>{t("auth.heroTitle")}</h1>
             <p className="auth-description">
-              Write daily transactions, reconcile bank statements at month-end, and let the app
-              learn your categories, recurring habits, and future money outlook.
+              {t("auth.heroDescription")}
             </p>
 
             <div className="public-nav-strip">
-              <label htmlFor="public-explore">Explore</label>
+              <label htmlFor="public-explore">{t("auth.explore")}</label>
               <select id="public-explore" defaultValue="" onChange={handleExploreChange}>
                 <option value="" disabled>
-                  Choose where to start
+                  {t("auth.chooseWhereToStart")}
                 </option>
-                <option value="create">Create free account</option>
+                <option value="create">{t("auth.createFreeAccount")}</option>
               </select>
             </div>
 
@@ -74,35 +75,32 @@ function LoginPage() {
               <div className="auth-feature-item">
                 <span className="auth-feature-dot" />
                 <div>
-                  <strong>Month-end reconciliation</strong>
-                  <p>Compare what you wrote daily against your real bank statement.</p>
+                  <strong>{t("auth.monthEndTitle")}</strong>
+                  <p>{t("auth.monthEndDetail")}</p>
                 </div>
               </div>
 
               <div className="auth-feature-item">
                 <span className="auth-feature-dot" />
                 <div>
-                  <strong>Learned category memory</strong>
-                  <p>Teach the app your personal naming habits instead of accepting generic guesses.</p>
+                  <strong>{t("auth.categoryMemoryTitle")}</strong>
+                  <p>{t("auth.categoryMemoryDetail")}</p>
                 </div>
               </div>
 
               <div className="auth-feature-item">
                 <span className="auth-feature-dot" />
                 <div>
-                  <strong>Premium planning cockpit</strong>
-                  <p>Advanced forecasts, larger statement batches, saved scenarios, and guided spending plans.</p>
+                  <strong>{t("auth.premiumTitle")}</strong>
+                  <p>{t("auth.premiumDetail")}</p>
                 </div>
               </div>
             </div>
 
             <div className="auth-premium-card">
-              <strong>Premium preview</strong>
-              <p>
-                Unlock deeper 3 and 6 month analysis, bigger import batches, simulator portfolios,
-                and smarter recurring-charge decisions when plans launch.
-              </p>
-              <Link to="/register">Start free, upgrade later</Link>
+              <strong>{t("auth.premiumPreview")}</strong>
+              <p>{t("auth.premiumPreviewDetail")}</p>
+              <Link to="/register">{t("auth.startFree")}</Link>
             </div>
           </div>
         </div>
@@ -110,18 +108,18 @@ function LoginPage() {
         <div className="auth-panel">
           <div className="auth-card">
             <div className="auth-card-header">
-              <p className="auth-card-kicker">Welcome back</p>
-              <h2>Login</h2>
-              <p>Sign in to access your dashboard, analytics, and assistant.</p>
+              <p className="auth-card-kicker">{t("auth.welcomeBack")}</p>
+              <h2>{t("auth.login")}</h2>
+              <p>{t("auth.loginDetail")}</p>
             </div>
 
             <form onSubmit={handleLogin} className="auth-form">
               <div className="auth-field">
-                <label htmlFor="login-email">Email</label>
+                <label htmlFor="login-email">{t("auth.email")}</label>
                 <input
                   id="login-email"
                   type="email"
-                  placeholder="Enter your email"
+                  placeholder={t("auth.emailPlaceholder")}
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   autoComplete="email"
@@ -130,9 +128,9 @@ function LoginPage() {
               </div>
 
               <PasswordField
-                label="Password"
+                label={t("auth.password")}
                 name="login-password"
-                placeholder="Enter your password"
+                placeholder={t("auth.passwordPlaceholder")}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 autoComplete="current-password"
@@ -141,12 +139,12 @@ function LoginPage() {
 
               <div className="auth-inline-link-row">
                 <Link to="/forgot-password" className="auth-inline-link">
-                  Forgot password?
+                  {t("auth.forgotPassword")}
                 </Link>
               </div>
 
               <button type="submit" className="auth-submit-button">
-                Login
+                {t("auth.login")}
               </button>
             </form>
 
@@ -154,7 +152,7 @@ function LoginPage() {
 
             <div className="auth-footer">
               <p>
-                Don't have an account? <Link to="/register">Create one</Link>
+                {t("auth.noAccount")} <Link to="/register">{t("auth.createOne")}</Link>
               </p>
             </div>
           </div>

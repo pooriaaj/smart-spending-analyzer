@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import api, { handleApiAuthError } from "../services/api";
 import AccountSelector from "../components/AccountSelector";
 import { ALL_ACCOUNTS_VALUE, getSelectedAccountId } from "../services/accountStorage";
+import { useLanguage } from "../i18n/LanguageContext";
 import {
   buildBudgetForecastSummary,
   buildBudgetPaceLabel,
@@ -39,6 +40,7 @@ function buildQuickSaveKey(category, amount) {
 
 function BudgetsPage() {
   const navigate = useNavigate();
+  const { t } = useLanguage();
   const [searchParams] = useSearchParams();
   const [selectedAccountId, setSelectedAccountId] = useState(getSelectedAccountId());
   const [month, setMonth] = useState(
@@ -148,8 +150,8 @@ function BudgetsPage() {
 
   const scopeDescription =
     normalizedAccountId == null
-      ? "These budgets apply across all accounts combined."
-      : "These budgets apply only to the selected account.";
+      ? t("budgets.scopeAll")
+      : t("budgets.scopeOne");
 
   const budgetSummary = budgetData?.summary || {
     total_budgeted: 0,
@@ -394,47 +396,47 @@ function BudgetsPage() {
       <div className="dashboard-wrapper">
         <div className="dashboard-hero">
           <div>
-            <p className="eyebrow-text">Smart Spending Analyzer</p>
-            <h1>Budgets</h1>
+            <p className="eyebrow-text">{t("common.appName")}</p>
+            <h1>{t("common.budgets")}</h1>
             <p className="hero-subtitle">
-              Plan category limits by month and see how your real spending is tracking against them.
+              {t("headers.budgetsSubtitle")}
             </p>
           </div>
 
           <div className="header-actions">
             <button className="secondary-button" onClick={() => navigate("/dashboard")}>
-              Back to Dashboard
+              {t("common.backToDashboard")}
             </button>
             <button className="secondary-button" onClick={() => navigate("/analytics")}>
-              View Analytics
+              {t("common.viewAnalytics")}
             </button>
             <button className="secondary-button" onClick={() => navigate("/money-map")}>
-              Money Map
+              {t("common.moneyMap")}
             </button>
             <button className="secondary-button" onClick={() => navigate("/simulator")}>
-              Simulator
+              {t("common.simulator")}
             </button>
             <button className="secondary-button" onClick={() => navigate("/assistant")}>
-              Assistant
+              {t("common.assistant")}
             </button>
           </div>
         </div>
 
         <div className="dashboard-card">
           <div className="section-header">
-            <h2>Budget Scope</h2>
+            <h2>{t("budgets.scopeTitle")}</h2>
             <p>{scopeDescription}</p>
           </div>
 
           <div className="assistant-mode-row">
             <AccountSelector
               value={selectedAccountId}
-              label="Budget scope"
+              label={t("budgets.scopeLabel")}
               onChange={setSelectedAccountId}
             />
 
             <div className="assistant-mode-field">
-              <label htmlFor="budget-month">Month</label>
+              <label htmlFor="budget-month">{t("common.month")}</label>
               <input
                 id="budget-month"
                 type="month"
@@ -446,9 +448,7 @@ function BudgetsPage() {
 
           <div className="budget-scope-actions">
             <p className="budget-inline-note">
-              Reuse the previous month for a straight rollover, or build {nextMonth} from {month}
-              &apos;s live pace when you want smarter targets. Existing budgets in the target month
-              stay untouched.
+              {t("budgets.rolloverNote", { nextMonth, month })}
             </p>
             <div className="budget-section-actions">
               <button
@@ -457,7 +457,9 @@ function BudgetsPage() {
                 onClick={handleCopyPreviousMonth}
                 disabled={copying || buildingNextMonth}
               >
-                {copying ? "Copying..." : `Copy ${previousMonth} Budgets`}
+                {copying
+                  ? t("budgets.copying")
+                  : t("budgets.copyBudgets", { month: previousMonth })}
               </button>
               <button
                 type="button"
@@ -465,7 +467,9 @@ function BudgetsPage() {
                 onClick={handleBuildNextMonth}
                 disabled={buildingNextMonth || copying}
               >
-                {buildingNextMonth ? "Building..." : `Build ${nextMonth} From Pace`}
+                {buildingNextMonth
+                  ? t("budgets.building")
+                  : t("budgets.buildFromPace", { month: nextMonth })}
               </button>
             </div>
           </div>

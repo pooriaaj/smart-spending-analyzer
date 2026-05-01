@@ -8,6 +8,7 @@ import {
   getSelectedAccountId,
   setSelectedAccountId as persistSelectedAccountId,
 } from "../services/accountStorage";
+import { useLanguage } from "../i18n/LanguageContext";
 
 const getCurrentMonthStart = () => {
   const now = new Date();
@@ -98,6 +99,7 @@ const buildPaginationItems = (currentPage, totalPages) => {
 };
 
 function TransactionsPage() {
+  const { t } = useLanguage();
   const [transactions, setTransactions] = useState([]);
   const [typeFilter, setTypeFilter] = useState("");
   const [monthFilter, setMonthFilter] = useState("");
@@ -536,8 +538,8 @@ function TransactionsPage() {
       <div className="page-container dashboard-page">
         <div className="dashboard-wrapper">
           <div className="status-card">
-            <h2>Loading transactions...</h2>
-            <p>Please wait while your transaction history is being prepared.</p>
+            <h2>{t("transactions.loadingTitle")}</h2>
+            <p>{t("transactions.loadingDetail")}</p>
           </div>
         </div>
       </div>
@@ -549,58 +551,46 @@ function TransactionsPage() {
       <div className="dashboard-wrapper">
         <PageHeader
           icon="TX"
-          title="Transactions"
-          subtitle="Your ledger is the source of truth. Write daily transactions here, then reconcile the bank statement at month-end to catch what you forgot."
+          titleKey="common.transactions"
+          subtitleKey="headers.transactionsSubtitle"
           actions={(
             <button className="secondary-button" onClick={() => navigate("/import")}>
-              Reconcile Statement
+              {t("transactions.reconcileStatement")}
             </button>
           )}
         />
 
         <div className="dashboard-card product-guide-card">
           <div className="section-header">
-            <h2>How transactions work</h2>
-            <p>
-              Think of this page as your financial notebook. The more consistently you write here,
-              the smarter the app becomes at spotting habits, repeated payments, and category patterns.
-            </p>
+            <h2>{t("transactions.howTitle")}</h2>
+            <p>{t("transactions.howDetail")}</p>
           </div>
 
           <div className="feature-guide-grid">
             <div className="feature-guide-item">
-              <span className="feature-step">Daily</span>
-              <h3>Record what you remember</h3>
-              <p>
-                Add purchases, bills, income, and transfers as they happen. These are the transactions
-                you personally confirmed.
-              </p>
+              <span className="feature-step">{t("transactions.daily")}</span>
+              <h3>{t("transactions.dailyTitle")}</h3>
+              <p>{t("transactions.dailyDetail")}</p>
             </div>
 
             <div className="feature-guide-item">
-              <span className="feature-step">Month</span>
-              <h3>Reconcile the statement</h3>
-              <p>
-                Upload the month-end bank statement from Smart Import. The app looks for matching
-                written rows and only offers the missing statement rows for import.
-              </p>
+              <span className="feature-step">{t("transactions.month")}</span>
+              <h3>{t("transactions.monthTitle")}</h3>
+              <p>{t("transactions.monthDetail")}</p>
             </div>
 
             <div className="feature-guide-item">
-              <span className="feature-step">Learn</span>
-              <h3>Improve category memory</h3>
-              <p>
-                Normalize categories and review suggestions when needed. Your naming habits help the
-                app suggest cleaner categories next time.
-              </p>
+              <span className="feature-step">{t("transactions.learn")}</span>
+              <h3>{t("transactions.learnTitle")}</h3>
+              <p>{t("transactions.learnDetail")}</p>
             </div>
           </div>
         </div>
 
         <div className="filter-card">
           <div className="section-header">
-            <h2>Account View</h2>
-            <p>Select all accounts or focus on one account.</p>
+            <h2>{t("dashboard.accountView")}</h2>
+            <p>{t("transactions.accountViewDetail")}</p>
           </div>
           <AccountSelector value={selectedAccountId} onChange={setSelectedAccountId} allowAll={true} />
           {scopeNotice && <div className="bulk-message-box">{scopeNotice}</div>}
@@ -608,16 +598,13 @@ function TransactionsPage() {
 
         <div className="filter-card fresh-start-card">
           <div className="section-header">
-            <h2>Fresh Start</h2>
-            <p>
-              Remove old statement history and keep the transactions from your new spending life.
-              This is built for your new workflow: write daily transactions, then reconcile the month-end bank statement.
-            </p>
+            <h2>{t("transactions.freshStart")}</h2>
+            <p>{t("transactions.freshStartDetail")}</p>
           </div>
 
           <div className="fresh-start-grid">
             <div>
-              <label htmlFor="fresh-start-date">Keep transactions from</label>
+              <label htmlFor="fresh-start-date">{t("transactions.keepFrom")}</label>
               <input
                 id="fresh-start-date"
                 type="date"
@@ -651,14 +638,14 @@ function TransactionsPage() {
               onClick={handleFreshStart}
               disabled={freshStartLoading || !freshStartDate}
             >
-              {freshStartLoading ? "Cleaning..." : "Delete Old History"}
+              {freshStartLoading ? t("transactions.cleaning") : t("transactions.deleteOldHistory")}
             </button>
             <button
               type="button"
               className="secondary-button"
               onClick={() => navigate("/import")}
             >
-              Reconcile This Month
+              {t("transactions.reconcileThisMonth")}
             </button>
           </div>
 
@@ -668,8 +655,8 @@ function TransactionsPage() {
 
         <div className="filter-card">
           <div className="section-header">
-            <h2>Repeating Money Patterns</h2>
-            <p>Repeated expenses and income detected from your written transaction history in this scope.</p>
+            <h2>{t("transactions.repeatingPatterns")}</h2>
+            <p>{t("transactions.repeatingPatternsDetail")}</p>
           </div>
 
           {recurringPatterns.length === 0 ? (
@@ -759,8 +746,8 @@ function TransactionsPage() {
 
         <div className="filter-card">
           <div className="section-header">
-            <h2>Smart Categorization</h2>
-            <p>Analyze uncategorized rows and clean up legacy category labels so future suggestions stay consistent.</p>
+            <h2>{t("transactions.smartCategorization")}</h2>
+            <p>{t("transactions.smartCategorizationDetail")}</p>
           </div>
 
           <div className="smart-actions-row">
@@ -841,7 +828,7 @@ function TransactionsPage() {
 
         <div className="filter-card">
           <div className="section-header">
-            <h2>Transaction Filters</h2>
+            <h2>{t("transactions.transactionFilters")}</h2>
             <p>
               Showing {filteredTransactions.length} of {transactions.length} transaction
               {transactions.length === 1 ? "" : "s"} in this account view.

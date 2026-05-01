@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import api from "../services/api";
+import { useLanguage } from "../i18n/LanguageContext";
 
 function ForgotPasswordPage() {
   const [email, setEmail] = useState("");
@@ -8,6 +9,7 @@ function ForgotPasswordPage() {
   const [error, setError] = useState("");
   const [resetUrl, setResetUrl] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const { t } = useLanguage();
 
   const handleForgotPassword = async (e) => {
     e.preventDefault();
@@ -23,9 +25,7 @@ function ForgotPasswordPage() {
       setMessage(response.data.message);
       setResetUrl(response.data.reset_url || "");
     } catch (err) {
-      setError(
-        err?.response?.data?.detail || "Failed to process forgot password request."
-      );
+      setError(err?.response?.data?.detail || t("auth.forgotFailed"));
     } finally {
       setSubmitting(false);
     }
@@ -37,18 +37,18 @@ function ForgotPasswordPage() {
         <div className="auth-panel auth-panel-centered">
           <div className="auth-card">
             <div className="auth-card-header">
-              <p className="auth-card-kicker">Account recovery</p>
-              <h2>Forgot password</h2>
-              <p>Enter your email and we’ll generate a password reset link.</p>
+              <p className="auth-card-kicker">{t("auth.accountRecovery")}</p>
+              <h2>{t("auth.forgotPasswordTitle")}</h2>
+              <p>{t("auth.forgotPasswordDetail")}</p>
             </div>
 
             <form onSubmit={handleForgotPassword} className="auth-form">
               <div className="auth-field">
-                <label htmlFor="forgot-email">Email</label>
+                <label htmlFor="forgot-email">{t("auth.email")}</label>
                 <input
                   id="forgot-email"
                   type="email"
-                  placeholder="Enter your email"
+                  placeholder={t("auth.emailPlaceholder")}
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   autoComplete="email"
@@ -61,7 +61,7 @@ function ForgotPasswordPage() {
                 className="auth-submit-button"
                 disabled={submitting}
               >
-                {submitting ? "Generating..." : "Send Reset Link"}
+                {submitting ? t("auth.generating") : t("auth.sendResetLink")}
               </button>
             </form>
 
@@ -70,16 +70,16 @@ function ForgotPasswordPage() {
 
             {resetUrl && (
               <div className="reset-link-box">
-                <p className="reset-link-label">Test reset link:</p>
+                <p className="reset-link-label">{t("auth.testResetLink")}</p>
                 <a href={resetUrl} className="auth-inline-link">
-                  Open password reset page
+                  {t("auth.openResetPage")}
                 </a>
               </div>
             )}
 
             <div className="auth-footer">
               <p>
-                Back to <Link to="/">Login</Link>
+                {t("auth.backTo")} <Link to="/">{t("auth.login")}</Link>
               </p>
             </div>
           </div>

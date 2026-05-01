@@ -1,17 +1,21 @@
+import { useLanguage } from "../i18n/LanguageContext";
+
 function ThemeToggle({ theme, onToggle }) {
+  const { t } = useLanguage();
+
   return (
     <button
       type="button"
       className="theme-toggle"
       onClick={onToggle}
-      aria-label="Toggle theme"
-      title={theme === "light" ? "Switch to dark mode" : "Switch to light mode"}
+      aria-label={t("theme.toggle")}
+      title={theme === "light" ? t("theme.switchToDark") : t("theme.switchToLight")}
     >
       <span className="theme-toggle-icon">
-        {theme === "light" ? "🌙" : "☀️"}
+        {theme === "light" ? "Moon" : "Sun"}
       </span>
       <span className="theme-toggle-text">
-        {theme === "light" ? "Dark" : "Light"}
+        {theme === "light" ? t("theme.dark") : t("theme.light")}
       </span>
     </button>
   );

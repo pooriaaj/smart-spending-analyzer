@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import api, { handleApiAuthError } from "../services/api";
 import AccountSelector from "../components/AccountSelector";
+import { useLanguage } from "../i18n/LanguageContext";
 import {
   ALL_ACCOUNTS_VALUE,
   getSelectedAccountId,
@@ -25,6 +26,7 @@ const FALLBACK_QUESTIONS = [
 ];
 
 function AssistantPage() {
+  const { t } = useLanguage();
   const [question, setQuestion] = useState("");
   const [assistantMode, setAssistantMode] = useState("balanced");
   const [selectedAccountId, setSelectedAccountId] = useState(getSelectedAccountId());
@@ -250,24 +252,24 @@ function AssistantPage() {
 
   const modeDescription =
     assistantMode === "strict"
-      ? "Direct and accountability-focused."
+      ? t("assistant.strictDescription")
       : assistantMode === "coach"
-      ? "Supportive and motivating."
-      : "Neutral and practical.";
+      ? t("assistant.coachDescription")
+      : t("assistant.balancedDescription");
   const scopeDescription =
     selectedAccountId === ALL_ACCOUNTS_VALUE
-      ? "All accounts combined."
-      : "Focused on the selected account only.";
+      ? t("assistant.scopeAll")
+      : t("assistant.scopeOne");
 
   return (
     <div className="page-container dashboard-page">
       <div className="dashboard-wrapper">
         <div className="dashboard-hero">
           <div>
-            <p className="eyebrow-text">Smart Spending Analyzer</p>
-            <h1>Financial Assistant</h1>
+            <p className="eyebrow-text">{t("common.appName")}</p>
+            <h1>{t("assistant.title")}</h1>
             <p className="hero-subtitle">
-              Ask questions about your balance, trends, alerts, categories, recent activity, and savings.
+              {t("headers.assistantSubtitle")}
             </p>
           </div>
 
@@ -276,91 +278,91 @@ function AssistantPage() {
               className="secondary-button"
               onClick={() => navigate("/dashboard")}
             >
-              Back to Dashboard
+              {t("common.backToDashboard")}
             </button>
 
             <button
               className="secondary-button"
               onClick={() => navigate("/analytics")}
             >
-              View Analytics
+              {t("common.viewAnalytics")}
             </button>
 
             <button
               className="secondary-button"
               onClick={() => navigate("/money-map")}
             >
-              Money Map
+              {t("common.moneyMap")}
             </button>
 
             <button
               className="secondary-button"
               onClick={() => navigate("/budgets")}
             >
-              Budgets
+              {t("common.budgets")}
             </button>
 
             <button
               className="secondary-button"
               onClick={() => navigate("/simulator")}
             >
-              Simulator
+              {t("common.simulator")}
             </button>
           </div>
         </div>
 
         <div className="dashboard-card assistant-card">
           <div className="section-header">
-            <h2>Assistant mode</h2>
-            <p>Choose how you want the assistant to respond.</p>
+            <h2>{t("assistant.modeTitle")}</h2>
+            <p>{t("assistant.modeDetail")}</p>
           </div>
 
           <div className="assistant-mode-row">
             <div className="assistant-mode-field">
-              <label htmlFor="assistant-mode">Personality mode</label>
+              <label htmlFor="assistant-mode">{t("assistant.modeLabel")}</label>
               <select
                 id="assistant-mode"
                 value={assistantMode}
                 onChange={(e) => setAssistantMode(e.target.value)}
               >
-                <option value="balanced">Balanced</option>
-                <option value="strict">Strict</option>
-                <option value="coach">Coach</option>
+                <option value="balanced">{t("assistant.balanced")}</option>
+                <option value="strict">{t("assistant.strict")}</option>
+                <option value="coach">{t("assistant.coach")}</option>
               </select>
             </div>
 
             <div className="assistant-mode-note">
-              <strong>Current mode:</strong> {modeDescription}
+              <strong>{t("assistant.currentMode")}</strong> {modeDescription}
             </div>
           </div>
         </div>
 
         <div className="dashboard-card assistant-card">
           <div className="section-header">
-            <h2>Assistant scope</h2>
-            <p>Choose whether answers should use all accounts combined or one specific account.</p>
+            <h2>{t("assistant.scopeTitle")}</h2>
+            <p>{t("assistant.scopeDetail")}</p>
           </div>
 
           <div className="assistant-mode-row">
             <AccountSelector
               value={selectedAccountId}
-              label="Assistant scope"
+              label={t("assistant.scopeLabel")}
               onChange={setSelectedAccountId}
             />
 
             <div className="assistant-mode-note">
-              <strong>Current scope:</strong> {scopeDescription}
+              <strong>{t("assistant.currentScope")}</strong> {scopeDescription}
             </div>
           </div>
         </div>
 
         <div className="dashboard-card assistant-card">
           <div className="section-header">
-            <h2>Smart prompts</h2>
+            <h2>{t("assistant.smartPrompts")}</h2>
             <p>
               {suggestionsLoading
-                ? "Loading finance-aware prompts..."
-                : "These prompts are generated from your current financial data in the selected scope."}
+                ? t("assistant.promptsLoading")
+                : t("assistant.promptsReady")}
             </p>
           </div>
 

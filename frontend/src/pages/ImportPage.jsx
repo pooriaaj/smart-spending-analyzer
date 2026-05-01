@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import api, { handleApiAuthError } from "../services/api";
 import AccountSelector from "../components/AccountSelector";
 import { ALL_ACCOUNTS_VALUE } from "../services/accountStorage";
+import { useLanguage } from "../i18n/LanguageContext";
 
 const ALLOWED_TRANSACTION_TYPES = new Set(["expense", "income"]);
 const FREE_BATCH_IMPORT_FILE_LIMIT = 6;
@@ -131,6 +132,7 @@ const formatSelectedFilesLabel = (files) => {
 
 function ImportPage() {
   const navigate = useNavigate();
+  const { t } = useLanguage();
   const fileInputRef = useRef(null);
 
   const [selectedAccountId, setSelectedAccountId] = useState(ALL_ACCOUNTS_VALUE);
@@ -554,48 +556,45 @@ function ImportPage() {
       <div className="dashboard-wrapper">
         <div className="dashboard-hero">
           <div>
-            <p className="eyebrow-text">Smart Spending Analyzer</p>
-            <h1>Smart Import</h1>
+            <p className="eyebrow-text">{t("common.appName")}</p>
+            <h1>{t("common.smartImport")}</h1>
             <p className="hero-subtitle">
-              Use daily transactions as your source of truth, then upload the month-end statement to find what you missed.
+              {t("headers.importSubtitle")}
             </p>
           </div>
 
           <div className="header-actions">
             <button className="secondary-button" onClick={() => navigate("/transactions")}>
-              Back to Transactions
+              {t("common.backToTransactions")}
             </button>
             <button className="secondary-button" onClick={() => navigate("/dashboard")}>
-              Dashboard
+              {t("common.dashboard")}
             </button>
             <button className="secondary-button" onClick={() => navigate("/money-map")}>
-              Money Map
+              {t("common.moneyMap")}
             </button>
           </div>
         </div>
 
         <div className="filter-card">
           <div className="section-header">
-            <h2>Import Destination</h2>
-            <p>Select the account where imported transactions should go.</p>
+            <h2>{t("import.destination")}</h2>
+            <p>{t("import.destinationDetail")}</p>
           </div>
 
           <AccountSelector
             value={selectedAccountId}
             onChange={setSelectedAccountId}
             allowAll={false}
-            label="Target Account"
+            label={t("common.targetAccount")}
             persistSelection={false}
           />
         </div>
 
         <div className="dashboard-card large-card">
           <div className="section-header">
-            <h2>Upload Files</h2>
-            <p>
-              Upload up to {FREE_BATCH_IMPORT_FILE_LIMIT} CSV or PDF bank statements in one try. The app marks rows
-              already written and lets you import only the missed transactions.
-            </p>
+            <h2>{t("import.uploadFiles")}</h2>
+            <p>{t("import.uploadFilesDetail", { limit: FREE_BATCH_IMPORT_FILE_LIMIT })}</p>
           </div>
 
           <div className="import-upload-card">
@@ -611,11 +610,8 @@ function ImportPage() {
 
             <div className="import-upload-top">
               <div>
-                <h3>Smart Import</h3>
-                <p>
-                  Select this month&apos;s statement to reconcile your daily entries. More than{" "}
-                  {FREE_BATCH_IMPORT_FILE_LIMIT} files in one batch is a Premium workflow.
-                </p>
+                <h3>{t("common.smartImport")}</h3>
+                <p>{t("import.selectStatement", { limit: FREE_BATCH_IMPORT_FILE_LIMIT })}</p>
               </div>
 
               <button
@@ -624,19 +620,19 @@ function ImportPage() {
                 onClick={handleChooseFile}
                 disabled={loading}
               >
-                {loading ? "Processing..." : "Choose Files"}
+                {loading ? t("import.processing") : t("import.chooseFiles")}
               </button>
             </div>
 
             <div className="import-upload-meta">
-              <span className="import-file-label">Selected files:</span>
-              <span className="import-file-name">{selectedFileName || "No files selected yet"}</span>
+              <span className="import-file-label">{t("import.selectedFiles")}</span>
+              <span className="import-file-name">{selectedFileName || t("import.noFiles")}</span>
             </div>
 
             {loading && (
               <div className="import-info-box">
-                <strong>Processing upload...</strong>
-                <p>Detecting each file type and running the correct import pipeline.</p>
+                <strong>{t("import.processingUpload")}</strong>
+                <p>{t("import.processingDetail")}</p>
               </div>
             )}
 
@@ -644,7 +640,7 @@ function ImportPage() {
               <div className="import-error">
                 <div className="import-message-header">
                   <div>
-                    <h3>Import failed</h3>
+                    <h3>{t("import.importFailed")}</h3>
                     <p>{error}</p>
                   </div>
                   <button
@@ -652,7 +648,7 @@ function ImportPage() {
                     className="dismiss-message-button dismiss-error-button"
                     onClick={clearAll}
                   >
-                    Dismiss
+                    {t("import.dismiss")}
                   </button>
                 </div>
 
@@ -673,28 +669,28 @@ function ImportPage() {
               <div className="import-success">
                 <div className="import-message-header">
                   <div>
-                    <h3>Import completed</h3>
+                    <h3>{t("import.completed")}</h3>
                     <p>{importResult.message}</p>
                   </div>
                   <button type="button" className="dismiss-message-button" onClick={clearAll}>
-                    Clear
+                    {t("import.clear")}
                   </button>
                 </div>
 
                 {importResult.import_summary && (
                   <div className="import-stats-grid">
                     <div className="import-stat-card">
-                      <span className="import-stat-label">Imported</span>
+                      <span className="import-stat-label">{t("import.imported")}</span>
                       <strong>{importResult.import_summary.imported ?? 0}</strong>
                     </div>
 
                     <div className="import-stat-card">
-                      <span className="import-stat-label">Duplicates skipped</span>
+                      <span className="import-stat-label">{t("import.duplicatesSkipped")}</span>
                       <strong>{importResult.import_summary.duplicates_skipped ?? 0}</strong>
                     </div>
 
                     <div className="import-stat-card">
-                      <span className="import-stat-label">Invalid rows skipped</span>
+                      <span className="import-stat-label">{t("import.invalidRowsSkipped")}</span>
                       <strong>{importResult.import_summary.invalid_rows_skipped ?? 0}</strong>
                     </div>
                   </div>
@@ -717,14 +713,14 @@ function ImportPage() {
                     className="secondary-button"
                     onClick={() => navigate("/money-map")}
                   >
-                    Open Money Map
+                    {t("dashboard.openMoneyMap")}
                   </button>
                   <button
                     type="button"
                     className="secondary-button"
                     onClick={() => navigate("/transactions")}
                   >
-                    Review Transactions
+                    {t("common.reviewTransactions")}
                   </button>
                 </div>
               </div>

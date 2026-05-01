@@ -5,6 +5,7 @@ import {
   getSelectedAccountId,
   setSelectedAccountId as persistSelectedAccountId,
 } from "../services/accountStorage";
+import { useLanguage } from "../i18n/LanguageContext";
 
 function normalizeSelection(value, allowAll) {
   return allowAll || value !== ALL_ACCOUNTS_VALUE ? String(value || "") : "";
@@ -13,10 +14,11 @@ function normalizeSelection(value, allowAll) {
 function AccountSelector({
   onChange,
   allowAll = true,
-  label = "Account",
+  label,
   value,
   persistSelection = true,
 }) {
+  const { t } = useLanguage();
   const [accounts, setAccounts] = useState([]);
   const [internalSelected, setInternalSelected] = useState(() =>
     normalizeSelection(value ?? getSelectedAccountId(), allowAll)
@@ -67,14 +69,14 @@ function AccountSelector({
 
   return (
     <div className="account-selector-block">
-      <label htmlFor="account-selector">{label}</label>
+      <label htmlFor="account-selector">{label || t("common.account")}</label>
       <select
         id="account-selector"
         value={selected}
         onChange={handleSelectionChange}
       >
-        {allowAll && <option value={ALL_ACCOUNTS_VALUE}>All Accounts</option>}
-        {!allowAll && !accounts.length && <option value="">Loading accounts...</option>}
+        {allowAll && <option value={ALL_ACCOUNTS_VALUE}>{t("common.allAccounts")}</option>}
+        {!allowAll && !accounts.length && <option value="">{t("common.loadingAccounts")}</option>}
         {accounts.map((account) => (
           <option key={account.id} value={String(account.id)}>
             {account.name} ({account.type})
