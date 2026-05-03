@@ -14,7 +14,7 @@ function LanguageToggle() {
           onClick={() => setLanguage(item.code)}
           aria-pressed={language === item.code}
         >
-          {item.shortLabel}
+          {item.code === "fr" ? t("language.optionFrench") : t("language.optionEnglish")}
         </button>
       ))}
       <span className="language-toggle-label">

@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import api, { handleApiAuthError } from "../services/api";
 import { setSelectedAccountId } from "../services/accountStorage";
 import { useLanguage } from "../i18n/LanguageContext";
+import { formatAccountName, formatAccountType, formatCategoryLabel } from "../utils/displayLabels";
 
 function AccountsPage() {
   const navigate = useNavigate();
@@ -126,8 +127,8 @@ function AccountsPage() {
                 <div key={account.id} className="account-summary-item">
                   <div className="account-summary-top">
                     <div>
-                      <strong>{account.name}</strong>
-                      <p>{account.type}</p>
+                      <strong>{formatAccountName(account.name, t)}</strong>
+                      <p>{formatAccountType(account.type, t)}</p>
                     </div>
 
                     <div className="transaction-actions-inline">
@@ -163,8 +164,11 @@ function AccountsPage() {
 
                   <p className="account-summary-footnote">
                     {account.top_category
-                      ? `Top category: ${account.top_category} ($${Number(account.top_category_amount || 0).toFixed(2)})`
-                      : "No expense category recorded yet."}
+                      ? t("accounts.topCategory", {
+                          category: formatCategoryLabel(account.top_category, t),
+                          amount: Number(account.top_category_amount || 0).toFixed(2),
+                        })
+                      : t("accounts.noExpenseCategory")}
                   </p>
                 </div>
               ))}

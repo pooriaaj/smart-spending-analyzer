@@ -17,11 +17,16 @@ import {
   getSelectedAccountId,
   setSelectedAccountId as persistSelectedAccountId,
 } from "../services/accountStorage";
+import {
+  formatCategoryLabel,
+  formatRecurringReviewReason,
+  formatScopeLabel,
+} from "../utils/displayLabels";
 
 const SCENARIO_PRESETS = [
   {
-    label: "Cut $200 Expenses",
-    description: "Model a steady monthly expense reduction.",
+    labelKey: "simulator.presetCutExpenses",
+    descriptionKey: "simulator.presetCutExpensesDetail",
     months: 6,
     incomeAdjustment: 0,
     expenseAdjustment: -200,
@@ -31,8 +36,8 @@ const SCENARIO_PRESETS = [
     eventLabel: "",
   },
   {
-    label: "Add $500 Income",
-    description: "See the impact of a side income stream.",
+    labelKey: "simulator.presetAddIncome",
+    descriptionKey: "simulator.presetAddIncomeDetail",
     months: 6,
     incomeAdjustment: 500,
     expenseAdjustment: 0,
@@ -42,8 +47,8 @@ const SCENARIO_PRESETS = [
     eventLabel: "",
   },
   {
-    label: "Reach $10,000",
-    description: "Aim for a round-number balance goal.",
+    labelKey: "simulator.presetReachGoal",
+    descriptionKey: "simulator.presetReachGoalDetail",
     months: 6,
     incomeAdjustment: 0,
     expenseAdjustment: 0,
@@ -53,19 +58,19 @@ const SCENARIO_PRESETS = [
     eventLabel: "",
   },
   {
-    label: "Plan $1,200 Purchase",
-    description: "Drop a one-time expense into the second month.",
+    labelKey: "simulator.presetPlanPurchase",
+    descriptionKey: "simulator.presetPlanPurchaseDetail",
     months: 6,
     incomeAdjustment: 0,
     expenseAdjustment: 0,
     targetBalance: "",
     eventAmount: -1200,
     eventMonthOffset: 2,
-    eventLabel: "Planned purchase",
+    eventLabelKey: "simulator.plannedPurchase",
   },
   {
-    label: "Reset Scenario",
-    description: "Go back to the baseline path.",
+    labelKey: "simulator.presetReset",
+    descriptionKey: "simulator.presetResetDetail",
     months: 6,
     incomeAdjustment: 0,
     expenseAdjustment: 0,
@@ -116,33 +121,98 @@ function formatScenarioCurrency(value) {
 }
 
 const SAVED_SCENARIO_SORT_OPTIONS = [
-  { value: "newest", label: "Newest" },
-  { value: "strongest", label: "Strongest" },
-  { value: "safest", label: "Safest" },
-  { value: "goal", label: "Goal Progress" },
+  { value: "newest", labelKey: "simulator.newest" },
+  { value: "strongest", labelKey: "simulator.strongest" },
+  { value: "safest", labelKey: "simulator.safest" },
+  { value: "goal", labelKey: "simulator.goalProgress" },
 ];
 
 const SAVED_SCENARIO_FILTER_OPTIONS = [
-  { value: "all", label: "All Plans" },
-  { value: "healthy", label: "Healthy" },
-  { value: "attention", label: "Needs Attention" },
-  { value: "goal", label: "Goal Plans" },
-  { value: "event", label: "Event Plans" },
+  { value: "all", labelKey: "simulator.allPlans" },
+  { value: "healthy", labelKey: "simulator.healthyPlans" },
+  { value: "attention", labelKey: "simulator.attentionPlans" },
+  { value: "goal", labelKey: "simulator.goalPlans" },
+  { value: "event", labelKey: "simulator.eventPlans" },
 ];
 
 const RECOMMENDATION_FILTER_OPTIONS = [
-  { value: "all", label: "All Ideas" },
-  { value: "cash_flow", label: "Cash Flow" },
-  { value: "recurring", label: "Recurring" },
-  { value: "budget_pressure", label: "Budget Risk" },
-  { value: "saved", label: "Saved" },
+  { value: "all", labelKey: "simulator.allIdeas" },
+  { value: "cash_flow", labelKey: "simulator.cashFlow" },
+  { value: "recurring", labelKey: "simulator.recurring" },
+  { value: "budget_pressure", labelKey: "simulator.budgetRisk" },
+  { value: "saved", labelKey: "simulator.saved" },
 ];
 
-function getRecommendationSourceLabel(source) {
-  if (source === "cash_flow") return "Cash flow";
-  if (source === "recurring" || source === "recurring_bundle") return "Recurring";
-  if (source === "budget_pressure") return "Budget risk";
-  return "Strategy";
+function getRecommendationSourceLabel(source, t) {
+  if (source === "cash_flow") return t("simulator.cashFlow");
+  if (source === "recurring" || source === "recurring_bundle") return t("simulator.recurring");
+  if (source === "budget_pressure") return t("simulator.budgetRisk");
+  return t("simulator.strategy");
+}
+
+function getRecommendationDisplayLabel(recommendation, t) {
+  if (recommendation?.source === "cash_flow") {
+    return t("simulator.recommendationCashFlowTitle");
+  }
+
+  if (recommendation?.source === "recurring") {
+    const merchantName = String(recommendation?.label || "").replace(/^Cancel\s+/i, "").trim();
+    return t("simulator.recommendationRecurringTitle", {
+      name: merchantName || t("simulator.recurringCost"),
+    });
+  }
+
+  if (recommendation?.source === "recurring_bundle") {
+    return t("simulator.recommendationBundleTitle");
+  }
+
+  if (recommendation?.source === "budget_pressure") {
+    return t("simulator.recommendationBudgetTitle");
+  }
+
+  return recommendation?.label || t("simulator.recommendedPlanName");
+}
+
+function getRecommendationDescription(recommendation, t) {
+  const monthlyChange = Math.abs(Number(recommendation?.expense_adjustment || 0)).toFixed(2);
+
+  if (recommendation?.source === "cash_flow") {
+    return t("simulator.recommendationCashFlowDetail", { amount: monthlyChange });
+  }
+
+  if (recommendation?.source === "recurring") {
+    return t("simulator.recommendationRecurringDetail", { amount: monthlyChange });
+  }
+
+  if (recommendation?.source === "recurring_bundle") {
+    return t("simulator.recommendationBundleDetail", { amount: monthlyChange });
+  }
+
+  if (recommendation?.source === "budget_pressure") {
+    return t("simulator.recommendationBudgetDetail", { amount: monthlyChange });
+  }
+
+  return recommendation?.description || t("simulator.recommendationGenericDetail");
+}
+
+function getRecommendationReason(recommendation, t) {
+  if (recommendation?.source === "cash_flow") {
+    return t("simulator.recommendationCashFlowReason");
+  }
+
+  if (recommendation?.source === "recurring") {
+    return t("simulator.recommendationRecurringReason");
+  }
+
+  if (recommendation?.source === "recurring_bundle") {
+    return t("simulator.recommendationBundleReason");
+  }
+
+  if (recommendation?.source === "budget_pressure") {
+    return t("simulator.recommendationBudgetReason");
+  }
+
+  return t("simulator.recommendationGenericReason");
 }
 
 function filterRecommendations(recommendations, filterMode) {
@@ -160,17 +230,34 @@ function filterRecommendations(recommendations, filterMode) {
   return recommendations;
 }
 
-function buildSavedScenarioSummary(scenario) {
-  const summaryParts = [`${scenario.months} month${scenario.months === 1 ? "" : "s"}`];
+function buildSavedScenarioSummary(scenario, t) {
+  const summaryParts = [
+    t("simulator.monthCount", {
+      count: scenario.months,
+      plural: scenario.months === 1 ? "" : "s",
+    }),
+  ];
 
   if (Number(scenario.income_adjustment) !== 0) {
-    summaryParts.push(`income ${formatSignedScenarioAmount(scenario.income_adjustment)}`);
+    summaryParts.push(
+      t("simulator.summaryIncome", {
+        amount: formatSignedScenarioAmount(scenario.income_adjustment),
+      })
+    );
   }
   if (Number(scenario.expense_adjustment) !== 0) {
-    summaryParts.push(`expenses ${formatSignedScenarioAmount(scenario.expense_adjustment)}`);
+    summaryParts.push(
+      t("simulator.summaryExpenses", {
+        amount: formatSignedScenarioAmount(scenario.expense_adjustment),
+      })
+    );
   }
   if (scenario.target_balance != null) {
-    summaryParts.push(`target $${Number(scenario.target_balance).toFixed(2)}`);
+    summaryParts.push(
+      t("simulator.summaryTarget", {
+        amount: Number(scenario.target_balance).toFixed(2),
+      })
+    );
   }
 
   return summaryParts.join(" | ");
@@ -204,9 +291,9 @@ function buildSimulationRequestParams({
   };
 }
 
-function buildSavedScenarioPayloadFromRecommendation(recommendation, accountId) {
+function buildSavedScenarioPayloadFromRecommendation(recommendation, accountId, t) {
   return {
-    name: recommendation.label || "Recommended simulator plan",
+    name: getRecommendationDisplayLabel(recommendation, t),
     months: Math.max(1, Math.min(Number(recommendation.months) || 6, 12)),
     income_adjustment: Number(recommendation.income_adjustment) || 0,
     expense_adjustment: Number(recommendation.expense_adjustment) || 0,
@@ -226,14 +313,14 @@ function buildSavedScenarioPayloadFromRecommendation(recommendation, accountId) 
   };
 }
 
-function getScenarioRiskLabel(riskLevel) {
+function getScenarioRiskLabel(riskLevel, t) {
   if (riskLevel === "high") {
-    return "High risk";
+    return t("simulator.highRisk");
   }
   if (riskLevel === "watch") {
-    return "Watch closely";
+    return t("simulator.watchClosely");
   }
-  return "Healthy pace";
+  return t("simulator.healthyPace");
 }
 
 function getScenarioRiskRank(riskLevel) {
@@ -319,7 +406,7 @@ function filterSavedScenarios(scenarios, filterMode) {
   return scenarios;
 }
 
-function buildScenarioComparisonNote(currentData, comparedData, comparedName) {
+function buildScenarioComparisonNote(currentData, comparedData, comparedName, t) {
   if (!currentData || !comparedData || !comparedName) {
     return "";
   }
@@ -329,14 +416,110 @@ function buildScenarioComparisonNote(currentData, comparedData, comparedName) {
     Number(comparedData.projected_end_balance || 0);
 
   if (Math.abs(difference) < 0.01) {
-    return `The current draft and "${comparedName}" finish in nearly the same place by month end.`;
+    return t("simulator.comparisonSame", { name: comparedName });
   }
 
   if (difference > 0) {
-    return `The current draft finishes ${formatScenarioCurrency(difference)} ahead of "${comparedName}" by month end.`;
+    return t("simulator.comparisonCurrentAhead", {
+      name: comparedName,
+      amount: formatScenarioCurrency(difference),
+    });
   }
 
-  return `"${comparedName}" finishes ${formatScenarioCurrency(Math.abs(difference))} ahead of the current draft by month end.`;
+  return t("simulator.comparisonComparedAhead", {
+    name: comparedName,
+    amount: formatScenarioCurrency(Math.abs(difference)),
+  });
+}
+
+function buildSimulatorNarrative(simulationData, t) {
+  if (!simulationData) return "";
+
+  const months = Number(simulationData.months || 0);
+  const startingBalance = Number(simulationData.starting_balance || 0);
+  const projectedEndBalance = Number(simulationData.projected_end_balance || 0);
+  const projectedChange = projectedEndBalance - startingBalance;
+  const baseParams = {
+    amount: formatScenarioCurrency(Math.abs(projectedChange)),
+    months,
+    balance: formatScenarioCurrency(projectedEndBalance),
+  };
+
+  let narrative =
+    projectedChange < -0.01
+      ? t("simulator.narrativeFall", baseParams)
+      : projectedChange > 0.01
+      ? t("simulator.narrativeGrow", baseParams)
+      : t("simulator.narrativeFlat", baseParams);
+
+  if (simulationData.one_time_event_amount != null) {
+    narrative += ` ${t("simulator.narrativeEvent", {
+      amount: formatScenarioCurrency(Math.abs(Number(simulationData.one_time_event_amount || 0))),
+      month: simulationData.one_time_event_month || t("simulator.plannedEvent"),
+      label: simulationData.one_time_event_label || t("simulator.oneTimeEvent"),
+    })}`;
+  }
+
+  return narrative;
+}
+
+function buildSimulatorAssumptions(simulationData, t) {
+  if (!simulationData) return [];
+
+  const assumptions = [
+    t("simulator.assumptionBaseline", {
+      income: Number(simulationData.baseline_monthly_income || 0).toFixed(2),
+      expenses: Number(simulationData.baseline_monthly_expenses || 0).toFixed(2),
+    }),
+    t("simulator.assumptionAdjustments", {
+      income: Number(simulationData.adjusted_monthly_income || 0).toFixed(2),
+      expenses: Number(simulationData.adjusted_monthly_expenses || 0).toFixed(2),
+    }),
+  ];
+
+  if (simulationData.one_time_event_amount != null) {
+    assumptions.push(
+      t("simulator.assumptionEvent", {
+        label: simulationData.one_time_event_label || t("simulator.oneTimeEvent"),
+        month: simulationData.one_time_event_month || t("simulator.plannedEvent"),
+        amount: formatSignedScenarioAmount(simulationData.one_time_event_amount),
+      })
+    );
+  }
+
+  if (simulationData.goal_balance != null) {
+    assumptions.push(
+      t("simulator.assumptionGoal", {
+        amount: Number(simulationData.goal_balance || 0).toFixed(2),
+      })
+    );
+  }
+
+  return assumptions;
+}
+
+function buildGoalNote(simulationData, t) {
+  if (!simulationData || simulationData.goal_balance == null) return "";
+
+  const gapAmount = Number(simulationData.goal_gap_amount || 0);
+  if (gapAmount <= 0) {
+    return t("simulator.goalOnTrackNote", {
+      amount: Number(simulationData.goal_balance || 0).toFixed(2),
+    });
+  }
+
+  return t("simulator.goalGapNote", {
+    amount: gapAmount.toFixed(2),
+    monthly: Number(simulationData.required_income_lift || 0).toFixed(2),
+  });
+}
+
+function formatReductionReason(item, t) {
+  if (Number(item?.share_percent || 0) >= 35) {
+    return t("simulator.reductionLargeShareReason");
+  }
+
+  return t("simulator.reductionReviewReason");
 }
 
 function buildScenarioComparisonTimeline(currentData, comparedData) {
@@ -376,7 +559,7 @@ function buildScenarioComparisonTimeline(currentData, comparedData) {
   });
 }
 
-function buildScenarioComparisonHighlights(currentData, comparedData, comparedName) {
+function buildScenarioComparisonHighlights(currentData, comparedData, comparedName, t) {
   if (!currentData || !comparedData || !comparedName) {
     return [];
   }
@@ -404,38 +587,50 @@ function buildScenarioComparisonHighlights(currentData, comparedData, comparedNa
 
   return [
     {
-      title: "Better finish",
+      title: t("simulator.betterFinish"),
       value:
         endDifference >= 0
-          ? `Current draft by ${formatScenarioCurrency(endDifference)}`
-          : `${comparedName} by ${formatScenarioCurrency(Math.abs(endDifference))}`,
-      detail: "Projected end balance advantage over the full scenario window.",
+          ? t("simulator.currentDraftBy", { amount: formatScenarioCurrency(endDifference) })
+          : t("simulator.comparedBy", {
+              name: comparedName,
+              amount: formatScenarioCurrency(Math.abs(endDifference)),
+            }),
+      detail: t("simulator.betterFinishDetail"),
     },
     {
-      title: "Monthly pace edge",
+      title: t("simulator.monthlyPaceEdge"),
       value:
         netDifference >= 0
-          ? `Current draft ${formatSignedScenarioAmount(netDifference)}`
-          : `${comparedName} ${formatSignedScenarioAmount(Math.abs(netDifference))}`,
-      detail: "Difference in monthly net cash flow between the two paths.",
+          ? t("simulator.monthlyPaceCurrent", { amount: formatSignedScenarioAmount(netDifference) })
+          : t("simulator.monthlyPaceCompared", {
+              name: comparedName,
+              amount: formatSignedScenarioAmount(Math.abs(netDifference)),
+            }),
+      detail: t("simulator.monthlyPaceDetail"),
     },
     {
-      title: "Safer cash floor",
+      title: t("simulator.saferCashFloor"),
       value:
         cashFloorDifference == null
-          ? "Not enough data"
+          ? t("simulator.notEnoughData")
           : cashFloorDifference >= 0
-          ? `Current draft by ${formatScenarioCurrency(cashFloorDifference)}`
-          : `${comparedName} by ${formatScenarioCurrency(Math.abs(cashFloorDifference))}`,
+          ? t("simulator.currentDraftBy", { amount: formatScenarioCurrency(cashFloorDifference) })
+          : t("simulator.comparedBy", {
+              name: comparedName,
+              amount: formatScenarioCurrency(Math.abs(cashFloorDifference)),
+            }),
       detail:
         currentLowest && comparedLowest
-          ? `Lowest balance months: ${currentLowest.month} vs ${comparedLowest.month}.`
-          : "Compares the lowest point each plan hits.",
+          ? t("simulator.lowestBalanceMonths", {
+              currentMonth: currentLowest.month,
+              comparedMonth: comparedLowest.month,
+            })
+          : t("simulator.cashFloorDetail"),
     },
   ];
 }
 
-function buildScenarioCheckpoints(simulationData) {
+function buildScenarioCheckpoints(simulationData, t) {
   const timeline = simulationData?.timeline || [];
   if (timeline.length === 0) {
     return [];
@@ -452,47 +647,49 @@ function buildScenarioCheckpoints(simulationData) {
 
   const checkpoints = [
     {
-      title: "Lowest balance point",
+      title: t("simulator.lowestBalancePoint"),
       value: `${lowestPoint.month} | ${formatScenarioCurrency(lowestPoint.ending_balance)}`,
-      detail: "This is the tightest month in the current path.",
+      detail: t("simulator.lowestBalanceDetail"),
     },
   ];
 
   if (goalPoint && simulationData?.goal_balance != null) {
     checkpoints.push({
-      title: "Goal reached",
+      title: t("simulator.goalReached"),
       value: `${goalPoint.month} | ${formatScenarioCurrency(simulationData.goal_balance)}`,
-      detail: `This path reaches your target by ${goalPoint.month}.`,
+      detail: t("simulator.goalReachedDetail", { month: goalPoint.month }),
     });
   } else if (simulationData?.goal_balance != null) {
     checkpoints.push({
-      title: "Goal status",
-      value: "Not reached",
-      detail: simulationData.goal_note || "This scenario does not hit the target in the selected window.",
+      title: t("simulator.goalStatus"),
+      value: t("simulator.notReached"),
+      detail: buildGoalNote(simulationData, t) || t("simulator.targetNotReached"),
     });
   }
 
   if (firstNegativePoint) {
     checkpoints.push({
-      title: "First negative month",
+      title: t("simulator.firstNegativeMonth"),
       value: `${firstNegativePoint.month} | ${formatScenarioCurrency(firstNegativePoint.ending_balance)}`,
-      detail: "This is where the scenario drops below zero and needs intervention.",
+      detail: t("simulator.firstNegativeDetail"),
     });
   } else {
     checkpoints.push({
-      title: "Cash floor",
+      title: t("simulator.cashFloor"),
       value: formatScenarioCurrency(lowestPoint.ending_balance),
-      detail: `The plan stays above zero throughout the ${simulationData?.months || timeline.length}-month window.`,
+      detail: t("simulator.cashFloorHealthy", {
+        count: simulationData?.months || timeline.length,
+      }),
     });
   }
 
   if (simulationData?.one_time_event_amount != null) {
     checkpoints.push({
-      title: "Planned event month",
+      title: t("simulator.plannedEventMonth"),
       value: `${simulationData.one_time_event_month} | ${formatSignedScenarioAmount(
         simulationData.one_time_event_amount
       )}`,
-      detail: simulationData.one_time_event_label || "One-time event",
+      detail: simulationData.one_time_event_label || t("simulator.oneTimeEvent"),
     });
   }
 
@@ -714,12 +911,12 @@ function SimulatorPage() {
       setSavedScenarios(response.data || []);
     } catch (fetchError) {
       if (!handleApiAuthError(fetchError, navigate)) {
-        setSavedScenarioError("Failed to load saved scenarios.");
+        setSavedScenarioError(t("simulator.loadSavedFailed"));
       }
     } finally {
       setSavedScenariosLoading(false);
     }
-  }, [navigate, normalizedAccountId]);
+  }, [navigate, normalizedAccountId, t]);
 
   useEffect(() => {
     fetchSavedScenarios();
@@ -739,12 +936,12 @@ function SimulatorPage() {
     } catch (fetchError) {
       if (!handleApiAuthError(fetchError, navigate)) {
         setStrategyRecommendations([]);
-        setRecommendationsError("Failed to load recommended plans.");
+        setRecommendationsError(t("simulator.loadRecommendationsFailed"));
       }
     } finally {
       setRecommendationsLoading(false);
     }
-  }, [months, navigate, normalizedAccountId]);
+  }, [months, navigate, normalizedAccountId, t]);
 
   useEffect(() => {
     fetchRecommendations();
@@ -764,7 +961,7 @@ function SimulatorPage() {
       } catch (fetchError) {
         if (!handleApiAuthError(fetchError, navigate)) {
           setRecurringExpenses([]);
-          setRecurringError("Failed to load recurring cost levers.");
+          setRecurringError(t("simulator.loadRecurringFailed"));
         }
       } finally {
         setRecurringLoading(false);
@@ -772,7 +969,7 @@ function SimulatorPage() {
     };
 
     fetchRecurringExpenses();
-  }, [navigate, normalizedAccountId]);
+  }, [navigate, normalizedAccountId, t]);
 
   useEffect(() => {
     const fetchSimulation = async () => {
@@ -796,7 +993,7 @@ function SimulatorPage() {
         setSimulatorData(response.data);
       } catch (fetchError) {
         if (!handleApiAuthError(fetchError, navigate)) {
-          setError("Failed to load simulator.");
+          setError(t("simulator.loadSimulatorFailed"));
         }
       } finally {
         setLoading(false);
@@ -814,6 +1011,7 @@ function SimulatorPage() {
     eventAmount,
     eventMonthOffset,
     eventLabel,
+    t,
   ]);
 
   const comparedScenario = useMemo(
@@ -866,7 +1064,7 @@ function SimulatorPage() {
       const searchableText = [
         scenario.name,
         scenario.event_label,
-        buildSavedScenarioSummary(scenario),
+        buildSavedScenarioSummary(scenario, t),
       ]
         .filter(Boolean)
         .join(" ")
@@ -874,7 +1072,7 @@ function SimulatorPage() {
 
       return searchableText.includes(normalizedQuery);
     });
-  }, [quickFilteredSavedScenarios, savedScenarioQuery]);
+  }, [quickFilteredSavedScenarios, savedScenarioQuery, t]);
   const displayedSavedScenarios = useMemo(
     () => sortSavedScenarios(filteredSavedScenarios, savedScenarioSort),
     [filteredSavedScenarios, savedScenarioSort]
@@ -891,8 +1089,8 @@ function SimulatorPage() {
     if (strongestScenario) {
       highlights.push({
         key: "strongest",
-        title: "Strongest finish",
-        description: "Highest projected ending balance in this view.",
+        title: t("simulator.strongestFinish"),
+        description: t("simulator.strongestFinishDetail"),
         scenario: strongestScenario,
         value: formatScenarioCurrency(strongestScenario.projected_end_balance),
       });
@@ -905,10 +1103,10 @@ function SimulatorPage() {
     if (safestScenario) {
       highlights.push({
         key: "safest",
-        title: "Safest cushion",
-        description: "Best balance floor with the healthiest risk profile.",
+        title: t("simulator.safestCushion"),
+        description: t("simulator.safestCushionDetail"),
         scenario: safestScenario,
-        value: getScenarioRiskLabel(safestScenario.risk_level),
+        value: getScenarioRiskLabel(safestScenario.risk_level, t),
       });
       seenScenarioIds.add(safestScenario.id);
     }
@@ -920,21 +1118,21 @@ function SimulatorPage() {
     if (goalScenario) {
       highlights.push({
         key: "goal",
-        title: "Goal leader",
+        title: t("simulator.goalLeader"),
         description:
           Number(goalScenario.goal_gap_amount) <= 0
-            ? "Already on track to hit its saved target."
-            : "Closest saved plan to its target balance.",
+            ? t("simulator.goalLeaderOnTrack")
+            : t("simulator.goalLeaderClosest"),
         scenario: goalScenario,
         value:
           Number(goalScenario.goal_gap_amount) <= 0
-            ? "On track"
+            ? t("simulator.onTrack")
             : formatScenarioCurrency(goalScenario.goal_gap_amount),
       });
     }
 
     return highlights;
-  }, [displayedSavedScenarios]);
+  }, [displayedSavedScenarios, t]);
   const recommendationCountsByFilter = useMemo(
     () =>
       Object.fromEntries(
@@ -1059,7 +1257,7 @@ function SimulatorPage() {
         setComparisonData(response.data);
       } catch (fetchError) {
         if (!handleApiAuthError(fetchError, navigate)) {
-          setComparisonError(`Failed to compare against "${comparedScenario.name}".`);
+          setComparisonError(t("simulator.compareFailed", { name: comparedScenario.name }));
         }
       } finally {
         setComparisonLoading(false);
@@ -1067,7 +1265,7 @@ function SimulatorPage() {
     };
 
     fetchComparison();
-  }, [comparedScenario, navigate]);
+  }, [comparedScenario, navigate, t]);
 
   const chartTheme = useMemo(() => {
     const isDark = themeMode === "dark";
@@ -1091,34 +1289,35 @@ function SimulatorPage() {
   const riskMeta = useMemo(() => {
     const riskLevel = simulatorData?.risk_level;
     if (riskLevel === "high") {
-      return { label: "High risk", className: "simulator-risk-pill simulator-risk-high" };
+      return { label: t("simulator.highRisk"), className: "simulator-risk-pill simulator-risk-high" };
     }
     if (riskLevel === "watch") {
-      return { label: "Watch closely", className: "simulator-risk-pill simulator-risk-watch" };
+      return { label: t("simulator.watchClosely"), className: "simulator-risk-pill simulator-risk-watch" };
     }
-    return { label: "Healthy pace", className: "simulator-risk-pill simulator-risk-healthy" };
-  }, [simulatorData]);
+    return { label: t("simulator.healthyPace"), className: "simulator-risk-pill simulator-risk-healthy" };
+  }, [simulatorData, t]);
 
   const comparisonNote = useMemo(
-    () => buildScenarioComparisonNote(simulatorData, comparisonData, comparedScenario?.name),
-    [simulatorData, comparisonData, comparedScenario]
+    () => buildScenarioComparisonNote(simulatorData, comparisonData, comparedScenario?.name, t),
+    [simulatorData, comparisonData, comparedScenario, t]
   );
   const comparisonTimeline = useMemo(
     () => buildScenarioComparisonTimeline(simulatorData, comparisonData),
     [simulatorData, comparisonData]
   );
   const comparisonHighlights = useMemo(
-    () => buildScenarioComparisonHighlights(simulatorData, comparisonData, comparedScenario?.name),
-    [simulatorData, comparisonData, comparedScenario]
+    () => buildScenarioComparisonHighlights(simulatorData, comparisonData, comparedScenario?.name, t),
+    [simulatorData, comparisonData, comparedScenario, t]
   );
   const recommendationPreviewNote = useMemo(
     () =>
       buildScenarioComparisonNote(
         simulatorData,
         recommendationPreviewData,
-        previewedRecommendation?.label
+        previewedRecommendation ? getRecommendationDisplayLabel(previewedRecommendation, t) : "",
+        t
       ),
-    [simulatorData, recommendationPreviewData, previewedRecommendation]
+    [simulatorData, recommendationPreviewData, previewedRecommendation, t]
   );
   const recommendationPreviewTimeline = useMemo(
     () => buildScenarioComparisonTimeline(simulatorData, recommendationPreviewData),
@@ -1129,14 +1328,15 @@ function SimulatorPage() {
       buildScenarioComparisonHighlights(
         simulatorData,
         recommendationPreviewData,
-        previewedRecommendation?.label
+        previewedRecommendation ? getRecommendationDisplayLabel(previewedRecommendation, t) : "",
+        t
       ),
-    [simulatorData, recommendationPreviewData, previewedRecommendation]
+    [simulatorData, recommendationPreviewData, previewedRecommendation, t]
   );
 
   const scenarioCheckpoints = useMemo(
-    () => buildScenarioCheckpoints(simulatorData),
-    [simulatorData]
+    () => buildScenarioCheckpoints(simulatorData, t),
+    [simulatorData, t]
   );
 
   const comparisonBalanceDelta =
@@ -1186,7 +1386,7 @@ function SimulatorPage() {
     );
     setEventAmount(preset.eventAmount === "" ? "" : String(preset.eventAmount));
     setEventMonthOffset(preset.eventMonthOffset || 1);
-    setEventLabel(preset.eventLabel || "");
+    setEventLabel(preset.eventLabelKey ? t(preset.eventLabelKey) : preset.eventLabel || "");
   };
 
   const applyRecommendation = (recommendation) => {
@@ -1196,7 +1396,7 @@ function SimulatorPage() {
 
     setActiveSavedScenarioId(null);
     setLinkedSavedScenarioId(null);
-    setSavedScenarioName(recommendation.label || "");
+    setSavedScenarioName(getRecommendationDisplayLabel(recommendation, t));
     setRecurringLeverMessage("");
     setMonths(recommendation.months || 6);
     setIncomeAdjustment(String(recommendation.income_adjustment || 0));
@@ -1209,7 +1409,11 @@ function SimulatorPage() {
     );
     setEventMonthOffset(recommendation.event_month_offset || 1);
     setEventLabel(recommendation.event_label || "");
-    setRecommendationMessage(`Applied "${recommendation.label}" to the simulator controls.`);
+    setRecommendationMessage(
+      t("simulator.appliedRecommendation", {
+        label: getRecommendationDisplayLabel(recommendation, t),
+      })
+    );
   };
 
   const handleSaveRecommendation = async (recommendation) => {
@@ -1233,7 +1437,8 @@ function SimulatorPage() {
       setSavedScenarioMessage("");
       const payload = buildSavedScenarioPayloadFromRecommendation(
         recommendation,
-        normalizedAccountId
+        normalizedAccountId,
+        t
       );
       const response = await api.post("/analytics/saved-scenarios", payload);
       setActiveSavedScenarioId(response.data.id);
@@ -1251,13 +1456,13 @@ function SimulatorPage() {
       setEventAmount(response.data.event_amount != null ? String(response.data.event_amount) : "");
       setEventMonthOffset(response.data.event_month_offset || 1);
       setEventLabel(response.data.event_label || "");
-      setSavedScenarioMessage(`Saved recommended plan "${response.data.name}".`);
+      setSavedScenarioMessage(t("simulator.savedRecommendedPlan", { name: response.data.name }));
       await fetchSavedScenarios();
       await fetchRecommendations();
     } catch (saveError) {
       if (!handleApiAuthError(saveError, navigate)) {
         setSavedScenarioError(
-          saveError?.response?.data?.detail || "Failed to save recommended plan."
+          saveError?.response?.data?.detail || t("simulator.saveRecommendedFailed")
         );
       }
     } finally {
@@ -1290,7 +1495,11 @@ function SimulatorPage() {
     } catch (previewError) {
       if (!handleApiAuthError(previewError, navigate)) {
         setRecommendationPreviewData(null);
-        setRecommendationPreviewError(`Failed to preview "${recommendation.label}".`);
+        setRecommendationPreviewError(
+          t("simulator.previewFailed", {
+            label: getRecommendationDisplayLabel(recommendation, t),
+          })
+        );
       }
     } finally {
       setRecommendationPreviewLoading(false);
@@ -1316,7 +1525,10 @@ function SimulatorPage() {
     setRecommendationMessage("");
     setExpenseAdjustment(String(-monthlyCut));
     setRecurringLeverMessage(
-      `Now modeling ${label} as ${formatSignedScenarioAmount(-monthlyCut)} in monthly expenses.`
+      t("simulator.recurringLeverModeled", {
+        label,
+        amount: formatSignedScenarioAmount(-monthlyCut),
+      })
     );
   };
 
@@ -1325,9 +1537,9 @@ function SimulatorPage() {
     const startMonth = simulatorData?.start_month;
     return Array.from({ length: optionCount }, (_, index) => ({
       value: index + 1,
-      label: startMonth ? shiftMonthLabel(startMonth, index) : `Month ${index + 1}`,
+      label: startMonth ? shiftMonthLabel(startMonth, index) : t("simulator.monthNumber", { count: index + 1 }),
     }));
-  }, [months, simulatorData?.start_month]);
+  }, [months, simulatorData?.start_month, t]);
 
   const handleApplyReductionPlan = async () => {
     const targets = buildReductionBudgetTargets(simulatorData?.reduction_plan);
@@ -1346,12 +1558,16 @@ function SimulatorPage() {
       });
       setReductionPlanMessage(
         response.data?.message ||
-          `Applied ${targets.length} budget target${targets.length === 1 ? "" : "s"} to ${simulatorData.start_month}.`
+          t("simulator.reductionApplied", {
+            count: targets.length,
+            plural: targets.length === 1 ? "" : "s",
+            month: simulatorData.start_month,
+          })
       );
     } catch (applyError) {
       if (!handleApiAuthError(applyError, navigate)) {
         setReductionPlanError(
-          applyError?.response?.data?.detail || "Failed to apply reduction plan to budgets."
+          applyError?.response?.data?.detail || t("simulator.reductionFailed")
         );
       }
     } finally {
@@ -1364,20 +1580,20 @@ function SimulatorPage() {
       setScenarioLinkError("");
       setScenarioLinkMessage("");
       await navigator.clipboard.writeText(window.location.href);
-      setScenarioLinkMessage("Scenario link copied.");
+      setScenarioLinkMessage(t("simulator.scenarioLinkCopied"));
     } catch (copyError) {
       console.error("Failed to copy scenario link:", copyError);
-      setScenarioLinkError("Could not copy the scenario link from this browser.");
+      setScenarioLinkError(t("simulator.scenarioLinkCopyFailed"));
     }
   };
 
   const handleSaveScenario = async (forceCreate = false) => {
     const fallbackName =
       (simulatorData?.one_time_event_label
-        ? `${simulatorData.one_time_event_label} plan`
+        ? t("simulator.oneTimePlanName", { label: simulatorData.one_time_event_label })
         : Number(targetBalance) > 0
-        ? `Target $${Number(targetBalance).toFixed(0)} plan`
-        : "Saved simulator plan");
+        ? t("simulator.targetPlanName", { amount: Number(targetBalance).toFixed(0) })
+        : t("simulator.savedSimulatorPlan"));
     const name = savedScenarioName.trim() || fallbackName;
     const isUpdatingExisting = Boolean(activeSavedScenarioId) && !forceCreate;
 
@@ -1408,17 +1624,17 @@ function SimulatorPage() {
       setSavedScenarioName(response.data.name);
       setSavedScenarioMessage(
         forceCreate
-          ? `Saved new scenario "${response.data.name}".`
+          ? t("simulator.savedNewScenario", { name: response.data.name })
           : isUpdatingExisting
-          ? `Updated scenario "${response.data.name}".`
-          : `Saved scenario "${response.data.name}".`
+          ? t("simulator.updatedScenario", { name: response.data.name })
+          : t("simulator.savedScenario", { name: response.data.name })
       );
       await fetchSavedScenarios();
     } catch (saveError) {
       if (!handleApiAuthError(saveError, navigate)) {
         setSavedScenarioError(
           saveError?.response?.data?.detail ||
-            (isUpdatingExisting ? "Failed to update scenario." : "Failed to save scenario.")
+            (isUpdatingExisting ? t("simulator.updateScenarioFailed") : t("simulator.saveScenarioFailed"))
         );
       }
     } finally {
@@ -1459,10 +1675,10 @@ function SimulatorPage() {
     if (comparisonScenarioId === scenario.id) {
       handleClearScenarioComparison();
     }
-    setSavedScenarioMessage(`Loaded "${scenario.name}".`);
+    setSavedScenarioMessage(t("simulator.loadedScenario", { name: scenario.name }));
     setSavedScenarioError("");
     window.scrollTo({ top: 0, behavior: "smooth" });
-  }, [comparisonScenarioId, handleClearScenarioComparison]);
+  }, [comparisonScenarioId, handleClearScenarioComparison, t]);
 
   useEffect(() => {
     if (!linkedSavedScenarioId || savedScenariosLoading || activeSavedScenarioId === linkedSavedScenarioId) {
@@ -1512,12 +1728,12 @@ function SimulatorPage() {
       if (comparisonScenarioId === scenarioId) {
         handleClearScenarioComparison();
       }
-      setSavedScenarioMessage("Saved scenario deleted.");
+      setSavedScenarioMessage(t("simulator.savedScenarioDeleted"));
       await fetchSavedScenarios();
     } catch (deleteError) {
       if (!handleApiAuthError(deleteError, navigate)) {
         setSavedScenarioError(
-          deleteError?.response?.data?.detail || "Failed to delete saved scenario."
+          deleteError?.response?.data?.detail || t("simulator.deleteScenarioFailed")
         );
       }
     } finally {
@@ -1578,7 +1794,7 @@ function SimulatorPage() {
 
           {recommendationsLoading ? (
             <div className="empty-state">
-              <p>Loading recommended plans...</p>
+              <p>{t("simulator.loadingRecommendedPlans")}</p>
             </div>
           ) : recommendationsError ? (
             <div className="empty-state">
@@ -1586,25 +1802,25 @@ function SimulatorPage() {
             </div>
           ) : strategyRecommendations.length === 0 ? (
             <div className="empty-state">
-              <p>No recommendation-ready plans yet for this scope.</p>
+              <p>{t("simulator.noRecommendationReady")}</p>
             </div>
           ) : (
             <>
               <div className="simulator-recommendation-summary-grid">
                 <div className="simulator-recommendation-summary-card">
-                  <span>Ideas</span>
+                  <span>{t("simulator.ideas")}</span>
                   <strong>{recommendationSummary.total}</strong>
                 </div>
                 <div className="simulator-recommendation-summary-card">
-                  <span>Saved</span>
+                  <span>{t("simulator.saved")}</span>
                   <strong>{recommendationSummary.savedCount}</strong>
                 </div>
                 <div className="simulator-recommendation-summary-card">
-                  <span>Healthy</span>
+                  <span>{t("simulator.healthy")}</span>
                   <strong>{recommendationSummary.healthyCount}</strong>
                 </div>
                 <div className="simulator-recommendation-summary-card">
-                  <span>Best impact</span>
+                  <span>{t("simulator.bestImpact")}</span>
                   <strong>
                     {recommendationSummary.strongestRecommendation
                       ? formatScenarioCurrency(recommendationSummary.strongestRecommendation.scenario_impact_amount)
@@ -1625,14 +1841,14 @@ function SimulatorPage() {
                     }
                     onClick={() => setRecommendationFilter(option.value)}
                   >
-                    {option.label} ({recommendationCountsByFilter[option.value] || 0})
+                    {t(option.labelKey)} ({recommendationCountsByFilter[option.value] || 0})
                   </button>
                 ))}
               </div>
 
               {displayedRecommendations.length === 0 ? (
                 <div className="empty-state">
-                  <p>No recommended plans match this filter.</p>
+                  <p>{t("simulator.noRecommendedPlansMatch")}</p>
                 </div>
               ) : (
                 <div className="simulator-recommendation-grid">
@@ -1650,15 +1866,15 @@ function SimulatorPage() {
                   >
                     <div className="simulator-recommendation-top">
                       <div>
-                        <h3>{recommendation.label}</h3>
-                        <p>{recommendation.description}</p>
+                        <h3>{getRecommendationDisplayLabel(recommendation, t)}</h3>
+                        <p>{getRecommendationDescription(recommendation, t)}</p>
                       </div>
                       <div className="simulator-saved-scenario-badges">
                         {recommendation.is_saved && (
-                          <span className="budget-status budget-status-on-track">Saved</span>
+                          <span className="budget-status budget-status-on-track">{t("simulator.saved")}</span>
                         )}
                         <span className="budget-status budget-status-risk">
-                          {getRecommendationSourceLabel(recommendation.source)}
+                          {getRecommendationSourceLabel(recommendation.source, t)}
                         </span>
                         <span
                           className={`simulator-risk-pill ${
@@ -1669,34 +1885,34 @@ function SimulatorPage() {
                                 : "simulator-risk-healthy"
                           }`}
                         >
-                          {getScenarioRiskLabel(recommendation.risk_level)}
+                          {getScenarioRiskLabel(recommendation.risk_level, t)}
                         </span>
                       </div>
                     </div>
 
                     <div className="simulator-recommendation-metrics">
                       <div>
-                        <span>Impact</span>
+                        <span>{t("simulator.impact")}</span>
                         <strong>{formatScenarioCurrency(recommendation.scenario_impact_amount)}</strong>
                       </div>
                       <div>
-                        <span>Projected end</span>
+                        <span>{t("simulator.projectedEnd")}</span>
                         <strong>{formatScenarioCurrency(recommendation.projected_end_balance)}</strong>
                       </div>
                       <div>
-                        <span>Monthly net</span>
+                        <span>{t("simulator.monthlyNet")}</span>
                         <strong>{formatSignedScenarioAmount(recommendation.monthly_net_change)}</strong>
                       </div>
                     </div>
 
-                    <p className="budget-inline-note">{recommendation.reason}</p>
+                    <p className="budget-inline-note">{getRecommendationReason(recommendation, t)}</p>
                     <div className="simulator-saved-scenario-actions">
                       <button
                         type="button"
                         className="secondary-button"
                         onClick={() => applyRecommendation(recommendation)}
                       >
-                        Apply Plan
+                        {t("simulator.applyPlan")}
                       </button>
                       <button
                         type="button"
@@ -1709,8 +1925,8 @@ function SimulatorPage() {
                       >
                         {recommendationPreviewLoading &&
                         previewedRecommendation?.key === recommendation.key
-                          ? "Previewing..."
-                          : "Preview Impact"}
+                          ? t("simulator.previewing")
+                          : t("simulator.previewImpact")}
                       </button>
                       <button
                         type="button"
@@ -1723,10 +1939,10 @@ function SimulatorPage() {
                         disabled={savingRecommendationKey === recommendation.key}
                       >
                         {savingRecommendationKey === recommendation.key
-                          ? "Saving..."
+                          ? t("common.saving")
                           : savedScenario
-                            ? "Load Saved"
-                            : "Save Plan"}
+                            ? t("simulator.loadSaved")
+                            : t("simulator.savePlan")}
                       </button>
                     </div>
                   </div>
@@ -1739,8 +1955,12 @@ function SimulatorPage() {
                 <div className="simulator-recommendation-preview">
                   <div className="section-header">
                     <div>
-                      <h2>Recommendation Preview</h2>
-                      <p>Current draft vs "{previewedRecommendation.label}".</p>
+                      <h2>{t("simulator.recommendationPreview")}</h2>
+                      <p>
+                        {t("simulator.currentDraftVs", {
+                          label: getRecommendationDisplayLabel(previewedRecommendation, t),
+                        })}
+                      </p>
                     </div>
                     <div className="budget-section-actions">
                       <button
@@ -1748,21 +1968,21 @@ function SimulatorPage() {
                         className="secondary-button"
                         onClick={() => applyRecommendation(previewedRecommendation)}
                       >
-                        Apply Preview
+                        {t("simulator.applyPreview")}
                       </button>
                       <button
                         type="button"
                         className="secondary-button"
                         onClick={clearRecommendationPreview}
                       >
-                        Clear Preview
+                        {t("simulator.clearPreview")}
                       </button>
                     </div>
                   </div>
 
                   {recommendationPreviewLoading ? (
                     <div className="empty-state">
-                      <p>Previewing recommendation...</p>
+                      <p>{t("simulator.previewingRecommendation")}</p>
                     </div>
                   ) : recommendationPreviewError ? (
                     <p className="error-text">{recommendationPreviewError}</p>
@@ -1784,15 +2004,15 @@ function SimulatorPage() {
 
                       <div className="simulator-metrics-grid">
                         <div className="simulator-metric-card">
-                          <span>Preview end balance</span>
+                          <span>{t("simulator.previewEndBalance")}</span>
                           <strong>{formatScenarioCurrency(recommendationPreviewData.projected_end_balance)}</strong>
                         </div>
                         <div className="simulator-metric-card">
-                          <span>End balance lift</span>
+                          <span>{t("simulator.endBalanceLift")}</span>
                           <strong>{formatSignedScenarioAmount(recommendationPreviewBalanceDelta)}</strong>
                         </div>
                         <div className="simulator-metric-card">
-                          <span>Monthly net lift</span>
+                          <span>{t("simulator.monthlyNetLift")}</span>
                           <strong>{formatSignedScenarioAmount(recommendationPreviewMonthlyNetDelta)}</strong>
                         </div>
                       </div>
@@ -1810,7 +2030,7 @@ function SimulatorPage() {
                             <Line
                               type="monotone"
                               dataKey="current_ending_balance"
-                              name="Current draft"
+                              name={t("simulator.currentDraft")}
                               stroke={chartTheme.balanceLine}
                               strokeWidth={3}
                               dot={{ r: 3 }}
@@ -1818,7 +2038,7 @@ function SimulatorPage() {
                             <Line
                               type="monotone"
                               dataKey="compared_ending_balance"
-                              name={previewedRecommendation.label}
+                              name={getRecommendationDisplayLabel(previewedRecommendation, t)}
                               stroke={chartTheme.compareLine}
                               strokeWidth={3}
                               dot={{ r: 3 }}
@@ -1836,27 +2056,27 @@ function SimulatorPage() {
           <div className="simulator-preset-grid">
             {SCENARIO_PRESETS.map((preset) => (
               <button
-                key={preset.label}
+                key={preset.labelKey}
                 type="button"
                 className="simulator-preset-button"
                 onClick={() => applyPreset(preset)}
               >
-                <strong>{preset.label}</strong>
-                <span>{preset.description}</span>
+                <strong>{t(preset.labelKey)}</strong>
+                <span>{t(preset.descriptionKey)}</span>
               </button>
             ))}
           </div>
 
           <div className="section-header simulator-recurring-header">
             <div>
-              <h2>Recurring Cost Levers</h2>
-              <p>Turn likely subscriptions and repeat charges into savings scenarios with one click.</p>
+              <h2>{t("simulator.recurringCostLevers")}</h2>
+              <p>{t("simulator.recurringCostLeversDetail")}</p>
             </div>
           </div>
 
           {recurringLoading ? (
             <div className="empty-state">
-              <p>Loading recurring cost levers...</p>
+              <p>{t("simulator.loadingRecurringLevers")}</p>
             </div>
           ) : recurringError ? (
             <div className="empty-state">
@@ -1864,7 +2084,7 @@ function SimulatorPage() {
             </div>
           ) : recurringLeverCandidates.length === 0 ? (
             <div className="empty-state">
-              <p>No strong recurring levers detected for this scope yet.</p>
+              <p>{t("simulator.noRecurringLevers")}</p>
             </div>
           ) : (
             <>
@@ -1877,7 +2097,7 @@ function SimulatorPage() {
                     <div className="simulator-recurring-top">
                       <div>
                         <h3>{item.description}</h3>
-                        <p>{item.category}</p>
+                        <p>{formatCategoryLabel(item.category, t)}</p>
                       </div>
                       <span
                         className={`budget-status ${
@@ -1889,25 +2109,25 @@ function SimulatorPage() {
                         }`}
                       >
                         {item.review_priority === "high"
-                          ? "Review first"
+                          ? t("transactions.reviewFirst")
                           : item.review_priority === "medium"
-                            ? "Worth reviewing"
-                            : "Stable"}
+                            ? t("transactions.worthReviewing")
+                            : t("transactions.stable")}
                       </span>
                     </div>
 
                     <div className="simulator-recurring-metrics">
                       <div>
-                        <span>Monthly cut</span>
+                        <span>{t("simulator.monthlyCut")}</span>
                         <strong>{formatScenarioCurrency(item.average_amount)}</strong>
                       </div>
                       <div>
-                        <span>Annual impact</span>
+                        <span>{t("simulator.annualImpact")}</span>
                         <strong>{formatScenarioCurrency(item.annualized_amount)}</strong>
                       </div>
                     </div>
 
-                    <p>{item.review_reason}</p>
+                    <p>{formatRecurringReviewReason(item, t)}</p>
                     <div className="simulator-saved-scenario-actions">
                       <button
                         type="button"
@@ -1919,7 +2139,7 @@ function SimulatorPage() {
                           })
                         }
                       >
-                        Model This Cut
+                        {t("simulator.modelThisCut")}
                       </button>
                     </div>
                   </div>
@@ -1929,11 +2149,12 @@ function SimulatorPage() {
               {combinedRecurringLever.items.length > 1 && (
                 <div className="simulator-recurring-bundle">
                   <div>
-                    <h3>Bundle the top recurring cuts</h3>
+                    <h3>{t("simulator.bundleTopCuts")}</h3>
                     <p>
-                      Model {combinedRecurringLever.items.length} review-first recurring charges as a
-                      combined {formatSignedScenarioAmount(-combinedRecurringLever.totalMonthlyCut)} monthly
-                      expense change.
+                      {t("simulator.bundleTopCutsDetail", {
+                        count: combinedRecurringLever.items.length,
+                        amount: formatSignedScenarioAmount(-combinedRecurringLever.totalMonthlyCut),
+                      })}
                     </p>
                   </div>
                   <button
@@ -1942,11 +2163,11 @@ function SimulatorPage() {
                     onClick={() =>
                       handleApplyRecurringLever({
                         amount: combinedRecurringLever.totalMonthlyCut,
-                        label: "top recurring cuts",
+                        label: t("simulator.bundleTopCuts"),
                       })
                     }
                   >
-                    Model Bundle
+                    {t("simulator.modelBundle")}
                   </button>
                 </div>
               )}
@@ -1956,12 +2177,12 @@ function SimulatorPage() {
           <div className="simulator-controls-grid">
             <AccountSelector
               value={selectedAccountId}
-              label="Simulator scope"
+              label={t("simulator.simulatorScope")}
               onChange={setSelectedAccountId}
             />
 
             <div className="budget-form-field">
-              <label htmlFor="simulator-months">Months ahead</label>
+              <label htmlFor="simulator-months">{t("simulator.monthsAhead")}</label>
               <input
                 id="simulator-months"
                 type="number"
@@ -1973,7 +2194,7 @@ function SimulatorPage() {
             </div>
 
             <div className="budget-form-field">
-              <label htmlFor="simulator-income-adjustment">Monthly income change</label>
+              <label htmlFor="simulator-income-adjustment">{t("simulator.monthlyIncomeChange")}</label>
               <input
                 id="simulator-income-adjustment"
                 type="number"
@@ -1985,7 +2206,7 @@ function SimulatorPage() {
             </div>
 
             <div className="budget-form-field">
-              <label htmlFor="simulator-expense-adjustment">Monthly expense change</label>
+              <label htmlFor="simulator-expense-adjustment">{t("simulator.monthlyExpenseChange")}</label>
               <input
                 id="simulator-expense-adjustment"
                 type="number"
@@ -1997,7 +2218,7 @@ function SimulatorPage() {
             </div>
 
             <div className="budget-form-field">
-              <label htmlFor="simulator-target-balance">Target ending balance</label>
+              <label htmlFor="simulator-target-balance">{t("simulator.targetEndingBalance")}</label>
               <input
                 id="simulator-target-balance"
                 type="number"
@@ -2005,12 +2226,12 @@ function SimulatorPage() {
                 min="0"
                 value={targetBalance}
                 onChange={(event) => setTargetBalance(event.target.value)}
-                placeholder="Optional"
+                placeholder={t("simulator.optional")}
               />
             </div>
 
             <div className="budget-form-field">
-              <label htmlFor="simulator-event-amount">One-time event amount</label>
+              <label htmlFor="simulator-event-amount">{t("simulator.oneTimeEventAmount")}</label>
               <input
                 id="simulator-event-amount"
                 type="number"
@@ -2022,7 +2243,7 @@ function SimulatorPage() {
             </div>
 
             <div className="budget-form-field">
-              <label htmlFor="simulator-event-month">Event month</label>
+              <label htmlFor="simulator-event-month">{t("simulator.eventMonth")}</label>
               <select
                 id="simulator-event-month"
                 value={eventMonthOffset}
@@ -2037,41 +2258,38 @@ function SimulatorPage() {
             </div>
 
             <div className="budget-form-field">
-              <label htmlFor="simulator-event-label">Event label</label>
+              <label htmlFor="simulator-event-label">{t("simulator.eventLabel")}</label>
               <input
                 id="simulator-event-label"
                 type="text"
                 maxLength="80"
                 value={eventLabel}
                 onChange={(event) => setEventLabel(event.target.value)}
-                placeholder="Planned trip"
+                placeholder={t("simulator.plannedTrip")}
               />
             </div>
           </div>
 
           <p className="budget-inline-note">
-            Positive expense values simulate extra spending. Negative expense values simulate
-            savings or cuts.
+            {t("simulator.positiveExpenseNote")}
           </p>
           <p className="budget-inline-note">
-            One-time events use positive values for windfalls like bonuses and negative values for
-            planned expenses like travel or repairs.
+            {t("simulator.oneTimeEventNote")}
           </p>
           <p className="budget-inline-note">
-            Scenario links keep the simulator controls and scope together, so you can reload or
-            revisit the same plan quickly.
+            {t("simulator.scenarioLinkNote")}
           </p>
 
           <div className="budget-section-actions">
             <div className="budget-form-field">
-              <label htmlFor="saved-scenario-name">Scenario name</label>
+              <label htmlFor="saved-scenario-name">{t("simulator.scenarioName")}</label>
               <input
                 id="saved-scenario-name"
                 type="text"
                 maxLength="100"
                 value={savedScenarioName}
                 onChange={(event) => setSavedScenarioName(event.target.value)}
-                placeholder="Quarterly repair plan"
+                placeholder={t("simulator.quarterlyRepairPlan")}
               />
             </div>
             <button
@@ -2082,13 +2300,13 @@ function SimulatorPage() {
             >
               {savingScenario
                 ? savingScenarioMode === "copy"
-                  ? "Save Scenario"
+                  ? t("simulator.saveScenario")
                   : savingScenarioMode === "update"
-                  ? "Updating..."
-                  : "Saving..."
+                  ? t("common.saving")
+                  : t("common.saving")
                 : activeSavedScenarioId
-                ? "Update Scenario"
-                : "Save Scenario"}
+                ? t("simulator.updateScenario")
+                : t("simulator.saveScenario")}
             </button>
             {activeSavedScenarioId && (
               <button
@@ -2097,14 +2315,13 @@ function SimulatorPage() {
                 onClick={() => handleSaveScenario(true)}
                 disabled={savingScenario}
               >
-                {savingScenario && savingScenarioMode === "copy" ? "Saving Copy..." : "Save As New"}
+                {savingScenario && savingScenarioMode === "copy" ? t("simulator.savingCopy") : t("simulator.saveAsNew")}
               </button>
             )}
           </div>
           {activeSavedScenarioId && (
             <p className="budget-inline-note">
-              You&apos;re editing a loaded saved scenario. Saving updates it in place, and Save As
-              New branches the current draft into a separate plan.
+              {t("simulator.editingLoadedScenario")}
             </p>
           )}
 
@@ -2119,17 +2336,20 @@ function SimulatorPage() {
         <div className="dashboard-card">
           <div className="section-header">
             <div>
-              <h2>Saved Scenarios</h2>
+              <h2>{t("simulator.savedScenarios")}</h2>
               <p>
-                Keep a few named plans for this scope so you can revisit them quickly.
+                {t("simulator.savedScenariosDetail")}
                 {savedScenarios.length > 0
-                  ? ` ${displayedSavedScenarios.length} of ${savedScenarios.length} shown.`
+                  ? ` ${t("simulator.shownCount", {
+                      shown: displayedSavedScenarios.length,
+                      total: savedScenarios.length,
+                    })}`
                   : ""}
               </p>
             </div>
             <div className="budget-section-actions">
               <div className="budget-form-field simulator-saved-sort-field">
-                <label htmlFor="saved-scenario-sort">Sort plans</label>
+                <label htmlFor="saved-scenario-sort">{t("simulator.sortPlans")}</label>
                 <select
                   id="saved-scenario-sort"
                   value={savedScenarioSort}
@@ -2137,52 +2357,52 @@ function SimulatorPage() {
                 >
                   {SAVED_SCENARIO_SORT_OPTIONS.map((option) => (
                     <option key={option.value} value={option.value}>
-                      {option.label}
+                      {t(option.labelKey)}
                     </option>
                   ))}
                 </select>
               </div>
               <div className="budget-form-field simulator-saved-search-field">
-                <label htmlFor="saved-scenario-search">Search plans</label>
+                <label htmlFor="saved-scenario-search">{t("simulator.searchPlans")}</label>
                 <input
                   id="saved-scenario-search"
                   type="text"
                   value={savedScenarioQuery}
                   onChange={(event) => setSavedScenarioQuery(event.target.value)}
-                  placeholder="Trip, repair, target..."
+                  placeholder={t("simulator.searchPlansPlaceholder")}
                 />
               </div>
               <button type="button" className="secondary-button" onClick={fetchSavedScenarios}>
-                Refresh
+                {t("simulator.refresh")}
               </button>
             </div>
           </div>
 
           {savedScenariosLoading ? (
             <div className="empty-state">
-              <p>Loading saved scenarios...</p>
+              <p>{t("simulator.loadingSavedScenarios")}</p>
             </div>
           ) : savedScenarios.length === 0 ? (
             <div className="empty-state">
-              <p>No saved scenarios for this scope yet.</p>
+              <p>{t("simulator.noSavedScenarios")}</p>
             </div>
           ) : (
             <>
               <div className="summary-grid">
                 <div className="summary-card balance-card">
-                  <span className="card-label">Saved Plans</span>
+                  <span className="card-label">{t("simulator.savedPlans")}</span>
                   <p>{savedScenarioPortfolioSummary.total}</p>
                 </div>
                 <div className="summary-card income-card">
-                  <span className="card-label">Healthy</span>
+                  <span className="card-label">{t("simulator.healthy")}</span>
                   <p>{savedScenarioPortfolioSummary.healthyCount}</p>
                 </div>
                 <div className="summary-card expense-card">
-                  <span className="card-label">Needs Attention</span>
+                  <span className="card-label">{t("simulator.needsAttention")}</span>
                   <p>{savedScenarioPortfolioSummary.attentionCount}</p>
                 </div>
                 <div className="summary-card top-card">
-                  <span className="card-label">Best Finish</span>
+                  <span className="card-label">{t("simulator.bestFinish")}</span>
                   <p>
                     {savedScenarioPortfolioSummary.strongestScenario
                       ? formatScenarioCurrency(
@@ -2203,7 +2423,7 @@ function SimulatorPage() {
                     }`}
                     onClick={() => setSavedScenarioFilter(option.value)}
                   >
-                    {option.label} ({filterCountByMode[option.value] || 0})
+                    {t(option.labelKey)} ({filterCountByMode[option.value] || 0})
                   </button>
                 ))}
               </div>
@@ -2215,7 +2435,7 @@ function SimulatorPage() {
                     className="secondary-button"
                     onClick={() => handleOpenSavedScenario(savedScenarioPortfolioSummary.strongestScenario)}
                   >
-                    Open Strongest
+                    {t("simulator.openStrongest")}
                   </button>
                 )}
                 {savedScenarioPortfolioSummary.strongestScenario &&
@@ -2232,7 +2452,7 @@ function SimulatorPage() {
                         )
                       }
                     >
-                      Compare Strongest vs Safest
+                      {t("simulator.compareStrongestSafest")}
                     </button>
                   )}
                 {savedScenarioPortfolioSummary.goalLeader && (
@@ -2241,7 +2461,7 @@ function SimulatorPage() {
                     className="secondary-button"
                     onClick={() => handleOpenSavedScenario(savedScenarioPortfolioSummary.goalLeader)}
                   >
-                    Open Goal Leader
+                    {t("simulator.openGoalLeader")}
                   </button>
                 )}
                 {hasSavedScenarioControlOverrides && (
@@ -2250,14 +2470,14 @@ function SimulatorPage() {
                     className="clear-filter-button"
                     onClick={handleResetSavedScenarioControls}
                   >
-                    Reset Saved Plan View
+                    {t("simulator.resetSavedPlanView")}
                   </button>
                 )}
               </div>
 
               {displayedSavedScenarios.length === 0 ? (
                 <div className="empty-state">
-                  <p>No saved scenarios match that search or filter yet.</p>
+                  <p>{t("simulator.noSavedScenarioMatches")}</p>
                 </div>
               ) : (
                 <>
@@ -2277,7 +2497,7 @@ function SimulatorPage() {
                           </div>
                           <p>{highlight.description}</p>
                           <p className="budget-inline-note">
-                            {buildSavedScenarioSummary(highlight.scenario)}
+                            {buildSavedScenarioSummary(highlight.scenario, t)}
                           </p>
                           <div className="simulator-saved-scenario-actions">
                             <button
@@ -2285,14 +2505,14 @@ function SimulatorPage() {
                               className="secondary-button"
                               onClick={() => handleLoadSavedScenario(highlight.scenario)}
                             >
-                              Load Scenario
+                              {t("simulator.loadScenario")}
                             </button>
                             <button
                               type="button"
                               className="secondary-button"
                               onClick={() => handleCompareSavedScenario(highlight.scenario)}
                             >
-                              Compare
+                              {t("simulator.compare")}
                             </button>
                           </div>
                         </div>
@@ -2313,23 +2533,25 @@ function SimulatorPage() {
                         <div className="simulator-saved-scenario-top">
                           <div>
                             <h3>{scenario.name}</h3>
-                            <p>{buildSavedScenarioSummary(scenario)}</p>
+                            <p>{buildSavedScenarioSummary(scenario, t)}</p>
                           </div>
                           <div className="simulator-saved-scenario-badges">
                             {activeSavedScenarioId === scenario.id && (
-                              <span className="budget-status budget-status-on-track">Loaded</span>
+                              <span className="budget-status budget-status-on-track">{t("simulator.loaded")}</span>
                             )}
                             {comparisonScenarioId === scenario.id && (
-                              <span className="budget-status budget-status-risk">Comparing</span>
+                              <span className="budget-status budget-status-risk">{t("simulator.comparing")}</span>
                             )}
                           </div>
                         </div>
 
                         {scenario.event_amount != null && (
                           <p className="budget-inline-note">
-                            Event: {scenario.event_label || "One-time event"} in month{" "}
-                            {scenario.event_month_offset || 1} at{" "}
-                            {formatSignedScenarioAmount(scenario.event_amount)}
+                            {t("simulator.savedScenarioEvent", {
+                              label: scenario.event_label || t("simulator.oneTimeEvent"),
+                              month: scenario.event_month_offset || 1,
+                              amount: formatSignedScenarioAmount(scenario.event_amount),
+                            })}
                           </p>
                         )}
                         {(scenario.projected_end_balance != null ||
@@ -2340,41 +2562,41 @@ function SimulatorPage() {
                           <div className="simulator-saved-scenario-metrics">
                             {scenario.projected_end_balance != null && (
                               <div className="simulator-saved-scenario-metric">
-                                <span>Projected end</span>
+                                <span>{t("simulator.projectedEnd")}</span>
                                 <strong>{formatScenarioCurrency(scenario.projected_end_balance)}</strong>
                               </div>
                             )}
                             {scenario.monthly_net_change != null && (
                               <div className="simulator-saved-scenario-metric">
-                                <span>Monthly net</span>
+                                <span>{t("simulator.monthlyNet")}</span>
                                 <strong>{formatSignedScenarioAmount(scenario.monthly_net_change)}</strong>
                               </div>
                             )}
                             {scenario.risk_level && (
                               <div className="simulator-saved-scenario-metric">
-                                <span>Risk</span>
-                                <strong>{getScenarioRiskLabel(scenario.risk_level)}</strong>
+                                <span>{t("simulator.risk")}</span>
+                                <strong>{getScenarioRiskLabel(scenario.risk_level, t)}</strong>
                               </div>
                             )}
                             {scenario.target_balance != null && scenario.goal_gap_amount != null ? (
                               <div className="simulator-saved-scenario-metric">
-                                <span>{Number(scenario.goal_gap_amount) <= 0 ? "Target" : "Goal gap"}</span>
+                                <span>{Number(scenario.goal_gap_amount) <= 0 ? t("simulator.target") : t("simulator.goalGap")}</span>
                                 <strong>
                                   {Number(scenario.goal_gap_amount) <= 0
-                                    ? "On track"
+                                    ? t("simulator.onTrack")
                                     : formatScenarioCurrency(scenario.goal_gap_amount)}
                                 </strong>
                               </div>
                             ) : scenario.lowest_balance != null ? (
                               <div className="simulator-saved-scenario-metric">
-                                <span>Balance floor</span>
+                                <span>{t("simulator.balanceFloor")}</span>
                                 <strong>{formatScenarioCurrency(scenario.lowest_balance)}</strong>
                               </div>
                             ) : null}
                           </div>
                         )}
                         <p className="budget-inline-note">
-                          Saved {new Date(scenario.created_at).toLocaleDateString()}
+                          {t("simulator.savedDate", { date: new Date(scenario.created_at).toLocaleDateString() })}
                         </p>
                         <div className="simulator-saved-scenario-actions">
                           <button
@@ -2382,7 +2604,7 @@ function SimulatorPage() {
                             className="secondary-button"
                             onClick={() => handleLoadSavedScenario(scenario)}
                           >
-                            Load Scenario
+                            {t("simulator.loadScenario")}
                           </button>
                           <button
                             type="button"
@@ -2391,10 +2613,10 @@ function SimulatorPage() {
                             disabled={comparisonLoading && comparisonScenarioId === scenario.id}
                           >
                             {comparisonLoading && comparisonScenarioId === scenario.id
-                              ? "Comparing..."
+                              ? t("simulator.comparingScenarios")
                               : comparisonScenarioId === scenario.id
-                              ? "Refresh Compare"
-                              : "Compare"}
+                              ? t("simulator.refreshCompare")
+                              : t("simulator.compare")}
                           </button>
                           <button
                             type="button"
@@ -2402,7 +2624,9 @@ function SimulatorPage() {
                             onClick={() => handleDeleteSavedScenario(scenario.id)}
                             disabled={deletingScenarioId === scenario.id}
                           >
-                            {deletingScenarioId === scenario.id ? "Deleting..." : "Delete"}
+                            {deletingScenarioId === scenario.id
+                              ? t("simulator.deleting")
+                              : t("common.delete")}
                           </button>
                         </div>
                       </div>
@@ -2418,8 +2642,8 @@ function SimulatorPage() {
           <div className="dashboard-card">
             <div className="section-header">
               <div>
-                <h2>Scenario Comparison</h2>
-                <p>Current draft vs "{comparedScenario.name}".</p>
+                <h2>{t("simulator.scenarioComparison")}</h2>
+                <p>{t("simulator.currentDraftVs", { label: comparedScenario.name })}</p>
               </div>
               <div className="budget-section-actions">
                 <button
@@ -2427,21 +2651,21 @@ function SimulatorPage() {
                   className="secondary-button"
                   onClick={() => handleLoadSavedScenario(comparedScenario)}
                 >
-                  Load Compared Scenario
+                  {t("simulator.loadComparedScenario")}
                 </button>
                 <button
                   type="button"
                   className="secondary-button"
                   onClick={handleClearScenarioComparison}
                 >
-                  Clear Comparison
+                  {t("simulator.clearComparison")}
                 </button>
               </div>
             </div>
 
             {comparisonLoading ? (
               <div className="empty-state">
-                <p>Comparing scenarios...</p>
+                <p>{t("simulator.comparingScenarios")}</p>
               </div>
             ) : comparisonError ? (
               <p className="error-text">{comparisonError}</p>
@@ -2462,39 +2686,43 @@ function SimulatorPage() {
                 </div>
                 <div className="simulator-metrics-grid">
                   <div className="simulator-metric-card">
-                    <span>Current end balance</span>
+                    <span>{t("simulator.currentEndBalance")}</span>
                     <strong>{formatScenarioCurrency(simulatorData.projected_end_balance)}</strong>
                   </div>
                   <div className="simulator-metric-card">
-                    <span>{comparedScenario.name} end balance</span>
+                    <span>{t("simulator.namedEndBalance", { name: comparedScenario.name })}</span>
                     <strong>{formatScenarioCurrency(comparisonData.projected_end_balance)}</strong>
                   </div>
                   <div className="simulator-metric-card">
-                    <span>End balance gap</span>
+                    <span>{t("simulator.endBalanceGap")}</span>
                     <strong>{formatSignedScenarioAmount(comparisonBalanceDelta)}</strong>
                   </div>
                   <div className="simulator-metric-card">
-                    <span>Monthly net gap</span>
+                    <span>{t("simulator.monthlyNetGap")}</span>
                     <strong>{formatSignedScenarioAmount(comparisonMonthlyNetDelta)}</strong>
                   </div>
                 </div>
 
                 <p className="budget-inline-note">
-                  Current risk: {getScenarioRiskLabel(simulatorData.risk_level)}. Compared risk:{" "}
-                  {getScenarioRiskLabel(comparisonData.risk_level)}.
+                  {t("simulator.currentRiskComparedRisk", {
+                    current: getScenarioRiskLabel(simulatorData.risk_level, t),
+                    compared: getScenarioRiskLabel(comparisonData.risk_level, t),
+                  })}
                 </p>
                 {comparisonData.one_time_event_amount != null && (
                   <p className="budget-inline-note">
-                    Compared plan event: {comparisonData.one_time_event_label || "One-time event"}{" "}
-                    in {comparisonData.one_time_event_month} at{" "}
-                    {formatSignedScenarioAmount(comparisonData.one_time_event_amount)}.
+                    {t("simulator.comparedPlanEvent", {
+                      label: comparisonData.one_time_event_label || t("simulator.oneTimeEvent"),
+                      month: comparisonData.one_time_event_month,
+                      amount: formatSignedScenarioAmount(comparisonData.one_time_event_amount),
+                    })}
                   </p>
                 )}
 
                 <div className="simulator-comparison-section simulator-chart-card">
                   <div className="section-header">
-                    <h2>Comparison Balance Path</h2>
-                    <p>Track how the current draft and the compared plan separate over time.</p>
+                    <h2>{t("simulator.comparisonBalancePath")}</h2>
+                    <p>{t("simulator.comparisonBalancePathDetail")}</p>
                   </div>
 
                   <ResponsiveContainer width="100%" height={300}>
@@ -2510,7 +2738,7 @@ function SimulatorPage() {
                         strokeWidth={3}
                         dot={{ r: 4 }}
                         connectNulls={false}
-                        name="Current draft"
+                        name={t("simulator.currentDraft")}
                       />
                       <Line
                         type="monotone"
@@ -2527,20 +2755,20 @@ function SimulatorPage() {
 
                 <div className="simulator-comparison-section">
                   <div className="section-header">
-                    <h2>Monthly Comparison</h2>
-                    <p>See the balance gap month by month.</p>
+                    <h2>{t("simulator.monthlyComparison")}</h2>
+                    <p>{t("simulator.monthlyComparisonDetail")}</p>
                   </div>
 
                   <div className="transactions-table-wrapper">
                     <table className="transactions-table">
                       <thead>
                         <tr>
-                          <th>Month</th>
-                          <th>Current Balance</th>
+                          <th>{t("common.month")}</th>
+                          <th>{t("simulator.currentBalance")}</th>
                           <th>{comparedScenario.name}</th>
-                          <th>Gap</th>
-                          <th>Current Net</th>
-                          <th>{comparedScenario.name} Net</th>
+                          <th>{t("simulator.gap")}</th>
+                          <th>{t("simulator.currentNet")}</th>
+                          <th>{t("simulator.namedNet", { name: comparedScenario.name })}</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -2549,27 +2777,27 @@ function SimulatorPage() {
                             <td>{row.month}</td>
                             <td>
                               {row.current_ending_balance == null
-                                ? "N/A"
+                                ? t("simulator.notAvailable")
                                 : formatScenarioCurrency(row.current_ending_balance)}
                             </td>
                             <td>
                               {row.compared_ending_balance == null
-                                ? "N/A"
+                                ? t("simulator.notAvailable")
                                 : formatScenarioCurrency(row.compared_ending_balance)}
                             </td>
                             <td>
                               {row.ending_balance_gap == null
-                                ? "N/A"
+                                ? t("simulator.notAvailable")
                                 : formatSignedScenarioAmount(row.ending_balance_gap)}
                             </td>
                             <td>
                               {row.current_net_change == null
-                                ? "N/A"
+                                ? t("simulator.notAvailable")
                                 : formatSignedScenarioAmount(row.current_net_change)}
                             </td>
                             <td>
                               {row.compared_net_change == null
-                                ? "N/A"
+                                ? t("simulator.notAvailable")
                                 : formatSignedScenarioAmount(row.compared_net_change)}
                             </td>
                           </tr>
@@ -2592,40 +2820,40 @@ function SimulatorPage() {
         {loading ? (
           <div className="dashboard-card">
             <div className="empty-state">
-              <p>Running your scenario...</p>
+              <p>{t("simulator.runningScenario")}</p>
             </div>
           </div>
         ) : (
           <>
             <div className="summary-grid">
               <div className="summary-card balance-card">
-                <span className="card-label">Starting Balance</span>
+                <span className="card-label">{t("simulator.startingBalance")}</span>
                 <p>${simulatorData?.starting_balance?.toFixed(2) || "0.00"}</p>
               </div>
 
               <div className="summary-card income-card">
-                <span className="card-label">Monthly Net</span>
+                <span className="card-label">{t("simulator.monthlyNet")}</span>
                 <p>${simulatorData?.monthly_net_change?.toFixed(2) || "0.00"}</p>
               </div>
 
               <div className="summary-card top-card">
-                <span className="card-label">Scenario Impact</span>
+                <span className="card-label">{t("simulator.scenarioImpact")}</span>
                 <p>${simulatorData?.scenario_impact_amount?.toFixed(2) || "0.00"}</p>
               </div>
 
               <div className="summary-card expense-card">
-                <span className="card-label">Projected End Balance</span>
+                <span className="card-label">{t("simulator.projectedEndBalance")}</span>
                 <p>${simulatorData?.projected_end_balance?.toFixed(2) || "0.00"}</p>
               </div>
 
               <div className="summary-card top-card">
-                <span className="card-label">One-Time Event</span>
+                <span className="card-label">{t("simulator.oneTimeEvent")}</span>
                 <p>
                   {simulatorData?.one_time_event_amount != null
-                    ? `${simulatorData.one_time_event_label || "Planned event"} ${
+                    ? `${simulatorData.one_time_event_label || t("simulator.plannedEvent")} ${
                         simulatorData.one_time_event_amount > 0 ? "+" : "-"
                       }$${Math.abs(simulatorData.one_time_event_amount).toFixed(2)}`
-                    : "None"}
+                    : t("simulator.none")}
                 </p>
               </div>
             </div>
@@ -2634,44 +2862,44 @@ function SimulatorPage() {
               <div className="simulator-overview-top">
                 <div>
                   <div className="section-header">
-                    <h2>Scenario Readout</h2>
-                    <p>{simulatorData?.scope_label}</p>
+                    <h2>{t("simulator.scenarioReadout")}</h2>
+                    <p>{formatScopeLabel(simulatorData?.scope_label, t)}</p>
                   </div>
-                  <p className="budget-forecast-banner">{simulatorData?.narrative}</p>
+                  <p className="budget-forecast-banner">{buildSimulatorNarrative(simulatorData, t)}</p>
                 </div>
                 <span className={riskMeta.className}>{riskMeta.label}</span>
               </div>
 
               <div className="simulator-metrics-grid">
                 <div className="simulator-metric-card">
-                  <span>Baseline monthly income</span>
+                  <span>{t("simulator.baselineMonthlyIncome")}</span>
                   <strong>${simulatorData?.baseline_monthly_income?.toFixed(2) || "0.00"}</strong>
                 </div>
                 <div className="simulator-metric-card">
-                  <span>Baseline monthly expenses</span>
+                  <span>{t("simulator.baselineMonthlyExpenses")}</span>
                   <strong>${simulatorData?.baseline_monthly_expenses?.toFixed(2) || "0.00"}</strong>
                 </div>
                 <div className="simulator-metric-card">
-                  <span>Scenario income</span>
+                  <span>{t("simulator.scenarioIncome")}</span>
                   <strong>${simulatorData?.adjusted_monthly_income?.toFixed(2) || "0.00"}</strong>
                 </div>
                 <div className="simulator-metric-card">
-                  <span>Scenario expenses</span>
+                  <span>{t("simulator.scenarioExpenses")}</span>
                   <strong>${simulatorData?.adjusted_monthly_expenses?.toFixed(2) || "0.00"}</strong>
                 </div>
                 <div className="simulator-metric-card">
-                  <span>Baseline end balance</span>
+                  <span>{t("simulator.baselineEndBalance")}</span>
                   <strong>${simulatorData?.baseline_projected_end_balance?.toFixed(2) || "0.00"}</strong>
                 </div>
                 <div className="simulator-metric-card">
-                  <span>Scenario end balance</span>
+                  <span>{t("simulator.scenarioEndBalance")}</span>
                   <strong>${simulatorData?.projected_end_balance?.toFixed(2) || "0.00"}</strong>
                 </div>
                 {simulatorData?.one_time_event_amount != null && (
                   <div className="simulator-metric-card">
-                    <span>{simulatorData.one_time_event_month || "Planned event"}</span>
+                    <span>{simulatorData.one_time_event_month || t("simulator.plannedEvent")}</span>
                     <strong>
-                      {(simulatorData.one_time_event_label || "One-time event")}:{" "}
+                      {(simulatorData.one_time_event_label || t("simulator.oneTimeEvent"))}:{" "}
                       {simulatorData.one_time_event_amount > 0 ? "+" : "-"}$
                       {Math.abs(simulatorData.one_time_event_amount).toFixed(2)}
                     </strong>
@@ -2682,10 +2910,8 @@ function SimulatorPage() {
 
             <div className="dashboard-card simulator-chart-card">
               <div className="section-header">
-                <h2>Projected Balance Path</h2>
-                <p>
-                  Compare the baseline path against your adjusted scenario starting from {simulatorData?.start_month}.
-                </p>
+                <h2>{t("simulator.projectedBalancePath")}</h2>
+                <p>{t("simulator.projectedBalancePathDetail", { month: simulatorData?.start_month })}</p>
               </div>
 
               <ResponsiveContainer width="100%" height={320}>
@@ -2701,7 +2927,7 @@ function SimulatorPage() {
                     strokeWidth={2}
                     strokeDasharray="5 5"
                     dot={false}
-                    name="Baseline balance"
+                    name={t("simulator.baselineBalance")}
                   />
                   <Line
                     type="monotone"
@@ -2709,7 +2935,7 @@ function SimulatorPage() {
                     stroke={chartTheme.balanceLine}
                     strokeWidth={3}
                     dot={{ r: 4 }}
-                    name="Ending balance"
+                    name={t("simulator.endingBalance")}
                   />
                   <Line
                     type="monotone"
@@ -2718,7 +2944,7 @@ function SimulatorPage() {
                     strokeWidth={2}
                     strokeDasharray="6 4"
                     dot={false}
-                    name="Monthly net"
+                    name={t("simulator.monthlyNet")}
                   />
                 </LineChart>
               </ResponsiveContainer>
@@ -2728,8 +2954,8 @@ function SimulatorPage() {
               {scenarioCheckpoints.length > 0 && (
                 <div className="dashboard-card">
                   <div className="section-header">
-                    <h2>Scenario Checkpoints</h2>
-                    <p>Key moments to watch in the current path.</p>
+                    <h2>{t("simulator.scenarioCheckpoints")}</h2>
+                    <p>{t("simulator.scenarioCheckpointsDetail")}</p>
                   </div>
 
                   <div className="simulator-checkpoint-grid">
@@ -2750,35 +2976,35 @@ function SimulatorPage() {
               {simulatorData?.goal_balance != null && (
                 <div className="dashboard-card">
                   <div className="section-header">
-                    <h2>Goal Planner</h2>
-                    <p>What this scenario would take to reach your target balance.</p>
+                    <h2>{t("simulator.goalPlanner")}</h2>
+                    <p>{t("simulator.goalPlannerDetail")}</p>
                   </div>
 
                   <div className="simulator-metrics-grid">
                     <div className="simulator-metric-card">
-                      <span>Target balance</span>
+                      <span>{t("simulator.targetBalance")}</span>
                       <strong>${simulatorData.goal_balance.toFixed(2)}</strong>
                     </div>
                     <div className="simulator-metric-card">
-                      <span>Gap from current scenario</span>
+                      <span>{t("simulator.gapCurrentScenario")}</span>
                       <strong>${(simulatorData.goal_gap_amount || 0).toFixed(2)}</strong>
                     </div>
                     <div className="simulator-metric-card">
-                      <span>Required monthly net</span>
+                      <span>{t("simulator.requiredMonthlyNet")}</span>
                       <strong>${(simulatorData.required_monthly_net || 0).toFixed(2)}</strong>
                     </div>
                     <div className="simulator-metric-card">
-                      <span>Needed monthly improvement</span>
+                      <span>{t("simulator.neededMonthlyImprovement")}</span>
                       <strong>${(simulatorData.required_income_lift || 0).toFixed(2)}</strong>
                     </div>
                   </div>
 
-                  <p className="budget-forecast-banner">{simulatorData.goal_note}</p>
+                  <p className="budget-forecast-banner">{buildGoalNote(simulatorData, t)}</p>
                   <p className="budget-inline-note">
-                    Equivalent paths: earn about $
-                    {(simulatorData.required_income_lift || 0).toFixed(2)} more each month, spend
-                    about ${(simulatorData.required_expense_reduction || 0).toFixed(2)} less, or
-                    combine both.
+                    {t("simulator.equivalentPaths", {
+                      income: (simulatorData.required_income_lift || 0).toFixed(2),
+                      expense: (simulatorData.required_expense_reduction || 0).toFixed(2),
+                    })}
                   </p>
                 </div>
               )}
@@ -2787,11 +3013,8 @@ function SimulatorPage() {
                 <div className="dashboard-card">
                   <div className="section-header">
                     <div>
-                      <h2>Reduction Plan</h2>
-                      <p>
-                        Category-level places to look first if you want to close the gap through
-                        spending cuts.
-                      </p>
+                      <h2>{t("simulator.reductionPlan")}</h2>
+                      <p>{t("simulator.reductionPlanDetail")}</p>
                     </div>
                     <div className="budget-section-actions">
                       <button
@@ -2801,8 +3024,8 @@ function SimulatorPage() {
                         disabled={applyingReductionPlan}
                       >
                         {applyingReductionPlan
-                          ? "Applying..."
-                          : `Apply To ${simulatorData.start_month} Budgets`}
+                          ? t("transactions.applying")
+                          : t("simulator.applyToBudgets", { month: simulatorData.start_month })}
                       </button>
                       <button
                         type="button"
@@ -2813,18 +3036,18 @@ function SimulatorPage() {
                           )
                         }
                       >
-                        Open {simulatorData.start_month} Budgets
+                        {t("simulator.openBudgets", { month: simulatorData.start_month })}
                       </button>
                     </div>
                   </div>
 
                   <div className="simulator-metrics-grid">
                     <div className="simulator-metric-card">
-                      <span>Monthly cut target</span>
+                      <span>{t("simulator.monthlyCutTarget")}</span>
                       <strong>${(simulatorData.reduction_plan_target || 0).toFixed(2)}</strong>
                     </div>
                     <div className="simulator-metric-card">
-                      <span>Plan coverage</span>
+                      <span>{t("simulator.planCoverage")}</span>
                       <strong>${(simulatorData.reduction_plan_coverage_amount || 0).toFixed(2)}</strong>
                     </div>
                   </div>
@@ -2839,20 +3062,24 @@ function SimulatorPage() {
                         className="budget-insight-item"
                       >
                         <div className="budget-insight-top">
-                          <strong>{item.category}</strong>
+                          <strong>{formatCategoryLabel(item.category, t)}</strong>
                           <span className="budget-insight-badge budget-insight-badge-watch">
-                            Cut ${item.suggested_monthly_reduction.toFixed(2)}/mo
+                            {t("simulator.cutPerMonth", { amount: item.suggested_monthly_reduction.toFixed(2) })}
                           </span>
                         </div>
                         <p className="budget-insight-title">
-                          Current monthly spend: ${item.current_monthly_spend.toFixed(2)}
+                          {t("simulator.currentMonthlySpend", { amount: item.current_monthly_spend.toFixed(2) })}
                         </p>
                         <p className="budget-inline-note">
-                          About {item.share_percent.toFixed(1)}% of this plan comes from {item.category}. {item.reason}
+                          {t("simulator.reductionPlanShare", {
+                            percent: item.share_percent.toFixed(1),
+                            category: formatCategoryLabel(item.category, t),
+                            reason: formatReductionReason(item, t),
+                          })}
                         </p>
                         <div className="budget-insight-actions">
                           <span className="budget-inline-note">
-                            Suggested next-month budget: ${item.suggested_budget_amount.toFixed(2)}
+                            {t("simulator.suggestedNextMonthBudget", { amount: item.suggested_budget_amount.toFixed(2) })}
                           </span>
                           <div className="budget-section-actions">
                             <button
@@ -2868,7 +3095,7 @@ function SimulatorPage() {
                                 )
                               }
                             >
-                              Open Budget Target
+                              {t("simulator.openBudgetTarget")}
                             </button>
                             <button
                               type="button"
@@ -2879,7 +3106,7 @@ function SimulatorPage() {
                                 )
                               }
                             >
-                              Review Transactions
+                              {t("common.reviewTransactions")}
                             </button>
                           </div>
                         </div>
@@ -2891,12 +3118,12 @@ function SimulatorPage() {
 
               <div className="dashboard-card">
                 <div className="section-header">
-                  <h2>Assumptions</h2>
-                  <p>What this scenario is using behind the scenes.</p>
+                  <h2>{t("simulator.assumptions")}</h2>
+                  <p>{t("simulator.assumptionsDetail")}</p>
                 </div>
 
                 <ul className="simulator-assumptions-list">
-                  {(simulatorData?.assumptions || []).map((item) => (
+                  {buildSimulatorAssumptions(simulatorData, t).map((item) => (
                     <li key={item}>{item}</li>
                   ))}
                 </ul>
@@ -2904,22 +3131,22 @@ function SimulatorPage() {
 
               <div className="dashboard-card">
                 <div className="section-header">
-                  <h2>Scenario Timeline</h2>
-                  <p>Projected income, expenses, and ending balance for each month.</p>
+                  <h2>{t("simulator.scenarioTimeline")}</h2>
+                  <p>{t("simulator.scenarioTimelineDetail")}</p>
                 </div>
 
                 <div className="transactions-table-wrapper">
                   <table className="transactions-table">
                     <thead>
                       <tr>
-                        <th>Month</th>
-                        <th>Income</th>
-                        <th>Expenses</th>
-                        <th>One-Time Event</th>
-                        <th>Net</th>
-                        <th>Baseline Balance</th>
-                        <th>Ending Balance</th>
-                        <th>Scenario Delta</th>
+                        <th>{t("common.month")}</th>
+                        <th>{t("common.income")}</th>
+                        <th>{t("common.expenses")}</th>
+                        <th>{t("simulator.oneTimeEvent")}</th>
+                        <th>{t("simulator.net")}</th>
+                        <th>{t("simulator.baselineBalanceHeader")}</th>
+                        <th>{t("simulator.endingBalanceHeader")}</th>
+                        <th>{t("simulator.scenarioDelta")}</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -2930,10 +3157,10 @@ function SimulatorPage() {
                           <td>${row.expenses.toFixed(2)}</td>
                           <td>
                             {row.one_time_event_amount
-                              ? `${row.one_time_event_label || "Planned event"} ${
+                              ? `${row.one_time_event_label || t("simulator.plannedEvent")} ${
                                   row.one_time_event_amount > 0 ? "+" : "-"
                                 }$${Math.abs(row.one_time_event_amount).toFixed(2)}`
-                              : "None"}
+                              : t("simulator.none")}
                           </td>
                           <td>${row.net_change.toFixed(2)}</td>
                           <td>${row.baseline_ending_balance.toFixed(2)}</td>

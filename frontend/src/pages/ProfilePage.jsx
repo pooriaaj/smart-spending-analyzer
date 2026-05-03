@@ -7,6 +7,7 @@ import { useLanguage } from "../i18n/LanguageContext";
 function ProfilePage() {
   const navigate = useNavigate();
   const { t } = useLanguage();
+  const deleteConfirmationWord = t("profile.deleteConfirmationWord");
 
   const [email, setEmail] = useState("");
   const [profileLoading, setProfileLoading] = useState(true);
@@ -47,11 +48,11 @@ function ProfilePage() {
     try {
       const response = await api.put("/users/me", { email });
       setEmail(response.data.email);
-      setProfileMessage("Profile updated successfully.");
+      setProfileMessage(t("profile.profileUpdated"));
     } catch (error) {
       if (!handleApiAuthError(error, navigate)) {
         setProfileError(
-          error?.response?.data?.detail || "Failed to update profile."
+          error?.response?.data?.detail || t("profile.profileUpdateFailed")
         );
       }
     }
@@ -68,13 +69,13 @@ function ProfilePage() {
         new_password: newPassword,
       });
 
-      setPasswordMessage(response.data.message || "Password changed successfully.");
+      setPasswordMessage(response.data.message || t("profile.passwordChanged"));
       setCurrentPassword("");
       setNewPassword("");
     } catch (error) {
       if (!handleApiAuthError(error, navigate)) {
         setPasswordError(
-          error?.response?.data?.detail || "Failed to change password."
+          error?.response?.data?.detail || t("profile.passwordChangeFailed")
         );
       }
     }
@@ -84,8 +85,8 @@ function ProfilePage() {
     e.preventDefault();
     setDeleteError("");
 
-    if (deleteConfirmText !== "DELETE") {
-      setDeleteError('Please type DELETE to confirm account deletion.');
+    if (deleteConfirmText.trim().toUpperCase() !== deleteConfirmationWord.toUpperCase()) {
+      setDeleteError(t("profile.deleteConfirmError"));
       return;
     }
 
@@ -103,7 +104,7 @@ function ProfilePage() {
     } catch (error) {
       if (!handleApiAuthError(error, navigate)) {
         setDeleteError(
-          error?.response?.data?.detail || "Failed to delete account."
+          error?.response?.data?.detail || t("profile.deleteFailed")
         );
       }
     } finally {
@@ -215,34 +216,28 @@ function ProfilePage() {
 
         <div id="plans" className="dashboard-card large-card premium-plans-card">
           <div className="section-header">
-            <h2>Premium Plans</h2>
-            <p>
-              Free is for daily tracking and month-end reconciliation. Premium is for deeper forecasting,
-              larger statement workflows, and smarter decision support.
-            </p>
+            <h2>{t("profile.premiumPlans")}</h2>
+            <p>{t("profile.premiumPlansDetail")}</p>
           </div>
 
           <div className="pricing-grid">
             <div className="pricing-card">
-              <span className="pricing-kicker">Free</span>
-              <h3>Smart Starter</h3>
+              <span className="pricing-kicker">{t("profile.free")}</span>
+              <h3>{t("profile.smartStarter")}</h3>
               <p className="pricing-price">$0</p>
-              <p>Manual tracking, basic statement import, current-month dashboard, and clean transaction review.</p>
+              <p>{t("profile.freePlanDetail")}</p>
               <button className="secondary-button" type="button">
-                Current Plan
+                {t("profile.currentPlan")}
               </button>
             </div>
 
             <div className="pricing-card pricing-card-featured">
-              <span className="pricing-kicker">Premium</span>
-              <h3>Money Operator</h3>
-              <p className="pricing-price">Coming soon</p>
-              <p>
-                Larger statement batches, advanced simulator plans, 3 and 6 month trend intelligence,
-                recurring-charge levers, and personalized category learning controls.
-              </p>
+              <span className="pricing-kicker">{t("common.premium")}</span>
+              <h3>{t("profile.moneyOperator")}</h3>
+              <p className="pricing-price">{t("profile.comingSoon")}</p>
+              <p>{t("profile.premiumPlanDetail")}</p>
               <button className="premium-header-button" type="button">
-                Notify Me
+                {t("profile.notifyMe")}
               </button>
             </div>
           </div>
@@ -250,18 +245,15 @@ function ProfilePage() {
 
         <div className="dashboard-card large-card danger-zone-card">
           <div className="section-header">
-            <h2>Danger Zone</h2>
-            <p>
-              Deleting your account permanently removes your profile, transactions,
-              and saved category memory.
-            </p>
+            <h2>{t("profile.dangerZone")}</h2>
+            <p>{t("profile.dangerZoneDetail")}</p>
           </div>
 
           <form className="auth-form" onSubmit={handleDeleteAccount}>
             <PasswordField
-              label="Confirm Password"
+              label={t("profile.confirmPassword")}
               name="delete-password"
-              placeholder="Enter your password"
+              placeholder={t("profile.enterPassword")}
               value={deletePassword}
               onChange={(e) => setDeletePassword(e.target.value)}
               autoComplete="current-password"
@@ -270,12 +262,12 @@ function ProfilePage() {
 
             <div className="auth-field">
               <label htmlFor="delete-confirm-text">
-                Type <strong>DELETE</strong> to confirm
+                {t("profile.typeDelete")}
               </label>
               <input
                 id="delete-confirm-text"
                 type="text"
-                placeholder="Type DELETE"
+                placeholder={t("profile.typeDeletePlaceholder")}
                 value={deleteConfirmText}
                 onChange={(e) => setDeleteConfirmText(e.target.value)}
                 required
@@ -287,7 +279,7 @@ function ProfilePage() {
               className="delete-account-button"
               disabled={deleting}
             >
-              {deleting ? "Deleting Account..." : "Delete Account"}
+              {deleting ? t("profile.deletingAccount") : t("profile.deleteAccount")}
             </button>
           </form>
 

@@ -9,6 +9,7 @@ import {
   setSelectedAccountId as persistSelectedAccountId,
 } from "../services/accountStorage";
 import { useLanguage } from "../i18n/LanguageContext";
+import { formatCategoryLabel, formatRecurringReviewReason } from "../utils/displayLabels";
 
 const getCurrentMonthStart = () => {
   const now = new Date();
@@ -28,14 +29,6 @@ const normalizeRecurringDescription = (value = "") => {
   );
   normalized = normalized.replace(/\b\d+\b/g, " ");
   return normalized.replace(/\s+/g, " ").trim();
-};
-
-const formatDisplayLabel = (value = "") => {
-  const cleaned = String(value || "Other").replace(/_/g, " ").trim();
-  return cleaned
-    .split(/\s+/)
-    .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
-    .join(" ");
 };
 
 const cleanRecurringDisplayName = (value = "") => {
@@ -59,7 +52,7 @@ const AMOUNT_RANGE_OPTIONS = [
   { value: "1000-2500", label: "$1,000-$2,500", min: 1000, max: 2500 },
   { value: "2500-5000", label: "$2,500-$5,000", min: 2500, max: 5000 },
   { value: "5000-10000", label: "$5,000-$10,000", min: 5000, max: 10000 },
-  { value: "10000-plus", label: "Over $10,000", min: 10000, max: null, minExclusive: true },
+  { value: "10000-plus", labelKey: "transactions.overAmount", amount: "10,000", min: 10000, max: null, minExclusive: true },
 ];
 
 const buildPaginationItems = (currentPage, totalPages) => {
@@ -142,12 +135,12 @@ function TransactionsPage() {
 
   const getSuggestionStrength = (confidence) => {
     if (confidence >= 0.95) {
-      return { label: "Learned", className: "bulk-confidence-pill bulk-confidence-pill-memory" };
+      return { label: t("transactions.learned"), className: "bulk-confidence-pill bulk-confidence-pill-memory" };
     }
     if (confidence >= 0.85) {
-      return { label: "Strong rule", className: "bulk-confidence-pill bulk-confidence-pill-rule" };
+      return { label: t("transactions.strongRule"), className: "bulk-confidence-pill bulk-confidence-pill-rule" };
     }
-    return { label: "Review", className: "bulk-confidence-pill bulk-confidence-pill-review" };
+    return { label: t("transactions.review"), className: "bulk-confidence-pill bulk-confidence-pill-review" };
   };
 
   useEffect(() => {
@@ -187,9 +180,7 @@ function TransactionsPage() {
           recurringResponse = allRecurringResponse;
           persistSelectedAccountId(ALL_ACCOUNTS_VALUE);
           setSelectedAccountId(ALL_ACCOUNTS_VALUE);
-          setScopeNotice(
-            "We switched you back to All Accounts because this account view was empty, but your transactions exist in another account."
-          );
+          setScopeNotice(t("transactions.switchedAllAccountsNotice"));
         } else {
           setScopeNotice("");
         }
@@ -204,7 +195,7 @@ function TransactionsPage() {
     } finally {
       setLoading(false);
     }
-  }, [navigate, normalizedAccountId]);
+  }, [navigate, normalizedAccountId, t]);
 
   useEffect(() => {
     fetchTransactions();
@@ -399,7 +390,7 @@ function TransactionsPage() {
       setBulkSuggestions(response.data.suggestions || []);
     } catch (error) {
       if (!handleApiAuthError(error, navigate)) {
-        setBulkMessage("Failed to analyze transactions.");
+        setBulkMessage(t("transactions.bulkAnalyzeFailed"));
       }
     } finally {
       setBulkLoading(false);
@@ -417,12 +408,17 @@ function TransactionsPage() {
         transaction_ids: bulkSuggestions.map((item) => item.transaction_id),
       });
 
-      setBulkMessage(`Applied suggested categories to ${response.data.updated_count} transaction(s).`);
+      setBulkMessage(
+        t("transactions.bulkApplySuccess", {
+          count: response.data.updated_count,
+          plural: response.data.updated_count === 1 ? "" : "s",
+        })
+      );
       setBulkSuggestions([]);
       await fetchTransactions();
     } catch (error) {
       if (!handleApiAuthError(error, navigate)) {
-        setBulkMessage("Failed to apply suggested categories.");
+        setBulkMessage(t("transactions.bulkApplyFailed"));
       }
     } finally {
       setBulkApplying(false);
@@ -445,13 +441,18 @@ function TransactionsPage() {
       const memoryUpdated = response.data?.memory_entries_updated || 0;
 
       setBulkMessage(
-        `Normalized ${updatedCount} transaction categor${updatedCount === 1 ? "y" : "ies"} and refreshed ${memoryCreated + memoryUpdated} saved memory pattern${memoryCreated + memoryUpdated === 1 ? "" : "s"}.`
+        t("transactions.normalizeSuccess", {
+          count: updatedCount,
+          categoryPlural: updatedCount === 1 ? "" : "s",
+          memoryCount: memoryCreated + memoryUpdated,
+          memoryPlural: memoryCreated + memoryUpdated === 1 ? "" : "s",
+        })
       );
       setBulkSuggestions([]);
       await fetchTransactions();
     } catch (error) {
       if (!handleApiAuthError(error, navigate)) {
-        setBulkMessage("Failed to normalize existing categories.");
+        setBulkMessage(t("transactions.normalizeFailed"));
       }
     } finally {
       setNormalizingCategories(false);
@@ -460,7 +461,7 @@ function TransactionsPage() {
 
   const handleFreshStart = async () => {
     if (freshStartConfirm.trim().toUpperCase() !== "START FRESH") {
-      setFreshStartError('Type "START FRESH" to confirm this cleanup.');
+      setFreshStartError(t("transactions.freshStartConfirmError"));
       return;
     }
 
@@ -475,12 +476,12 @@ function TransactionsPage() {
         delete_all: false,
       });
 
-      setFreshStartMessage(response.data?.message || "Fresh start complete.");
+      setFreshStartMessage(response.data?.message || t("transactions.freshStartComplete"));
       setFreshStartConfirm("");
       await fetchTransactions();
     } catch (error) {
       if (!handleApiAuthError(error, navigate)) {
-        setFreshStartError(error?.response?.data?.detail || "Failed to clean old history.");
+        setFreshStartError(error?.response?.data?.detail || t("transactions.freshStartFailed"));
       }
     } finally {
       setFreshStartLoading(false);
@@ -491,14 +492,14 @@ function TransactionsPage() {
     if (totalPages <= 1) return null;
 
     return (
-      <nav className={`transaction-pagination ${positionClass}`} aria-label="Transaction pages">
+      <nav className={`transaction-pagination ${positionClass}`} aria-label={t("transactions.transactionPages")}>
         <button
           type="button"
           className="pagination-button"
           onClick={() => setCurrentPage(Math.max(1, activePage - 1))}
           disabled={activePage === 1}
         >
-          Previous
+          {t("common.previous")}
         </button>
 
         <div className="pagination-pages">
@@ -527,7 +528,7 @@ function TransactionsPage() {
           onClick={() => setCurrentPage(Math.min(totalPages, activePage + 1))}
           disabled={activePage === totalPages}
         >
-          Next
+          {t("common.next")}
         </button>
       </nav>
     );
@@ -612,21 +613,21 @@ function TransactionsPage() {
                 onChange={(event) => setFreshStartDate(event.target.value)}
               />
               <p className="budget-inline-note">
-                Everything before this date in the selected account view will be deleted.
+                {t("transactions.freshStartDeleteNote")}
               </p>
             </div>
 
             <div>
-              <label htmlFor="fresh-start-confirm">Confirmation</label>
+              <label htmlFor="fresh-start-confirm">{t("transactions.confirmation")}</label>
               <input
                 id="fresh-start-confirm"
                 type="text"
                 value={freshStartConfirm}
                 onChange={(event) => setFreshStartConfirm(event.target.value)}
-                placeholder='Type "START FRESH"'
+                placeholder={t("transactions.typeStartFresh")}
               />
               <p className="budget-inline-note">
-                This cannot tell old manual rows from old imported rows, so choose the date carefully.
+                {t("transactions.freshStartCarefulNote")}
               </p>
             </div>
           </div>
@@ -661,14 +662,14 @@ function TransactionsPage() {
 
           {recurringPatterns.length === 0 ? (
             <div className="empty-state">
-              <p>No strong repeating income or expense patterns were detected yet.</p>
+              <p>{t("transactions.noRecurringPatterns")}</p>
             </div>
           ) : (
             <div className="recurring-charges-grid">
               {recurringPatterns.map((item) => {
                 const displayName = cleanRecurringDisplayName(item.description);
-                const typeLabel = item.type === "income" ? "Income" : "Expense";
-                const categoryLabel = formatDisplayLabel(item.category);
+                const typeLabel = item.type === "income" ? t("common.income") : t("common.expense");
+                const categoryLabel = formatCategoryLabel(item.category, t);
 
                 return (
                   <div key={`${item.description}-${item.latest_date}`} className="recurring-charge-card">
@@ -685,48 +686,57 @@ function TransactionsPage() {
                       <div className="recurring-charge-badges">
                         <span className={getRecurringPriorityClass(item.review_priority)}>
                           {item.review_priority === "high"
-                            ? "Review first"
+                            ? t("transactions.reviewFirst")
                             : item.review_priority === "medium"
-                              ? "Worth reviewing"
-                              : "Stable"}
+                              ? t("transactions.worthReviewing")
+                              : t("transactions.stable")}
                         </span>
                         <span className="budget-status budget-status-risk">
-                          {Math.round(Number(item.confidence || 0) * 100)}% match
+                          {t("transactions.matchPercent", {
+                            percent: Math.round(Number(item.confidence || 0) * 100),
+                          })}
                         </span>
                       </div>
                     </div>
 
                     <div className="recurring-charge-metrics">
                       <div>
-                        <span>Average</span>
+                        <span>{t("transactions.average")}</span>
                         <strong>${Number(item.average_amount || 0).toFixed(2)}</strong>
                       </div>
                       <div>
-                        <span>Annualized</span>
+                        <span>{t("transactions.annualized")}</span>
                         <strong>${Number(item.annualized_amount || 0).toFixed(2)}</strong>
                       </div>
                       <div>
-                        <span>Occurrences</span>
+                        <span>{t("transactions.occurrences")}</span>
                         <strong>{item.occurrences}</strong>
                       </div>
                     </div>
 
                     <p className="budget-inline-note">
-                      Latest {item.type === "income" ? "income" : "expense"}: ${Number(item.latest_amount || 0).toFixed(2)} on {item.latest_date}
+                      {t("transactions.latestTransaction", {
+                        type: item.type === "income" ? t("common.income").toLowerCase() : t("common.expense").toLowerCase(),
+                        amount: Number(item.latest_amount || 0).toFixed(2),
+                        date: item.latest_date,
+                      })}
                     </p>
                     {item.next_expected_date && (
                       <p className="budget-inline-note">
-                        Next expected around {item.next_expected_date}
+                        {t("transactions.nextExpected", { date: item.next_expected_date })}
                       </p>
                     )}
                     {item.latest_change_percent != null && (
                       <p className="budget-inline-note">
-                        Latest change: {item.latest_change_percent > 0 ? "+" : ""}
-                        {Number(item.latest_change_percent).toFixed(1)}% vs usual amount
+                        {t("transactions.latestChange", {
+                          change: `${item.latest_change_percent > 0 ? "+" : ""}${Number(item.latest_change_percent).toFixed(1)}`,
+                        })}
                       </p>
                     )}
                     {item.review_reason && (
-                      <p className="recurring-charge-reason">{item.review_reason}</p>
+                      <p className="recurring-charge-reason">
+                        {formatRecurringReviewReason(item, t)}
+                      </p>
                     )}
                     <div className="recurring-charge-actions">
                       <button
@@ -734,7 +744,7 @@ function TransactionsPage() {
                         className="secondary-button recurring-charge-action"
                         onClick={() => applyRecurringFilter(item)}
                       >
-                        Show matching transactions
+                        {t("transactions.showMatchingTransactions")}
                       </button>
                     </div>
                   </div>
@@ -757,7 +767,7 @@ function TransactionsPage() {
               onClick={handleBulkAnalyze}
               disabled={bulkLoading}
             >
-              {bulkLoading ? "Analyzing..." : "Analyze Uncategorized Transactions"}
+              {bulkLoading ? t("transactions.analyzing") : t("transactions.analyzeUncategorized")}
             </button>
 
             <button
@@ -766,7 +776,7 @@ function TransactionsPage() {
               onClick={handleBulkApply}
               disabled={bulkApplying || bulkSuggestions.length === 0}
             >
-              {bulkApplying ? "Applying..." : "Apply Suggested Categories"}
+              {bulkApplying ? t("transactions.applying") : t("transactions.applySuggestedCategories")}
             </button>
 
             <button
@@ -775,7 +785,9 @@ function TransactionsPage() {
               onClick={handleNormalizeCategories}
               disabled={normalizingCategories}
             >
-              {normalizingCategories ? "Normalizing..." : "Normalize Existing Categories"}
+              {normalizingCategories
+                ? t("transactions.normalizing")
+                : t("transactions.normalizeExistingCategories")}
             </button>
           </div>
 
@@ -792,7 +804,7 @@ function TransactionsPage() {
                       <div>
                         <h3>{item.description}</h3>
                         <p>
-                          Current: <strong>{item.current_category}</strong> {"->"} Suggested: <strong>{item.suggested_category}</strong>
+                          {t("common.current")}: <strong>{formatCategoryLabel(item.current_category, t)}</strong> {"->"} {t("common.suggested")}: <strong>{formatCategoryLabel(item.suggested_category, t)}</strong>
                         </p>
                       </div>
 
@@ -806,13 +818,18 @@ function TransactionsPage() {
                       </div>
                     </div>
 
-                    <p className="bulk-suggestion-meta">Type: {item.type}</p>
+                    <p className="bulk-suggestion-meta">
+                      {t("common.type")}:{" "}
+                      {item.type === "income" ? t("common.income") : t("common.expense")}
+                    </p>
                     {item.matched_keyword && (
                       <p className="bulk-suggestion-meta">
-                        Matched keyword: <strong>{item.matched_keyword}</strong>
+                        {t("transactions.matchedKeyword")}: <strong>{item.matched_keyword}</strong>
                       </p>
                     )}
-                    <p className="bulk-suggestion-meta">{item.reason}</p>
+                    <p className="bulk-suggestion-meta">
+                      {t("transactions.suggestionReasonGeneric")}
+                    </p>
                   </div>
                 );
               })}
@@ -821,7 +838,7 @@ function TransactionsPage() {
 
           {!bulkLoading && bulkSuggestions.length === 0 && !bulkMessage && (
             <div className="empty-state">
-              <p>No bulk suggestions yet. Run analysis to scan uncategorized rows.</p>
+              <p>{t("transactions.noBulkSuggestions")}</p>
             </div>
           )}
         </div>
@@ -830,25 +847,28 @@ function TransactionsPage() {
           <div className="section-header">
             <h2>{t("transactions.transactionFilters")}</h2>
             <p>
-              Showing {filteredTransactions.length} of {transactions.length} transaction
-              {transactions.length === 1 ? "" : "s"} in this account view.
+              {t("transactions.showingTransactions", {
+                filtered: filteredTransactions.length,
+                total: transactions.length,
+                plural: transactions.length === 1 ? "" : "s",
+              })}
             </p>
           </div>
 
           <div className="filter-bar">
             <div>
-              <label>Type</label>
+              <label>{t("common.type")}</label>
               <select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)}>
-                <option value="">All</option>
-                <option value="income">Income</option>
-                <option value="expense">Expense</option>
+                <option value="">{t("common.all")}</option>
+                <option value="income">{t("common.income")}</option>
+                <option value="expense">{t("common.expense")}</option>
               </select>
             </div>
 
             <div>
-              <label>Month</label>
+              <label>{t("common.month")}</label>
               <select value={monthFilter} onChange={(e) => setMonthFilter(e.target.value)}>
-                <option value="">All</option>
+                <option value="">{t("common.all")}</option>
                 {availableMonths.map((month) => (
                   <option key={month} value={month}>{month}</option>
                 ))}
@@ -856,37 +876,37 @@ function TransactionsPage() {
             </div>
 
             <div>
-              <label>Category</label>
+              <label>{t("common.category")}</label>
               <select value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)}>
-                <option value="">All</option>
+                <option value="">{t("common.all")}</option>
                 {availableCategories.map((category) => (
-                  <option key={category} value={category}>{category}</option>
+                  <option key={category} value={category}>{formatCategoryLabel(category, t)}</option>
                 ))}
               </select>
             </div>
 
             <div>
-              <label>Amount Range</label>
+              <label>{t("transactions.amountRange")}</label>
               <select
                 value={amountRangeFilter}
                 onChange={(e) => setAmountRangeFilter(e.target.value)}
               >
-                <option value="">All amounts</option>
+                <option value="">{t("transactions.allAmounts")}</option>
                 {AMOUNT_RANGE_OPTIONS.map((option) => (
                   <option key={option.value} value={option.value}>
-                    {option.label}
+                    {option.labelKey ? t(option.labelKey, { amount: option.amount }) : option.label}
                   </option>
                 ))}
               </select>
             </div>
 
             <div>
-              <label>Description</label>
+              <label>{t("common.description")}</label>
               <input
                 type="text"
                 value={searchFilter}
                 onChange={(e) => setSearchFilter(e.target.value)}
-                placeholder="Search merchant or note"
+                placeholder={t("transactions.descriptionSearch")}
               />
             </div>
           </div>
@@ -897,7 +917,9 @@ function TransactionsPage() {
               className={recurringOnlyFilter ? "smart-action-button" : "secondary-button"}
               onClick={() => setRecurringOnlyFilter((current) => !current)}
             >
-              {recurringOnlyFilter ? "Showing Recurring Matches" : "Only Recurring Matches"}
+              {recurringOnlyFilter
+                ? t("transactions.showingRecurringMatches")
+                : t("transactions.onlyRecurringMatches")}
             </button>
 
             {(typeFilter ||
@@ -907,7 +929,7 @@ function TransactionsPage() {
               searchFilter ||
               recurringOnlyFilter) && (
               <button type="button" className="secondary-button" onClick={clearFilters}>
-                Clear Filters
+                {t("common.clearFilters")}
               </button>
             )}
           </div>
@@ -915,32 +937,34 @@ function TransactionsPage() {
           {(searchFilter || recurringOnlyFilter) && (
             <p className="budget-inline-note recurring-filter-note">
               {recurringOnlyFilter
-                ? `Showing likely repeating money patterns${searchFilter ? ` matching "${searchFilter}".` : "."}`
-                : `Filtering descriptions for "${searchFilter}".`}
+                ? t("transactions.recurringFilterNote", {
+                    match: searchFilter ? t("transactions.matchingDescription", { term: searchFilter }) : "",
+                  })
+                : t("transactions.descriptionFilterNote", { term: searchFilter })}
             </p>
           )}
         </div>
 
         <div className="dashboard-card">
           <div className="section-header">
-            <h2>Transaction Table</h2>
-            <p>Your daily written transactions and any missing statement rows you chose to import.</p>
+            <h2>{t("transactions.transactionTable")}</h2>
+            <p>{t("transactions.tableDetail")}</p>
           </div>
 
           {filteredTransactions.length === 0 ? (
             <div className="empty-state">
               <p>
                 {transactions.length === 0
-                  ? "No transactions found in this account view yet."
-                  : "Transactions exist, but the current filters are hiding them."}
+                  ? t("transactions.noTransactions")
+                  : t("transactions.filtersHidingTransactions")}
               </p>
               {transactions.length === 0 ? (
                 <button className="secondary-button" onClick={() => navigate("/dashboard")}>
-                  Add Today&apos;s Transaction
+                  {t("transactions.addToday")}
                 </button>
               ) : (
                 <button className="secondary-button" onClick={clearFilters}>
-                  Clear Filters
+                  {t("common.clearFilters")}
                 </button>
               )}
             </div>
@@ -949,11 +973,17 @@ function TransactionsPage() {
               <div className="transaction-table-toolbar">
                 <div>
                   <span className="transaction-page-kicker">
-                    {totalPages > 1 ? `Page ${activePage} of ${totalPages}` : "All transactions"}
+                    {totalPages > 1
+                      ? t("common.pageOf", { page: activePage, total: totalPages })
+                      : t("common.allTransactions")}
                   </span>
                   <p className="transaction-page-summary">
-                    Showing {pageStartIndex + 1}-{pageEndIndex} of {filteredTransactions.length} filtered transaction
-                    {filteredTransactions.length === 1 ? "" : "s"}.
+                    {t("transactions.pageSummary", {
+                      start: pageStartIndex + 1,
+                      end: pageEndIndex,
+                      total: filteredTransactions.length,
+                      plural: filteredTransactions.length === 1 ? "" : "s",
+                    })}
                   </p>
                 </div>
 
@@ -964,13 +994,13 @@ function TransactionsPage() {
                 <table className="transactions-table">
                   <thead>
                     <tr>
-                      <th>Date</th>
-                      <th>Type</th>
-                      <th>Category</th>
-                      <th>Description</th>
-                      <th>Amount</th>
-                      <th>Account</th>
-                      <th>Action</th>
+                      <th>{t("common.date")}</th>
+                      <th>{t("common.type")}</th>
+                      <th>{t("common.category")}</th>
+                      <th>{t("common.description")}</th>
+                      <th>{t("common.amount")}</th>
+                      <th>{t("common.account")}</th>
+                      <th>{t("common.actions")}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -988,8 +1018,8 @@ function TransactionsPage() {
                           <td>
                             {isEditing ? (
                               <select value={editForm.type} onChange={(e) => setEditForm({ ...editForm, type: e.target.value })}>
-                                <option value="income">Income</option>
-                                <option value="expense">Expense</option>
+                                <option value="income">{t("common.income")}</option>
+                                <option value="expense">{t("common.expense")}</option>
                               </select>
                             ) : transaction.type}
                           </td>
@@ -997,7 +1027,7 @@ function TransactionsPage() {
                           <td>
                             {isEditing ? (
                               <input type="text" value={editForm.category} onChange={(e) => setEditForm({ ...editForm, category: e.target.value })} />
-                            ) : transaction.category}
+                            ) : formatCategoryLabel(transaction.category, t)}
                           </td>
 
                           <td>
@@ -1025,7 +1055,7 @@ function TransactionsPage() {
                                 value={editForm.account_id}
                                 onChange={(e) => setEditForm({ ...editForm, account_id: e.target.value })}
                               />
-                            ) : transaction.account_id || "Unassigned"}
+                            ) : transaction.account_id || t("common.unassigned")}
                           </td>
 
                           <td>
@@ -1033,19 +1063,19 @@ function TransactionsPage() {
                               {isEditing ? (
                                 <>
                                   <button className="edit-button" onClick={() => saveEdit(transaction.id)}>
-                                    Save
+                                    {t("common.save")}
                                   </button>
                                   <button className="secondary-button" onClick={cancelEdit}>
-                                    Cancel
+                                    {t("common.cancel")}
                                   </button>
                                 </>
                               ) : (
                                 <>
                                   <button className="edit-button" onClick={() => startEdit(transaction)}>
-                                    Edit
+                                    {t("common.edit")}
                                   </button>
                                   <button className="delete-button" onClick={() => handleDelete(transaction.id)}>
-                                    Delete
+                                    {t("common.delete")}
                                   </button>
                                 </>
                               )}

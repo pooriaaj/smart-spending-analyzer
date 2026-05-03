@@ -9,6 +9,7 @@ import {
   buildBudgetPaceLabel,
   buildBudgetProjectionLabel,
 } from "../utils/budgetDisplay";
+import { formatCategoryLabel } from "../utils/displayLabels";
 
 function formatBudgetCategory(value) {
   if (!value || typeof value !== "string") return "";
@@ -38,6 +39,101 @@ function buildQuickSaveKey(category, amount) {
   return `${formatBudgetCategory(category)}-${Number(amount || 0).toFixed(2)}`;
 }
 
+function formatBudgetSuggestionNote(suggestion, t) {
+  const latestMonthSpent = Number(suggestion?.latest_month_spent || 0);
+  const averageSpent = Number(suggestion?.average_spent || 0);
+
+  return latestMonthSpent > averageSpent
+    ? t("budgets.suggestionPaceNote")
+    : t("budgets.suggestionAverageNote");
+}
+
+function formatBudgetInsightTitle(insight, t) {
+  const category = formatCategoryLabel(insight?.category, t);
+
+  if (insight?.severity === "action") {
+    return t("budgets.insightActionTitle", { category });
+  }
+
+  if (insight?.severity === "watch") {
+    return t("budgets.insightWatchTitle", { category });
+  }
+
+  return t("budgets.insightPositiveTitle", { category });
+}
+
+function formatBudgetInsightDetail(insight, t) {
+  const recommendedAmount = Number(insight?.recommended_amount || 0).toFixed(2);
+
+  if (insight?.severity === "action") {
+    return t("budgets.insightActionDetail", { amount: recommendedAmount });
+  }
+
+  if (insight?.severity === "watch") {
+    return t("budgets.insightWatchDetail", { amount: recommendedAmount });
+  }
+
+  return t("budgets.insightPositiveDetail");
+}
+
+function formatBudgetPaceNote(budget, t) {
+  if (!budget) return "";
+
+  const remainingAmount = Number(budget.remaining_amount || 0);
+  const daysRemaining = Number(budget.days_remaining || 0);
+
+  if (Number(budget.days_elapsed || 0) === 0) {
+    return t("budgets.paceNotStartedNote");
+  }
+
+  if (daysRemaining <= 0) {
+    return remainingAmount >= 0
+      ? t("budgets.paceClosedRemainingNote", { amount: remainingAmount.toFixed(2) })
+      : t("budgets.paceClosedOverNote", { amount: Math.abs(remainingAmount).toFixed(2) });
+  }
+
+  if (remainingAmount < 0) {
+    return t("budgets.paceAlreadyOverNote", {
+      amount: Math.abs(remainingAmount).toFixed(2),
+      days: daysRemaining,
+    });
+  }
+
+  if (budget.status === "at_risk") {
+    return t("budgets.paceAtRiskNote", { days: daysRemaining });
+  }
+
+  return t("budgets.paceOnTrackNote", { days: daysRemaining });
+}
+
+function formatBudgetProjectionNote(budget, t) {
+  if (!budget) return "";
+
+  const projectedRemainingAmount = Number(budget.projected_remaining_amount || 0);
+  const projectedUsagePercent = Number(budget.projected_usage_percent || 0);
+  const projectedStatus = budget.projected_status || budget.status;
+
+  if (Number(budget.projected_spent_amount || 0) <= 0) {
+    return t("budgets.projectionNoSpendNote");
+  }
+
+  if (projectedStatus === "over_budget") {
+    return t("budgets.projectionOverNote", {
+      amount: Math.abs(projectedRemainingAmount).toFixed(2),
+    });
+  }
+
+  if (projectedStatus === "at_risk") {
+    return t("budgets.projectionRiskNote", {
+      percent: projectedUsagePercent.toFixed(1),
+    });
+  }
+
+  return t("budgets.projectionHealthyNote", {
+    amount: projectedRemainingAmount.toFixed(2),
+  });
+}
+
 function BudgetsPage() {
   const navigate = useNavigate();
   const { t } = useLanguage();
@@ -48,7 +144,7 @@ function BudgetsPage() {
   );
   const [budgetData, setBudgetData] = useState(null);
   const [category, setCategory] = useState(
-    formatBudgetCategory(searchParams.get("category") || "")
+    searchParams.get("category") ? formatCategoryLabel(searchParams.get("category"), t) : ""
   );
   const [amount, setAmount] = useState(searchParams.get("amount") || "");
   const [loading, setLoading] = useState(true);
@@ -76,12 +172,12 @@ function BudgetsPage() {
       setBudgetData(response.data);
     } catch (fetchError) {
       if (!handleApiAuthError(fetchError, navigate)) {
-        setError("Failed to load budgets.");
+        setError(t("budgets.loadFailed"));
       }
     } finally {
       setLoading(false);
     }
-  }, [month, navigate, normalizedAccountId]);
+  }, [month, navigate, normalizedAccountId, t]);
 
   useEffect(() => {
     fetchBudgets();
@@ -97,7 +193,7 @@ function BudgetsPage() {
     }
 
     if (urlCategory) {
-      setCategory(formatBudgetCategory(urlCategory));
+      setCategory(formatCategoryLabel(urlCategory, t));
     }
 
     if (searchParams.has("amount")) {
@@ -105,7 +201,7 @@ function BudgetsPage() {
     } else if (urlMonth || urlCategory) {
       setAmount("");
     }
-  }, [searchParams]);
+  }, [searchParams, t]);
 
   const handleSaveBudget = async (event) => {
     event.preventDefault();
@@ -122,11 +218,11 @@ function BudgetsPage() {
       });
       setCategory("");
       setAmount("");
-      setMessage("Budget saved.");
+      setMessage(t("budgets.budgetSaved"));
       await fetchBudgets();
     } catch (saveError) {
       if (!handleApiAuthError(saveError, navigate)) {
-        setError(saveError?.response?.data?.detail || "Failed to save budget.");
+        setError(saveError?.response?.data?.detail || t("budgets.saveFailed"));
       }
     } finally {
       setSaving(false);
@@ -139,11 +235,11 @@ function BudgetsPage() {
 
     try {
       await api.delete(`/budgets/${budgetId}`);
-      setMessage("Budget deleted.");
+      setMessage(t("budgets.budgetDeleted"));
       await fetchBudgets();
     } catch (deleteError) {
       if (!handleApiAuthError(deleteError, navigate)) {
-        setError(deleteError?.response?.data?.detail || "Failed to delete budget.");
+        setError(deleteError?.response?.data?.detail || t("budgets.deleteFailed"));
       }
     }
   };
@@ -177,34 +273,34 @@ function BudgetsPage() {
     [budgetData]
   );
   const formattedCategoryOptions = useMemo(
-    () => categoryOptions.map((item) => formatBudgetCategory(item)),
-    [categoryOptions]
+    () => categoryOptions.map((item) => formatCategoryLabel(item, t)),
+    [categoryOptions, t]
   );
 
   const getBudgetStatusMeta = (status) => {
     if (status === "over_budget") {
-      return { label: "Over budget", className: "budget-status budget-status-over" };
+      return { label: t("budgets.overBudget"), className: "budget-status budget-status-over" };
     }
     if (status === "at_risk") {
-      return { label: "At risk", className: "budget-status budget-status-risk" };
+      return { label: t("budgets.atRisk"), className: "budget-status budget-status-risk" };
     }
-    return { label: "On track", className: "budget-status budget-status-on-track" };
+    return { label: t("budgets.onTrack"), className: "budget-status budget-status-on-track" };
   };
 
   const getBudgetInsightMeta = (severity) => {
     if (severity === "action") {
-      return { label: "Act now", className: "budget-insight-badge budget-insight-badge-action" };
+      return { label: t("budgets.actNow"), className: "budget-insight-badge budget-insight-badge-action" };
     }
     if (severity === "watch") {
-      return { label: "Watch closely", className: "budget-insight-badge budget-insight-badge-watch" };
+      return { label: t("budgets.watchClosely"), className: "budget-insight-badge budget-insight-badge-watch" };
     }
-    return { label: "On pace", className: "budget-insight-badge budget-insight-badge-positive" };
+    return { label: t("budgets.onPace"), className: "budget-insight-badge budget-insight-badge-positive" };
   };
 
   const handleUseSuggestion = (suggestion) => {
-    setCategory(formatBudgetCategory(suggestion.category));
+    setCategory(formatCategoryLabel(suggestion.category, t));
     setAmount(String(suggestion.suggested_amount));
-    setMessage(`Loaded ${formatBudgetCategory(suggestion.category)} into the form.`);
+    setMessage(t("budgets.loadedCategory", { category: formatCategoryLabel(suggestion.category, t) }));
     setError("");
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
@@ -228,13 +324,17 @@ function BudgetsPage() {
       setCategory(normalizedCategory);
       setAmount(String(targetAmount));
       setMessage(
-        `${sourceLabel} saved ${normalizedCategory} at $${Number(targetAmount).toFixed(2)}.`
+        t("budgets.targetSaved", {
+          source: sourceLabel,
+          category: formatCategoryLabel(normalizedCategory, t),
+          amount: Number(targetAmount).toFixed(2),
+        })
       );
       await fetchBudgets();
       window.scrollTo({ top: 0, behavior: "smooth" });
     } catch (saveError) {
       if (!handleApiAuthError(saveError, navigate)) {
-        setError(saveError?.response?.data?.detail || "Failed to save budget target.");
+        setError(saveError?.response?.data?.detail || t("budgets.targetSaveFailed"));
       }
     } finally {
       setQuickSavingKey("");
@@ -276,15 +376,17 @@ function BudgetsPage() {
       setAmount(String(lastTarget.amount));
       setMessage(
         response.data?.message ||
-          `${sourceLabel} saved ${uniqueTargets.length} budget target${
-            uniqueTargets.length === 1 ? "" : "s"
-          }.`
+          t("budgets.targetsSaved", {
+            source: sourceLabel,
+            count: uniqueTargets.length,
+            plural: uniqueTargets.length === 1 ? "" : "s",
+          })
       );
       await fetchBudgets();
       window.scrollTo({ top: 0, behavior: "smooth" });
     } catch (saveError) {
       if (!handleApiAuthError(saveError, navigate)) {
-        setError(saveError?.response?.data?.detail || "Failed to apply budget targets.");
+        setError(saveError?.response?.data?.detail || t("budgets.targetsApplyFailed"));
       }
     } finally {
       setBulkApplyingKey("");
@@ -294,12 +396,13 @@ function BudgetsPage() {
   const handleUseInsightTarget = (insight) => {
     if (insight.recommended_amount == null) return;
 
-    setCategory(formatBudgetCategory(insight.category));
+    setCategory(formatCategoryLabel(insight.category, t));
     setAmount(String(insight.recommended_amount));
     setMessage(
-      `Loaded ${formatBudgetCategory(insight.category)} target ${Number(
-        insight.recommended_amount
-      ).toFixed(2)} into the form.`
+      t("budgets.loadedTarget", {
+        category: formatCategoryLabel(insight.category, t),
+        amount: Number(insight.recommended_amount).toFixed(2),
+      })
     );
     setError("");
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -309,7 +412,7 @@ function BudgetsPage() {
     await saveBudgetTarget(
       suggestion.category,
       suggestion.suggested_amount,
-      "Suggested budget"
+      t("budgets.suggestedBudgetSource")
     );
   };
 
@@ -319,7 +422,7 @@ function BudgetsPage() {
     await saveBudgetTarget(
       insight.category,
       insight.recommended_amount,
-      "Budget move"
+      t("budgets.budgetMoveSource")
     );
   };
 
@@ -329,7 +432,7 @@ function BudgetsPage() {
         category: suggestion.category,
         amount: suggestion.suggested_amount,
       })),
-      "Suggested budgets",
+      t("budgets.suggestedBudgetsSource"),
       "suggestions"
     );
   };
@@ -342,7 +445,7 @@ function BudgetsPage() {
           category: insight.category,
           amount: insight.recommended_amount,
         })),
-      "Budget moves",
+      t("budgets.budgetMovesSource"),
       "insights"
     );
   };
@@ -357,11 +460,11 @@ function BudgetsPage() {
         month,
         account_id: normalizedAccountId,
       });
-      setMessage(response.data.message || `Copied budgets from ${previousMonth}.`);
+      setMessage(response.data.message || t("budgets.copiedBudgets", { month: previousMonth }));
       await fetchBudgets();
     } catch (copyError) {
       if (!handleApiAuthError(copyError, navigate)) {
-        setError(copyError?.response?.data?.detail || "Failed to copy previous month budgets.");
+        setError(copyError?.response?.data?.detail || t("budgets.copyFailed"));
       }
     } finally {
       setCopying(false);
@@ -380,11 +483,11 @@ function BudgetsPage() {
       });
       setCategory("");
       setAmount("");
-      setMessage(response.data.message || `Built ${nextMonth} budgets from current pace.`);
+      setMessage(response.data.message || t("budgets.builtBudgets", { month: nextMonth }));
       setMonth(response.data.target_month || nextMonth);
     } catch (buildError) {
       if (!handleApiAuthError(buildError, navigate)) {
-        setError(buildError?.response?.data?.detail || "Failed to build next month budgets.");
+        setError(buildError?.response?.data?.detail || t("budgets.buildFailed"));
       }
     } finally {
       setBuildingNextMonth(false);
@@ -479,8 +582,8 @@ function BudgetsPage() {
           <div className="dashboard-card">
             <div className="section-header">
               <div>
-                <h2>Suggested Budgets</h2>
-                <p>Quick starting points based on your recent spending in this scope.</p>
+                <h2>{t("budgets.suggestedBudgets")}</h2>
+                <p>{t("budgets.suggestedBudgetsDetail")}</p>
               </div>
               <div className="budget-section-actions">
                 <button
@@ -489,7 +592,9 @@ function BudgetsPage() {
                   onClick={handleApplyAllSuggestions}
                   disabled={bulkApplyingKey === "suggestions"}
                 >
-                  {bulkApplyingKey === "suggestions" ? "Applying..." : "Apply All Suggestions"}
+                  {bulkApplyingKey === "suggestions"
+                    ? t("transactions.applying")
+                    : t("budgets.applyAllSuggestions")}
                 </button>
               </div>
             </div>
@@ -502,16 +607,16 @@ function BudgetsPage() {
                 >
                   <div className="budget-suggestion-header">
                     <div>
-                      <h3>{formatBudgetCategory(suggestion.category)}</h3>
-                      <p>Suggested budget ${suggestion.suggested_amount.toFixed(2)}</p>
+                      <h3>{formatCategoryLabel(suggestion.category, t)}</h3>
+                      <p>{t("budgets.suggestedBudget", { amount: suggestion.suggested_amount.toFixed(2) })}</p>
                     </div>
                   </div>
 
                   <div className="budget-suggestion-meta">
-                    <span>Average spent: ${suggestion.average_spent.toFixed(2)}</span>
-                    <span>Current month: ${suggestion.latest_month_spent.toFixed(2)}</span>
+                    <span>{t("budgets.averageSpent", { amount: suggestion.average_spent.toFixed(2) })}</span>
+                    <span>{t("budgets.currentMonthSpent", { amount: suggestion.latest_month_spent.toFixed(2) })}</span>
                   </div>
-                  <p className="budget-inline-note">{suggestion.note}</p>
+                  <p className="budget-inline-note">{formatBudgetSuggestionNote(suggestion, t)}</p>
 
                   <div className="budget-suggestion-actions">
                     <button
@@ -519,7 +624,7 @@ function BudgetsPage() {
                       className="secondary-button budget-suggestion-load-button"
                       onClick={() => handleUseSuggestion(suggestion)}
                     >
-                      Load Form
+                      {t("budgets.loadForm")}
                     </button>
                     <button
                       type="button"
@@ -532,8 +637,8 @@ function BudgetsPage() {
                       }
                     >
                       {quickSavingKey === buildQuickSaveKey(suggestion.category, suggestion.suggested_amount)
-                        ? "Applying..."
-                        : "Save Budget"}
+                        ? t("transactions.applying")
+                        : t("budgets.saveBudget")}
                     </button>
                   </div>
                 </div>
@@ -544,19 +649,19 @@ function BudgetsPage() {
 
         <div className="dashboard-card">
           <div className="section-header">
-            <h2>Create Or Update Budget</h2>
-            <p>Set a monthly spending target for a category. Saving the same category again updates it.</p>
+            <h2>{t("budgets.createOrUpdate")}</h2>
+            <p>{t("budgets.createOrUpdateDetail")}</p>
           </div>
 
           <form className="transaction-form budget-form" onSubmit={handleSaveBudget}>
             <div className="budget-form-field">
-              <label htmlFor="budget-category">Category</label>
+              <label htmlFor="budget-category">{t("common.category")}</label>
               <input
                 id="budget-category"
                 list="budget-category-options"
                 value={category}
                 onChange={(event) => setCategory(event.target.value)}
-                placeholder="Groceries"
+                placeholder={t("budgets.categoryPlaceholder")}
                 required
               />
               <datalist id="budget-category-options">
@@ -567,7 +672,7 @@ function BudgetsPage() {
             </div>
 
             <div className="budget-form-field">
-              <label htmlFor="budget-amount">Budget amount</label>
+              <label htmlFor="budget-amount">{t("budgets.budgetAmount")}</label>
               <input
                 id="budget-amount"
                 type="number"
@@ -581,7 +686,7 @@ function BudgetsPage() {
             </div>
 
             <button type="submit" disabled={saving}>
-              {saving ? "Saving..." : "Save Budget"}
+              {saving ? t("common.saving") : t("budgets.saveBudget")}
             </button>
           </form>
 
@@ -591,36 +696,41 @@ function BudgetsPage() {
 
         <div className="summary-grid">
           <div className="summary-card income-card">
-            <span className="card-label">Budgeted</span>
+            <span className="card-label">{t("dashboard.budgeted")}</span>
             <p>${budgetSummary.total_budgeted.toFixed(2)}</p>
           </div>
 
           <div className="summary-card expense-card">
-            <span className="card-label">Spent</span>
+            <span className="card-label">{t("dashboard.spent")}</span>
             <p>${budgetSummary.total_spent.toFixed(2)}</p>
           </div>
 
           <div className="summary-card balance-card">
-            <span className="card-label">Remaining</span>
+            <span className="card-label">{t("dashboard.remaining")}</span>
             <p>${budgetSummary.total_remaining.toFixed(2)}</p>
           </div>
 
           <div className="summary-card top-card">
-            <span className="card-label">Watchlist</span>
-            <p>{budgetSummary.over_budget_count} over / {budgetSummary.at_risk_count} at risk</p>
+            <span className="card-label">{t("dashboard.watchlist")}</span>
+            <p>
+              {t("dashboard.overAtRisk", {
+                over: budgetSummary.over_budget_count,
+                risk: budgetSummary.at_risk_count,
+              })}
+            </p>
           </div>
         </div>
 
         {budgetCards.length > 0 && (
-          <p className="budget-forecast-banner">{buildBudgetForecastSummary(budgetSummary)}</p>
+          <p className="budget-forecast-banner">{buildBudgetForecastSummary(budgetSummary, t)}</p>
         )}
 
         {budgetInsights.length > 0 && (
           <div className="dashboard-card">
             <div className="section-header">
               <div>
-                <h2>Budget Moves</h2>
-                <p>Concrete next steps based on your current pace and month-end forecast.</p>
+                <h2>{t("budgets.budgetMoves")}</h2>
+                <p>{t("budgets.budgetMovesDetail")}</p>
               </div>
               <div className="budget-section-actions">
                 <button
@@ -632,7 +742,9 @@ function BudgetsPage() {
                     !budgetInsights.some((insight) => insight.recommended_amount != null)
                   }
                 >
-                  {bulkApplyingKey === "insights" ? "Applying..." : "Apply All Targets"}
+                  {bulkApplyingKey === "insights"
+                    ? t("transactions.applying")
+                    : t("budgets.applyAllTargets")}
                 </button>
               </div>
             </div>
@@ -648,21 +760,23 @@ function BudgetsPage() {
                   >
                     <div className="budget-insight-top">
                       <span className={insightMeta.className}>{insightMeta.label}</span>
-                      <strong>{formatBudgetCategory(insight.category)}</strong>
+                      <strong>{formatCategoryLabel(insight.category, t)}</strong>
                     </div>
-                    <p className="budget-insight-title">{insight.title}</p>
-                    <p className="budget-inline-note">{insight.detail}</p>
+                    <p className="budget-insight-title">{formatBudgetInsightTitle(insight, t)}</p>
+                    <p className="budget-inline-note">{formatBudgetInsightDetail(insight, t)}</p>
                     {insight.recommended_amount != null && (
                       <div className="budget-insight-actions">
                         <span className="budget-inline-note">
-                          Suggested target: ${Number(insight.recommended_amount).toFixed(2)}
+                          {t("budgets.suggestedTarget", {
+                            amount: Number(insight.recommended_amount).toFixed(2),
+                          })}
                         </span>
                         <button
                           type="button"
                           className="secondary-button"
                           onClick={() => handleUseInsightTarget(insight)}
                         >
-                          Load Target
+                          {t("budgets.loadTarget")}
                         </button>
                         <button
                           type="button"
@@ -675,8 +789,8 @@ function BudgetsPage() {
                           }
                         >
                           {quickSavingKey === buildQuickSaveKey(insight.category, insight.recommended_amount)
-                            ? "Applying..."
-                            : "Apply Target"}
+                            ? t("transactions.applying")
+                            : t("budgets.applyTarget")}
                         </button>
                       </div>
                     )}
@@ -689,17 +803,17 @@ function BudgetsPage() {
 
         <div className="dashboard-card">
           <div className="section-header">
-            <h2>Budget Tracking</h2>
-            <p>Watch each category move from safe to at-risk to over budget.</p>
+            <h2>{t("budgets.budgetTracking")}</h2>
+            <p>{t("budgets.budgetTrackingDetail")}</p>
           </div>
 
           {loading ? (
             <div className="empty-state">
-              <p>Loading budgets...</p>
+              <p>{t("budgets.loadingBudgets")}</p>
             </div>
           ) : budgetCards.length === 0 ? (
             <div className="empty-state">
-              <p>No budgets set for this scope and month yet.</p>
+              <p>{t("budgets.noBudgetsScope")}</p>
             </div>
           ) : (
             <div className="budget-list">
@@ -711,9 +825,12 @@ function BudgetsPage() {
                   <div key={budget.id} className="budget-card">
                     <div className="budget-card-top">
                       <div>
-                        <h3>{formatBudgetCategory(budget.category)}</h3>
+                        <h3>{formatCategoryLabel(budget.category, t)}</h3>
                         <p>
-                          Budget ${budget.amount.toFixed(2)} • Spent ${budget.spent_amount.toFixed(2)}
+                          {t("budgets.budgetSpent", {
+                            budget: budget.amount.toFixed(2),
+                            spent: budget.spent_amount.toFixed(2),
+                          })}
                         </p>
                       </div>
 
@@ -723,7 +840,7 @@ function BudgetsPage() {
                           className="delete-button"
                           onClick={() => handleDeleteBudget(budget.id)}
                         >
-                          Delete
+                          {t("common.delete")}
                         </button>
                       </div>
                     </div>
@@ -736,26 +853,28 @@ function BudgetsPage() {
                     </div>
 
                     <div className="budget-card-meta">
-                      <span>{budget.usage_percent.toFixed(1)}% used</span>
+                      <span>{t("budgets.used", { percent: budget.usage_percent.toFixed(1) })}</span>
                       <span>
                         {budget.remaining_amount >= 0
-                          ? `$${budget.remaining_amount.toFixed(2)} remaining`
-                          : `$${Math.abs(budget.remaining_amount).toFixed(2)} over`}
+                          ? t("budgets.remainingAmount", {
+                              amount: budget.remaining_amount.toFixed(2),
+                            })
+                          : t("budgets.overAmount", {
+                              amount: Math.abs(budget.remaining_amount).toFixed(2),
+                            })}
                       </span>
                     </div>
 
-                    {buildBudgetPaceLabel(budget) && (
-                      <p className="budget-pace-metrics">{buildBudgetPaceLabel(budget)}</p>
+                    {buildBudgetPaceLabel(budget, t) && (
+                      <p className="budget-pace-metrics">{buildBudgetPaceLabel(budget, t)}</p>
                     )}
-                    {budget.pace_note && <p className="budget-pace-note">{budget.pace_note}</p>}
-                    {buildBudgetProjectionLabel(budget) && (
+                    <p className="budget-pace-note">{formatBudgetPaceNote(budget, t)}</p>
+                    {buildBudgetProjectionLabel(budget, t) && (
                       <p className="budget-projection-metrics">
-                        {buildBudgetProjectionLabel(budget)}
+                        {buildBudgetProjectionLabel(budget, t)}
                       </p>
                     )}
-                    {budget.projection_note && (
-                      <p className="budget-projection-note">{budget.projection_note}</p>
-                    )}
+                    <p className="budget-projection-note">{formatBudgetProjectionNote(budget, t)}</p>
                   </div>
                 );
               })}

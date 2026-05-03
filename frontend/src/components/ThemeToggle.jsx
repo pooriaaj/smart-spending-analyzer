@@ -11,8 +11,8 @@ function ThemeToggle({ theme, onToggle }) {
       aria-label={t("theme.toggle")}
       title={theme === "light" ? t("theme.switchToDark") : t("theme.switchToLight")}
     >
-      <span className="theme-toggle-icon">
-        {theme === "light" ? "Moon" : "Sun"}
+      <span className="theme-toggle-icon" aria-hidden="true">
+        {theme === "light" ? "☾" : "☀"}
       </span>
       <span className="theme-toggle-text">
         {theme === "light" ? t("theme.dark") : t("theme.light")}

@@ -19,7 +19,7 @@ const isValidIsoDate = (value) => {
   return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
 };
 
-const validatePreviewRow = (row) => {
+const validatePreviewRow = (row, t) => {
   const fieldIssues = {
     date: !isValidIsoDate(row.date),
     description: !row.description?.trim(),
@@ -30,11 +30,11 @@ const validatePreviewRow = (row) => {
 
   const messages = [];
 
-  if (fieldIssues.date) messages.push("fix the date");
-  if (fieldIssues.description) messages.push("add a description");
-  if (fieldIssues.amount) messages.push("enter an amount greater than 0");
-  if (fieldIssues.type) messages.push("choose income or expense");
-  if (fieldIssues.category) messages.push("add a category");
+  if (fieldIssues.date) messages.push(t("import.fixDate"));
+  if (fieldIssues.description) messages.push(t("import.addDescription"));
+  if (fieldIssues.amount) messages.push(t("import.amountGreaterThanZero"));
+  if (fieldIssues.type) messages.push(t("import.chooseIncomeExpense"));
+  if (fieldIssues.category) messages.push(t("import.addCategory"));
 
   return {
     fieldIssues,
@@ -42,7 +42,7 @@ const validatePreviewRow = (row) => {
   };
 };
 
-const validateReceiptDraft = (draft) => {
+const validateReceiptDraft = (draft, t) => {
   const fieldIssues = {
     amount: !Number.isFinite(Number(draft?.amount)) || Number(draft?.amount) <= 0,
     category: !draft?.category?.trim(),
@@ -53,11 +53,11 @@ const validateReceiptDraft = (draft) => {
 
   const messages = [];
 
-  if (fieldIssues.amount) messages.push("enter an amount greater than 0");
-  if (fieldIssues.category) messages.push("add a category");
-  if (fieldIssues.description) messages.push("add a description");
-  if (fieldIssues.date) messages.push("fix the date");
-  if (fieldIssues.type) messages.push("choose income or expense");
+  if (fieldIssues.amount) messages.push(t("import.amountGreaterThanZero"));
+  if (fieldIssues.category) messages.push(t("import.addCategory"));
+  if (fieldIssues.description) messages.push(t("import.addDescription"));
+  if (fieldIssues.date) messages.push(t("import.fixDate"));
+  if (fieldIssues.type) messages.push(t("import.chooseIncomeExpense"));
 
   return {
     fieldIssues,
@@ -65,13 +65,13 @@ const validateReceiptDraft = (draft) => {
   };
 };
 
-const buildManualPreviewRow = (fallbackDate) => ({
+const buildManualPreviewRow = (fallbackDate, t) => ({
   date: fallbackDate || todayIsoDate(),
   description: "",
   amount: "",
   type: "expense",
   category: "other",
-  source_line: "Added manually during review.",
+  source_line: t("import.manualSourceLine"),
   category_review_required: false,
   category_review_reason: null,
   is_duplicate: false,
@@ -100,8 +100,44 @@ const getPreviewRowConfidence = (row) => {
   return Math.max(0, Math.min(confidence, 1));
 };
 
-const formatConfidencePercent = (confidence) =>
-  confidence == null ? "Not scored" : `${Math.round(confidence * 100)}%`;
+const formatConfidencePercent = (confidence, t) =>
+  confidence == null ? t("common.notScored") : `${Math.round(confidence * 100)}%`;
+
+const formatPreviewReason = (reason, t, fallbackKey) => {
+  if (!reason) return null;
+
+  const lowered = String(reason).toLowerCase();
+
+  if (lowered.includes("learned category memory")) {
+    return t("import.reasonLearnedMemory");
+  }
+
+  if (
+    lowered.includes("merchant/category rule") ||
+    lowered.includes("normalized merchant") ||
+    lowered.includes("built-in category rule")
+  ) {
+    return t("import.reasonCategoryRule");
+  }
+
+  if (lowered.includes("income rule") || lowered.includes("deposit rule")) {
+    return t("import.reasonIncomeRule");
+  }
+
+  if (lowered.includes("no learned memory") || lowered.includes("no stronger rule")) {
+    return t("import.reasonNeedsTeaching");
+  }
+
+  if (lowered.includes("already written") || lowered.includes("duplicate")) {
+    return t("import.reasonAlreadyWritten");
+  }
+
+  if (lowered.includes("confidence")) {
+    return t("import.reasonConfidenceReview");
+  }
+
+  return t(fallbackKey);
+};
 
 const getPreviewCategoryConfidence = (row) => {
   const confidence = Number(row?.category_confidence);
@@ -117,7 +153,7 @@ const getFileExtension = (fileName = "") => fileName.split(".").pop()?.toLowerCa
 
 const isReceiptImageFile = (file) => RECEIPT_IMAGE_EXTENSIONS.has(getFileExtension(file.name));
 
-const formatSelectedFilesLabel = (files) => {
+const formatSelectedFilesLabel = (files, t) => {
   if (files.length === 0) {
     return "";
   }
@@ -127,7 +163,11 @@ const formatSelectedFilesLabel = (files) => {
 
   const visibleNames = files.slice(0, 3).map((file) => file.name).join(", ");
   const remainingCount = files.length - 3;
-  return `${files.length} files selected: ${visibleNames}${remainingCount > 0 ? `, +${remainingCount} more` : ""}`;
+  return t("import.filesSelected", {
+    count: files.length,
+    names: visibleNames,
+    more: remainingCount > 0 ? t("import.moreFiles", { count: remainingCount }) : "",
+  });
 };
 
 function ImportPage() {
@@ -145,6 +185,7 @@ function ImportPage() {
   const [confirmingPreview, setConfirmingPreview] = useState(false);
   const [savingDraft, setSavingDraft] = useState(false);
   const [previewFilter, setPreviewFilter] = useState("all");
+  const manualSourceLine = t("import.manualSourceLine");
 
   const normalizedAccountId =
     selectedAccountId === ALL_ACCOUNTS_VALUE ? undefined : Number(selectedAccountId);
@@ -152,11 +193,11 @@ function ImportPage() {
   const importErrorGuidance = (() => {
     if (normalizedError.includes("upgrade to premium")) {
       return {
-        title: "Premium batch import",
+        title: t("import.premiumBatchTitle"),
         items: [
-          `Free users can import ${FREE_BATCH_IMPORT_FILE_LIMIT} statement files per batch.`,
-          "Split larger uploads into smaller batches for now, or upgrade when Premium billing is enabled.",
-          "Premium will unlock larger statement batches for faster setup and deeper history building.",
+          t("import.premiumBatchItem1", { limit: FREE_BATCH_IMPORT_FILE_LIMIT }),
+          t("import.premiumBatchItem2"),
+          t("import.premiumBatchItem3"),
         ],
       };
     }
@@ -167,23 +208,23 @@ function ImportPage() {
       normalizedError.includes("tesseract was not found")
     ) {
       return {
-        title: "What to try next",
+        title: t("import.tryNextTitle"),
         items: [
-          "The backend now tries free local OCR first for scanned or screenshot-style PDFs.",
-          "This live backend still needs to be deployed with Docker so the Tesseract command from the open-source OCR project is installed.",
-          "Original downloadable statement PDFs still import more reliably than camera scans or screenshot-to-PDF exports.",
-          "OpenAI vision OCR can stay optional as a stronger paid fallback, not the default requirement.",
+          t("import.ocrGuidance1"),
+          t("import.ocrGuidance2"),
+          t("import.ocrGuidance3"),
+          t("import.ocrGuidance4"),
         ],
       };
     }
 
     if (normalizedError.includes("no transaction rows were recognized")) {
       return {
-        title: "What to try next",
+        title: t("import.tryNextTitle"),
         items: [
-          "This file had readable text, but the row layout did not match a supported parser pattern yet.",
-          "If your bank offers another PDF layout or a CSV export, try that version first.",
-          "Keep this statement available for future parser tuning if the same bank format keeps failing.",
+          t("import.parserGuidance1"),
+          t("import.parserGuidance2"),
+          t("import.parserGuidance3"),
         ],
       };
     }
@@ -193,11 +234,11 @@ function ImportPage() {
       normalizedError.includes("valid openai_api_key")
     ) {
       return {
-        title: "What to try next",
+        title: t("import.tryNextTitle"),
         items: [
-          "Add a valid OPENAI_API_KEY in the backend environment to enable receipt scanning.",
-          "Use CSV or PDF statement import for statements, or add receipt transactions manually until OCR is enabled.",
-          "Once OCR is enabled, the app will return a draft transaction for review before saving.",
+          t("import.receiptGuidance1"),
+          t("import.receiptGuidance2"),
+          t("import.receiptGuidance3"),
         ],
       };
     }
@@ -206,7 +247,7 @@ function ImportPage() {
   })();
   const detectedPreviewRows = importResult?.status === "table_review" ? importResult.preview_rows || [] : [];
   const removedPreviewCount = Math.max(detectedPreviewRows.length - previewRows.length, 0);
-  const previewRowValidations = previewRows.map((row) => validatePreviewRow(row));
+  const previewRowValidations = previewRows.map((row) => validatePreviewRow(row, t));
   const previewDuplicateCounts = previewRows.reduce((counts, row, index) => {
     const duplicateKey = buildPreviewDuplicateKey(row, previewRowValidations[index]);
     if (!duplicateKey) {
@@ -222,16 +263,21 @@ function ImportPage() {
     const confidence = getPreviewRowConfidence(row);
     const categoryConfidence = getPreviewCategoryConfidence(row);
     const categoryReviewRequired = isCategoryReviewRequired(row);
-    const categoryReason =
-      row.category_review_reason ||
-      row.category_reason ||
+    const categoryReason = formatPreviewReason(
+      row.category_review_reason || row.category_reason,
+      t,
+      "import.reasonCategoryReview"
+    ) ||
       (categoryConfidence != null && categoryConfidence < 0.75
-        ? "Category confidence is low; verify this label before importing."
+        ? t("import.lowCategoryConfidenceReason")
         : null);
-    const confidenceReason =
-      row.review_reason ||
+    const confidenceReason = formatPreviewReason(
+      row.review_reason,
+      t,
+      "import.reasonConfidenceReview"
+    ) ||
       (confidence != null && confidence < 0.75
-        ? "Parser confidence is low; verify this row before importing."
+        ? t("import.lowParserConfidenceReason")
         : categoryReason);
 
     return {
@@ -245,11 +291,11 @@ function ImportPage() {
       confidenceReason,
       duplicateReason:
         row.is_duplicate && row.duplicate_reason
-          ? row.duplicate_reason
+          ? formatPreviewReason(row.duplicate_reason, t, "import.reasonAlreadyWritten")
           : (() => {
               const duplicateKey = buildPreviewDuplicateKey(row, previewRowValidations[index]);
               if (duplicateKey && previewDuplicateCounts[duplicateKey] > 1) {
-                return "Duplicate of another row in this preview.";
+                return t("import.duplicatePreviewReason");
               }
               return null;
             })(),
@@ -276,11 +322,11 @@ function ImportPage() {
     (item) => item.confidenceReason
   ).length;
   const manualPreviewRowCount = previewRows.filter(
-    (row) => row.source_line === "Added manually during review."
+    (row) => row.source_line === manualSourceLine || row.source_line === "Added manually during review."
   ).length;
   const previewImportDisabled =
     confirmingPreview || importReadyPreviewRowCount === 0 || invalidPreviewRowCount > 0;
-  const receiptDraftValidation = validateReceiptDraft(receiptDraft);
+  const receiptDraftValidation = validateReceiptDraft(receiptDraft, t);
   const filteredPreviewRows = previewRowItems.filter(
     ({ duplicateReason, validation, confidenceReason, row, categoryReviewRequired }) => {
       if (previewFilter === "missing") {
@@ -320,34 +366,32 @@ function ImportPage() {
     if (!selectedFiles.length) return;
 
     if (!normalizedAccountId) {
-      setError("Please select a specific account before importing a file.");
+      setError(t("import.accountRequired"));
       event.target.value = "";
       return;
     }
 
     if (selectedFiles.length > FREE_BATCH_IMPORT_FILE_LIMIT) {
-      setSelectedFileName(formatSelectedFilesLabel(selectedFiles));
+      setSelectedFileName(formatSelectedFilesLabel(selectedFiles, t));
       setImportResult(null);
       setPreviewRows([]);
       setReceiptDraft(null);
-      setError(
-        `Free users can upload up to ${FREE_BATCH_IMPORT_FILE_LIMIT} bank statements in one try. Upgrade to Premium to import more at once.`
-      );
+      setError(t("import.premiumBatchError", { limit: FREE_BATCH_IMPORT_FILE_LIMIT }));
       event.target.value = "";
       return;
     }
 
     if (selectedFiles.length > 1 && selectedFiles.some(isReceiptImageFile)) {
-      setSelectedFileName(formatSelectedFilesLabel(selectedFiles));
+      setSelectedFileName(formatSelectedFilesLabel(selectedFiles, t));
       setImportResult(null);
       setPreviewRows([]);
       setReceiptDraft(null);
-      setError("Batch import supports CSV and PDF bank statements. Upload receipt images one at a time.");
+      setError(t("import.receiptBatchError"));
       event.target.value = "";
       return;
     }
 
-    setSelectedFileName(formatSelectedFilesLabel(selectedFiles));
+    setSelectedFileName(formatSelectedFilesLabel(selectedFiles, t));
     setImportResult(null);
     setPreviewRows([]);
     setReceiptDraft(null);
@@ -387,7 +431,7 @@ function ImportPage() {
       }
     } catch (uploadError) {
       if (!handleApiAuthError(uploadError, navigate)) {
-        setError(uploadError?.response?.data?.detail || "Import failed.");
+        setError(uploadError?.response?.data?.detail || t("import.importFallbackFailed"));
       }
     } finally {
       setLoading(false);
@@ -408,7 +452,7 @@ function ImportPage() {
                     category_review_reason: null,
                     category_confidence: 1,
                     category_source: "user_review",
-                    category_reason: "Reviewed or edited by you during import.",
+                    category_reason: t("import.categoryEditedReason"),
                   }
                 : {}),
               is_duplicate: false,
@@ -439,7 +483,7 @@ function ImportPage() {
               category_review_reason: null,
               category_confidence: Math.max(Number(row.category_confidence || 0), 0.9),
               category_source: row.category_source || "user_review",
-              category_reason: "Reviewed and approved by you during import.",
+              category_reason: t("import.categoryApprovedReason"),
             }
           : row
       )
@@ -473,7 +517,7 @@ function ImportPage() {
       detectedPreviewRows[detectedPreviewRows.length - 1]?.date ||
       todayIsoDate();
 
-    setPreviewRows((prev) => [...prev, buildManualPreviewRow(fallbackDate)]);
+    setPreviewRows((prev) => [...prev, buildManualPreviewRow(fallbackDate, t)]);
     setPreviewFilter("all");
   };
 
@@ -509,7 +553,7 @@ function ImportPage() {
       setPreviewRows([]);
     } catch (confirmError) {
       if (!handleApiAuthError(confirmError, navigate)) {
-        setError(confirmError?.response?.data?.detail || "Failed to confirm preview import.");
+        setError(confirmError?.response?.data?.detail || t("import.confirmPreviewFailed"));
       }
     } finally {
       setConfirmingPreview(false);
@@ -533,7 +577,7 @@ function ImportPage() {
       setImportResult({
         detected_type: "receipt_image",
         status: "completed",
-        message: "Scanned receipt transaction saved successfully.",
+        message: t("import.receiptSaved"),
         import_summary: {
           imported: 1,
           duplicates_skipped: 0,
@@ -544,7 +588,7 @@ function ImportPage() {
       setReceiptDraft(null);
     } catch (saveError) {
       if (!handleApiAuthError(saveError, navigate)) {
-        setError(saveError?.response?.data?.detail || "Failed to save scanned receipt.");
+        setError(saveError?.response?.data?.detail || t("import.saveReceiptFailed"));
       }
     } finally {
       setSavingDraft(false);
@@ -698,7 +742,7 @@ function ImportPage() {
 
                 {importResult.notes?.length > 0 && (
                   <div className="receipt-preview-box">
-                    <strong>Notes</strong>
+                    <strong>{t("common.notes")}</strong>
                     <ul className="assistant-list">
                       {importResult.notes.map((item, index) => (
                         <li key={`import-note-${index}`}>{item}</li>
@@ -731,8 +775,8 @@ function ImportPage() {
         {importResult?.status === "draft_review" && receiptDraft && (
           <div className="dashboard-card large-card">
             <div className="section-header">
-              <h2>Review Receipt Draft</h2>
-              <p>Review the extracted transaction before saving it.</p>
+              <h2>{t("import.reviewReceiptDraft")}</h2>
+              <p>{t("import.reviewReceiptDraftDetail")}</p>
             </div>
 
             <div className="transaction-form">
@@ -742,7 +786,7 @@ function ImportPage() {
                 className={receiptDraftValidation.fieldIssues.amount ? "import-invalid-input" : ""}
                 value={receiptDraft.amount ?? ""}
                 onChange={(e) => setReceiptDraft({ ...receiptDraft, amount: e.target.value })}
-                placeholder="Amount"
+                placeholder={t("common.amount")}
               />
 
               <input
@@ -750,7 +794,7 @@ function ImportPage() {
                 className={receiptDraftValidation.fieldIssues.category ? "import-invalid-input" : ""}
                 value={receiptDraft.category}
                 onChange={(e) => setReceiptDraft({ ...receiptDraft, category: e.target.value })}
-                placeholder="Category"
+                placeholder={t("common.category")}
               />
 
               <input
@@ -758,7 +802,7 @@ function ImportPage() {
                 className={receiptDraftValidation.fieldIssues.description ? "import-invalid-input" : ""}
                 value={receiptDraft.description}
                 onChange={(e) => setReceiptDraft({ ...receiptDraft, description: e.target.value })}
-                placeholder="Description"
+                placeholder={t("common.description")}
               />
 
               <input
@@ -773,8 +817,8 @@ function ImportPage() {
                 value={receiptDraft.type}
                 onChange={(e) => setReceiptDraft({ ...receiptDraft, type: e.target.value })}
               >
-                <option value="expense">Expense</option>
-                <option value="income">Income</option>
+                <option value="expense">{t("common.expense")}</option>
+                <option value="income">{t("common.income")}</option>
               </select>
 
               <button
@@ -782,27 +826,27 @@ function ImportPage() {
                 onClick={handleSaveReceiptDraft}
                 disabled={savingDraft || receiptDraftValidation.messages.length > 0}
               >
-                {savingDraft ? "Saving..." : "Save Transaction"}
+                {savingDraft ? t("common.saving") : t("import.saveTransaction")}
               </button>
             </div>
 
             {receiptDraftValidation.messages.length > 0 && (
               <div className="import-validation-box">
-                <strong>Receipt draft still needs fixes</strong>
-                <p>Before saving, please {receiptDraftValidation.messages.join(", ")}.</p>
+                <strong>{t("import.receiptNeedsFixes")}</strong>
+                <p>{t("import.beforeSavingFix", { issues: receiptDraftValidation.messages.join(", ") })}</p>
               </div>
             )}
 
             {receiptDraft.raw_text_preview && (
               <div className="receipt-preview-box">
-                <strong>OCR Text Preview</strong>
+                <strong>{t("import.ocrTextPreview")}</strong>
                 <p>{receiptDraft.raw_text_preview}</p>
               </div>
             )}
 
             {receiptDraft.notes?.length > 0 && (
               <div className="receipt-preview-box">
-                <strong>Notes</strong>
+                <strong>{t("common.notes")}</strong>
                 <ul className="assistant-list">
                   {receiptDraft.notes.map((item, index) => (
                     <li key={`draft-note-${index}`}>{item}</li>
@@ -816,29 +860,59 @@ function ImportPage() {
         {importResult?.status === "table_review" && (
           <div className="dashboard-card large-card">
             <div className="section-header">
-              <h2>Review Statement Rows</h2>
-              <p>Matched rows are already in your app. Missing rows are the ones you may have forgotten to write.</p>
+              <h2>{t("import.reviewStatementRows")}</h2>
+              <p>{t("import.reviewStatementRowsDetail")}</p>
             </div>
 
             <div className="import-preview-toolbar">
               <div className="import-preview-summary">
-                <strong>{previewRows.length} row{previewRows.length === 1 ? "" : "s"} currently selected</strong>
+                <strong>
+                  {t("import.rowsSelected", {
+                    count: previewRows.length,
+                    plural: previewRows.length === 1 ? "" : "s",
+                  })}
+                </strong>
                 <p>
                   {invalidPreviewRowCount > 0
-                    ? `${invalidPreviewRowCount} row${invalidPreviewRowCount === 1 ? "" : "s"} still need attention before you can import.`
+                    ? t("import.summaryInvalid", {
+                        count: invalidPreviewRowCount,
+                        plural: invalidPreviewRowCount === 1 ? "" : "s",
+                      })
                     : categoryReviewRowCount > 0
-                    ? `${categoryReviewRowCount} row${categoryReviewRowCount === 1 ? "" : "s"} need category review. ${importReadyPreviewRowCount} row${importReadyPreviewRowCount === 1 ? "" : "s"} are ready to import.`
+                    ? t("import.summaryCategoryReview", {
+                        reviewCount: categoryReviewRowCount,
+                        reviewPlural: categoryReviewRowCount === 1 ? "" : "s",
+                        readyCount: importReadyPreviewRowCount,
+                        readyPlural: importReadyPreviewRowCount === 1 ? "" : "s",
+                      })
                     : matchedPreviewRowCount > 0
-                    ? `${matchedPreviewRowCount} row${matchedPreviewRowCount === 1 ? "" : "s"} already match your written transactions. ${importReadyPreviewRowCount} row${importReadyPreviewRowCount === 1 ? "" : "s"} are ready to import if needed.`
+                    ? t("import.summaryMatched", {
+                        matchedCount: matchedPreviewRowCount,
+                        matchedPlural: matchedPreviewRowCount === 1 ? "" : "s",
+                        readyCount: importReadyPreviewRowCount,
+                        readyPlural: importReadyPreviewRowCount === 1 ? "" : "s",
+                      })
                     : repeatingPreviewRowCount > 0
-                    ? `${repeatingPreviewRowCount} row${repeatingPreviewRowCount === 1 ? "" : "s"} look repetitive based on your written history.`
+                    ? t("import.summaryRepeating", {
+                        count: repeatingPreviewRowCount,
+                        plural: repeatingPreviewRowCount === 1 ? "" : "s",
+                      })
                     : confidencePreviewRowCount > 0
-                    ? `${confidencePreviewRowCount} row${confidencePreviewRowCount === 1 ? "" : "s"} should get a quick parser confidence check before importing.`
+                    ? t("import.summaryConfidence", {
+                        count: confidencePreviewRowCount,
+                        plural: confidencePreviewRowCount === 1 ? "" : "s",
+                      })
                     : removedPreviewCount > 0
-                    ? `${removedPreviewCount} removed row${removedPreviewCount === 1 ? "" : "s"} will be skipped when you confirm.`
+                    ? t("import.summaryRemoved", {
+                        count: removedPreviewCount,
+                        plural: removedPreviewCount === 1 ? "" : "s",
+                      })
                     : manualPreviewRowCount > 0
-                    ? `${manualPreviewRowCount} manual row${manualPreviewRowCount === 1 ? "" : "s"} were added during review.`
-                    : "Remove any bad detections before importing, or edit the values directly in the table."}
+                    ? t("import.summaryManual", {
+                        count: manualPreviewRowCount,
+                        plural: manualPreviewRowCount === 1 ? "" : "s",
+                      })
+                    : t("import.summaryDefault")}
                 </p>
               </div>
 
@@ -850,8 +924,8 @@ function ImportPage() {
                   disabled={previewImportDisabled}
                 >
                   {confirmingPreview
-                    ? "Importing..."
-                    : `Import Ready Rows (${importReadyPreviewRowCount})`}
+                    ? t("common.importing")
+                    : t("import.importReadyRowsCount", { count: importReadyPreviewRowCount })}
                 </button>
                 <button
                   type="button"
@@ -859,7 +933,7 @@ function ImportPage() {
                   onClick={handleAddManualPreviewRow}
                   disabled={confirmingPreview}
                 >
-                  Add Manual Row
+                  {t("common.addManualRow")}
                 </button>
                 {invalidPreviewRowCount > 0 && (
                   <button
@@ -868,7 +942,7 @@ function ImportPage() {
                     onClick={handleRemoveNeedsReviewRows}
                     disabled={confirmingPreview}
                   >
-                    Remove Needs Review
+                    {t("import.removeNeedsReview")}
                   </button>
                 )}
                 {(removedPreviewCount > 0 || duplicatePreviewRowCount > 0 || detectedPreviewRows.length > 0) && (
@@ -880,7 +954,7 @@ function ImportPage() {
                       onClick={handleRemoveDuplicatePreviewRows}
                       disabled={confirmingPreview}
                     >
-                      Remove Already Written
+                      {t("import.removeAlreadyWritten")}
                     </button>
                   )}
                   <button
@@ -889,7 +963,7 @@ function ImportPage() {
                     onClick={handleRestorePreviewRows}
                     disabled={confirmingPreview}
                   >
-                    Restore Detected Rows
+                    {t("common.restoreDetectedRows")}
                   </button>
                   </>
                 )}
@@ -898,123 +972,129 @@ function ImportPage() {
 
             <div className="import-preview-stats-grid">
               <div className="import-preview-stat-card">
-                <span className="import-preview-stat-label">Ready</span>
+                <span className="import-preview-stat-label">{t("common.ready")}</span>
                 <strong>{importReadyPreviewRowCount}</strong>
               </div>
               <div className="import-preview-stat-card">
-                <span className="import-preview-stat-label">Needs Review</span>
+                <span className="import-preview-stat-label">{t("common.needsReview")}</span>
                 <strong>{invalidPreviewRowCount + categoryReviewRowCount}</strong>
               </div>
               <div className="import-preview-stat-card">
-                <span className="import-preview-stat-label">Category Review</span>
+                <span className="import-preview-stat-label">{t("common.categoryReview")}</span>
                 <strong>{categoryReviewRowCount}</strong>
               </div>
               <div className="import-preview-stat-card">
-                <span className="import-preview-stat-label">Already Written</span>
+                <span className="import-preview-stat-label">{t("common.alreadyWritten")}</span>
                 <strong>{matchedPreviewRowCount}</strong>
               </div>
               <div className="import-preview-stat-card">
-                <span className="import-preview-stat-label">Repeating</span>
+                <span className="import-preview-stat-label">{t("common.repeating")}</span>
                 <strong>{repeatingPreviewRowCount}</strong>
               </div>
               <div className="import-preview-stat-card">
-                <span className="import-preview-stat-label">Confidence</span>
+                <span className="import-preview-stat-label">{t("common.confidence")}</span>
                 <strong>{confidencePreviewRowCount}</strong>
               </div>
               <div className="import-preview-stat-card">
-                <span className="import-preview-stat-label">Removed</span>
+                <span className="import-preview-stat-label">{t("common.removed")}</span>
                 <strong>{removedPreviewCount}</strong>
               </div>
               <div className="import-preview-stat-card">
-                <span className="import-preview-stat-label">Manual</span>
+                <span className="import-preview-stat-label">{t("common.manual")}</span>
                 <strong>{manualPreviewRowCount}</strong>
               </div>
             </div>
 
-            <div className="import-preview-filters" role="tablist" aria-label="Preview row filters">
+            <div className="import-preview-filters" role="tablist" aria-label={t("import.previewFilters")}>
               <button
                 type="button"
                 className={`import-filter-chip ${previewFilter === "all" ? "import-filter-chip-active" : ""}`}
                 onClick={() => setPreviewFilter("all")}
               >
-                All ({previewRows.length})
+                {t("import.allRows", { count: previewRows.length })}
               </button>
               <button
                 type="button"
                 className={`import-filter-chip ${previewFilter === "missing" ? "import-filter-chip-active" : ""}`}
                 onClick={() => setPreviewFilter("missing")}
               >
-                Ready ({importReadyPreviewRowCount})
+                {t("import.readyRows", { count: importReadyPreviewRowCount })}
               </button>
               <button
                 type="button"
                 className={`import-filter-chip ${previewFilter === "needs_review" ? "import-filter-chip-active" : ""}`}
                 onClick={() => setPreviewFilter("needs_review")}
               >
-                Needs Review ({invalidPreviewRowCount + categoryReviewRowCount})
+                {t("import.needsReviewRows", { count: invalidPreviewRowCount + categoryReviewRowCount })}
               </button>
               <button
                 type="button"
                 className={`import-filter-chip ${previewFilter === "duplicates" ? "import-filter-chip-active" : ""}`}
                 onClick={() => setPreviewFilter("duplicates")}
               >
-                Already Written ({duplicatePreviewRowCount})
+                {t("import.alreadyWrittenRows", { count: duplicatePreviewRowCount })}
               </button>
               <button
                 type="button"
                 className={`import-filter-chip ${previewFilter === "repeating" ? "import-filter-chip-active" : ""}`}
                 onClick={() => setPreviewFilter("repeating")}
               >
-                Repeating ({repeatingPreviewRowCount})
+                {t("import.repeatingRows", { count: repeatingPreviewRowCount })}
               </button>
               <button
                 type="button"
                 className={`import-filter-chip ${previewFilter === "confidence" ? "import-filter-chip-active" : ""}`}
                 onClick={() => setPreviewFilter("confidence")}
               >
-                Confidence Check ({confidencePreviewRowCount})
+                {t("import.confidenceCheckRows", { count: confidencePreviewRowCount })}
               </button>
             </div>
 
             {invalidPreviewRowCount > 0 && (
               <div className="import-validation-box">
                 <strong>
-                  {invalidPreviewRowCount} row{invalidPreviewRowCount === 1 ? "" : "s"} need fixes
+                  {t("import.rowsNeedFixes", {
+                    count: invalidPreviewRowCount,
+                    plural: invalidPreviewRowCount === 1 ? "" : "s",
+                  })}
                 </strong>
-                <p>Review the highlighted fields before confirming import. Invalid rows are blocked on the client now.</p>
+                <p>{t("import.reviewHighlightedFields")}</p>
               </div>
             )}
 
             {duplicatePreviewRowCount > 0 && (
               <div className="import-duplicate-box">
                 <strong>
-                  {matchedPreviewRowCount || duplicatePreviewRowCount} already written or duplicate row{(matchedPreviewRowCount || duplicatePreviewRowCount) === 1 ? "" : "s"}
+                  {t("import.duplicatesFound", {
+                    count: matchedPreviewRowCount || duplicatePreviewRowCount,
+                    plural: (matchedPreviewRowCount || duplicatePreviewRowCount) === 1 ? "" : "s",
+                  })}
                 </strong>
-                <p>
-                  These rows matched your written transactions or another row in this preview. Keep them visible for review or remove them; the backend skips them during import.
-                </p>
+                <p>{t("import.duplicatesDetail")}</p>
               </div>
             )}
 
             {confidencePreviewRowCount > 0 && (
               <div className="import-confidence-box">
                 <strong>
-                  {confidencePreviewRowCount} confidence check{confidencePreviewRowCount === 1 ? "" : "s"}
+                  {t("import.confidenceChecks", {
+                    count: confidencePreviewRowCount,
+                    plural: confidencePreviewRowCount === 1 ? "" : "s",
+                  })}
                 </strong>
-                <p>
-                  These rows need a quick review before they become import-ready. Edit the category, or approve it when the current label is correct.
-                </p>
+                <p>{t("import.confidenceChecksDetail")}</p>
               </div>
             )}
 
             {repeatingPreviewRowCount > 0 && (
               <div className="import-info-box">
                 <strong>
-                  {repeatingPreviewRowCount} repeating money pattern{repeatingPreviewRowCount === 1 ? "" : "s"} detected
+                  {t("import.repeatingPatternsDetected", {
+                    count: repeatingPreviewRowCount,
+                    plural: repeatingPreviewRowCount === 1 ? "" : "s",
+                  })}
                 </strong>
-                <p>
-                  These rows look similar to expenses or income you already wrote before. Use this to confirm monthly habits, subscriptions, payroll, or recurring transfers.
-                </p>
+                <p>{t("import.repeatingPatternsDetail")}</p>
               </div>
             )}
 
@@ -1023,12 +1103,12 @@ function ImportPage() {
                 <table className="transactions-table">
                   <thead>
                     <tr>
-                      <th>Date</th>
-                      <th>Description</th>
-                      <th>Amount</th>
-                      <th>Type</th>
-                      <th>Category</th>
-                      <th>Actions</th>
+                      <th>{t("common.date")}</th>
+                      <th>{t("common.description")}</th>
+                      <th>{t("common.amount")}</th>
+                      <th>{t("common.type")}</th>
+                      <th>{t("common.category")}</th>
+                      <th>{t("common.actions")}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1063,20 +1143,20 @@ function ImportPage() {
                               />
                               {row.source_line && (
                                 <div className="import-source-line">
-                                  <span className="import-source-label">Parsed From</span>
+                                  <span className="import-source-label">{t("import.parsedFrom")}</span>
                                   <code>{row.source_line}</code>
                                 </div>
                               )}
                               {confidence != null && (
                                 <div className="import-confidence-row">
-                                  <span>Parser confidence</span>
-                                  <strong>{formatConfidencePercent(confidence)}</strong>
+                                  <span>{t("common.parserConfidence")}</span>
+                                  <strong>{formatConfidencePercent(confidence, t)}</strong>
                                 </div>
                               )}
                               {categoryConfidence != null && (
                                 <div className="import-confidence-row">
-                                  <span>Category confidence</span>
-                                  <strong>{formatConfidencePercent(categoryConfidence)}</strong>
+                                  <span>{t("common.categoryConfidence")}</span>
+                                  <strong>{formatConfidencePercent(categoryConfidence, t)}</strong>
                                 </div>
                               )}
                               {confidenceReason && (
@@ -1090,12 +1170,12 @@ function ImportPage() {
                               )}
                               {row.repeating_pattern_reason && (
                                 <div className="import-confidence-note">
-                                  {row.repeating_pattern_reason}
+                                  {t("import.repeatingPatternReason")}
                                 </div>
                               )}
                               {validation.messages.length > 0 && (
                                 <div className="import-row-issues">
-                                  Needs review: {validation.messages.join(", ")}.
+                                  {t("import.needsReviewInline", { issues: validation.messages.join(", ") })}
                                 </div>
                               )}
                             </td>
@@ -1114,8 +1194,8 @@ function ImportPage() {
                                 value={row.type}
                                 onChange={(e) => handlePreviewRowChange(index, "type", e.target.value)}
                               >
-                                <option value="expense">Expense</option>
-                                <option value="income">Income</option>
+                                <option value="expense">{t("common.expense")}</option>
+                                <option value="income">{t("common.income")}</option>
                               </select>
                             </td>
                             <td>
@@ -1133,7 +1213,7 @@ function ImportPage() {
                                 onClick={() => handleRemovePreviewRow(index)}
                                 disabled={confirmingPreview}
                               >
-                                Remove
+                                {t("common.remove")}
                               </button>
                               {categoryReviewRequired && validation.messages.length === 0 && !duplicateReason && (
                                 <button
@@ -1142,29 +1222,31 @@ function ImportPage() {
                                   onClick={() => handleApprovePreviewCategory(index)}
                                   disabled={confirmingPreview}
                                 >
-                                  Approve Category
+                                  {t("common.approveCategory")}
                                 </button>
                               )}
-                              {row.source_line === "Added manually during review." && (
-                                <span className="import-row-status import-row-status-manual">Manual row</span>
+                              {(row.source_line === manualSourceLine || row.source_line === "Added manually during review.") && (
+                                <span className="import-row-status import-row-status-manual">{t("common.manualRow")}</span>
                               )}
                               {duplicateReason && (
                                 <span className="import-row-status import-row-status-duplicate">
-                                  {row.reconciliation_status === "matched" ? "Already written" : "Duplicate"}
+                                  {row.reconciliation_status === "matched"
+                                    ? t("import.alreadyWrittenStatus")
+                                    : t("common.duplicate")}
                                 </span>
                               )}
                               {confidenceReason && (
                                 <span className="import-row-status import-row-status-confidence">
-                                  {categoryReviewRequired ? "Review category" : "Check parser"}
+                                  {categoryReviewRequired ? t("import.reviewCategory") : t("import.checkParser")}
                                 </span>
                               )}
                               {row.is_repeating_pattern && (
                                 <span className="import-row-status import-row-status-confidence">
-                                  Repeating {row.repeating_pattern_type}
+                                  {t("import.repeatingType", { type: row.repeating_pattern_type })}
                                 </span>
                               )}
                               {validation.messages.length > 0 && (
-                                <span className="import-row-status import-row-status-warning">Needs review</span>
+                                <span className="import-row-status import-row-status-warning">{t("common.needsReview")}</span>
                               )}
                             </td>
                           </tr>
@@ -1176,18 +1258,18 @@ function ImportPage() {
               </div>
             ) : previewRows.length > 0 ? (
               <div className="empty-state import-preview-empty">
-                <p>No rows match the current filter.</p>
+                <p>{t("import.noRowsMatch")}</p>
                 <button
                   type="button"
                   className="secondary-button"
                   onClick={() => setPreviewFilter("all")}
                 >
-                  Show All Rows
+                  {t("common.showAllRows")}
                 </button>
               </div>
             ) : (
               <div className="empty-state import-preview-empty">
-                <p>No rows are currently selected for import.</p>
+                <p>{t("import.noRowsSelected")}</p>
                 <div className="import-preview-actions">
                   <button
                     type="button"
@@ -1195,7 +1277,7 @@ function ImportPage() {
                     onClick={handleAddManualPreviewRow}
                     disabled={confirmingPreview}
                   >
-                    Add Manual Row
+                    {t("common.addManualRow")}
                   </button>
                   {detectedPreviewRows.length > 0 && (
                     <button
@@ -1204,7 +1286,7 @@ function ImportPage() {
                       onClick={handleRestorePreviewRows}
                       disabled={confirmingPreview}
                     >
-                      Restore Detected Rows
+                      {t("common.restoreDetectedRows")}
                     </button>
                   )}
                 </div>
@@ -1218,13 +1300,13 @@ function ImportPage() {
                 onClick={handleConfirmPreviewImport}
                 disabled={previewImportDisabled}
               >
-                {confirmingPreview ? "Importing..." : "Import Ready Rows"}
+                {confirmingPreview ? t("common.importing") : t("common.importReadyRows")}
               </button>
             </div>
 
             {importResult.notes?.length > 0 && (
               <div className="receipt-preview-box">
-                <strong>Notes</strong>
+                <strong>{t("common.notes")}</strong>
                 <ul className="assistant-list">
                   {importResult.notes.map((item, index) => (
                     <li key={`preview-note-${index}`}>{item}</li>

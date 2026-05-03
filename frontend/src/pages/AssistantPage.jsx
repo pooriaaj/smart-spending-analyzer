@@ -8,29 +8,27 @@ import {
   getSelectedAccountId,
   setSelectedAccountId as persistSelectedAccountId,
 } from "../services/accountStorage";
+import { formatScopeLabel } from "../utils/displayLabels";
 
-const INITIAL_ASSISTANT_MESSAGE = {
-  role: "assistant",
-  content:
-    "Hi - I'm your financial assistant. Ask me about your balance, spending changes, alerts, recent transactions, categories, or savings.",
-  data: null,
-};
+function buildInitialAssistantMessage(t) {
+  return {
+    role: "assistant",
+    content: t("assistant.welcomeMessage"),
+    data: null,
+  };
+}
 
-const FALLBACK_QUESTIONS = [
-  "What is my balance?",
-  "What is my top expense category?",
-  "Did my spending increase?",
-  "Show my recent transactions",
-  "Give me saving advice",
-  "Summarize my finances",
-];
+function getFallbackQuestions(t) {
+  const questions = t("assistant.fallbackQuestions");
+  return Array.isArray(questions) ? questions : [];
+}
 
 function AssistantPage() {
-  const { t } = useLanguage();
+  const { language, t } = useLanguage();
   const [question, setQuestion] = useState("");
   const [assistantMode, setAssistantMode] = useState("balanced");
   const [selectedAccountId, setSelectedAccountId] = useState(getSelectedAccountId());
-  const [messages, setMessages] = useState([INITIAL_ASSISTANT_MESSAGE]);
+  const [messages, setMessages] = useState(() => [buildInitialAssistantMessage(t)]);
   const [smartSuggestions, setSmartSuggestions] = useState([]);
   const [loading, setLoading] = useState(false);
   const [suggestionsLoading, setSuggestionsLoading] = useState(true);
@@ -58,13 +56,15 @@ function AssistantPage() {
       return;
     }
 
-    setMessages([INITIAL_ASSISTANT_MESSAGE]);
+    setMessages([buildInitialAssistantMessage(t)]);
     setQuestion("");
     setError("");
-  }, [selectedAccountId]);
+  }, [language, selectedAccountId, t]);
 
   useEffect(() => {
     const loadSuggestions = async () => {
+      const fallbackQuestions = getFallbackQuestions(t);
+
       try {
         setSuggestionsLoading(true);
         const response = await api.get("/analytics/assistant-suggestions", {
@@ -72,12 +72,13 @@ function AssistantPage() {
             account_id: normalizedAccountId,
           },
         });
-        setSmartSuggestions(response.data.suggestions || []);
+        const suggestions = response.data.suggestions || [];
+        setSmartSuggestions(language === "fr" ? fallbackQuestions : suggestions.length ? suggestions : fallbackQuestions);
       } catch (error) {
         console.error("Failed to load assistant suggestions:", error);
 
         if (!handleApiAuthError(error, navigate)) {
-          setSmartSuggestions(FALLBACK_QUESTIONS);
+          setSmartSuggestions(fallbackQuestions);
         }
       } finally {
         setSuggestionsLoading(false);
@@ -85,7 +86,7 @@ function AssistantPage() {
     };
 
     loadSuggestions();
-  }, [navigate, normalizedAccountId]);
+  }, [language, navigate, normalizedAccountId, t]);
 
   const buildHistoryPayload = (existingMessages, newQuestion) => {
     return [
@@ -204,7 +205,7 @@ function AssistantPage() {
     const finalQuestion = (customQuestion ?? question).trim();
 
     if (!finalQuestion) {
-      setError("Please enter a question.");
+      setError(t("assistant.questionRequired"));
       return;
     }
 
@@ -240,7 +241,7 @@ function AssistantPage() {
       console.error("Failed to get assistant response:", error);
 
       if (!handleApiAuthError(error, navigate)) {
-        setError("Failed to get assistant response.");
+        setError(t("assistant.responseFailed"));
       }
     } finally {
       setLoading(false);
@@ -248,7 +249,7 @@ function AssistantPage() {
   };
 
   const displayedSuggestions =
-    smartSuggestions.length > 0 ? smartSuggestions : FALLBACK_QUESTIONS;
+    smartSuggestions.length > 0 ? smartSuggestions : getFallbackQuestions(t);
 
   const modeDescription =
     assistantMode === "strict"
@@ -383,7 +384,7 @@ function AssistantPage() {
           <div className="assistant-input-row">
             <input
               type="text"
-              placeholder="Ask something like: Why did my spending increase?"
+              placeholder={t("assistant.questionPlaceholder")}
               value={question}
               onChange={(e) => setQuestion(e.target.value)}
               className="assistant-input"
@@ -397,7 +398,7 @@ function AssistantPage() {
               onClick={() => handleAsk()}
               disabled={loading}
             >
-              {loading ? "Thinking..." : "Ask"}
+              {loading ? t("assistant.thinking") : t("assistant.ask")}
             </button>
           </div>
 
@@ -406,8 +407,8 @@ function AssistantPage() {
 
         <div className="dashboard-card assistant-chat-card">
           <div className="section-header">
-            <h2>Conversation</h2>
-            <p>Your assistant keeps short conversation context and uses your analytics data to answer better.</p>
+            <h2>{t("assistant.conversation")}</h2>
+            <p>{t("assistant.conversationDetail")}</p>
           </div>
 
           <div className="assistant-chat-list">
@@ -417,7 +418,7 @@ function AssistantPage() {
                 className={`assistant-chat-bubble assistant-chat-${message.role}`}
               >
                 <div className="assistant-chat-role">
-                  {message.role === "assistant" ? "Assistant" : "You"}
+                  {message.role === "assistant" ? t("common.assistant") : t("assistant.you")}
                 </div>
 
                 <p className="assistant-chat-text">{message.content}</p>
@@ -426,14 +427,14 @@ function AssistantPage() {
                   <div className="assistant-chat-details">
                     {message.data.scope_label && (
                       <div className="assistant-chat-detail-block">
-                        <h4>Answer Scope</h4>
-                        <p className="assistant-scope-summary">{message.data.scope_label}</p>
+                        <h4>{t("assistant.answerScope")}</h4>
+                        <p className="assistant-scope-summary">{formatScopeLabel(message.data.scope_label, t)}</p>
                       </div>
                     )}
 
                     {message.data.supporting_points?.length > 0 && (
                       <div className="assistant-chat-detail-block">
-                        <h4>Supporting Points</h4>
+                        <h4>{t("assistant.supportingPoints")}</h4>
                         <ul className="assistant-list">
                           {message.data.supporting_points.map((item, idx) => (
                             <li key={`support-${index}-${idx}`}>{item}</li>
@@ -443,7 +444,7 @@ function AssistantPage() {
                     )}
 
                     <div className="assistant-chat-detail-block">
-                      <h4>Suggested Follow-ups</h4>
+                      <h4>{t("assistant.suggestedFollowups")}</h4>
                       {message.data.suggested_followups?.length > 0 ? (
                         <div className="assistant-followup-list">
                           {message.data.suggested_followups.map((item, idx) => (
@@ -460,14 +461,14 @@ function AssistantPage() {
                         </div>
                       ) : (
                         <p className="assistant-empty-text">
-                          No follow-up suggestions available.
+                          {t("assistant.noFollowups")}
                         </p>
                       )}
                     </div>
 
                     {message.data.suggested_actions?.length > 0 && (
                       <div className="assistant-chat-detail-block assistant-actions-block">
-                        <h4>Suggested Actions</h4>
+                        <h4>{t("assistant.suggestedActions")}</h4>
                         <div className="assistant-followup-list">
                           {message.data.suggested_actions.map((action, idx) => (
                             <button

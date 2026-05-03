@@ -5,6 +5,7 @@ import AccountSelector from "../components/AccountSelector";
 import PageHeader from "../components/PageHeader";
 import { ALL_ACCOUNTS_VALUE, getSelectedAccountId } from "../services/accountStorage";
 import { useLanguage } from "../i18n/LanguageContext";
+import { formatAccountName, formatAccountType, formatCategoryLabel } from "../utils/displayLabels";
 import {
   BarChart,
   Bar,
@@ -49,28 +50,17 @@ const CATEGORY_ALIASES = {
   "car maintenance": "Car Maintenance",
 };
 
-function formatCategoryName(category) {
-  if (!category || typeof category !== "string") return "Other";
-
+function formatCategoryName(category, t) {
+  if (!category || typeof category !== "string") return formatCategoryLabel("other", t);
   const normalized = category.trim().toLowerCase();
-  if (!normalized) return "Other";
-
-  if (CATEGORY_ALIASES[normalized]) {
-    return CATEGORY_ALIASES[normalized];
-  }
-
-  return normalized
-    .split(" ")
-    .filter(Boolean)
-    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
-    .join(" ");
+  return formatCategoryLabel(CATEGORY_ALIASES[normalized] || category, t);
 }
 
-function mergeCategoryBreakdown(items) {
+function mergeCategoryBreakdown(items, t) {
   const mergedMap = new Map();
 
   (items || []).forEach((item) => {
-    const displayCategory = formatCategoryName(item.category);
+    const displayCategory = formatCategoryName(item.category, t);
     const currentTotal = mergedMap.get(displayCategory) || 0;
     mergedMap.set(displayCategory, currentTotal + Number(item.total || 0));
   });
@@ -83,8 +73,8 @@ function mergeCategoryBreakdown(items) {
     .sort((a, b) => b.total - a.total);
 }
 
-function buildTopPieData(items, topN = 5) {
-  const merged = mergeCategoryBreakdown(items);
+function buildTopPieData(items, topN = 5, t) {
+  const merged = mergeCategoryBreakdown(items, t);
 
   if (merged.length <= topN) {
     return merged;
@@ -128,8 +118,8 @@ const calculateChangePercent = (currentValue, baselineValue) => {
   return ((currentValue - baselineValue) / baselineValue) * 100;
 };
 
-const formatPercentChange = (value) => {
-  if (value == null || Number.isNaN(value)) return "Not enough data";
+const formatPercentChange = (value, t) => {
+  if (value == null || Number.isNaN(value)) return t("analytics.notEnoughData");
   const prefix = value > 0 ? "+" : "";
   return `${prefix}${value.toFixed(1)}%`;
 };
@@ -168,7 +158,7 @@ const sumExpensesBetween = (transactions, startDate, endDate) =>
     return total;
   }, 0);
 
-function buildSpendingPatternPulse(transactions) {
+function buildSpendingPatternPulse(transactions, t) {
   const expenseTransactions = getExpenseTransactions(transactions);
   const today = new Date();
   today.setHours(23, 59, 59, 999);
@@ -207,25 +197,30 @@ function buildSpendingPatternPulse(transactions) {
   const primaryMovement =
     sevenVsMonthChange != null ? sevenVsMonthChange : threeVsSixChange;
 
-  let status = "Building pattern";
+  let status = t("analytics.buildingPattern");
   let tone = "neutral";
   if (expenseTransactions.length > 0 && primaryMovement != null) {
     if (primaryMovement > 15) {
-      status = "Spending is rising";
+      status = t("analytics.spendingRising");
       tone = "warning";
     } else if (primaryMovement < -15) {
-      status = "Spending is dropping";
+      status = t("analytics.spendingDropping");
       tone = "positive";
     } else {
-      status = "Spending is steady";
+      status = t("analytics.spendingSteady");
       tone = "stable";
     }
   }
 
   const narrative =
     expenseTransactions.length === 0
-      ? "Add daily transactions or import a statement to unlock spending movement signals."
-      : `Your last 7-day daily average is ${formatMoney(lastSevenDailyAverage)} compared with ${formatMoney(monthDailyAverage)} for this month so far. The 3-month average is ${formatMoney(lastThreeAverage)} versus ${formatMoney(lastSixAverage)} across 6 months.`;
+      ? t("analytics.unlockMovementSignals")
+      : t("analytics.pulseNarrative", {
+          sevenDayAverage: formatMoney(lastSevenDailyAverage),
+          monthAverage: formatMoney(monthDailyAverage),
+          threeMonthAverage: formatMoney(lastThreeAverage),
+          sixMonthAverage: formatMoney(lastSixAverage),
+        });
 
   return {
     hasData: expenseTransactions.length > 0,
@@ -294,8 +289,8 @@ function AnalyticsPage() {
     const urlCategory = searchParams.get("category") || "";
 
     if (urlMonth) setSelectedMonth(urlMonth);
-    if (urlCategory) setSelectedCategory(formatCategoryName(urlCategory));
-  }, [searchParams]);
+    if (urlCategory) setSelectedCategory(formatCategoryName(urlCategory, t));
+  }, [searchParams, t]);
 
   useEffect(() => {
     const fetchDashboardAnalytics = async () => {
@@ -385,12 +380,12 @@ function AnalyticsPage() {
   );
 
   const mergedCategoryBreakdown = useMemo(() => {
-    return mergeCategoryBreakdown(rawCategoryBreakdown);
-  }, [rawCategoryBreakdown]);
+    return mergeCategoryBreakdown(rawCategoryBreakdown, t);
+  }, [rawCategoryBreakdown, t]);
 
   const topPieData = useMemo(() => {
-    return buildTopPieData(rawCategoryBreakdown, 5);
-  }, [rawCategoryBreakdown]);
+    return buildTopPieData(rawCategoryBreakdown, 5, t);
+  }, [rawCategoryBreakdown, t]);
 
   const totalPieAmount = useMemo(() => {
     return topPieData.reduce((sum, item) => sum + item.total, 0);
@@ -401,8 +396,8 @@ function AnalyticsPage() {
   }, [mergedCategoryBreakdown]);
 
   const spendingPatternPulse = useMemo(() => {
-    return buildSpendingPatternPulse(transactions);
-  }, [transactions]);
+    return buildSpendingPatternPulse(transactions, t);
+  }, [transactions, t]);
 
   const clearFilters = () => {
     setSelectedMonth("");
@@ -474,8 +469,8 @@ function AnalyticsPage() {
       <div className="page-container dashboard-page">
         <div className="dashboard-wrapper">
           <div className="status-card">
-            <h2>Loading analytics...</h2>
-            <p>Please wait while your analysis page is being prepared.</p>
+            <h2>{t("analytics.loadingTitle")}</h2>
+            <p>{t("analytics.loadingDetail")}</p>
           </div>
         </div>
       </div>
@@ -497,7 +492,7 @@ function AnalyticsPage() {
   const normalizedTopCategory = topCategory
     ? {
         ...topCategory,
-        category: formatCategoryName(topCategory.category),
+        category: formatCategoryName(topCategory.category, t),
       }
     : null;
 
@@ -523,13 +518,13 @@ function AnalyticsPage() {
 
           <div className="feature-guide-grid">
             <div className="feature-guide-item">
-              <span className="feature-step">Daily</span>
+              <span className="feature-step">{t("analytics.daily")}</span>
               <h3>{t("analytics.shortTermPace")}</h3>
               <p>{t("analytics.shortTermDetail")}</p>
             </div>
 
             <div className="feature-guide-item">
-              <span className="feature-step">Monthly</span>
+              <span className="feature-step">{t("analytics.monthly")}</span>
               <h3>{t("analytics.currentMonthControl")}</h3>
               <p>{t("analytics.currentMonthDetail")}</p>
             </div>
@@ -556,12 +551,12 @@ function AnalyticsPage() {
             />
 
             <div>
-              <label>Month</label>
+              <label>{t("common.month")}</label>
               <select
                 value={selectedMonth}
                 onChange={(e) => setSelectedMonth(e.target.value)}
               >
-                <option value="">All</option>
+                <option value="">{t("common.all")}</option>
                 {monthlySummary.map((item) => (
                   <option key={item.month} value={item.month}>
                     {item.month}
@@ -571,7 +566,7 @@ function AnalyticsPage() {
             </div>
 
             <div>
-              <label>From</label>
+              <label>{t("common.from")}</label>
               <input
                 type="date"
                 value={startDate}
@@ -580,7 +575,7 @@ function AnalyticsPage() {
             </div>
 
             <div>
-              <label>To</label>
+              <label>{t("common.to")}</label>
               <input
                 type="date"
                 value={endDate}
@@ -589,24 +584,24 @@ function AnalyticsPage() {
             </div>
 
             <div>
-              <label>Type</label>
+              <label>{t("common.type")}</label>
               <select
                 value={selectedType}
                 onChange={(e) => setSelectedType(e.target.value)}
               >
-                <option value="">All</option>
-                <option value="income">Income</option>
-                <option value="expense">Expense</option>
+                <option value="">{t("common.all")}</option>
+                <option value="income">{t("common.income")}</option>
+                <option value="expense">{t("common.expense")}</option>
               </select>
             </div>
 
             <div>
-              <label>Category</label>
+              <label>{t("common.category")}</label>
               <select
                 value={selectedCategory}
                 onChange={(e) => setSelectedCategory(e.target.value)}
               >
-                <option value="">All</option>
+                <option value="">{t("common.all")}</option>
                 {availableCategories.map((category) => (
                   <option key={category} value={category}>
                     {category}
@@ -617,7 +612,7 @@ function AnalyticsPage() {
 
             <div className="filter-actions">
               <button className="clear-filter-button" onClick={clearFilters}>
-                Clear Filters
+                {t("common.clearFilters")}
               </button>
             </div>
           </div>
@@ -679,40 +674,41 @@ function AnalyticsPage() {
 
           <div className="pattern-comparison-grid">
             <div className="pattern-metric-card">
-              <span>Last 7 days</span>
+              <span>{t("analytics.last7DaysShort")}</span>
               <strong>{formatMoney(spendingPatternPulse.lastSevenTotal)}</strong>
               <p>
-                {formatMoney(spendingPatternPulse.lastSevenDailyAverage)}/day,
-                {" "}
-                {formatPercentChange(spendingPatternPulse.sevenVsMonthChange)}
-                {" "}
-                vs this month&apos;s daily pace.
+                {t("analytics.dayAveragePace", {
+                  amount: formatMoney(spendingPatternPulse.lastSevenDailyAverage),
+                  change: formatPercentChange(spendingPatternPulse.sevenVsMonthChange, t),
+                })}
               </p>
             </div>
 
             <div className="pattern-metric-card">
-              <span>Current month</span>
+              <span>{t("analytics.currentMonthShort")}</span>
               <strong>{formatMoney(spendingPatternPulse.currentMonthTotal)}</strong>
               <p>
-                Month-to-date spending compared with the 3-month average:
-                {" "}
-                {formatPercentChange(spendingPatternPulse.currentVsThreeChange)}.
+                {t("analytics.monthToDateComparison", {
+                  change: formatPercentChange(spendingPatternPulse.currentVsThreeChange, t),
+                })}
               </p>
             </div>
 
             <div className="pattern-metric-card">
-              <span>3 months vs 6 months</span>
-              <strong>{formatPercentChange(spendingPatternPulse.threeVsSixChange)}</strong>
+              <span>{t("analytics.threeVsSix")}</span>
+              <strong>{formatPercentChange(spendingPatternPulse.threeVsSixChange, t)}</strong>
               <p>
-                3-month average {formatMoney(spendingPatternPulse.lastThreeAverage)} vs
-                6-month average {formatMoney(spendingPatternPulse.lastSixAverage)}.
+                {t("analytics.threeSixComparison", {
+                  three: formatMoney(spendingPatternPulse.lastThreeAverage),
+                  six: formatMoney(spendingPatternPulse.lastSixAverage),
+                })}
               </p>
             </div>
           </div>
 
           {!spendingPatternPulse.hasData ? (
             <div className="empty-state">
-              <p>No expense pattern yet. Add transactions or import a statement to activate this chart.</p>
+              <p>{t("analytics.noExpensePattern")}</p>
             </div>
           ) : (
             <ResponsiveContainer width="100%" height={320}>
@@ -731,7 +727,7 @@ function AnalyticsPage() {
                 <Line
                   type="monotone"
                   dataKey="expenses"
-                  name="Monthly expenses"
+                  name={t("analytics.monthlyExpenses")}
                   stroke={chartTheme.patternLine}
                   strokeWidth={3}
                   dot={{ r: 5, strokeWidth: 2 }}
@@ -740,7 +736,7 @@ function AnalyticsPage() {
                 <Line
                   type="monotone"
                   dataKey="threeMonthAverage"
-                  name="3-month average"
+                  name={t("analytics.threeMonthAverage")}
                   stroke={chartTheme.threeMonthLine}
                   strokeWidth={2}
                   strokeDasharray="6 5"
@@ -749,7 +745,7 @@ function AnalyticsPage() {
                 <Line
                   type="monotone"
                   dataKey="sixMonthAverage"
-                  name="6-month average"
+                  name={t("analytics.sixMonthAverage")}
                   stroke={chartTheme.sixMonthLine}
                   strokeWidth={2}
                   strokeDasharray="3 5"
@@ -763,8 +759,8 @@ function AnalyticsPage() {
         {normalizedAccountId === undefined && accountComparison.length > 1 && (
           <div className="dashboard-card account-comparison-card">
             <div className="section-header">
-              <h2>Accounts at a Glance</h2>
-              <p>See which account is carrying the most income, expenses, and balance pressure.</p>
+              <h2>{t("analytics.accountsGlance")}</h2>
+              <p>{t("analytics.accountsGlanceDetail")}</p>
             </div>
 
             <div className="account-comparison-grid">
@@ -775,31 +771,31 @@ function AnalyticsPage() {
                 >
                   <div className="account-comparison-header">
                     <div>
-                      <h3>{account.name}</h3>
-                      <p>{account.type}</p>
+                      <h3>{formatAccountName(account.name, t)}</h3>
+                      <p>{formatAccountType(account.type, t)}</p>
                     </div>
-                    {index === 0 && <span className="account-comparison-badge">Highest spend</span>}
+                    {index === 0 && <span className="account-comparison-badge">{t("analytics.highestSpend")}</span>}
                   </div>
 
                   <div className="account-comparison-metrics">
                     <div>
-                      <span>Income</span>
+                      <span>{t("common.income")}</span>
                       <strong>${account.total_income.toFixed(2)}</strong>
                     </div>
                     <div>
-                      <span>Expenses</span>
+                      <span>{t("common.expenses")}</span>
                       <strong>${account.total_expenses.toFixed(2)}</strong>
                     </div>
                     <div>
-                      <span>Balance</span>
+                      <span>{t("common.balance")}</span>
                       <strong>${account.balance.toFixed(2)}</strong>
                     </div>
                   </div>
 
                   <p className="account-comparison-footnote">
                     {account.top_category
-                      ? `Top category: ${formatCategoryName(account.top_category)} ($${account.top_category_amount.toFixed(2)})`
-                      : "No category spending recorded yet."}
+                      ? `${t("analytics.topCategory")}: ${formatCategoryName(account.top_category, t)} ($${account.top_category_amount.toFixed(2)})`
+                      : t("analytics.noCategorySpending")}
                   </p>
                 </div>
               ))}
@@ -812,13 +808,13 @@ function AnalyticsPage() {
           className={`dashboard-card alerts-card ${getSectionHighlightClass("alerts")}`}
         >
           <div className="section-header">
-            <h2>Overspending Alerts</h2>
-            <p>Warnings based on unusual monthly or category-level spending increases.</p>
+            <h2>{t("analytics.overspendingAlerts")}</h2>
+            <p>{t("analytics.overspendingAlertsDetail")}</p>
           </div>
 
           {!overspendingAlerts || overspendingAlerts.alerts.length === 0 ? (
             <div className="empty-state">
-              <p>No alerts available.</p>
+              <p>{t("analytics.noAlerts")}</p>
             </div>
           ) : (
             <div className="alerts-list">
@@ -840,13 +836,13 @@ function AnalyticsPage() {
           className={`dashboard-card trends-card ${getSectionHighlightClass("trends")}`}
         >
           <div className="section-header">
-            <h2>Category Trend Comparison</h2>
-            <p>See which categories increased or decreased the most month over month.</p>
+            <h2>{t("analytics.categoryTrendComparison")}</h2>
+            <p>{t("analytics.categoryTrendDetail")}</p>
           </div>
 
           {!categoryTrends ? (
             <div className="empty-state">
-              <p>No trend data available.</p>
+              <p>{t("analytics.noTrendData")}</p>
             </div>
           ) : (
             <>
@@ -858,15 +854,15 @@ function AnalyticsPage() {
 
               <div className="trend-grid">
                 <div className="trend-block">
-                  <h3>Top Increases</h3>
+                  <h3>{t("analytics.topIncreases")}</h3>
                   {categoryTrends.top_increases.length === 0 ? (
-                    <p className="trend-empty-text">No increases detected.</p>
+                    <p className="trend-empty-text">{t("analytics.noIncreases")}</p>
                   ) : (
                     <div className="trend-list">
                       {categoryTrends.top_increases.map((item) => (
                         <div key={`increase-${item.category}`} className="trend-item">
                           <div>
-                            <strong>{formatCategoryName(item.category)}</strong>
+                            <strong>{formatCategoryName(item.category, t)}</strong>
                             <p>
                               {categoryTrends.previous_month}: ${item.previous_amount.toFixed(2)} → {categoryTrends.current_month}: ${item.current_amount.toFixed(2)}
                             </p>
@@ -881,15 +877,15 @@ function AnalyticsPage() {
                 </div>
 
                 <div className="trend-block">
-                  <h3>Top Decreases</h3>
+                  <h3>{t("analytics.topDecreases")}</h3>
                   {categoryTrends.top_decreases.length === 0 ? (
-                    <p className="trend-empty-text">No decreases detected.</p>
+                    <p className="trend-empty-text">{t("analytics.noDecreases")}</p>
                   ) : (
                     <div className="trend-list">
                       {categoryTrends.top_decreases.map((item) => (
                         <div key={`decrease-${item.category}`} className="trend-item">
                           <div>
-                            <strong>{formatCategoryName(item.category)}</strong>
+                            <strong>{formatCategoryName(item.category, t)}</strong>
                             <p>
                               {categoryTrends.previous_month}: ${item.previous_amount.toFixed(2)} → {categoryTrends.current_month}: ${item.current_amount.toFixed(2)}
                             </p>
@@ -912,18 +908,18 @@ function AnalyticsPage() {
           className={`dashboard-card insights-card ${getSectionHighlightClass("insights")}`}
         >
           <div className="section-header">
-            <h2>Spending Insights</h2>
-            <p>Simple observations and recommendations based on your spending data.</p>
+            <h2>{t("analytics.spendingInsights")}</h2>
+            <p>{t("analytics.spendingInsightsDetail")}</p>
           </div>
 
           {!spendingInsights ? (
             <div className="empty-state">
-              <p>No insights available yet.</p>
+              <p>{t("analytics.noInsights")}</p>
             </div>
           ) : (
             <div className="insights-grid">
               <div className="insights-block">
-                <h3>Observations</h3>
+                <h3>{t("analytics.observations")}</h3>
                 <ul className="insights-list">
                   {spendingInsights.insights.map((item, index) => (
                     <li key={`insight-${index}`}>{item}</li>
@@ -932,7 +928,7 @@ function AnalyticsPage() {
               </div>
 
               <div className="insights-block">
-                <h3>Recommendations</h3>
+                <h3>{t("analytics.recommendations")}</h3>
                 <ul className="insights-list">
                   {spendingInsights.recommendations.map((item, index) => (
                     <li key={`recommendation-${index}`}>{item}</li>
@@ -949,13 +945,13 @@ function AnalyticsPage() {
         >
           <div className="dashboard-card">
             <div className="section-header">
-              <h2>Monthly Summary</h2>
-              <p>Compare income and expense amounts by month.</p>
+              <h2>{t("analytics.monthlySummary")}</h2>
+              <p>{t("analytics.monthlySummaryDetail")}</p>
             </div>
 
             {monthlySummary.length === 0 ? (
               <div className="empty-state">
-                <p>No monthly data found.</p>
+                <p>{t("analytics.noMonthlyData")}</p>
               </div>
             ) : (
               <ResponsiveContainer width="100%" height={300}>
@@ -973,13 +969,13 @@ function AnalyticsPage() {
 
           <div className="dashboard-card">
             <div className="section-header">
-              <h2>Top 5 Expense Categories</h2>
-              <p>Focus on the categories that have the biggest effect on your balance.</p>
+              <h2>{t("analytics.top5ExpenseCategories")}</h2>
+              <p>{t("analytics.top5ExpenseCategoriesDetail")}</p>
             </div>
 
             {topPieData.length === 0 ? (
               <div className="empty-state">
-                <p>No expense categories found.</p>
+                <p>{t("dashboard.noExpenseCategories")}</p>
               </div>
             ) : (
               <ResponsiveContainer width="100%" height={340}>
@@ -1029,19 +1025,19 @@ function AnalyticsPage() {
           className={`dashboard-card ${getSectionHighlightClass("categories")}`}
         >
           <div className="section-header">
-            <h2>Expense Categories</h2>
-            <p>Ranked from highest to lowest total expense, with duplicates merged cleanly.</p>
+            <h2>{t("dashboard.expenseCategoriesTitle")}</h2>
+            <p>{t("analytics.expenseCategoriesDetail")}</p>
           </div>
 
           {mergedCategoryBreakdown.length === 0 ? (
             <div className="empty-state">
-              <p>No expense categories found.</p>
+              <p>{t("dashboard.noExpenseCategories")}</p>
             </div>
           ) : (
             <div className="category-list">
               {mergedCategoryBreakdown.map((item) => (
                 <div key={item.category} className="category-item">
-                  <span>{item.category}</span>
+                  <span>{formatCategoryName(item.category, t)}</span>
                   <strong>${item.total.toFixed(2)}</strong>
                 </div>
               ))}

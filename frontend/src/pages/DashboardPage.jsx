@@ -6,6 +6,7 @@ import PageHeader from "../components/PageHeader";
 import { ALL_ACCOUNTS_VALUE, getSelectedAccountId, setSelectedAccountId as persistSelectedAccountId } from "../services/accountStorage";
 import { buildBudgetForecastSummary } from "../utils/budgetDisplay";
 import { useLanguage } from "../i18n/LanguageContext";
+import { formatAccountLabel, formatCategoryLabel } from "../utils/displayLabels";
 
 const CATEGORY_RULES = {
   groceries: ["walmart", "costco", "freshco", "nofrills", "grocery", "supermarket"],
@@ -29,7 +30,7 @@ const normalizeRepeatDescription = (value = "") => {
   return normalized.replace(/\s+/g, " ").trim();
 };
 
-const buildManualRepeatNotice = (savedTransaction, existingTransactions) => {
+const buildManualRepeatNotice = (savedTransaction, existingTransactions, t) => {
   const repeatKey = normalizeRepeatDescription(savedTransaction?.description || "");
   if (!repeatKey) return "";
 
@@ -45,9 +46,13 @@ const buildManualRepeatNotice = (savedTransaction, existingTransactions) => {
 
   const amounts = [...matches.map((item) => Number(item.amount || 0)), Number(savedTransaction.amount || 0)];
   const averageAmount = amounts.reduce((total, value) => total + value, 0) / amounts.length;
-  const label = savedTransaction.type === "income" ? "income" : "expense";
+  const label = savedTransaction.type === "income" ? t("common.income").toLowerCase() : t("common.expense").toLowerCase();
 
-  return ` Repeating ${label} detected: ${matches.length + 1} similar entries, averaging $${averageAmount.toFixed(2)}.`;
+  return t("dashboard.repeatNotice", {
+    type: label,
+    count: matches.length + 1,
+    amount: averageAmount.toFixed(2),
+  });
 };
 
 const formatMonthLabel = (monthValue) => {
@@ -183,9 +188,7 @@ function DashboardPage() {
           simulatorRes = allSimulatorRes;
           persistSelectedAccountId(ALL_ACCOUNTS_VALUE);
           setSelectedAccountId(ALL_ACCOUNTS_VALUE);
-          setScopeNotice(
-            "We switched you back to All Accounts because this account view was empty, but your transactions exist in another account."
-          );
+          setScopeNotice(t("transactions.switchedAllAccountsNotice"));
         } else {
           setScopeNotice("");
         }
@@ -273,7 +276,13 @@ function DashboardPage() {
   };
   const hasBudgets = (budgetData?.budgets || []).length > 0;
   const hasTransactions = allTransactions.length > 0;
-  const simulatorNarrative = simulatorData?.goal_note || simulatorData?.narrative || "";
+  const simulatorNarrative = simulatorData
+    ? t("dashboard.futureOutlookNarrative", {
+        amount: Math.abs(Number(simulatorData.projected_change_amount || 0)).toFixed(2),
+        months: simulatorData.months || 3,
+        balance: Number(simulatorData.projected_end_balance || 0).toFixed(2),
+      })
+    : "";
 
   const suggestCategory = () => {
     const text = description.trim().toLowerCase();
@@ -282,7 +291,7 @@ function DashboardPage() {
       setSuggestion({
         category: "Other",
         confidence: 35,
-        reason: "No description entered, used fallback category.",
+        reason: t("dashboard.noDescriptionFallback"),
       });
       return;
     }
@@ -293,7 +302,7 @@ function DashboardPage() {
         const suggested = {
           category: "Salary",
           confidence: 95,
-          reason: `Matched keyword '${salaryMatch}' in description.`,
+          reason: t("dashboard.matchedKeywordReason", { keyword: salaryMatch }),
         };
         setSuggestion(suggested);
         setCategory(suggested.category);
@@ -303,7 +312,7 @@ function DashboardPage() {
       const suggested = {
         category: "Income",
         confidence: 70,
-        reason: "No salary keyword matched, used generic income category.",
+        reason: t("dashboard.noSalaryFallback"),
       };
       setSuggestion(suggested);
       setCategory(suggested.category);
@@ -316,7 +325,7 @@ function DashboardPage() {
         const suggested = {
           category: ruleCategory.charAt(0).toUpperCase() + ruleCategory.slice(1),
           confidence: 92,
-          reason: `Matched keyword '${matchedKeyword}' in description.`,
+          reason: t("dashboard.matchedKeywordReason", { keyword: matchedKeyword }),
         };
         setSuggestion(suggested);
         setCategory(suggested.category);
@@ -327,7 +336,7 @@ function DashboardPage() {
     const suggested = {
       category: "Other",
       confidence: 35,
-      reason: "No rule matched, used fallback category.",
+      reason: t("dashboard.noRuleFallback"),
     };
     setSuggestion(suggested);
     setCategory(suggested.category);
@@ -339,12 +348,12 @@ function DashboardPage() {
     setFormSuccess("");
 
     if (!transactionAccountId) {
-      setFormError("Please choose an account for this transaction.");
+      setFormError(t("dashboard.chooseAccountError"));
       return;
     }
 
     if (!amount || !description || !date || !transactionType || !category) {
-      setFormError("Please fill all transaction fields.");
+      setFormError(t("dashboard.fillFieldsError"));
       return;
     }
 
@@ -360,7 +369,7 @@ function DashboardPage() {
         account_id: Number(transactionAccountId),
       });
       const savedTransaction = response.data;
-      const repeatNotice = buildManualRepeatNotice(savedTransaction, allTransactions);
+      const repeatNotice = buildManualRepeatNotice(savedTransaction, allTransactions, t);
 
       setAmount("");
       setCategory("Other");
@@ -368,7 +377,7 @@ function DashboardPage() {
       setDate(new Date().toISOString().slice(0, 10));
       setTransactionType("expense");
       setSuggestion(null);
-      setFormSuccess(`Transaction added successfully.${repeatNotice}`);
+      setFormSuccess(`${t("dashboard.transactionAdded")}${repeatNotice}`);
       setAllTransactions((currentTransactions) => {
         if (currentTransactions.some((transaction) => transaction.id === savedTransaction.id)) {
           return currentTransactions;
@@ -379,7 +388,7 @@ function DashboardPage() {
       await fetchData();
     } catch (error) {
       if (!handleApiAuthError(error, navigate)) {
-        setFormError(error?.response?.data?.detail || "Failed to add transaction.");
+        setFormError(error?.response?.data?.detail || t("dashboard.addTransactionFailed"));
       }
     } finally {
       setSubmitting(false);
@@ -599,60 +608,65 @@ function DashboardPage() {
             <>
               <div className="summary-grid">
                 <div className="summary-card income-card">
-                  <span className="card-label">Budgeted</span>
+                  <span className="card-label">{t("dashboard.budgeted")}</span>
                   <p>${budgetSummary.total_budgeted.toFixed(2)}</p>
                 </div>
 
                 <div className="summary-card expense-card">
-                  <span className="card-label">Spent</span>
+                  <span className="card-label">{t("dashboard.spent")}</span>
                   <p>${budgetSummary.total_spent.toFixed(2)}</p>
                 </div>
 
                 <div className="summary-card balance-card">
-                  <span className="card-label">Remaining</span>
+                  <span className="card-label">{t("dashboard.remaining")}</span>
                   <p>${budgetSummary.total_remaining.toFixed(2)}</p>
                 </div>
 
                 <div className="summary-card top-card">
-                  <span className="card-label">Watchlist</span>
-                  <p>{budgetSummary.over_budget_count} over / {budgetSummary.at_risk_count} at risk</p>
+                  <span className="card-label">{t("dashboard.watchlist")}</span>
+                  <p>
+                    {t("dashboard.overAtRisk", {
+                      over: budgetSummary.over_budget_count,
+                      risk: budgetSummary.at_risk_count,
+                    })}
+                  </p>
                 </div>
               </div>
 
-              <p className="budget-forecast-banner">{buildBudgetForecastSummary(budgetSummary)}</p>
+              <p className="budget-forecast-banner">{buildBudgetForecastSummary(budgetSummary, t)}</p>
             </>
           )}
         </div>
 
         <div className="dashboard-card large-card">
           <div className="section-header">
-            <h2>Add Transaction</h2>
-            <p>Add new income or expense into the account chosen in this form.</p>
+            <h2>{t("dashboard.addTransactionTitle")}</h2>
+            <p>{t("dashboard.addTransactionDetail")}</p>
           </div>
 
           <p className="budget-inline-note">
             {selectedAccountId === ALL_ACCOUNTS_VALUE
-              ? "You are viewing all accounts right now. This form saves into the account selected below."
-              : "This form is prefilled with the account from your current dashboard view, but you can change it here if needed."}
+              ? t("dashboard.addFormAllAccounts")
+              : t("dashboard.addFormSelectedAccount")}
           </p>
 
           <form className="transaction-form" onSubmit={handleAddTransaction}>
             <input
               type="number"
               step="0.01"
-              placeholder="Amount"
+              placeholder={t("common.amount")}
               value={amount}
               onChange={(e) => setAmount(e.target.value)}
             />
             <input
               type="text"
-              placeholder="Category"
+              placeholder={t("common.category")}
               value={category}
               onChange={(e) => setCategory(e.target.value)}
             />
             <input
               type="text"
-              placeholder="Description"
+              placeholder={t("common.description")}
               value={description}
               onChange={(e) => setDescription(e.target.value)}
             />
@@ -663,25 +677,29 @@ function DashboardPage() {
               disabled={accounts.length === 0}
             >
               <option value="" disabled>
-                {accounts.length === 0 ? "Loading accounts..." : "Select account"}
+                {accounts.length === 0 ? t("common.loadingAccounts") : t("common.selectAccount")}
               </option>
               {accounts.map((account) => (
                 <option key={account.id} value={String(account.id)}>
-                  {account.name} ({account.type})
+                  {formatAccountLabel(account, t)}
                 </option>
               ))}
             </select>
             <select value={transactionType} onChange={(e) => setTransactionType(e.target.value)}>
-              <option value="expense">Expense</option>
-              <option value="income">Income</option>
+              <option value="expense">{t("common.expense")}</option>
+              <option value="income">{t("common.income")}</option>
             </select>
 
             <button type="button" className="suggest-button" onClick={suggestCategory}>
-              Suggest Category
+              {t("transactionForm.suggestCategory")}
             </button>
 
             <button type="submit" disabled={submitting || accounts.length === 0}>
-              {accounts.length === 0 ? "Loading Accounts..." : submitting ? "Adding..." : "Add Transaction"}
+              {accounts.length === 0
+                ? t("dashboard.loadingAccountsAction")
+                : submitting
+                ? t("dashboard.adding")
+                : t("transactionForm.add")}
             </button>
           </form>
 
@@ -690,11 +708,11 @@ function DashboardPage() {
 
           {suggestion && (
             <div className="suggestion-box">
-              <h3>Suggested Category</h3>
+              <h3>{t("transactionForm.suggestedCategory")}</h3>
               <p>
-                <strong>{suggestion.category}</strong>
+                <strong>{formatCategoryLabel(suggestion.category, t)}</strong>
               </p>
-              <p>Confidence: {suggestion.confidence}%</p>
+              <p>{t("common.confidence")}: {suggestion.confidence}%</p>
               <p>{suggestion.reason}</p>
             </div>
           )}
@@ -702,24 +720,24 @@ function DashboardPage() {
 
         <div className="filter-card">
           <div className="section-header">
-            <h2>Recent Transaction Filters</h2>
-            <p>Filter recent activity by type and month.</p>
+            <h2>{t("dashboard.recentFiltersTitle")}</h2>
+            <p>{t("dashboard.recentFiltersDetail")}</p>
           </div>
 
           <div className="filter-bar">
             <div>
-              <label>Type</label>
+              <label>{t("common.type")}</label>
               <select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)}>
-                <option value="">All</option>
-                <option value="income">Income</option>
-                <option value="expense">Expense</option>
+                <option value="">{t("common.all")}</option>
+                <option value="income">{t("common.income")}</option>
+                <option value="expense">{t("common.expense")}</option>
               </select>
             </div>
 
             <div>
-              <label>Month</label>
+              <label>{t("common.month")}</label>
               <select value={monthFilter} onChange={(e) => setMonthFilter(e.target.value)}>
-                <option value="">All</option>
+                <option value="">{t("common.all")}</option>
                 {availableMonths.map((month) => (
                   <option key={month} value={month}>
                     {month}
@@ -733,13 +751,13 @@ function DashboardPage() {
         <div className="chart-grid">
           <div className="dashboard-card large-card">
             <div className="section-header">
-              <h2>Recent Transactions</h2>
-              <p>Your latest activity in the selected account view.</p>
+              <h2>{t("dashboard.recentTransactionsTitle")}</h2>
+              <p>{t("dashboard.recentTransactionsDetail")}</p>
             </div>
 
             {filteredRecentTransactions.length === 0 ? (
               <div className="empty-state">
-                <p>No recent transactions found.</p>
+                <p>{t("dashboard.noRecentTransactions")}</p>
               </div>
             ) : (
               <div className="transaction-list">
@@ -748,7 +766,7 @@ function DashboardPage() {
                     <div>
                       <strong>{transaction.description}</strong>
                       <p>
-                        {transaction.category} | {transaction.type} | {transaction.date}
+                        {formatCategoryLabel(transaction.category, t)} | {transaction.type === "income" ? t("common.income").toLowerCase() : t("common.expense").toLowerCase()} | {transaction.date}
                       </p>
                     </div>
                     <div className="transaction-right">
@@ -769,19 +787,19 @@ function DashboardPage() {
 
           <div className="dashboard-card large-card">
             <div className="section-header">
-              <h2>Expense Categories</h2>
-              <p>Ranked from highest to lowest total expense.</p>
+              <h2>{t("dashboard.expenseCategoriesTitle")}</h2>
+              <p>{t("dashboard.expenseCategoriesDetail")}</p>
             </div>
 
             {topCategories.length === 0 ? (
               <div className="empty-state">
-                <p>No expense categories found.</p>
+                <p>{t("dashboard.noExpenseCategories")}</p>
               </div>
             ) : (
               <div className="category-list">
                 {topCategories.map((item) => (
                   <div key={item.category} className="category-item">
-                    <span>{item.category}</span>
+                    <span>{formatCategoryLabel(item.category, t)}</span>
                     <strong>${item.total.toFixed(2)}</strong>
                   </div>
                 ))}

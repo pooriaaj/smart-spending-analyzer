@@ -8,6 +8,11 @@ import {
   setSelectedAccountId as persistSelectedAccountId,
 } from "../services/accountStorage";
 import { useLanguage } from "../i18n/LanguageContext";
+import {
+  formatCategoryLabel,
+  formatConfidenceLevel,
+  formatRecurringReviewReason,
+} from "../utils/displayLabels";
 
 function formatMoney(value) {
   return `$${Number(value || 0).toFixed(2)}`;
@@ -17,20 +22,81 @@ function formatPercent(value) {
   return `${Math.round(Number(value || 0) * 100)}%`;
 }
 
-function formatCategory(value) {
-  if (!value) return "Other";
-  return String(value)
-    .replace(/_/g, " ")
-    .split(" ")
-    .filter(Boolean)
-    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
-    .join(" ");
-}
-
 function getConfidenceClass(level) {
   if (level === "High") return "money-map-confidence-high";
   if (level === "Medium") return "money-map-confidence-medium";
   return "money-map-confidence-low";
+}
+
+const MONEY_MAP_ACTION_KEYS = {
+  "Upload a statement": ["actionUploadStatement", "actionUploadStatementDetail"],
+  "Add one transaction manually": ["actionAddManual", "actionAddManualDetail"],
+  "Review category guesses": ["actionReviewCategories", "actionReviewCategoriesDetail"],
+  "Upload more history": ["actionUploadMoreHistory", "actionUploadMoreHistoryDetail"],
+  "Simulate recurring cuts": ["actionSimulateRecurringCuts", "actionSimulateRecurringCutsDetail"],
+  "Build starter budgets": ["actionBuildBudgets", "actionBuildBudgetsDetail"],
+};
+
+function formatMoneyMapNarrative(moneyMap, t) {
+  if (!moneyMap || Number(moneyMap.transaction_count || 0) <= 0) {
+    return t("moneyMap.narrativeEmpty");
+  }
+
+  const topCategory = (moneyMap.top_categories || [])[0]?.category;
+  const recurringCount = (moneyMap.recurring_highlights || []).length;
+  const reviewCount = Number(moneyMap.uncategorized_count || 0);
+  const transactionCount = Number(moneyMap.transaction_count || 0);
+
+  return t("moneyMap.narrativeReady", {
+    level: formatConfidenceLevel(moneyMap.confidence_level, t).toLowerCase(),
+    transactions: transactionCount,
+    transactionPlural: transactionCount === 1 ? "" : "s",
+    months: Number(moneyMap.month_count || 0),
+    monthPlural: Number(moneyMap.month_count || 0) === 1 ? "" : "s",
+    category: topCategory ? formatCategoryLabel(topCategory, t) : formatCategoryLabel("other", t),
+    recurring: recurringCount,
+    reviews: reviewCount,
+  });
+}
+
+function formatMoneyMapAction(action, t) {
+  const [labelKey, detailKey] = MONEY_MAP_ACTION_KEYS[action.label] || [];
+  return {
+    label: labelKey ? t(`moneyMap.${labelKey}`) : action.label,
+    detail: detailKey ? t(`moneyMap.${detailKey}`) : action.detail,
+  };
+}
+
+function formatLearningSignal(signal, moneyMap, t) {
+  if (signal.label === "History depth") {
+    const monthCount = Number(moneyMap?.month_count || 0);
+    return {
+      label: t("moneyMap.signalHistoryDepth"),
+      value: t("moneyMap.signalHistoryDepthValue", {
+        count: monthCount,
+        plural: monthCount === 1 ? "" : "s",
+      }),
+      detail: t("moneyMap.signalHistoryDepthDetail"),
+    };
+  }
+
+  if (signal.label === "Learned merchants") {
+    return {
+      label: t("moneyMap.signalLearnedMerchants"),
+      value: String(moneyMap?.learned_merchant_count || 0),
+      detail: t("moneyMap.signalLearnedMerchantsDetail"),
+    };
+  }
+
+  if (signal.label === "Category review") {
+    return {
+      label: t("moneyMap.signalCategoryReview"),
+      value: String(moneyMap?.uncategorized_count || 0),
+      detail: t("moneyMap.signalCategoryReviewDetail"),
+    };
+  }
+
+  return signal;
 }
 
 function MoneyMapPage() {
@@ -56,7 +122,7 @@ function MoneyMapPage() {
       setMoneyMap(response.data);
     } catch (loadError) {
       if (!handleApiAuthError(loadError, navigate)) {
-        setError("Failed to load your Money Map.");
+        setError(t("moneyMapMessages.loadFailed"));
       }
     } finally {
       setLoading(false);
@@ -152,10 +218,14 @@ function MoneyMapPage() {
           <div className="money-map-command-top">
             <div>
               <span className={`money-map-confidence-pill ${getConfidenceClass(moneyMap?.confidence_level)}`}>
-                {moneyMap?.confidence_level ? `${moneyMap.confidence_level} confidence` : t("moneyMap.lowConfidence")}
+                {moneyMap?.confidence_level
+                  ? t("moneyMap.confidencePill", {
+                      level: formatConfidenceLevel(moneyMap.confidence_level, t),
+                    })
+                  : t("moneyMap.lowConfidence")}
               </span>
               <h2>{isEmpty ? t("moneyMap.startStatement") : t("moneyMap.learnedModel")}</h2>
-              <p>{moneyMap?.narrative}</p>
+              <p>{formatMoneyMapNarrative(moneyMap, t)}</p>
             </div>
             <div className="money-map-score-ring">
               <strong>{formatPercent(moneyMap?.confidence_score)}</strong>
@@ -164,17 +234,21 @@ function MoneyMapPage() {
           </div>
 
           <div className="money-map-action-grid">
-            {(moneyMap?.actions || []).map((action) => (
-              <button
-                key={`${action.page}-${action.label}`}
-                type="button"
-                className={`money-map-action-card money-map-action-${action.priority}`}
-                onClick={() => handleAction(action)}
-              >
-                <strong>{action.label}</strong>
-                <span>{action.detail}</span>
-              </button>
-            ))}
+            {(moneyMap?.actions || []).map((action) => {
+              const formattedAction = formatMoneyMapAction(action, t);
+
+              return (
+                <button
+                  key={`${action.page}-${action.label}`}
+                  type="button"
+                  className={`money-map-action-card money-map-action-${action.priority}`}
+                  onClick={() => handleAction(action)}
+                >
+                  <strong>{formattedAction.label}</strong>
+                  <span>{formattedAction.detail}</span>
+                </button>
+              );
+            })}
           </div>
         </div>
 
@@ -232,37 +306,41 @@ function MoneyMapPage() {
                 </div>
               </div>
               <div className="money-map-signal-grid">
-                {(moneyMap?.learning_signals || []).map((signal) => (
-                  <div
-                    key={signal.label}
-                    className={`money-map-signal-card money-map-signal-${signal.severity}`}
-                  >
-                    <span>{signal.label}</span>
-                    <strong>{signal.value}</strong>
-                    <p>{signal.detail}</p>
-                  </div>
-                ))}
+                {(moneyMap?.learning_signals || []).map((signal) => {
+                  const formattedSignal = formatLearningSignal(signal, moneyMap, t);
+
+                  return (
+                    <div
+                      key={signal.label}
+                      className={`money-map-signal-card money-map-signal-${signal.severity}`}
+                    >
+                      <span>{formattedSignal.label}</span>
+                      <strong>{formattedSignal.value}</strong>
+                      <p>{formattedSignal.detail}</p>
+                    </div>
+                  );
+                })}
               </div>
             </div>
 
             <div className="chart-grid">
               <div className="dashboard-card large-card">
                 <div className="section-header">
-                  <h2>Top Spending Drivers</h2>
-                  <p>Highest expense categories learned from the selected scope.</p>
+                  <h2>{t("moneyMap.topSpendingDrivers")}</h2>
+                  <p>{t("moneyMap.topSpendingDriversDetail")}</p>
                 </div>
 
                 {(moneyMap?.top_categories || []).length === 0 ? (
                   <div className="empty-state">
-                    <p>No expense categories are mapped yet.</p>
+                    <p>{t("moneyMap.noMappedCategories")}</p>
                   </div>
                 ) : (
                   <div className="money-map-category-list">
                     {moneyMap.top_categories.map((item) => (
                       <div key={item.category} className="money-map-category-row">
                         <div>
-                          <strong>{formatCategory(item.category)}</strong>
-                          <span>{item.share_percent.toFixed(1)}% of mapped spend</span>
+                          <strong>{formatCategoryLabel(item.category, t)}</strong>
+                          <span>{item.share_percent.toFixed(1)}% {t("moneyMap.mappedSpend")}</span>
                         </div>
                         <p>{formatMoney(item.total)}</p>
                         <div className="money-map-category-track">
@@ -285,13 +363,13 @@ function MoneyMapPage() {
 
               <div className="dashboard-card large-card">
                 <div className="section-header">
-                  <h2>Recurring Signals</h2>
-                  <p>Repeat charges that can become savings scenarios.</p>
+                  <h2>{t("moneyMap.recurringSignals")}</h2>
+                  <p>{t("moneyMap.recurringSignalsDetail")}</p>
                 </div>
 
                 {(moneyMap?.recurring_highlights || []).length === 0 ? (
                   <div className="empty-state">
-                    <p>Upload two or three months of history to detect recurring charges.</p>
+                    <p>{t("moneyMap.recurringEmpty")}</p>
                   </div>
                 ) : (
                   <div className="budget-insight-list">
@@ -304,11 +382,11 @@ function MoneyMapPage() {
                           <strong>{item.description}</strong>
                         </div>
                         <p className="budget-insight-title">
-                          {formatMoney(item.average_amount)} monthly average
+                          {formatMoney(item.average_amount)} {t("moneyMap.monthlyAverage")}
                         </p>
                         <p className="budget-inline-note">
-                          {formatCategory(item.category)} | {formatMoney(item.annualized_amount)} per year.
-                          {item.review_reason ? ` ${item.review_reason}` : ""}
+                          {formatCategoryLabel(item.category, t)} | {formatMoney(item.annualized_amount)} {t("moneyMap.perYear")}.
+                          {item.review_reason ? ` ${formatRecurringReviewReason(item, t)}` : ""}
                         </p>
                       </div>
                     ))}
@@ -320,17 +398,17 @@ function MoneyMapPage() {
             <div className="dashboard-card">
               <div className="section-header">
                 <div>
-                  <h2>Category Review Queue</h2>
-                  <p>Safe suggestions only: low-confidence fallbacks stay out of this list.</p>
+                  <h2>{t("moneyMap.categoryReviewQueue")}</h2>
+                  <p>{t("moneyMap.categoryReviewQueueDetail")}</p>
                 </div>
                 <button className="secondary-button" onClick={() => navigate("/transactions")}>
-                  Open Transactions
+                  {t("moneyMap.openTransactions")}
                 </button>
               </div>
 
               {(moneyMap?.category_suggestions || []).length === 0 ? (
                 <div className="empty-state">
-                  <p>No high-confidence category review items right now.</p>
+                  <p>{t("moneyMap.noCategoryReviewItems")}</p>
                 </div>
               ) : (
                 <div className="money-map-suggestion-grid">
@@ -339,10 +417,12 @@ function MoneyMapPage() {
                       <span>{item.source.replace("_", " ")}</span>
                       <strong>{item.description}</strong>
                       <p>
-                        Suggest {formatCategory(item.suggested_category)} at{" "}
-                        {formatPercent(item.confidence)} confidence.
+                        {t("moneyMap.suggestAtConfidence", {
+                          category: formatCategoryLabel(item.suggested_category, t),
+                          confidence: formatPercent(item.confidence),
+                        })}
                       </p>
-                      <small>{item.reason}</small>
+                      <small>{t("moneyMap.reviewInTransactions")}</small>
                     </div>
                   ))}
                 </div>

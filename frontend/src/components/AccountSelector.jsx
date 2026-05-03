@@ -6,6 +6,7 @@ import {
   setSelectedAccountId as persistSelectedAccountId,
 } from "../services/accountStorage";
 import { useLanguage } from "../i18n/LanguageContext";
+import { formatAccountLabel } from "../utils/displayLabels";
 
 function normalizeSelection(value, allowAll) {
   return allowAll || value !== ALL_ACCOUNTS_VALUE ? String(value || "") : "";
@@ -79,7 +80,7 @@ function AccountSelector({
         {!allowAll && !accounts.length && <option value="">{t("common.loadingAccounts")}</option>}
         {accounts.map((account) => (
           <option key={account.id} value={String(account.id)}>
-            {account.name} ({account.type})
+            {formatAccountLabel(account, t)}
           </option>
         ))}
       </select>
