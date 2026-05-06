@@ -943,7 +943,10 @@ def is_noise_line(line: str, extra_noise_prefixes: tuple[str, ...] = ()) -> bool
     if re.fullmatch(r"\d+\s+of\s+\d+", lowered):
         return True
 
-    if re.fullmatch(r"[A-Z0-9_\-\*\/ ]{8,}", line.strip()):
+    if re.fullmatch(r"\d{8,}", line.strip()):
+        return True
+
+    if re.fullmatch(r"[A-Z0-9_\-\*\/]{8,}", line.strip()):
         return True
 
     if looks_like_column_header_line(lowered):
@@ -953,6 +956,11 @@ def is_noise_line(line: str, extra_noise_prefixes: tuple[str, ...] = ()) -> bool
         return True
 
     return False
+
+
+def looks_like_card_reference_line(line: str) -> bool:
+    compact = re.sub(r"\s+", "", line.strip())
+    return bool(re.fullmatch(r"\d{10,30}", compact))
 
 
 def is_statement_disclosure_description(description: str) -> bool:
@@ -1009,6 +1017,21 @@ def is_income_description(description: str) -> bool:
     ]
 
     return any(marker in lowered for marker in income_markers)
+
+
+def is_credit_card_credit_description(description: str) -> bool:
+    lowered = strip_accents(description.lower())
+    credit_markers = (
+        "payment - thank you",
+        "payment thank you",
+        "paiement - merci",
+        "payback with points",
+        "statement credit",
+        "credit adjustment",
+        "refund",
+        "rebate",
+    )
+    return any(marker in lowered for marker in credit_markers)
 
 
 def is_expense_description(description: str) -> bool:
@@ -1224,6 +1247,9 @@ def infer_transaction_type(description: str) -> str:
 
 
 def resolve_transaction_type(amount_text: str | None, description: str) -> str:
+    if is_credit_card_credit_description(description):
+        return "income"
+
     if amount_text:
         explicit_type = infer_amount_token_type(amount_text)
         if explicit_type:
@@ -1512,7 +1538,11 @@ def finalize_pending_transaction(
         elif balance_inferred_type == "expense":
             amount = -abs(amount)
 
-    resolved_explicit_type = balance_inferred_type or explicit_type
+    credit_card_credit = is_credit_card_credit_description(raw_description) or is_credit_card_credit_description(description)
+    if credit_card_credit:
+        amount = abs(amount)
+
+    resolved_explicit_type = "income" if credit_card_credit else balance_inferred_type or explicit_type
     tx_type = resolved_explicit_type or resolve_transaction_type(amount_text_1, raw_description)
     confidence, review_reason = build_preview_row_review_metadata(
         trailing_amounts=trailing_amounts,
@@ -1584,19 +1614,6 @@ def parse_rbc_statement_preview(
 
     for raw_line in lines:
         line = raw_line.strip()
-        if is_noise_line(line, extra_noise_prefixes=profile.extra_noise_prefixes):
-            current_date = None
-            description_parts = []
-            continue
-
-        if looks_like_balance_only_line(line, extra_balance_markers=profile.extra_balance_markers):
-            line_balance = extract_last_amount_from_line(line)
-            if line_balance is not None:
-                running_balance = line_balance
-            current_date = None
-            description_parts = []
-            continue
-
         extracted_date = extract_transaction_date_from_line(
             line=line,
             start_year=statement_start_year,
@@ -1619,6 +1636,22 @@ def parse_rbc_statement_preview(
                 start_date=statement_start_date,
                 end_date=statement_end_date,
             )
+        else:
+            if current_date and description_parts and looks_like_card_reference_line(line):
+                continue
+
+            if is_noise_line(line, extra_noise_prefixes=profile.extra_noise_prefixes):
+                current_date = None
+                description_parts = []
+                continue
+
+            if looks_like_balance_only_line(line, extra_balance_markers=profile.extra_balance_markers):
+                line_balance = extract_last_amount_from_line(line)
+                if line_balance is not None:
+                    running_balance = line_balance
+                current_date = None
+                description_parts = []
+                continue
 
         if not current_date:
             continue
@@ -1727,17 +1760,6 @@ def parse_pdf_statement_preview(
     running_balance: float | None = None
 
     for line in lines:
-        if is_noise_line(line, extra_noise_prefixes=profile.extra_noise_prefixes) or looks_like_balance_only_line(
-            line,
-            extra_balance_markers=profile.extra_balance_markers,
-        ):
-            line_balance = extract_last_amount_from_line(line)
-            if line_balance is not None:
-                running_balance = line_balance
-            current_date = None
-            description_parts = []
-            continue
-
         extracted_date = extract_transaction_date_from_line(
             line=line,
             start_year=statement_start_year,
@@ -1759,6 +1781,20 @@ def parse_pdf_statement_preview(
                 start_date=statement_start_date,
                 end_date=statement_end_date,
             )
+        else:
+            if current_date and description_parts and looks_like_card_reference_line(line):
+                continue
+
+            if is_noise_line(line, extra_noise_prefixes=profile.extra_noise_prefixes) or looks_like_balance_only_line(
+                line,
+                extra_balance_markers=profile.extra_balance_markers,
+            ):
+                line_balance = extract_last_amount_from_line(line)
+                if line_balance is not None:
+                    running_balance = line_balance
+                current_date = None
+                description_parts = []
+                continue
 
         if not current_date:
             continue

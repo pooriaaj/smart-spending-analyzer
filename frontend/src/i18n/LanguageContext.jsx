@@ -448,6 +448,9 @@ const translations = {
       shortTermPace: "Short-term pace",
       shortTermDetail:
         "Last 7 Days shows the newest spending pulse. Use it when you want to know if this week is heavier than normal.",
+      rolling30DayControl: "Rolling 30-day control",
+      rolling30DayDetail:
+        "Last 30 Days gives you a fairer month-style view without being distorted by a brand-new calendar month.",
       currentMonthControl: "Current month control",
       currentMonthDetail:
         "Current Month keeps the view focused on the month you are living in right now, which is the best range for budgeting decisions.",
@@ -457,6 +460,7 @@ const translations = {
       filtersTitle: "Analytics Filters",
       filtersDetail: "Refine the analysis using account scope, month, date range, type, and category.",
       last7Days: "Last 7 Days",
+      last30Days: "Last 30 Days",
       currentMonth: "Current Month",
       last3Months: "Last 3 Months",
       last6Months: "Last 6 Months",
@@ -466,15 +470,18 @@ const translations = {
       noExpenseData: "No expense data",
       spendingPulse: "Spending Pattern Pulse",
       spendingPulseDetail:
-        "Dot-and-line view of your expense movement. It compares this week against the current month, then recent 3-month behavior against the 6-month baseline.",
+        "Dot-and-line view of your expense movement. It compares this week against the last 30 days, then recent 3-month behavior against the 6-month baseline.",
       loadingTitle: "Loading analytics...",
       loadingDetail: "Please wait while your analysis page is being prepared.",
       daily: "Daily",
       monthly: "Monthly",
       last7DaysShort: "Last 7 days",
+      last30DaysShort: "Last 30 days",
       currentMonthShort: "Current month",
       threeVsSix: "3 months vs 6 months",
-      dayAveragePace: "{amount}/day, {change} vs this month's daily pace.",
+      dayAveragePace: "{amount}/day, {change} vs the last 30-day daily pace.",
+      last30Comparison:
+        "Last 30-day spending compared with the 3-month average: {change}.",
       monthToDateComparison:
         "Month-to-date spending compared with the 3-month average: {change}.",
       threeSixComparison: "3-month average {three} vs 6-month average {six}.",
@@ -488,7 +495,7 @@ const translations = {
       unlockMovementSignals:
         "Add daily transactions or import a statement to unlock spending movement signals.",
       pulseNarrative:
-        "Your last 7-day daily average is {sevenDayAverage} compared with {monthAverage} for this month so far. The 3-month average is {threeMonthAverage} versus {sixMonthAverage} across 6 months.",
+        "Your last 7-day daily average is {sevenDayAverage} compared with {monthAverage} across the last 30 days. The 3-month average is {threeMonthAverage} versus {sixMonthAverage} across 6 months.",
       monthlyExpenses: "Monthly expenses",
       threeMonthAverage: "3-month average",
       sixMonthAverage: "6-month average",
@@ -1714,6 +1721,9 @@ const translations = {
       shortTermPace: "Rythme à court terme",
       shortTermDetail:
         "Les 7 derniers jours montrent le pouls récent des dépenses. Utilisez-les pour voir si cette semaine est plus lourde que d'habitude.",
+      rolling30DayControl: "Contrôle sur 30 jours",
+      rolling30DayDetail:
+        "Les 30 derniers jours donnent une vue mensuelle plus juste sans être faussée par un nouveau mois civil.",
       currentMonthControl: "Contrôle du mois courant",
       currentMonthDetail:
         "Le mois courant garde la vue concentrée sur le mois que vous vivez maintenant, idéal pour les décisions de budget.",
@@ -1723,6 +1733,7 @@ const translations = {
       filtersTitle: "Filtres d'analyse",
       filtersDetail: "Affinez l'analyse par compte, mois, dates, type et catégorie.",
       last7Days: "7 derniers jours",
+      last30Days: "30 derniers jours",
       currentMonth: "Mois courant",
       last3Months: "3 derniers mois",
       last6Months: "6 derniers mois",
@@ -1732,15 +1743,18 @@ const translations = {
       noExpenseData: "Aucune donnée de dépense",
       spendingPulse: "Pouls des habitudes de dépenses",
       spendingPulseDetail:
-        "Vue avec points et lignes du mouvement de vos dépenses. Elle compare la semaine au mois courant, puis 3 mois récents à la base de 6 mois.",
+        "Vue avec points et lignes du mouvement de vos dépenses. Elle compare la semaine aux 30 derniers jours, puis 3 mois récents à la base de 6 mois.",
       loadingTitle: "Chargement des analyses...",
       loadingDetail: "Préparation de votre page d'analyse.",
       daily: "Quotidien",
       monthly: "Mensuel",
       last7DaysShort: "7 derniers jours",
+      last30DaysShort: "30 derniers jours",
       currentMonthShort: "Mois courant",
       threeVsSix: "3 mois vs 6 mois",
-      dayAveragePace: "{amount}/jour, {change} vs le rythme quotidien de ce mois.",
+      dayAveragePace: "{amount}/jour, {change} vs le rythme quotidien des 30 derniers jours.",
+      last30Comparison:
+        "Dépenses des 30 derniers jours comparées à la moyenne de 3 mois: {change}.",
       monthToDateComparison:
         "Dépenses du mois à ce jour comparées à la moyenne de 3 mois: {change}.",
       threeSixComparison: "Moyenne 3 mois {three} vs moyenne 6 mois {six}.",
@@ -1754,7 +1768,7 @@ const translations = {
       unlockMovementSignals:
         "Ajoutez des transactions quotidiennes ou importez un relevé pour activer les signaux de mouvement des dépenses.",
       pulseNarrative:
-        "Votre moyenne quotidienne des 7 derniers jours est {sevenDayAverage}, comparée à {monthAverage} pour le mois en cours. La moyenne de 3 mois est {threeMonthAverage}, contre {sixMonthAverage} sur 6 mois.",
+        "Votre moyenne quotidienne des 7 derniers jours est {sevenDayAverage}, comparée à {monthAverage} sur les 30 derniers jours. La moyenne de 3 mois est {threeMonthAverage}, contre {sixMonthAverage} sur 6 mois.",
       monthlyExpenses: "Dépenses mensuelles",
       threeMonthAverage: "Moyenne 3 mois",
       sixMonthAverage: "Moyenne 6 mois",

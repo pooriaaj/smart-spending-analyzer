@@ -4,7 +4,7 @@ from datetime import date, timedelta
 import re
 from typing import Any
 
-from sqlalchemy import case, func
+from sqlalchemy import case, func, or_
 from sqlalchemy.orm import Query, Session
 
 from app.models import Account, BudgetPlan, Transaction
@@ -17,6 +17,32 @@ from app.services.budget_metrics import (
 )
 from app.services.llm_service import generate_llm_assistant_response
 from app.services.saved_scenario_service import list_saved_scenarios
+
+
+CASHFLOW_NEUTRAL_CATEGORIES = {
+    "transfer",
+    "transfers",
+    "refund",
+    "refunds",
+    "credit card payment",
+    "credit card payments",
+}
+CASHFLOW_NEUTRAL_DESCRIPTION_MARKERS = (
+    "e-transfer received",
+    "e-transfer sent",
+    "interac received",
+    "interac sent",
+    "online transfer",
+    "online banking transfer",
+    "transfer to deposit account",
+    "payment - thank you",
+    "payment thank you",
+    "paiement - merci",
+    "payback with points",
+    "atm deposit",
+    "virement interac",
+    "virement en ligne",
+)
 
 
 def parse_iso_date(value: str | None) -> date | None:
@@ -32,6 +58,27 @@ def month_bucket_expression(db: Session):
     return func.to_char(Transaction.date, "YYYY-MM")
 
 
+def normalize_analytics_category(value: str | None) -> str:
+    return re.sub(r"\s+", " ", str(value or "").strip().lower())
+
+
+def is_cashflow_neutral_category(category: str | None) -> bool:
+    return normalize_analytics_category(category) in CASHFLOW_NEUTRAL_CATEGORIES
+
+
+def cashflow_neutral_filter():
+    normalized_category = func.lower(func.coalesce(Transaction.category, ""))
+    normalized_description = func.lower(func.coalesce(Transaction.description, ""))
+    description_filters = [
+        normalized_description.like(f"%{marker}%")
+        for marker in CASHFLOW_NEUTRAL_DESCRIPTION_MARKERS
+    ]
+    return or_(
+        normalized_category.in_(tuple(CASHFLOW_NEUTRAL_CATEGORIES)),
+        *description_filters,
+    )
+
+
 def build_filtered_query(
     db: Session,
     user_id: int,
@@ -41,6 +88,7 @@ def build_filtered_query(
     transaction_type: str | None = None,
     category: str | None = None,
     account_id: int | None = None,
+    include_cashflow_neutral: bool = False,
 ) -> Query:
     query = db.query(Transaction).filter(Transaction.owner_id == user_id)
     month_expr = month_bucket_expression(db)
@@ -60,6 +108,8 @@ def build_filtered_query(
         query = query.filter(func.lower(Transaction.category) == category.strip().lower())
     if account_id is not None:
         query = query.filter(Transaction.account_id == account_id)
+    if not include_cashflow_neutral and not is_cashflow_neutral_category(category):
+        query = query.filter(~cashflow_neutral_filter())
 
     return query
 
@@ -233,6 +283,7 @@ def get_top_expense_categories(
     ).filter(
         Transaction.owner_id == user_id,
         Transaction.type == "expense",
+        ~cashflow_neutral_filter(),
     )
 
     if account_id is not None:
@@ -844,6 +895,7 @@ def build_simulation_reduction_plan(
             Transaction.owner_id == user_id,
             Transaction.type == "expense",
             month_expr.in_(recent_month_labels),
+            ~cashflow_neutral_filter(),
         )
 
         if account_id is not None:

@@ -55,7 +55,7 @@ CATEGORY_RULES = {
         "paie",
         "cffa vendome",
     ],
-    "rent": ["rent", "lease", "landlord"],
+    "rent": ["rent", "lease", "landlord", "hazelview", "hazielview", "hazielview prop"],
     "groceries": ["grocery", "supermarket", "freshco", "nofrills", "costco", "walmart", "loblaws"],
     "transport": ["uber", "lyft", "ttc", "presto", "parking", "transit"],
     "gas": ["gas station", "shell", "esso", "petro canada", "ultramar", "pioneer"],
@@ -65,7 +65,23 @@ CATEGORY_RULES = {
     "cafe": ["coffee", "cafe", "café", "starbucks", "tim hortons"],
     "entertainment": ["netflix", "spotify", "cinema", "movie", "youtube"],
     "shopping": ["amazon", "dollarama", "discount store", "department store", "shopping mall"],
-    "transfer": ["e-transfer", "transfer", "interac"],
+    "transfer": [
+        "e-transfer",
+        "e-transfer received",
+        "e-transfer sent",
+        "interac received",
+        "interac sent",
+        "online transfer",
+        "online banking transfer",
+        "transfer to deposit account",
+        "virement interac",
+        "virement en ligne",
+        "atm deposit",
+        "payment - thank you",
+        "payment thank you",
+        "paiement - merci",
+        "credit card payment",
+    ],
     "utilities": ["utility", "utilities", "hydro", "electric", "water", "gas bill"],
     "car maintenance": ["car maintenance", "mechanic", "oil change", "tire", "repair"],
     "personal": ["personal", "haircut", "laundry", "dry cleaner"],
@@ -189,12 +205,27 @@ CATEGORY_RULES.update(
         "taxes": ["cra", "revenue canada", "income tax", "property tax"],
         "donations": ["charity", "donation", "gofundme", "red cross", "unicef"],
         "subscriptions": ["subscription", "patreon", "onlyfans", "substack"],
+        "refund": [
+            "payback with points",
+            "refund",
+            "rebate",
+            "returned purchase",
+            "statement credit",
+        ],
     }
 )
 CATEGORY_RULES["utilities"].extend(["metergy", "ez-pay", "ez pay"])
 CATEGORY_RULES["utilities"].extend(["alectra", "enbridge", "toronto hydro"])
-CATEGORY_RULES["phone"].extend(["bell mobility", "koodo", "phone bill"])
+CATEGORY_RULES["phone"].extend(["bell mobility", "koodo", "phone bill", "virgin plus"])
 CATEGORY_RULES["internet"].extend(["teksavvy", "internet provider"])
+CATEGORY_RULES["subscriptions"].extend([
+    "apple.com/bill",
+    "doordashdashpass",
+    "microsoft*micro",
+    "microsoft 365",
+    "spotify",
+])
+CATEGORY_RULES["clothing"].extend(["gap.com", "lids"])
 for expanded_category, expanded_keywords in CATEGORY_KEYWORD_EXPANSION.items():
     CATEGORY_RULES.setdefault(expanded_category, [])
     CATEGORY_RULES[expanded_category].extend(expanded_keywords)
@@ -1139,7 +1170,25 @@ def categorize_transaction_details(
                     reason="Matched an income rule in the transaction description.",
                     source="rule",
                 )
-        for keyword in ("e-transfer received", "atm deposit", "deposit", "interest"):
+        for keyword in CATEGORY_RULES["refund"]:
+            if keyword_matches_description(keyword, lowered, raw_lowered):
+                return CategoryDecision(
+                    category="refund",
+                    confidence=0.91,
+                    matched_keyword=keyword,
+                    reason="Matched a refund or statement-credit rule in the transaction description.",
+                    source="rule",
+                )
+        for keyword in CATEGORY_RULES["transfer"]:
+            if keyword_matches_description(keyword, lowered, raw_lowered):
+                return CategoryDecision(
+                    category="transfer",
+                    confidence=0.91,
+                    matched_keyword=keyword,
+                    reason="Matched a transfer/funding rule, so this is not treated as earned income.",
+                    source="rule",
+                )
+        for keyword in ("interest",):
             if keyword_matches_description(keyword, lowered, raw_lowered):
                 return CategoryDecision(
                     category="income",
@@ -1163,6 +1212,21 @@ def categorize_transaction_details(
             reason="Defaulted to income because the transaction type is income and no stronger rule matched.",
             source="fallback",
         )
+
+    priority_expense_rules = (
+        ("subscriptions", ("doordashdashpass",)),
+        ("restaurant", ("ubereats", "uber eats", "doordash", "skip the dishes")),
+    )
+    for category, keywords in priority_expense_rules:
+        for keyword in keywords:
+            if keyword_matches_description(keyword, lowered, raw_lowered):
+                return CategoryDecision(
+                    category=normalize_category_name(category),
+                    confidence=0.9,
+                    matched_keyword=keyword,
+                    reason="Matched a high-priority merchant rule before generic keyword matching.",
+                    source="rule",
+                )
 
     merchant_override = match_merchant_category_override(description)
     if merchant_override:
@@ -1632,6 +1696,27 @@ def normalize_existing_categories_for_user(
     for transaction in transactions:
         old_category = transaction.category or "other"
         new_category = normalize_category_name(old_category)
+        category_decision = categorize_transaction_details(
+            db=db,
+            owner_id=owner_id,
+            description=transaction.description,
+            tx_type=transaction.type,
+        )
+        suggested_category = normalize_category_name(category_decision.category)
+        should_apply_suggestion = (
+            category_decision.confidence >= 0.88
+            and suggested_category != new_category
+            and (
+                new_category in UNCATEGORIZED_VALUES
+                or (
+                    new_category == "income"
+                    and suggested_category in {"refund", "transfer"}
+                )
+            )
+        )
+
+        if should_apply_suggestion:
+            new_category = suggested_category
 
         if old_category != new_category:
             transaction.category = new_category

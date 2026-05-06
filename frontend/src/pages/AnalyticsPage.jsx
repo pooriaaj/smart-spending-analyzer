@@ -50,6 +50,23 @@ const CATEGORY_ALIASES = {
   "car maintenance": "Car Maintenance",
 };
 
+const CASHFLOW_NEUTRAL_CATEGORIES = new Set(["transfer", "transfers", "refund", "refunds"]);
+const CASHFLOW_NEUTRAL_DESCRIPTION_MARKERS = [
+  "e-transfer received",
+  "e-transfer sent",
+  "interac received",
+  "interac sent",
+  "online transfer",
+  "online banking transfer",
+  "payment - thank you",
+  "payment thank you",
+  "paiement - merci",
+  "payback with points",
+  "atm deposit",
+  "virement interac",
+  "virement en ligne",
+];
+
 function formatCategoryName(category, t) {
   if (!category || typeof category !== "string") return formatCategoryLabel("other", t);
   const normalized = category.trim().toLowerCase();
@@ -147,7 +164,11 @@ const getExpenseTransactions = (transactions) =>
       (transaction) =>
         transaction.type === "expense" &&
         transaction.amount > 0 &&
-        transaction.parsedDate
+        transaction.parsedDate &&
+        !CASHFLOW_NEUTRAL_CATEGORIES.has(String(transaction.category || "").trim().toLowerCase()) &&
+        !CASHFLOW_NEUTRAL_DESCRIPTION_MARKERS.some((marker) =>
+          String(transaction.description || "").toLowerCase().includes(marker)
+        )
     );
 
 const sumExpensesBetween = (transactions, startDate, endDate) =>
@@ -162,10 +183,12 @@ function buildSpendingPatternPulse(transactions, t) {
   const expenseTransactions = getExpenseTransactions(transactions);
   const today = new Date();
   today.setHours(23, 59, 59, 999);
-  const currentMonthStart = new Date(today.getFullYear(), today.getMonth(), 1);
   const lastSevenStart = new Date(today);
   lastSevenStart.setDate(today.getDate() - 6);
   lastSevenStart.setHours(0, 0, 0, 0);
+  const lastThirtyStart = new Date(today);
+  lastThirtyStart.setDate(today.getDate() - 29);
+  lastThirtyStart.setHours(0, 0, 0, 0);
 
   const monthKeys = buildRecentMonthKeys(6);
   const expensesByMonth = new Map(monthKeys.map((monthKey) => [monthKey, 0]));
@@ -186,16 +209,15 @@ function buildSpendingPatternPulse(transactions, t) {
     lastSixValues.reduce((total, value) => total + value, 0) / Math.max(lastSixValues.length, 1);
 
   const lastSevenTotal = sumExpensesBetween(expenseTransactions, lastSevenStart, today);
-  const currentMonthTotal = sumExpensesBetween(expenseTransactions, currentMonthStart, today);
-  const daysElapsedThisMonth = Math.max(today.getDate(), 1);
+  const lastThirtyTotal = sumExpensesBetween(expenseTransactions, lastThirtyStart, today);
   const lastSevenDailyAverage = lastSevenTotal / 7;
-  const monthDailyAverage = currentMonthTotal / daysElapsedThisMonth;
+  const lastThirtyDailyAverage = lastThirtyTotal / 30;
 
-  const sevenVsMonthChange = calculateChangePercent(lastSevenDailyAverage, monthDailyAverage);
+  const sevenVsThirtyChange = calculateChangePercent(lastSevenDailyAverage, lastThirtyDailyAverage);
   const threeVsSixChange = calculateChangePercent(lastThreeAverage, lastSixAverage);
-  const currentVsThreeChange = calculateChangePercent(currentMonthTotal, lastThreeAverage);
+  const thirtyVsThreeChange = calculateChangePercent(lastThirtyTotal, lastThreeAverage);
   const primaryMovement =
-    sevenVsMonthChange != null ? sevenVsMonthChange : threeVsSixChange;
+    sevenVsThirtyChange != null ? sevenVsThirtyChange : threeVsSixChange;
 
   let status = t("analytics.buildingPattern");
   let tone = "neutral";
@@ -217,7 +239,7 @@ function buildSpendingPatternPulse(transactions, t) {
       ? t("analytics.unlockMovementSignals")
       : t("analytics.pulseNarrative", {
           sevenDayAverage: formatMoney(lastSevenDailyAverage),
-          monthAverage: formatMoney(monthDailyAverage),
+          monthAverage: formatMoney(lastThirtyDailyAverage),
           threeMonthAverage: formatMoney(lastThreeAverage),
           sixMonthAverage: formatMoney(lastSixAverage),
         });
@@ -229,13 +251,13 @@ function buildSpendingPatternPulse(transactions, t) {
     narrative,
     lastSevenTotal,
     lastSevenDailyAverage,
-    currentMonthTotal,
-    monthDailyAverage,
+    lastThirtyTotal,
+    lastThirtyDailyAverage,
     lastThreeAverage,
     lastSixAverage,
-    sevenVsMonthChange,
+    sevenVsThirtyChange,
     threeVsSixChange,
-    currentVsThreeChange,
+    thirtyVsThreeChange,
     chartData: monthKeys.map((monthKey, index) => ({
       month: formatShortMonth(monthKey),
       expenses: monthlyValues[index],
@@ -415,16 +437,12 @@ function AnalyticsPage() {
     setSelectedType("");
     setSelectedCategory("");
 
-    if (preset === "month") {
-      setStartDate("");
-      setEndDate("");
-      setSelectedMonth(today.toISOString().slice(0, 7));
-      return;
-    }
-
     const start = new Date(today);
     if (preset === "week") {
       start.setDate(today.getDate() - 6);
+    }
+    if (preset === "30d") {
+      start.setDate(today.getDate() - 29);
     }
     if (preset === "3m") {
       start.setMonth(today.getMonth() - 3);
@@ -525,8 +543,8 @@ function AnalyticsPage() {
 
             <div className="feature-guide-item">
               <span className="feature-step">{t("analytics.monthly")}</span>
-              <h3>{t("analytics.currentMonthControl")}</h3>
-              <p>{t("analytics.currentMonthDetail")}</p>
+              <h3>{t("analytics.rolling30DayControl")}</h3>
+              <p>{t("analytics.rolling30DayDetail")}</p>
             </div>
 
             <div className="feature-guide-item">
@@ -621,8 +639,8 @@ function AnalyticsPage() {
             <button type="button" className="secondary-button" onClick={() => applyDatePreset("week")}>
               {t("analytics.last7Days")}
             </button>
-            <button type="button" className="secondary-button" onClick={() => applyDatePreset("month")}>
-              {t("analytics.currentMonth")}
+            <button type="button" className="secondary-button" onClick={() => applyDatePreset("30d")}>
+              {t("analytics.last30Days")}
             </button>
             <button type="button" className="secondary-button" onClick={() => applyDatePreset("3m")}>
               {t("analytics.last3Months")}
@@ -679,17 +697,17 @@ function AnalyticsPage() {
               <p>
                 {t("analytics.dayAveragePace", {
                   amount: formatMoney(spendingPatternPulse.lastSevenDailyAverage),
-                  change: formatPercentChange(spendingPatternPulse.sevenVsMonthChange, t),
+                  change: formatPercentChange(spendingPatternPulse.sevenVsThirtyChange, t),
                 })}
               </p>
             </div>
 
             <div className="pattern-metric-card">
-              <span>{t("analytics.currentMonthShort")}</span>
-              <strong>{formatMoney(spendingPatternPulse.currentMonthTotal)}</strong>
+              <span>{t("analytics.last30DaysShort")}</span>
+              <strong>{formatMoney(spendingPatternPulse.lastThirtyTotal)}</strong>
               <p>
-                {t("analytics.monthToDateComparison", {
-                  change: formatPercentChange(spendingPatternPulse.currentVsThreeChange, t),
+                {t("analytics.last30Comparison", {
+                  change: formatPercentChange(spendingPatternPulse.thirtyVsThreeChange, t),
                 })}
               </p>
             </div>
