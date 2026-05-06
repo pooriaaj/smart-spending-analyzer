@@ -43,7 +43,18 @@ HEADER_ALIASES = {
 }
 
 CATEGORY_RULES = {
-    "salary": ["salary", "payroll", "paycheque", "paycheck", "deposit payroll"],
+    "salary": [
+        "salary",
+        "payroll",
+        "paycheque",
+        "paycheck",
+        "deposit payroll",
+        "direct deposit",
+        "pay/pay",
+        "pay pay",
+        "paie",
+        "cffa vendome",
+    ],
     "rent": ["rent", "lease", "landlord"],
     "groceries": ["grocery", "supermarket", "freshco", "nofrills", "costco", "walmart", "loblaws"],
     "transport": ["uber", "lyft", "ttc", "presto", "parking", "transit"],
@@ -488,6 +499,13 @@ def strip_statement_transaction_prefixes(value: str) -> str:
         ),
         (r"(?i)^online\s+banking\s+payment\s*-\s*\d+\s+", ""),
         (r"(?i)^atm\s+deposit\s*-\s*[a-z0-9]+\s*", "ATM deposit"),
+        (r"(?i)^achat\s+par\s+carte\s+de\s+d(?:è|é|e)bit,?\s*", ""),
+        (r"(?i)^d(?:è|é|e)p(?:ô|o)t\s+direct,?\s*", "Direct deposit "),
+        (r"(?i)^virement\s+interac\s+re(?:ç|c)u\s*", "Interac received "),
+        (r"(?i)^virement\s+interac\s+envoy(?:è|é|e)\s*", "Interac sent "),
+        (r"(?i)^r(?:è|e)gl\.\s+de\s+fact\.\s+en\s+ligne,?\s*(?:\d+\s*)?", "Online bill payment "),
+        (r"(?i)^virement\s+en\s+ligne,\s*tf\s+[a-z0-9#-]+\s*", "Online transfer "),
+        (r"(?i)^paiem(?:ent)?\s+periodiq(?:ue)?\s*", "Periodic payment "),
     )
 
     for pattern, replacement in replacements:
@@ -747,6 +765,45 @@ def save_category_memory(
         created += 1
 
     return {"created": created, "updated": updated}
+
+
+def apply_category_to_similar_transactions(
+    db: Session,
+    owner_id: int,
+    description: str,
+    category: str,
+    tx_type: str,
+) -> int:
+    normalized_category = normalize_category_name(category)
+    if not should_store_category_memory(normalized_category):
+        return 0
+
+    fingerprint = extract_merchant_fingerprint(description)
+    if not fingerprint:
+        return 0
+
+    merchant_key, _ = fingerprint
+    candidates = (
+        db.query(Transaction)
+        .filter(
+            Transaction.owner_id == owner_id,
+            Transaction.type == tx_type,
+        )
+        .all()
+    )
+
+    updated_count = 0
+    for transaction in candidates:
+        transaction_fingerprint = extract_merchant_fingerprint(transaction.description)
+        if not transaction_fingerprint or transaction_fingerprint[0] != merchant_key:
+            continue
+        if normalize_category_name(transaction.category) == normalized_category:
+            continue
+
+        transaction.category = normalized_category
+        updated_count += 1
+
+    return updated_count
 
 
 def sniff_csv_dialect(text: str) -> csv.Dialect:

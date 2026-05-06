@@ -527,9 +527,9 @@ const translations = {
       destinationDetail: "Select the account where imported transactions should go.",
       uploadFiles: "Upload Files",
       uploadFilesDetail:
-        "Upload up to {limit} CSV or PDF bank statements in one try. The app marks rows already written and lets you import only the missed transactions.",
+        "Upload CSV or PDF bank statements in one try. The app marks rows already written and lets you import only the missed transactions.",
       selectStatement:
-        "Select this month's statement to reconcile your daily entries. More than {limit} files in one batch is a Premium workflow.",
+        "Select this month's statements to reconcile your daily entries. If a category is unknown, teach one row and matching rows will update together.",
       chooseFiles: "Choose Files",
       processing: "Processing...",
       selectedFiles: "Selected files:",
@@ -568,7 +568,7 @@ const translations = {
         "Review the highlighted fields before confirming import. Invalid rows are blocked on the client now.",
       duplicatesFound: "{count} already written or duplicate row{plural}",
       duplicatesDetail:
-        "These rows matched your written transactions or another row in this preview. Keep them visible for review or remove them; the backend skips them during import.",
+        "These rows matched transactions already saved in your app. Keep them visible for review or remove them; the backend skips them during import.",
       confidenceChecks: "{count} confidence check{plural}",
       confidenceChecksDetail:
         "These rows need a quick review before they become import-ready. Edit the category, or approve it when the current label is correct.",
@@ -590,6 +590,7 @@ const translations = {
       addCategory: "add a category",
       manualSourceLine: "Added manually during review.",
       categoryEditedReason: "Reviewed or edited by you during import.",
+      categoryAppliedToSimilarReason: "Applied from your review to matching rows in this import.",
       categoryApprovedReason: "Reviewed and approved by you during import.",
       lowCategoryConfidenceReason:
         "Category confidence is low; verify this label before importing.",
@@ -600,7 +601,7 @@ const translations = {
       reasonIncomeRule: "Matched an income or deposit rule.",
       reasonNeedsTeaching:
         "No strong rule matched yet, so this row should teach the app through review.",
-      reasonAlreadyWritten: "This row looks already written or duplicated in this import.",
+      reasonAlreadyWritten: "This row looks already written in your saved transactions.",
       reasonConfidenceReview:
         "The parser wants a quick review before saving this row.",
       reasonCategoryReview:
@@ -612,19 +613,19 @@ const translations = {
       moreFiles: ", +{count} more",
       accountRequired: "Please select a specific account before importing a file.",
       premiumBatchError:
-        "Free users can upload up to {limit} bank statements in one try. Upgrade to Premium to import more at once.",
+        "Batch import could not process this upload. Try fewer files or check that each file is a supported CSV or PDF statement.",
       receiptBatchError:
         "Batch import supports CSV and PDF bank statements. Upload receipt images one at a time.",
       importFallbackFailed: "Import failed.",
       confirmPreviewFailed: "Failed to confirm preview import.",
       receiptSaved: "Scanned receipt transaction saved successfully.",
       saveReceiptFailed: "Failed to save scanned receipt.",
-      premiumBatchTitle: "Premium batch import",
-      premiumBatchItem1: "Free users can import {limit} statement files per batch.",
+      premiumBatchTitle: "Batch import",
+      premiumBatchItem1: "You can import multiple statement files in one batch.",
       premiumBatchItem2:
-        "Split larger uploads into smaller batches for now, or upgrade when Premium billing is enabled.",
+        "If a very large upload times out, split it into smaller batches and try again.",
       premiumBatchItem3:
-        "Premium will unlock larger statement batches for faster setup and deeper history building.",
+        "Receipt images still import one at a time so OCR review stays accurate.",
       tryNextTitle: "What to try next",
       ocrGuidance1:
         "The backend now tries free local OCR first for scanned or screenshot-style PDFs.",
@@ -1792,9 +1793,9 @@ const translations = {
       destinationDetail: "Sélectionnez le compte où les transactions importées doivent aller.",
       uploadFiles: "Importer des fichiers",
       uploadFilesDetail:
-        "Importez jusqu'à {limit} relevés bancaires CSV ou PDF en une fois. L'application marque les lignes déjà écrites et vous laisse importer seulement les transactions manquées.",
+        "Importez des relevés bancaires CSV ou PDF en une fois. L'application marque les lignes déjà écrites et vous laisse importer seulement les transactions manquées.",
       selectStatement:
-        "Sélectionnez le relevé de ce mois pour rapprocher vos entrées quotidiennes. Plus de {limit} fichiers par lot fait partie du forfait avancé.",
+        "Sélectionnez les relevés de ce mois pour rapprocher vos entrées quotidiennes. Si une catégorie est inconnue, corrigez une ligne et les lignes similaires seront mises à jour ensemble.",
       chooseFiles: "Choisir les fichiers",
       processing: "Traitement...",
       selectedFiles: "Fichiers sélectionnés:",
@@ -1833,7 +1834,7 @@ const translations = {
         "Vérifiez les champs surlignés avant de confirmer l'importation. Les lignes invalides sont bloquées côté client.",
       duplicatesFound: "{count} ligne{plural} déjà écrite{plural} ou doublon{plural}",
       duplicatesDetail:
-        "Ces lignes correspondent à vos transactions écrites ou à une autre ligne de l'aperçu. Gardez-les visibles ou retirez-les; le backend les ignore pendant l'importation.",
+        "Ces lignes correspondent à des transactions déjà enregistrées dans l'application. Gardez-les visibles ou retirez-les; le backend les ignore pendant l'importation.",
       confidenceChecks: "{count} vérification{plural} de confiance",
       confidenceChecksDetail:
         "Ces lignes ont besoin d'une vérification rapide avant d'être prêtes. Modifiez la catégorie ou approuvez-la si elle est correcte.",
@@ -1855,6 +1856,7 @@ const translations = {
       addCategory: "ajouter une catégorie",
       manualSourceLine: "Ajouté manuellement pendant la vérification.",
       categoryEditedReason: "Vérifié ou modifié par vous pendant l'importation.",
+      categoryAppliedToSimilarReason: "Appliqué depuis votre vérification aux lignes similaires de cet import.",
       categoryApprovedReason: "Vérifié et approuvé par vous pendant l'importation.",
       lowCategoryConfidenceReason:
         "La confiance de catégorie est faible; vérifiez cette étiquette avant l'importation.",
@@ -1865,7 +1867,7 @@ const translations = {
       reasonIncomeRule: "Correspond à une règle de revenu ou de dépôt.",
       reasonNeedsTeaching:
         "Aucune règle forte ne correspond encore; cette ligne doit entraîner l'application par revue.",
-      reasonAlreadyWritten: "Cette ligne semble déjà écrite ou dupliquée dans cet import.",
+      reasonAlreadyWritten: "Cette ligne semble déjà écrite dans vos transactions enregistrées.",
       reasonConfidenceReview:
         "Le parseur demande une vérification rapide avant l'enregistrement.",
       reasonCategoryReview:
@@ -1877,19 +1879,19 @@ const translations = {
       moreFiles: ", +{count} autres",
       accountRequired: "Veuillez sélectionner un compte précis avant d'importer un fichier.",
       premiumBatchError:
-        "Les utilisateurs gratuits peuvent importer jusqu'à {limit} relevés bancaires en une fois. Passez au forfait avancé pour en importer plus à la fois.",
+        "L'importation par lot n'a pas pu traiter ce téléversement. Essayez moins de fichiers ou vérifiez que chaque fichier est un relevé CSV ou PDF supporté.",
       receiptBatchError:
         "L'importation par lot accepte les relevés bancaires CSV et PDF. Importez les images de reçus une à la fois.",
       importFallbackFailed: "Échec de l'importation.",
       confirmPreviewFailed: "Impossible de confirmer l'importation de l'aperçu.",
       receiptSaved: "Transaction de reçu numérisée enregistrée avec succès.",
       saveReceiptFailed: "Impossible d'enregistrer le reçu numérisé.",
-      premiumBatchTitle: "Importation par lot avancée",
-      premiumBatchItem1: "Les utilisateurs gratuits peuvent importer {limit} fichiers de relevé par lot.",
+      premiumBatchTitle: "Importation par lot",
+      premiumBatchItem1: "Vous pouvez importer plusieurs fichiers de relevé dans un même lot.",
       premiumBatchItem2:
-        "Divisez les imports plus grands en petits lots pour l'instant, ou passez au forfait avancé lorsque la facturation sera activée.",
+        "Si un très gros téléversement expire, divisez-le en lots plus petits et réessayez.",
       premiumBatchItem3:
-        "Le forfait avancé débloquera de plus gros lots de relevés pour configurer plus vite et construire plus d'historique.",
+        "Les images de reçus restent importées une à la fois afin que la vérification OCR reste précise.",
       tryNextTitle: "À essayer ensuite",
       ocrGuidance1:
         "Le backend essaie maintenant l'OCR local gratuit d'abord pour les PDF scannés ou de type capture d'écran.",

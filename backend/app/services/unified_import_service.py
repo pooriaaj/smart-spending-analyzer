@@ -16,7 +16,6 @@ from app.services.transaction_service import (
     find_likely_statement_match,
     get_existing_duplicate_keys,
     get_existing_statement_match_map,
-    get_repeating_transaction_signal,
     parse_csv_statement_preview,
 )
 
@@ -24,7 +23,6 @@ from app.services.transaction_service import (
 IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp"}
 CSV_EXTENSIONS = {".csv"}
 PDF_EXTENSIONS = {".pdf"}
-FREE_BATCH_IMPORT_FILE_LIMIT = 6
 
 
 def annotate_preview_rows_for_duplicates(
@@ -35,8 +33,6 @@ def annotate_preview_rows_for_duplicates(
 ) -> list[StatementPreviewRow]:
     existing_keys = get_existing_duplicate_keys(db, owner_id, account_id=account_id)
     existing_statement_matches = get_existing_statement_match_map(db, owner_id, account_id=account_id)
-    seen_in_preview: set[tuple] = set()
-    seen_statement_matches: set[tuple] = set()
     seen_matched_transaction_ids: set[int] = set()
     annotated_rows: list[StatementPreviewRow] = []
 
@@ -83,9 +79,6 @@ def annotate_preview_rows_for_duplicates(
         elif statement_match_key in existing_statement_matches:
             matched_transaction = existing_statement_matches[statement_match_key]
             duplicate_reason = f"Already written as {matched_transaction.description}."
-        elif duplicate_key in seen_in_preview or statement_match_key in seen_statement_matches:
-            matched_transaction = None
-            duplicate_reason = "Duplicate of another row in this preview."
         else:
             matched_transaction = find_likely_statement_match(
                 db=db,
@@ -109,17 +102,6 @@ def annotate_preview_rows_for_duplicates(
         elif duplicate_reason == "Already written in this account.":
             reconciliation_status = "matched"
 
-        seen_in_preview.add(duplicate_key)
-        seen_statement_matches.add(statement_match_key)
-        repeating_signal = get_repeating_transaction_signal(
-            db=db,
-            owner_id=owner_id,
-            account_id=account_id,
-            description=row.description,
-            tx_type=row.type,
-            amount=row.amount,
-            tx_date=tx_date,
-        )
         annotated_rows.append(
             row.model_copy(
                 update={
@@ -129,7 +111,6 @@ def annotate_preview_rows_for_duplicates(
                     "reconciliation_status": reconciliation_status,
                     "reconciliation_reason": duplicate_reason
                     or "Not found in your written transactions yet.",
-                    **(repeating_signal or {}),
                 }
             )
         )
@@ -271,12 +252,6 @@ def process_smart_import_batch(
 ) -> dict[str, Any]:
     if not files:
         raise ValueError("Select at least one statement file to import.")
-
-    if len(files) > FREE_BATCH_IMPORT_FILE_LIMIT:
-        raise ValueError(
-            f"Free batch imports support up to {FREE_BATCH_IMPORT_FILE_LIMIT} bank statements at once. "
-            "Upgrade to Premium to import more statements in one try."
-        )
 
     detected_types = [
         detect_import_type(filename, content_type)

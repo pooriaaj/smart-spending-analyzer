@@ -193,6 +193,7 @@ GENERIC_BALANCE_MARKERS = (
     "solde total",
     "solde des montants",
     "totaux a la fermeture",
+    "total des montants",
 )
 HEADER_ONLY_WORDS = {
     "account",
@@ -236,6 +237,7 @@ class StatementProfile:
     extra_noise_prefixes: tuple[str, ...] = ()
     extra_balance_markers: tuple[str, ...] = ()
     match_all_markers: bool = False
+    balance_delta_type_inference: bool = False
 
 
 @dataclass(frozen=True)
@@ -315,8 +317,10 @@ STATEMENT_PROFILES = (
             "solde d'ouverture",
             "solde de fermeture",
             "solde de cloture",
+            "totaux a la fermeture",
         ),
         match_all_markers=True,
+        balance_delta_type_inference=True,
     ),
 )
 GENERIC_STATEMENT_PROFILE = StatementProfile(
@@ -871,8 +875,12 @@ def clean_statement_description(value: str) -> str:
             "Online bill payment ",
         ),
         (
-            r"(?i)^virement\s+en\s+ligne,\s*tf\s+\d+\s*",
+            r"(?i)^virement\s+en\s+ligne,\s*tf\s+[a-z0-9#-]+\s*",
             "Online transfer ",
+        ),
+        (
+            r"(?i)^paiem(?:ent)?\s+periodiq(?:ue)?\s*",
+            "Periodic payment ",
         ),
     )
 
@@ -882,6 +890,11 @@ def clean_statement_description(value: str) -> str:
     cleaned = re.sub(
         r"(?i)\b(e-transfer\s+received\s+[A-Z][A-Z\s.'-]*?)\s+CA[a-z0-9]+\b",
         r"\1",
+        cleaned,
+    )
+    cleaned = re.sub(
+        r"(?i)\b\d{1,2}\s*(?:jan|feb|fev|f[e\u00e9]v|mar|apr|avr|may|mai|jun|jui|jul|aug|aou|ao[u\u00fb]|sep|oct|nov|dec|d[e\u00e9]c)\s*\d{4},?\s*",
+        " ",
         cleaned,
     )
     cleaned = re.sub(r"(?i)\s+PRES/[A-Z0-9]+\b", "", cleaned)
@@ -1103,6 +1116,35 @@ def parse_amount_token(value: str) -> float | None:
     return parsed
 
 
+def values_match(left: float, right: float, tolerance: float = 0.02) -> bool:
+    return abs(left - right) <= tolerance
+
+
+def extract_last_amount_from_line(line: str) -> float | None:
+    _, trailing_amounts = split_line_and_trailing_amounts(line)
+    if not trailing_amounts:
+        return None
+    return parse_amount_token(trailing_amounts[-1])
+
+
+def infer_type_from_running_balance(
+    amount: float,
+    previous_balance: float | None,
+    current_balance: float | None,
+) -> str | None:
+    if previous_balance is None or current_balance is None:
+        return None
+
+    delta = current_balance - previous_balance
+    if values_match(abs(delta), abs(amount)):
+        if delta > 0:
+            return "income"
+        if delta < 0:
+            return "expense"
+
+    return None
+
+
 def split_line_and_trailing_amounts(line: str) -> tuple[str, list[str]]:
     body = line.strip()
     trailing_amounts_reversed: list[str] = []
@@ -1319,6 +1361,13 @@ def extract_transaction_date_from_line(
 def build_profile_notes(profile: StatementProfile) -> list[str]:
     if profile.profile_id == "rbc":
         return ["Detected bank profile: RBC. Using RBC-tuned parser."]
+    if profile.balance_delta_type_inference:
+        return [
+            (
+                f"Detected bank profile: {profile.display_name}. Using running-balance "
+                "checks to infer income vs expense direction."
+            )
+        ]
     if profile.profile_id == "generic":
         return ["Used generic PDF parser. Accuracy may vary for this bank format."]
     return [
@@ -1425,35 +1474,51 @@ def finalize_pending_transaction(
     description_parts: list[str],
     trailing_amounts: list[str],
     preview_rows: list[StatementPreviewRow],
-) -> None:
+    previous_balance: float | None = None,
+    profile: StatementProfile | None = None,
+) -> float | None:
     if not current_date or not description_parts or not trailing_amounts:
-        return
+        return None
 
     raw_description = clean_description_line(" ".join(part for part in description_parts if part))
     if not raw_description:
-        return
+        return None
 
     if looks_like_balance_only_line(raw_description):
-        return
+        return None
 
     description = clean_statement_description(raw_description)
     if is_statement_disclosure_description(description):
-        return
+        return None
 
     amount_text_1, amount_text_2, explicit_type = resolve_trailing_amount_columns(trailing_amounts)
     if not amount_text_1:
-        return
+        return None
 
     amount = parse_amount_token(amount_text_1)
     if amount is None:
-        return
+        return None
 
-    tx_type = explicit_type or resolve_transaction_type(amount_text_1, raw_description)
+    balance_amount = parse_amount_token(amount_text_2) if amount_text_2 else None
+    balance_inferred_type: str | None = None
+    if profile and profile.balance_delta_type_inference:
+        balance_inferred_type = infer_type_from_running_balance(
+            amount=amount,
+            previous_balance=previous_balance,
+            current_balance=balance_amount,
+        )
+        if balance_inferred_type == "income":
+            amount = abs(amount)
+        elif balance_inferred_type == "expense":
+            amount = -abs(amount)
+
+    resolved_explicit_type = balance_inferred_type or explicit_type
+    tx_type = resolved_explicit_type or resolve_transaction_type(amount_text_1, raw_description)
     confidence, review_reason = build_preview_row_review_metadata(
         trailing_amounts=trailing_amounts,
         amount_text=amount_text_1,
         balance_text=amount_text_2,
-        explicit_type=explicit_type,
+        explicit_type=resolved_explicit_type,
         description=raw_description,
         tx_type=tx_type,
     )
@@ -1490,6 +1555,8 @@ def finalize_pending_transaction(
         )
     )
 
+    return balance_amount
+
 
 def parse_rbc_statement_preview(
     db: Session,
@@ -1513,6 +1580,7 @@ def parse_rbc_statement_preview(
 
     current_date: date | None = None
     description_parts: list[str] = []
+    running_balance: float | None = None
 
     for raw_line in lines:
         line = raw_line.strip()
@@ -1522,6 +1590,9 @@ def parse_rbc_statement_preview(
             continue
 
         if looks_like_balance_only_line(line, extra_balance_markers=profile.extra_balance_markers):
+            line_balance = extract_last_amount_from_line(line)
+            if line_balance is not None:
+                running_balance = line_balance
             current_date = None
             description_parts = []
             continue
@@ -1559,14 +1630,18 @@ def parse_rbc_statement_preview(
             if body:
                 description_parts.append(body)
 
-            finalize_pending_transaction(
+            next_balance = finalize_pending_transaction(
                 db=db,
                 owner_id=owner_id,
                 current_date=current_date,
                 description_parts=description_parts,
                 trailing_amounts=trailing_amounts,
                 preview_rows=preview_rows,
+                previous_balance=running_balance,
+                profile=profile,
             )
+            if next_balance is not None:
+                running_balance = next_balance
 
             description_parts = []
             continue
@@ -1649,12 +1724,16 @@ def parse_pdf_statement_preview(
     fallback_year = extract_statement_year(text)
     current_date: date | None = None
     description_parts: list[str] = []
+    running_balance: float | None = None
 
     for line in lines:
         if is_noise_line(line, extra_noise_prefixes=profile.extra_noise_prefixes) or looks_like_balance_only_line(
             line,
             extra_balance_markers=profile.extra_balance_markers,
         ):
+            line_balance = extract_last_amount_from_line(line)
+            if line_balance is not None:
+                running_balance = line_balance
             current_date = None
             description_parts = []
             continue
@@ -1691,14 +1770,18 @@ def parse_pdf_statement_preview(
             if body:
                 description_parts.append(body)
 
-            finalize_pending_transaction(
+            next_balance = finalize_pending_transaction(
                 db=db,
                 owner_id=owner_id,
                 current_date=current_date,
                 description_parts=description_parts,
                 trailing_amounts=trailing_amounts,
                 preview_rows=preview_rows,
+                previous_balance=running_balance,
+                profile=profile,
             )
+            if next_balance is not None:
+                running_balance = next_balance
 
             description_parts = []
             continue

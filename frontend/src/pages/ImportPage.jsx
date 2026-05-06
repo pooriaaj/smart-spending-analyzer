@@ -6,9 +6,45 @@ import { ALL_ACCOUNTS_VALUE } from "../services/accountStorage";
 import { useLanguage } from "../i18n/LanguageContext";
 
 const ALLOWED_TRANSACTION_TYPES = new Set(["expense", "income"]);
-const FREE_BATCH_IMPORT_FILE_LIMIT = 6;
 const RECEIPT_IMAGE_EXTENSIONS = new Set(["jpg", "jpeg", "png", "webp"]);
 const todayIsoDate = () => new Date().toISOString().slice(0, 10);
+const MERCHANT_ALIAS_PATTERNS = [
+  [/sqdc\d*/i, "sqdc"],
+  [/orange\s+mart/i, "orange mart"],
+  [/hazelview\s+prop/i, "hazelview prop"],
+  [/apple\.?com\/?bill/i, "apple com bill"],
+  [/tim\s*hortons?/i, "tim hortons"],
+  [/mcdonald'?s?/i, "mcdonalds"],
+  [/supermarche\s+pa/i, "supermarche pa"],
+  [/pharmaprix/i, "pharmaprix"],
+  [/depanneur\s+macka/i, "depanneur macka"],
+  [/concordiau|concordia\s+u/i, "concordia university"],
+  [/stm\s+angrignon|(?:^|\s)stm(?:\s|$)/i, "stm"],
+  [/smoke\s+king/i, "smoke king"],
+];
+const MERCHANT_NOISE_WORDS = new Set([
+  "achat",
+  "amount",
+  "balance",
+  "card",
+  "carte",
+  "contactless",
+  "de",
+  "debit",
+  "interac",
+  "ligne",
+  "mtl",
+  "online",
+  "paiem",
+  "payment",
+  "periodic",
+  "periodiq",
+  "purchase",
+  "regl",
+  "source",
+  "tf",
+  "virement",
+]);
 
 const isValidIsoDate = (value) => {
   if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) {
@@ -78,18 +114,29 @@ const buildManualPreviewRow = (fallbackDate, t) => ({
   duplicate_reason: null,
 });
 
-const buildPreviewDuplicateKey = (row, validation) => {
-  if (validation.messages.length > 0) {
-    return null;
+const normalizeMerchantText = (value = "") =>
+  String(value || "")
+    .toLowerCase()
+    .replace(/&/g, " and ")
+    .replace(/[^a-z0-9 ]+/g, " ")
+    .replace(/\b\d+[a-z]*\b/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+const getPreviewSimilarityKey = (row) => {
+  const candidateText = `${row.description || ""} ${row.source_line || ""}`;
+  for (const [pattern, alias] of MERCHANT_ALIAS_PATTERNS) {
+    if (pattern.test(candidateText)) {
+      return `${row.type || "expense"}:${alias}`;
+    }
   }
 
-  return JSON.stringify({
-    date: row.date,
-    description: row.description.trim().toLowerCase(),
-    amount: Number(row.amount).toFixed(2),
-    type: row.type.trim().toLowerCase(),
-    category: row.category.trim().toLowerCase(),
-  });
+  const tokens = normalizeMerchantText(candidateText)
+    .split(" ")
+    .filter((token) => token.length >= 3 && !MERCHANT_NOISE_WORDS.has(token));
+
+  if (tokens.length === 0) return "";
+  return `${row.type || "expense"}:${tokens.slice(0, 2).join(" ")}`;
 };
 
 const getPreviewRowConfidence = (row) => {
@@ -195,7 +242,7 @@ function ImportPage() {
       return {
         title: t("import.premiumBatchTitle"),
         items: [
-          t("import.premiumBatchItem1", { limit: FREE_BATCH_IMPORT_FILE_LIMIT }),
+          t("import.premiumBatchItem1"),
           t("import.premiumBatchItem2"),
           t("import.premiumBatchItem3"),
         ],
@@ -248,17 +295,6 @@ function ImportPage() {
   const detectedPreviewRows = importResult?.status === "table_review" ? importResult.preview_rows || [] : [];
   const removedPreviewCount = Math.max(detectedPreviewRows.length - previewRows.length, 0);
   const previewRowValidations = previewRows.map((row) => validatePreviewRow(row, t));
-  const previewDuplicateCounts = previewRows.reduce((counts, row, index) => {
-    const duplicateKey = buildPreviewDuplicateKey(row, previewRowValidations[index]);
-    if (!duplicateKey) {
-      return counts;
-    }
-
-    return {
-      ...counts,
-      [duplicateKey]: (counts[duplicateKey] || 0) + 1,
-    };
-  }, {});
   const previewRowItems = previewRows.map((row, index) => {
     const confidence = getPreviewRowConfidence(row);
     const categoryConfidence = getPreviewCategoryConfidence(row);
@@ -292,13 +328,7 @@ function ImportPage() {
       duplicateReason:
         row.is_duplicate && row.duplicate_reason
           ? formatPreviewReason(row.duplicate_reason, t, "import.reasonAlreadyWritten")
-          : (() => {
-              const duplicateKey = buildPreviewDuplicateKey(row, previewRowValidations[index]);
-              if (duplicateKey && previewDuplicateCounts[duplicateKey] > 1) {
-                return t("import.duplicatePreviewReason");
-              }
-              return null;
-            })(),
+          : null,
     };
   });
   const invalidPreviewRowCount = previewRowValidations.filter(
@@ -314,9 +344,6 @@ function ImportPage() {
   const importReadyPreviewRowCount = previewRowItems.filter(
     ({ duplicateReason, validation, categoryReviewRequired }) =>
       !duplicateReason && validation.messages.length === 0 && !categoryReviewRequired
-  ).length;
-  const repeatingPreviewRowCount = previewRowItems.filter(
-    (item) => item.row.is_repeating_pattern
   ).length;
   const confidencePreviewRowCount = previewRowItems.filter(
     (item) => item.confidenceReason
@@ -337,9 +364,6 @@ function ImportPage() {
       }
       if (previewFilter === "duplicates") {
         return Boolean(duplicateReason);
-      }
-      if (previewFilter === "repeating") {
-        return Boolean(row.is_repeating_pattern);
       }
       if (previewFilter === "confidence") {
         return Boolean(confidenceReason || categoryReviewRequired);
@@ -367,16 +391,6 @@ function ImportPage() {
 
     if (!normalizedAccountId) {
       setError(t("import.accountRequired"));
-      event.target.value = "";
-      return;
-    }
-
-    if (selectedFiles.length > FREE_BATCH_IMPORT_FILE_LIMIT) {
-      setSelectedFileName(formatSelectedFilesLabel(selectedFiles, t));
-      setImportResult(null);
-      setPreviewRows([]);
-      setReceiptDraft(null);
-      setError(t("import.premiumBatchError", { limit: FREE_BATCH_IMPORT_FILE_LIMIT }));
       event.target.value = "";
       return;
     }
@@ -440,37 +454,50 @@ function ImportPage() {
   };
 
   const handlePreviewRowChange = (index, field, value) => {
-    setPreviewRows((prev) =>
-      prev.map((row, rowIndex) =>
-        rowIndex === index
-          ? {
-              ...row,
-              [field]: field === "amount" ? (value === "" ? "" : Number(value)) : value,
-              ...(field === "category"
-                ? {
-                    category_review_required: false,
-                    category_review_reason: null,
-                    category_confidence: 1,
-                    category_source: "user_review",
-                    category_reason: t("import.categoryEditedReason"),
-                  }
-                : {}),
-              is_duplicate: false,
-              duplicate_reason: null,
-              matched_transaction_id: null,
-              reconciliation_status: "missing",
-              reconciliation_reason: null,
-              is_repeating_pattern: false,
-              repeating_pattern_type: null,
-              repeating_pattern_reason: null,
-              repeating_pattern_occurrences: 0,
-              repeating_pattern_average_amount: null,
-              repeating_pattern_cadence: null,
-              repeating_pattern_confidence: null,
-            }
-          : row
-      )
-    );
+    setPreviewRows((prev) => {
+      const editedRow = prev[index];
+      const normalizedValue = field === "amount" ? (value === "" ? "" : Number(value)) : value;
+      const similarityKey = field === "category" && editedRow ? getPreviewSimilarityKey(editedRow) : "";
+
+      return prev.map((row, rowIndex) => {
+        const shouldApplyToSimilar =
+          field === "category" &&
+          similarityKey &&
+          rowIndex !== index &&
+          getPreviewSimilarityKey(row) === similarityKey;
+        if (rowIndex !== index && !shouldApplyToSimilar) {
+          return row;
+        }
+
+        return {
+          ...row,
+          [field]: normalizedValue,
+          ...(field === "category"
+            ? {
+                category_review_required: false,
+                category_review_reason: null,
+                category_confidence: 1,
+                category_source: shouldApplyToSimilar ? "user_review_similar" : "user_review",
+                category_reason: shouldApplyToSimilar
+                  ? t("import.categoryAppliedToSimilarReason")
+                  : t("import.categoryEditedReason"),
+              }
+            : {}),
+          is_duplicate: false,
+          duplicate_reason: null,
+          matched_transaction_id: null,
+          reconciliation_status: "missing",
+          reconciliation_reason: null,
+          is_repeating_pattern: false,
+          repeating_pattern_type: null,
+          repeating_pattern_reason: null,
+          repeating_pattern_occurrences: 0,
+          repeating_pattern_average_amount: null,
+          repeating_pattern_cadence: null,
+          repeating_pattern_confidence: null,
+        };
+      });
+    });
   };
 
   const handleApprovePreviewCategory = (index) => {
@@ -638,7 +665,7 @@ function ImportPage() {
         <div className="dashboard-card large-card">
           <div className="section-header">
             <h2>{t("import.uploadFiles")}</h2>
-            <p>{t("import.uploadFilesDetail", { limit: FREE_BATCH_IMPORT_FILE_LIMIT })}</p>
+            <p>{t("import.uploadFilesDetail")}</p>
           </div>
 
           <div className="import-upload-card">
@@ -655,7 +682,7 @@ function ImportPage() {
             <div className="import-upload-top">
               <div>
                 <h3>{t("common.smartImport")}</h3>
-                <p>{t("import.selectStatement", { limit: FREE_BATCH_IMPORT_FILE_LIMIT })}</p>
+                <p>{t("import.selectStatement")}</p>
               </div>
 
               <button
@@ -892,11 +919,6 @@ function ImportPage() {
                         readyCount: importReadyPreviewRowCount,
                         readyPlural: importReadyPreviewRowCount === 1 ? "" : "s",
                       })
-                    : repeatingPreviewRowCount > 0
-                    ? t("import.summaryRepeating", {
-                        count: repeatingPreviewRowCount,
-                        plural: repeatingPreviewRowCount === 1 ? "" : "s",
-                      })
                     : confidencePreviewRowCount > 0
                     ? t("import.summaryConfidence", {
                         count: confidencePreviewRowCount,
@@ -988,10 +1010,6 @@ function ImportPage() {
                 <strong>{matchedPreviewRowCount}</strong>
               </div>
               <div className="import-preview-stat-card">
-                <span className="import-preview-stat-label">{t("common.repeating")}</span>
-                <strong>{repeatingPreviewRowCount}</strong>
-              </div>
-              <div className="import-preview-stat-card">
                 <span className="import-preview-stat-label">{t("common.confidence")}</span>
                 <strong>{confidencePreviewRowCount}</strong>
               </div>
@@ -1036,13 +1054,6 @@ function ImportPage() {
               </button>
               <button
                 type="button"
-                className={`import-filter-chip ${previewFilter === "repeating" ? "import-filter-chip-active" : ""}`}
-                onClick={() => setPreviewFilter("repeating")}
-              >
-                {t("import.repeatingRows", { count: repeatingPreviewRowCount })}
-              </button>
-              <button
-                type="button"
                 className={`import-filter-chip ${previewFilter === "confidence" ? "import-filter-chip-active" : ""}`}
                 onClick={() => setPreviewFilter("confidence")}
               >
@@ -1083,18 +1094,6 @@ function ImportPage() {
                   })}
                 </strong>
                 <p>{t("import.confidenceChecksDetail")}</p>
-              </div>
-            )}
-
-            {repeatingPreviewRowCount > 0 && (
-              <div className="import-info-box">
-                <strong>
-                  {t("import.repeatingPatternsDetected", {
-                    count: repeatingPreviewRowCount,
-                    plural: repeatingPreviewRowCount === 1 ? "" : "s",
-                  })}
-                </strong>
-                <p>{t("import.repeatingPatternsDetail")}</p>
               </div>
             )}
 
@@ -1168,11 +1167,6 @@ function ImportPage() {
                               {duplicateReason && (
                                 <div className="import-duplicate-note">{duplicateReason}</div>
                               )}
-                              {row.repeating_pattern_reason && (
-                                <div className="import-confidence-note">
-                                  {t("import.repeatingPatternReason")}
-                                </div>
-                              )}
                               {validation.messages.length > 0 && (
                                 <div className="import-row-issues">
                                   {t("import.needsReviewInline", { issues: validation.messages.join(", ") })}
@@ -1238,11 +1232,6 @@ function ImportPage() {
                               {confidenceReason && (
                                 <span className="import-row-status import-row-status-confidence">
                                   {categoryReviewRequired ? t("import.reviewCategory") : t("import.checkParser")}
-                                </span>
-                              )}
-                              {row.is_repeating_pattern && (
-                                <span className="import-row-status import-row-status-confidence">
-                                  {t("import.repeatingType", { type: row.repeating_pattern_type })}
                                 </span>
                               )}
                               {validation.messages.length > 0 && (

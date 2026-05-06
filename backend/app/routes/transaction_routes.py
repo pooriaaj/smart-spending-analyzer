@@ -36,9 +36,12 @@ from app.services.transaction_service import (
     normalize_existing_categories_for_user,
     normalize_description,
     resolve_import_category_for_transaction,
+    apply_category_to_similar_transactions,
+    extract_merchant_fingerprint,
     save_category_memory,
+    should_store_category_memory,
 )
-from app.services.unified_import_service import FREE_BATCH_IMPORT_FILE_LIMIT, process_smart_import, process_smart_import_batch
+from app.services.unified_import_service import process_smart_import, process_smart_import_batch
 
 router = APIRouter(prefix="/transactions", tags=["Transactions"])
 
@@ -152,6 +155,13 @@ def update_transaction(
     transaction.type = updated_data.type
     transaction.account_id = updated_data.account_id
 
+    apply_category_to_similar_transactions(
+        db=db,
+        owner_id=current_user.id,
+        description=updated_data.description,
+        category=updated_data.category,
+        tx_type=updated_data.type,
+    )
     db.commit()
     db.refresh(transaction)
 
@@ -281,15 +291,6 @@ async def smart_import_files(
     if not account:
         raise HTTPException(status_code=404, detail="Account not found")
 
-    if len(files) > FREE_BATCH_IMPORT_FILE_LIMIT:
-        raise HTTPException(
-            status_code=402,
-            detail=(
-                f"Free batch imports support up to {FREE_BATCH_IMPORT_FILE_LIMIT} bank statements at once. "
-                "Upgrade to Premium to import more statements in one try."
-            ),
-        )
-
     try:
         file_payloads = [
             (await file.read(), file.filename or "statement", file.content_type)
@@ -329,9 +330,17 @@ def confirm_preview_import(
         owner_id=current_user.id,
         account_id=payload.account_id,
     )
-    seen_in_request = set()
-    seen_statement_matches = set()
     seen_matched_transaction_ids = set()
+    reviewed_categories_by_merchant: dict[tuple[str, str], str] = {}
+
+    for row in payload.rows:
+        normalized_row_category = normalize_category_name(row.category)
+        if row.category_review_required or not should_store_category_memory(normalized_row_category):
+            continue
+
+        fingerprint = extract_merchant_fingerprint(row.description)
+        if fingerprint:
+            reviewed_categories_by_merchant[(fingerprint[0], row.type)] = normalized_row_category
 
     imported = 0
     duplicates_skipped = 0
@@ -342,15 +351,27 @@ def confirm_preview_import(
         try:
             tx_date = date.fromisoformat(row.date)
             description = normalize_description(row.description)
+            row_category = row.category
+            row_needs_category_review = row.category_review_required
+            fingerprint = extract_merchant_fingerprint(description)
+            if fingerprint:
+                learned_category = reviewed_categories_by_merchant.get((fingerprint[0], row.type))
+                if learned_category and (
+                    row_needs_category_review
+                    or not should_store_category_memory(normalize_category_name(row_category))
+                ):
+                    row_category = learned_category
+                    row_needs_category_review = False
+
             normalized_category = resolve_import_category_for_transaction(
                 db=db,
                 owner_id=current_user.id,
                 description=description,
                 tx_type=row.type,
-                category=row.category,
+                category=row_category,
             )
 
-            if row.category_review_required:
+            if row_needs_category_review:
                 invalid_rows_skipped += 1
                 continue
 
@@ -373,9 +394,7 @@ def confirm_preview_import(
 
             if (
                 duplicate_key in existing_keys
-                or duplicate_key in seen_in_request
                 or statement_match_key in existing_statement_matches
-                or statement_match_key in seen_statement_matches
             ):
                 duplicates_skipped += 1
                 continue
@@ -395,9 +414,6 @@ def confirm_preview_import(
             if likely_match:
                 duplicates_skipped += 1
                 continue
-
-            seen_in_request.add(duplicate_key)
-            seen_statement_matches.add(statement_match_key)
 
             transaction = Transaction(
                 amount=row.amount,

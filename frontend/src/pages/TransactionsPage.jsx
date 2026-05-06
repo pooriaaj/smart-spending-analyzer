@@ -9,7 +9,7 @@ import {
   setSelectedAccountId as persistSelectedAccountId,
 } from "../services/accountStorage";
 import { useLanguage } from "../i18n/LanguageContext";
-import { formatCategoryLabel, formatRecurringReviewReason } from "../utils/displayLabels";
+import { formatCategoryLabel } from "../utils/displayLabels";
 
 const getCurrentMonthStart = () => {
   const now = new Date();
@@ -149,7 +149,7 @@ function TransactionsPage() {
     setCategoryFilter(searchParams.get("category") || "");
     setSearchFilter(searchParams.get("description") || "");
     setAmountRangeFilter(searchParams.get("amountRange") || "");
-    setRecurringOnlyFilter(searchParams.get("section") === "recurring");
+    setRecurringOnlyFilter(false);
   }, [searchParams]);
 
   const fetchTransactions = useCallback(async () => {
@@ -227,9 +227,7 @@ function TransactionsPage() {
       .filter((transaction) => {
         const transactionMonth = new Date(transaction.date).toISOString().slice(0, 7);
         const normalizedDescription = normalizeTextForMatching(transaction.description);
-        const recurringDescription = normalizeRecurringDescription(transaction.description);
         const normalizedSearch = normalizeTextForMatching(searchFilter);
-        const recurringSearch = normalizeRecurringDescription(searchFilter);
         const selectedAmountRange = AMOUNT_RANGE_OPTIONS.find(
           (option) => option.value === amountRangeFilter
         );
@@ -249,12 +247,10 @@ function TransactionsPage() {
         }
         if (
           searchFilter &&
-          !normalizedDescription.includes(normalizedSearch) &&
-          recurringDescription !== recurringSearch
+          !normalizedDescription.includes(normalizedSearch)
         ) {
           return false;
         }
-        if (recurringOnlyFilter && !recurringDescriptionKeys.has(recurringDescription)) return false;
 
         return true;
       })
@@ -266,8 +262,6 @@ function TransactionsPage() {
     categoryFilter,
     searchFilter,
     amountRangeFilter,
-    recurringOnlyFilter,
-    recurringDescriptionKeys,
   ]);
 
   const totalPages = Math.max(
@@ -294,7 +288,6 @@ function TransactionsPage() {
     categoryFilter,
     searchFilter,
     amountRangeFilter,
-    recurringOnlyFilter,
     selectedAccountId,
   ]);
 
@@ -304,13 +297,6 @@ function TransactionsPage() {
     }
   }, [currentPage, totalPages]);
 
-  const applyRecurringFilter = (item) => {
-    setSearchFilter(item.description || "");
-    setRecurringOnlyFilter(true);
-    setTypeFilter(item.type || "expense");
-    setCategoryFilter(item.category || "");
-  };
-
   const clearFilters = () => {
     setTypeFilter("");
     setMonthFilter("");
@@ -319,12 +305,6 @@ function TransactionsPage() {
     setAmountRangeFilter("");
     setRecurringOnlyFilter(false);
     setCurrentPage(1);
-  };
-
-  const getRecurringPriorityClass = (priority) => {
-    if (priority === "high") return "budget-status budget-status-over";
-    if (priority === "medium") return "budget-status budget-status-risk";
-    return "budget-status budget-status-on-track";
   };
 
   const handleDelete = async (transactionId) => {
@@ -656,106 +636,6 @@ function TransactionsPage() {
 
         <div className="filter-card">
           <div className="section-header">
-            <h2>{t("transactions.repeatingPatterns")}</h2>
-            <p>{t("transactions.repeatingPatternsDetail")}</p>
-          </div>
-
-          {recurringPatterns.length === 0 ? (
-            <div className="empty-state">
-              <p>{t("transactions.noRecurringPatterns")}</p>
-            </div>
-          ) : (
-            <div className="recurring-charges-grid">
-              {recurringPatterns.map((item) => {
-                const displayName = cleanRecurringDisplayName(item.description);
-                const typeLabel = item.type === "income" ? t("common.income") : t("common.expense");
-                const categoryLabel = formatCategoryLabel(item.category, t);
-
-                return (
-                  <div key={`${item.description}-${item.latest_date}`} className="recurring-charge-card">
-                    <div className="recurring-charge-top">
-                      <div>
-                        <h3>{displayName}</h3>
-                        <p>
-                          {typeLabel}
-                          {categoryLabel.toLowerCase() !== typeLabel.toLowerCase()
-                            ? ` | ${categoryLabel}`
-                            : ""}
-                        </p>
-                      </div>
-                      <div className="recurring-charge-badges">
-                        <span className={getRecurringPriorityClass(item.review_priority)}>
-                          {item.review_priority === "high"
-                            ? t("transactions.reviewFirst")
-                            : item.review_priority === "medium"
-                              ? t("transactions.worthReviewing")
-                              : t("transactions.stable")}
-                        </span>
-                        <span className="budget-status budget-status-risk">
-                          {t("transactions.matchPercent", {
-                            percent: Math.round(Number(item.confidence || 0) * 100),
-                          })}
-                        </span>
-                      </div>
-                    </div>
-
-                    <div className="recurring-charge-metrics">
-                      <div>
-                        <span>{t("transactions.average")}</span>
-                        <strong>${Number(item.average_amount || 0).toFixed(2)}</strong>
-                      </div>
-                      <div>
-                        <span>{t("transactions.annualized")}</span>
-                        <strong>${Number(item.annualized_amount || 0).toFixed(2)}</strong>
-                      </div>
-                      <div>
-                        <span>{t("transactions.occurrences")}</span>
-                        <strong>{item.occurrences}</strong>
-                      </div>
-                    </div>
-
-                    <p className="budget-inline-note">
-                      {t("transactions.latestTransaction", {
-                        type: item.type === "income" ? t("common.income").toLowerCase() : t("common.expense").toLowerCase(),
-                        amount: Number(item.latest_amount || 0).toFixed(2),
-                        date: item.latest_date,
-                      })}
-                    </p>
-                    {item.next_expected_date && (
-                      <p className="budget-inline-note">
-                        {t("transactions.nextExpected", { date: item.next_expected_date })}
-                      </p>
-                    )}
-                    {item.latest_change_percent != null && (
-                      <p className="budget-inline-note">
-                        {t("transactions.latestChange", {
-                          change: `${item.latest_change_percent > 0 ? "+" : ""}${Number(item.latest_change_percent).toFixed(1)}`,
-                        })}
-                      </p>
-                    )}
-                    {item.review_reason && (
-                      <p className="recurring-charge-reason">
-                        {formatRecurringReviewReason(item, t)}
-                      </p>
-                    )}
-                    <div className="recurring-charge-actions">
-                      <button
-                        type="button"
-                        className="secondary-button recurring-charge-action"
-                        onClick={() => applyRecurringFilter(item)}
-                      >
-                        {t("transactions.showMatchingTransactions")}
-                      </button>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
-
-        <div className="filter-card">
-          <div className="section-header">
             <h2>{t("transactions.smartCategorization")}</h2>
             <p>{t("transactions.smartCategorizationDetail")}</p>
           </div>
@@ -912,35 +792,20 @@ function TransactionsPage() {
           </div>
 
           <div className="smart-actions-row recurring-filter-actions">
-            <button
-              type="button"
-              className={recurringOnlyFilter ? "smart-action-button" : "secondary-button"}
-              onClick={() => setRecurringOnlyFilter((current) => !current)}
-            >
-              {recurringOnlyFilter
-                ? t("transactions.showingRecurringMatches")
-                : t("transactions.onlyRecurringMatches")}
-            </button>
-
             {(typeFilter ||
               monthFilter ||
               categoryFilter ||
               amountRangeFilter ||
-              searchFilter ||
-              recurringOnlyFilter) && (
+              searchFilter) && (
               <button type="button" className="secondary-button" onClick={clearFilters}>
                 {t("common.clearFilters")}
               </button>
             )}
           </div>
 
-          {(searchFilter || recurringOnlyFilter) && (
+          {searchFilter && (
             <p className="budget-inline-note recurring-filter-note">
-              {recurringOnlyFilter
-                ? t("transactions.recurringFilterNote", {
-                    match: searchFilter ? t("transactions.matchingDescription", { term: searchFilter }) : "",
-                  })
-                : t("transactions.descriptionFilterNote", { term: searchFilter })}
+              {t("transactions.descriptionFilterNote", { term: searchFilter })}
             </p>
           )}
         </div>
