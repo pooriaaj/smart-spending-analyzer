@@ -35,6 +35,43 @@ class PdfStatementServiceHelpersTest(unittest.TestCase):
         self.assertEqual(body, "Achat par carte de d\u00e8bit, MCDONALD'S #400")
         self.assertEqual(trailing_amounts, ["6,21", "260,05"])
 
+    def test_split_line_and_trailing_amounts_does_not_steal_reference_code_digits(self) -> None:
+        body, trailing_amounts = service.split_line_and_trailing_amounts(
+            "e-Transfer received MAHTAALIJANI CAmGNFb7 100.00 126.21"
+        )
+
+        self.assertEqual(body, "e-Transfer received MAHTAALIJANI CAmGNFb7")
+        self.assertEqual(trailing_amounts, ["100.00", "126.21"])
+
+        body, trailing_amounts = service.split_line_and_trailing_amounts(
+            "e-Transfer received MAHTAALIJANI CA3Y5xH5 200.00 211.78"
+        )
+
+        self.assertEqual(body, "e-Transfer received MAHTAALIJANI CA3Y5xH5")
+        self.assertEqual(trailing_amounts, ["200.00", "211.78"])
+
+        body, trailing_amounts = service.split_line_and_trailing_amounts(
+            "Cheque - # 7 100.00 126.21"
+        )
+
+        self.assertEqual(body, "Cheque - # 7")
+        self.assertEqual(trailing_amounts, ["100.00", "126.21"])
+
+    def test_split_line_and_trailing_amounts_keeps_supported_thousands_formats(self) -> None:
+        body, trailing_amounts = service.split_line_and_trailing_amounts(
+            "Payroll Deposit Plusgrade Inc. 3,268.57"
+        )
+
+        self.assertEqual(body, "Payroll Deposit Plusgrade Inc.")
+        self.assertEqual(trailing_amounts, ["3,268.57"])
+
+        body, trailing_amounts = service.split_line_and_trailing_amounts(
+            "Virement en ligne, TF 0283#8769-816 1 320,00 1 403,84"
+        )
+
+        self.assertEqual(body, "Virement en ligne, TF 0283#8769-816")
+        self.assertEqual(trailing_amounts, ["1 320,00", "1 403,84"])
+
     def test_normalize_extracted_pdf_text_decodes_french_statement_escapes(self) -> None:
         text = service.normalize_extracted_pdf_text(
             "/1/3 Avril /2/0/2/6 Achat par carte de d/e8bit/2c MCDONALD/27S /6/2c/2/1"
@@ -384,7 +421,7 @@ Date Description de votre compte /28$/29 /e0 votre compte /28$/29 Solde /28$/29
         self.assertEqual(
             result["notes"],
             [
-                "Detected bank profile: BMO French. Using generic parser with bank-aware noise filtering; review carefully."
+                "Detected bank profile: BMO French. Using running-balance checks to infer income vs expense direction."
             ],
         )
         preview_rows = result["preview_rows"]

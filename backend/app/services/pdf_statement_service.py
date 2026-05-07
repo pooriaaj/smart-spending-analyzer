@@ -36,9 +36,16 @@ MONTH_DAY_DATE_START_REGEX = re.compile(
 NUMERIC_DATE_START_REGEX = re.compile(
     r"^(?P<n1>\d{1,2})[/-](?P<n2>\d{1,2})(?:[/-](?P<year>\d{2,4}))?\s+(?P<rest>.*)$"
 )
+AMOUNT_NUMBER_PATTERN = (
+    r"(?:"
+    r"\d{1,3}(?:,\d{3})+\.\d{2}"
+    r"|\d{1,3}(?:[ .]\d{3})+,\d{2}"
+    r"|\d+[,.]\d{2}"
+    r")"
+)
 AMOUNT_TOKEN_PATTERN = (
-    r"\(?[+-]?\$?(?:(?:\d{1,3}(?:[ ,\.]\d{3})+)|\d+)[,.]\d{2}\)?(?:cr|dr)?"
-    r"|\$?(?:(?:\d{1,3}(?:[ ,\.]\d{3})+)|\d+)[,.]\d{2}-"
+    rf"\(?[+-]?\$?{AMOUNT_NUMBER_PATTERN}\)?(?:cr|dr)?"
+    rf"|[+-]?\$?{AMOUNT_NUMBER_PATTERN}-"
 )
 TRAILING_AMOUNT_TOKEN_REGEX = re.compile(
     rf"(?i)(?:{AMOUNT_TOKEN_PATTERN})$"
