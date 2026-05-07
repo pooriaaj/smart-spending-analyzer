@@ -19,6 +19,10 @@ class PdfStatementServiceHelpersTest(unittest.TestCase):
         self.assertAlmostEqual(service.parse_amount_token("1 320,00") or 0.0, 1320.00)
         self.assertAlmostEqual(service.parse_amount_token("6,21") or 0.0, 6.21)
 
+    def test_parse_amount_token_rejects_reference_digit_space_dot_amounts(self) -> None:
+        self.assertIsNone(service.parse_amount_token("7 100.00"))
+        self.assertIsNone(service.parse_amount_token("5 200.00"))
+
     def test_split_line_and_trailing_amounts_extracts_multiple_tokens(self) -> None:
         body, trailing_amounts = service.split_line_and_trailing_amounts(
             "GROCERY STORE TORONTO $45.67 $1,234.56"

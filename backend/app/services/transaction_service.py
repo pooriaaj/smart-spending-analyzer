@@ -423,6 +423,29 @@ class CategoryDecision:
     source: str
 
 
+@dataclass(frozen=True)
+class SuspiciousAmountRepairCandidate:
+    transaction_id: int
+    date: date
+    description: str
+    type: str
+    category: str
+    current_amount: float
+    suggested_amount: float
+    confidence: float
+    reason: str
+
+
+REFERENCE_CODE_AMOUNT_DESCRIPTORS = (
+    "e transfer",
+    "interac received",
+    "interac sent",
+    "virement interac",
+)
+SUSPICIOUS_REFERENCE_AMOUNT_MINIMUM = 5000.0
+SUSPICIOUS_REFERENCE_REPAIRED_MAXIMUM = 1000.0
+
+
 def build_category_review_metadata(decision: CategoryDecision) -> tuple[bool, str | None]:
     category = normalize_category_name(decision.category)
     if category in UNCATEGORIZED_VALUES:
@@ -835,6 +858,107 @@ def apply_category_to_similar_transactions(
         updated_count += 1
 
     return updated_count
+
+
+def suggest_reference_code_amount_repair(transaction: Transaction) -> SuspiciousAmountRepairCandidate | None:
+    description = normalize_description(transaction.description)
+    normalized_description = normalize_category_signal_text(description)
+    if not any(marker in normalized_description for marker in REFERENCE_CODE_AMOUNT_DESCRIPTORS):
+        return None
+
+    current_amount = abs(float(transaction.amount or 0))
+    if current_amount < SUSPICIOUS_REFERENCE_AMOUNT_MINIMUM:
+        return None
+
+    if abs(current_amount - round(current_amount)) > 0.005:
+        return None
+
+    amount_digits = str(int(round(current_amount)))
+    if len(amount_digits) < 4:
+        return None
+
+    repaired_digits = amount_digits[1:]
+    if not repaired_digits or set(repaired_digits) == {"0"}:
+        return None
+
+    suggested_amount = float(int(repaired_digits))
+    if not (0 < suggested_amount <= SUSPICIOUS_REFERENCE_REPAIRED_MAXIMUM):
+        return None
+
+    return SuspiciousAmountRepairCandidate(
+        transaction_id=transaction.id,
+        date=transaction.date,
+        description=description,
+        type=transaction.type,
+        category=transaction.category,
+        current_amount=current_amount,
+        suggested_amount=suggested_amount,
+        confidence=0.86,
+        reason=(
+            "This looks like a legacy statement-parser issue where one reference-code digit "
+            "was merged with the real transfer amount. Review before applying."
+        ),
+    )
+
+
+def get_suspicious_amount_repair_candidates(
+    db: Session,
+    owner_id: int,
+    account_id: int | None = None,
+) -> list[SuspiciousAmountRepairCandidate]:
+    query = db.query(Transaction).filter(Transaction.owner_id == owner_id)
+    if account_id is not None:
+        query = query.filter(Transaction.account_id == account_id)
+
+    candidates: list[SuspiciousAmountRepairCandidate] = []
+    for transaction in query.order_by(Transaction.date.desc(), Transaction.id.desc()).all():
+        candidate = suggest_reference_code_amount_repair(transaction)
+        if candidate:
+            candidates.append(candidate)
+
+    return candidates
+
+
+def apply_suspicious_amount_repairs(
+    db: Session,
+    owner_id: int,
+    transaction_ids: Iterable[int],
+    account_id: int | None = None,
+) -> dict:
+    requested_ids = {int(transaction_id) for transaction_id in transaction_ids}
+    if not requested_ids:
+        return {"updated_count": 0, "repairs": []}
+
+    query = db.query(Transaction).filter(
+        Transaction.owner_id == owner_id,
+        Transaction.id.in_(requested_ids),
+    )
+    if account_id is not None:
+        query = query.filter(Transaction.account_id == account_id)
+
+    updated_repairs: list[dict] = []
+    for transaction in query.all():
+        candidate = suggest_reference_code_amount_repair(transaction)
+        if not candidate:
+            continue
+
+        transaction.amount = candidate.suggested_amount
+        updated_repairs.append(
+            {
+                "transaction_id": candidate.transaction_id,
+                "previous_amount": candidate.current_amount,
+                "updated_amount": candidate.suggested_amount,
+                "description": candidate.description,
+            }
+        )
+
+    if updated_repairs:
+        db.commit()
+
+    return {
+        "updated_count": len(updated_repairs),
+        "repairs": updated_repairs,
+    }
 
 
 def sniff_csv_dialect(text: str) -> csv.Dialect:

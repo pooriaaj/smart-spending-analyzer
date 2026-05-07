@@ -351,6 +351,33 @@ class TransactionResponse(ORMBaseModel):
     owner_id: int
 
 
+class SuspiciousAmountRepairItem(BaseModel):
+    transaction_id: int
+    date: date
+    description: str
+    type: TransactionType
+    category: str
+    current_amount: float
+    suggested_amount: float
+    confidence: float
+    reason: str
+
+
+class SuspiciousAmountRepairPreviewResponse(BaseModel):
+    total_candidates: int
+    candidates: list[SuspiciousAmountRepairItem] = Field(default_factory=list)
+
+
+class SuspiciousAmountRepairApplyRequest(BaseModel):
+    transaction_ids: list[int] = Field(default_factory=list)
+    account_id: int | None = None
+
+
+class SuspiciousAmountRepairApplyResponse(BaseModel):
+    updated_count: int
+    repairs: list[dict] = Field(default_factory=list)
+
+
 class FreshStartRequest(BaseModel):
     keep_from: date | None = None
     account_id: int | None = None

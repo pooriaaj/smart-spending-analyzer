@@ -16,6 +16,10 @@ from app.schemas import (
     FreshStartRequest,
     FreshStartResponse,
     SmartImportResponse,
+    SuspiciousAmountRepairApplyRequest,
+    SuspiciousAmountRepairApplyResponse,
+    SuspiciousAmountRepairItem,
+    SuspiciousAmountRepairPreviewResponse,
     TransactionCreate,
     TransactionResponse,
 )
@@ -37,7 +41,9 @@ from app.services.transaction_service import (
     normalize_description,
     resolve_import_category_for_transaction,
     apply_category_to_similar_transactions,
+    apply_suspicious_amount_repairs,
     extract_merchant_fingerprint,
+    get_suspicious_amount_repair_candidates,
     save_category_memory,
     should_store_category_memory,
 )
@@ -249,6 +255,62 @@ def normalize_categories_route(
         owner_id=current_user.id,
         account_id=account_id,
     )
+
+
+@router.get("/amount-repairs/preview", response_model=SuspiciousAmountRepairPreviewResponse)
+def preview_suspicious_amount_repairs(
+    account_id: int | None = Query(default=None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    if account_id is not None:
+        account = get_account_for_user(db, current_user.id, account_id)
+        if not account:
+            raise HTTPException(status_code=404, detail="Account not found")
+
+    candidates = get_suspicious_amount_repair_candidates(
+        db=db,
+        owner_id=current_user.id,
+        account_id=account_id,
+    )
+
+    return SuspiciousAmountRepairPreviewResponse(
+        total_candidates=len(candidates),
+        candidates=[
+            SuspiciousAmountRepairItem(
+                transaction_id=item.transaction_id,
+                date=item.date,
+                description=item.description,
+                type=item.type,
+                category=item.category,
+                current_amount=item.current_amount,
+                suggested_amount=item.suggested_amount,
+                confidence=item.confidence,
+                reason=item.reason,
+            )
+            for item in candidates
+        ],
+    )
+
+
+@router.post("/amount-repairs/apply", response_model=SuspiciousAmountRepairApplyResponse)
+def apply_suspicious_amount_repairs_route(
+    payload: SuspiciousAmountRepairApplyRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    if payload.account_id is not None:
+        account = get_account_for_user(db, current_user.id, payload.account_id)
+        if not account:
+            raise HTTPException(status_code=404, detail="Account not found")
+
+    result = apply_suspicious_amount_repairs(
+        db=db,
+        owner_id=current_user.id,
+        transaction_ids=payload.transaction_ids,
+        account_id=payload.account_id,
+    )
+    return SuspiciousAmountRepairApplyResponse(**result)
 
 
 @router.post("/import/file", response_model=SmartImportResponse)

@@ -179,6 +179,91 @@ class SmartImportRouteTest(unittest.TestCase):
         self.assertEqual(payload["preview_rows"][1]["date"], "2025-01-02")
         self.assertEqual(payload["preview_rows"][1]["type"], "income")
 
+    def test_import_file_does_not_merge_reference_code_digits_into_amounts(self) -> None:
+        pdf_bytes = build_text_pdf(
+            [
+                "Royal Bank of Canada",
+                "Details of your account activity",
+                "From January 1, 2026 to February 28, 2026",
+                "27 Jan e-Transfer received MAHTAALIJANI CAmGNFb7 100.00 126.21",
+                "06 Feb e-Transfer received MAHTAALIJANI CA3Y5xH5 200.00 211.78",
+            ]
+        )
+
+        response = self.client.post(
+            "/transactions/import/file",
+            data={"account_id": str(self.account_id)},
+            files={"file": ("rbc-statement.pdf", pdf_bytes, "application/pdf")},
+        )
+
+        self.assertEqual(response.status_code, 200, response.text)
+        preview_rows = response.json()["preview_rows"]
+        self.assertEqual([row["amount"] for row in preview_rows], [100.0, 200.0])
+        self.assertTrue(all("7100" not in row["source_line"] for row in preview_rows))
+        self.assertTrue(all("5200" not in row["source_line"] for row in preview_rows))
+
+    def test_suspicious_amount_repair_reviews_legacy_reference_digit_merges(self) -> None:
+        with self.session_local() as session:
+            session.add_all(
+                [
+                    Transaction(
+                        amount=7100.0,
+                        category="income",
+                        description="e-Transfer received MAHTAALIJANI",
+                        date=date(2026, 1, 27),
+                        type="income",
+                        owner_id=self.user_id,
+                        account_id=self.account_id,
+                    ),
+                    Transaction(
+                        amount=5200.0,
+                        category="income",
+                        description="e-Transfer received MAHTAALIJANI",
+                        date=date(2026, 2, 6),
+                        type="income",
+                        owner_id=self.user_id,
+                        account_id=self.account_id,
+                    ),
+                    Transaction(
+                        amount=2000.0,
+                        category="transfer",
+                        description="e-Transfer received MAHTAALIJANI",
+                        date=date(2026, 2, 20),
+                        type="income",
+                        owner_id=self.user_id,
+                        account_id=self.account_id,
+                    ),
+                ]
+            )
+            session.commit()
+
+        preview_response = self.client.get(
+            "/transactions/amount-repairs/preview",
+            params={"account_id": self.account_id},
+        )
+
+        self.assertEqual(preview_response.status_code, 200, preview_response.text)
+        candidates = preview_response.json()["candidates"]
+        self.assertEqual([item["current_amount"] for item in candidates], [5200.0, 7100.0])
+        self.assertEqual([item["suggested_amount"] for item in candidates], [200.0, 100.0])
+
+        apply_response = self.client.post(
+            "/transactions/amount-repairs/apply",
+            json={
+                "account_id": self.account_id,
+                "transaction_ids": [item["transaction_id"] for item in candidates],
+            },
+        )
+
+        self.assertEqual(apply_response.status_code, 200, apply_response.text)
+        self.assertEqual(apply_response.json()["updated_count"], 2)
+        with self.session_local() as session:
+            amounts = [
+                row.amount
+                for row in session.query(Transaction).order_by(Transaction.date.asc()).all()
+            ]
+        self.assertEqual(amounts, [100.0, 200.0, 2000.0])
+
     def test_import_file_cleans_rbc_descriptions_before_categorizing(self) -> None:
         pdf_bytes = build_text_pdf(
             [

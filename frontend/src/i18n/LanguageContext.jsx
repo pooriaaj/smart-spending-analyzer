@@ -404,6 +404,15 @@ const translations = {
       applySuggestedCategories: "Apply Suggested Categories",
       normalizing: "Normalizing...",
       normalizeExistingCategories: "Normalize Existing Categories",
+      checkingAmounts: "Checking amounts...",
+      findSuspiciousAmounts: "Find Suspicious Amounts",
+      repairingAmounts: "Repairing amounts...",
+      applyAmountRepairs: "Apply Amount Repairs",
+      amountRepairChange: "Possible parser repair: ${current} -> ${suggested}",
+      amountRepairNone: "No suspicious legacy statement amounts were found in this account view.",
+      amountRepairFailed: "Failed to check suspicious statement amounts.",
+      amountRepairApplied: "Repaired {count} suspicious amount{plural}.",
+      amountRepairApplyFailed: "Failed to apply suspicious amount repairs.",
       learned: "Learned",
       strongRule: "Strong rule",
       review: "Review",
@@ -2565,13 +2574,7 @@ const translations = {
 };
 
 function readInitialLanguage() {
-  const stored = localStorage.getItem(LANGUAGE_STORAGE_KEY);
-  if (stored && SUPPORTED_LANGUAGES[stored]) {
-    return stored;
-  }
-
-  const browserLanguage = navigator.language?.toLowerCase() || "";
-  return browserLanguage.startsWith("fr") ? "fr" : "en";
+  return "en";
 }
 
 function resolveTranslation(language, key) {

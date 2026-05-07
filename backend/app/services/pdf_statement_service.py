@@ -50,6 +50,9 @@ AMOUNT_TOKEN_PATTERN = (
 TRAILING_AMOUNT_TOKEN_REGEX = re.compile(
     rf"(?i)(?:{AMOUNT_TOKEN_PATTERN})$"
 )
+FULL_AMOUNT_TOKEN_REGEX = re.compile(
+    rf"(?i)^(?:{AMOUNT_TOKEN_PATTERN})$"
+)
 TRAILING_AMOUNT_CAPTURE_REGEX = re.compile(
     rf"(?i)(?<![A-Za-z0-9,.-])(?P<amount>{AMOUNT_TOKEN_PATTERN}|[-â€“â€”]+)\s*$"
 )
@@ -1106,10 +1109,17 @@ def infer_amount_token_type(value: str) -> str | None:
 
 def parse_amount_token(value: str) -> float | None:
     direction = infer_amount_token_type(value)
-    cleaned = value.strip().replace("$", "").replace("\xa0", " ")
-    if not cleaned:
+    raw_value = value.strip().replace("\xa0", " ")
+    if not raw_value:
         return None
 
+    # Reject ambiguous space-thousands with dot decimals, e.g. "7 100.00".
+    # That shape can be a reference-code digit sitting beside a true amount;
+    # French/Canadian space-thousands remain supported through comma decimals.
+    if not FULL_AMOUNT_TOKEN_REGEX.fullmatch(raw_value):
+        return None
+
+    cleaned = raw_value.replace("$", "")
     if cleaned.lower().endswith(("cr", "dr")):
         cleaned = cleaned[:-2]
 

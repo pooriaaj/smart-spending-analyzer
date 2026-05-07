@@ -115,6 +115,9 @@ function TransactionsPage() {
   const [bulkLoading, setBulkLoading] = useState(false);
   const [bulkApplying, setBulkApplying] = useState(false);
   const [normalizingCategories, setNormalizingCategories] = useState(false);
+  const [amountRepairCandidates, setAmountRepairCandidates] = useState([]);
+  const [amountRepairLoading, setAmountRepairLoading] = useState(false);
+  const [amountRepairApplying, setAmountRepairApplying] = useState(false);
   const [bulkMessage, setBulkMessage] = useState("");
 
   const [editingId, setEditingId] = useState(null);
@@ -154,7 +157,7 @@ function TransactionsPage() {
 
   const fetchTransactions = useCallback(async () => {
     try {
-      let [transactionsResponse, recurringResponse] = await Promise.all([
+      let [transactionsResponse, recurringResponse, amountRepairsResponse] = await Promise.all([
         api.get("/transactions/", {
           params: {
             account_id: normalizedAccountId,
@@ -162,6 +165,13 @@ function TransactionsPage() {
         }),
         api
           .get("/analytics/recurring-transactions", {
+            params: {
+              account_id: normalizedAccountId,
+            },
+          })
+          .catch(() => null),
+        api
+          .get("/transactions/amount-repairs/preview", {
             params: {
               account_id: normalizedAccountId,
             },
@@ -176,8 +186,12 @@ function TransactionsPage() {
         ]);
 
         if ((allTransactionsResponse.data || []).length > 0) {
+          const allAmountRepairsResponse = await api
+            .get("/transactions/amount-repairs/preview")
+            .catch(() => null);
           transactionsResponse = allTransactionsResponse;
           recurringResponse = allRecurringResponse;
+          amountRepairsResponse = allAmountRepairsResponse;
           persistSelectedAccountId(ALL_ACCOUNTS_VALUE);
           setSelectedAccountId(ALL_ACCOUNTS_VALUE);
           setScopeNotice(t("transactions.switchedAllAccountsNotice"));
@@ -190,6 +204,7 @@ function TransactionsPage() {
 
       setTransactions(transactionsResponse.data);
       setRecurringPatterns(recurringResponse?.data?.items || []);
+      setAmountRepairCandidates(amountRepairsResponse?.data?.candidates || []);
     } catch (error) {
       handleApiAuthError(error, navigate);
     } finally {
@@ -439,6 +454,56 @@ function TransactionsPage() {
     }
   };
 
+  const handleFindAmountRepairs = async () => {
+    try {
+      setAmountRepairLoading(true);
+      setBulkMessage("");
+      const response = await api.get("/transactions/amount-repairs/preview", {
+        params: {
+          account_id: normalizedAccountId,
+        },
+      });
+      const candidates = response.data?.candidates || [];
+      setAmountRepairCandidates(candidates);
+      if (candidates.length === 0) {
+        setBulkMessage(t("transactions.amountRepairNone"));
+      }
+    } catch (error) {
+      if (!handleApiAuthError(error, navigate)) {
+        setBulkMessage(t("transactions.amountRepairFailed"));
+      }
+    } finally {
+      setAmountRepairLoading(false);
+    }
+  };
+
+  const handleApplyAmountRepairs = async () => {
+    if (amountRepairCandidates.length === 0) return;
+
+    try {
+      setAmountRepairApplying(true);
+      setBulkMessage("");
+      const response = await api.post("/transactions/amount-repairs/apply", {
+        transaction_ids: amountRepairCandidates.map((item) => item.transaction_id),
+        account_id: normalizedAccountId || null,
+      });
+      setBulkMessage(
+        t("transactions.amountRepairApplied", {
+          count: response.data?.updated_count || 0,
+          plural: (response.data?.updated_count || 0) === 1 ? "" : "s",
+        })
+      );
+      setAmountRepairCandidates([]);
+      await fetchTransactions();
+    } catch (error) {
+      if (!handleApiAuthError(error, navigate)) {
+        setBulkMessage(t("transactions.amountRepairApplyFailed"));
+      }
+    } finally {
+      setAmountRepairApplying(false);
+    }
+  };
+
   const handleFreshStart = async () => {
     if (freshStartConfirm.trim().toUpperCase() !== "START FRESH") {
       setFreshStartError(t("transactions.freshStartConfirmError"));
@@ -669,9 +734,60 @@ function TransactionsPage() {
                 ? t("transactions.normalizing")
                 : t("transactions.normalizeExistingCategories")}
             </button>
+
+            <button
+              type="button"
+              className="secondary-button"
+              onClick={handleFindAmountRepairs}
+              disabled={amountRepairLoading}
+            >
+              {amountRepairLoading
+                ? t("transactions.checkingAmounts")
+                : t("transactions.findSuspiciousAmounts")}
+            </button>
+
+            <button
+              type="button"
+              className="smart-apply-button"
+              onClick={handleApplyAmountRepairs}
+              disabled={amountRepairApplying || amountRepairCandidates.length === 0}
+            >
+              {amountRepairApplying
+                ? t("transactions.repairingAmounts")
+                : t("transactions.applyAmountRepairs")}
+            </button>
           </div>
 
           {bulkMessage && <div className="bulk-message-box">{bulkMessage}</div>}
+
+          {amountRepairCandidates.length > 0 && (
+            <div className="bulk-suggestions-list">
+              {amountRepairCandidates.map((item) => (
+                <div key={item.transaction_id} className="bulk-suggestion-card">
+                  <div className="bulk-suggestion-top">
+                    <div>
+                      <h3>{item.description}</h3>
+                      <p>
+                        {t("transactions.amountRepairChange", {
+                          current: Number(item.current_amount || 0).toFixed(2),
+                          suggested: Number(item.suggested_amount || 0).toFixed(2),
+                        })}
+                      </p>
+                    </div>
+                    <div className="bulk-suggestion-badges">
+                      <span className="bulk-confidence-pill bulk-confidence-pill-review">
+                        {t("transactions.review")}
+                      </span>
+                      <span className="bulk-confidence-pill">
+                        {Math.round(Number(item.confidence || 0) * 100)}%
+                      </span>
+                    </div>
+                  </div>
+                  <p className="bulk-suggestion-meta">{item.reason}</p>
+                </div>
+              ))}
+            </div>
+          )}
 
           {bulkSuggestions.length > 0 && (
             <div className="bulk-suggestions-list">
@@ -716,7 +832,7 @@ function TransactionsPage() {
             </div>
           )}
 
-          {!bulkLoading && bulkSuggestions.length === 0 && !bulkMessage && (
+          {!bulkLoading && bulkSuggestions.length === 0 && amountRepairCandidates.length === 0 && !bulkMessage && (
             <div className="empty-state">
               <p>{t("transactions.noBulkSuggestions")}</p>
             </div>

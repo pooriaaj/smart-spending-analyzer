@@ -1,7 +1,6 @@
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { Suspense, lazy, useEffect, useState } from "react";
 import ThemeToggle from "./components/ThemeToggle";
-import LanguageToggle from "./components/LanguageToggle";
 import { LanguageProvider, useLanguage } from "./i18n/LanguageContext";
 
 const LoginPage = lazy(() => import("./pages/LoginPage"));
@@ -55,7 +54,6 @@ function AppRoutes() {
   return (
     <BrowserRouter>
       <div className="app-floating-controls">
-        <LanguageToggle />
         <ThemeToggle
           theme={theme}
           onToggle={() => setTheme((prev) => (prev === "light" ? "dark" : "light"))}
