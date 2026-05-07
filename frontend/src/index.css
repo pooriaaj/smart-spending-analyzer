@@ -3483,6 +3483,19 @@ textarea:focus,
   letter-spacing: -0.02em;
 }
 
+.category-drilldown-item {
+  width: 100%;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.category-drilldown-item:hover {
+  border-color: rgba(37, 99, 235, 0.28);
+  background:
+    linear-gradient(135deg, rgba(239, 246, 255, 0.92), rgba(255, 255, 255, 0.82));
+}
+
 .analytics-section-highlight {
   box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.16), var(--shadow-sm);
 }
@@ -4174,6 +4187,12 @@ textarea {
   background: rgba(15, 23, 42, 0.82);
   border-color: rgba(148, 163, 184, 0.12);
   color: #e5edf8;
+}
+
+:root[data-theme="dark"] .category-drilldown-item:hover {
+  border-color: rgba(96, 165, 250, 0.34);
+  background:
+    linear-gradient(135deg, rgba(30, 64, 175, 0.22), rgba(15, 23, 42, 0.82));
 }
 
 :root[data-theme="dark"] .transaction-item strong,

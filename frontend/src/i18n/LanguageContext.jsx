@@ -535,9 +535,11 @@ const translations = {
       noMonthlyData: "No monthly data found.",
       top5ExpenseCategories: "Top 5 Expense Categories",
       top5ExpenseCategoriesDetail: "Focus on the categories that have the biggest effect on your balance.",
-      otherCategories: "Other categories",
+      categoryChartTitle: "Expense Categories by Amount",
+      categoryChartDetail:
+        "Every spending category is shown by total amount. Click a bar or category row to inspect the matching transactions.",
       expenseCategoriesDetail:
-        "Ranked from highest to lowest total expense, with duplicates merged cleanly.",
+        "Ranked from highest to lowest total expense. Click a category to review the exact transactions behind it.",
     },
     import: {
       destination: "Import Destination",
@@ -1809,9 +1811,11 @@ const translations = {
       noMonthlyData: "Aucune donnée mensuelle trouvée.",
       top5ExpenseCategories: "Top 5 des catégories de dépenses",
       top5ExpenseCategoriesDetail: "Concentrez-vous sur les catégories qui influencent le plus votre solde.",
-      otherCategories: "Autres catégories",
+      categoryChartTitle: "Catégories de dépenses par montant",
+      categoryChartDetail:
+        "Chaque catégorie de dépense est affichée par montant total. Cliquez sur une barre ou une ligne de catégorie pour voir les transactions correspondantes.",
       expenseCategoriesDetail:
-        "Classées du total de dépenses le plus élevé au plus faible, avec les doublons fusionnés proprement.",
+        "Classées du total de dépenses le plus élevé au plus faible. Cliquez sur une catégorie pour vérifier les transactions exactes derrière ce total.",
     },
     import: {
       destination: "Destination de l'importation",

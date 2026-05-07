@@ -14,9 +14,6 @@ import {
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
-  PieChart,
-  Pie,
-  Cell,
   Legend,
   LineChart,
   Line,
@@ -88,30 +85,6 @@ function mergeCategoryBreakdown(items, t) {
       total: Number(total.toFixed(2)),
     }))
     .sort((a, b) => b.total - a.total);
-}
-
-function buildTopPieData(items, topN = 5, t) {
-  const merged = mergeCategoryBreakdown(items, t);
-
-  if (merged.length <= topN) {
-    return merged;
-  }
-
-  const visibleCount = Math.max(topN - 1, 1);
-  const topItems = merged.slice(0, visibleCount);
-  const remainingTotal = merged
-    .slice(visibleCount)
-    .reduce((sum, item) => sum + item.total, 0);
-
-  if (remainingTotal > 0) {
-    topItems.push({
-      category: t("analytics.otherCategories"),
-      total: Number(remainingTotal.toFixed(2)),
-      isRollup: true,
-    });
-  }
-
-  return topItems;
 }
 
 const toLocalDate = (dateValue) => {
@@ -392,9 +365,6 @@ function AnalyticsPage() {
       patternLine: isDark ? "#60a5fa" : "#2563eb",
       threeMonthLine: isDark ? "#fbbf24" : "#d97706",
       sixMonthLine: isDark ? "#a78bfa" : "#7c3aed",
-      pieColors: isDark
-        ? ["#60a5fa", "#4ade80", "#f87171", "#fbbf24", "#a78bfa", "#22d3ee"]
-        : ["#2563eb", "#16a34a", "#dc2626", "#f59e0b", "#7c3aed", "#0891b2"],
     };
   }, [themeMode]);
 
@@ -407,13 +377,14 @@ function AnalyticsPage() {
     return mergeCategoryBreakdown(rawCategoryBreakdown, t);
   }, [rawCategoryBreakdown, t]);
 
-  const topPieData = useMemo(() => {
-    return buildTopPieData(rawCategoryBreakdown, 5, t);
-  }, [rawCategoryBreakdown, t]);
+  const categoryChartData = useMemo(() => {
+    return mergedCategoryBreakdown.map((item) => ({
+      ...item,
+      totalLabel: formatMoney(item.total),
+    }));
+  }, [mergedCategoryBreakdown]);
 
-  const totalPieAmount = useMemo(() => {
-    return topPieData.reduce((sum, item) => sum + item.total, 0);
-  }, [topPieData]);
+  const categoryChartHeight = Math.max(320, categoryChartData.length * 46 + 80);
 
   const availableCategories = useMemo(() => {
     return mergedCategoryBreakdown.map((item) => item.category);
@@ -468,6 +439,11 @@ function AnalyticsPage() {
       : "";
   };
 
+  const handleCategoryDrilldown = (category) => {
+    if (!category) return;
+    navigate(`/transactions?category=${encodeURIComponent(category)}`);
+  };
+
   const customTooltipStyle = {
     backgroundColor: chartTheme.tooltipBg,
     border: `1px solid ${chartTheme.tooltipBorder}`,
@@ -477,11 +453,6 @@ function AnalyticsPage() {
       themeMode === "dark"
         ? "0 18px 40px rgba(0, 0, 0, 0.28)"
         : "0 18px 40px rgba(15, 23, 42, 0.12)",
-  };
-
-  const pieTooltipFormatter = (value, name) => {
-    const percentage = totalPieAmount > 0 ? ((value / totalPieAmount) * 100).toFixed(1) : "0.0";
-    return [`$${Number(value).toFixed(2)} (${percentage}%)`, name];
   };
 
   if (loading) {
@@ -983,52 +954,51 @@ function AnalyticsPage() {
 
           <div className="dashboard-card">
             <div className="section-header">
-              <h2>{t("analytics.top5ExpenseCategories")}</h2>
-              <p>{t("analytics.top5ExpenseCategoriesDetail")}</p>
+              <h2>{t("analytics.categoryChartTitle")}</h2>
+              <p>{t("analytics.categoryChartDetail")}</p>
             </div>
 
-            {topPieData.length === 0 ? (
+            {categoryChartData.length === 0 ? (
               <div className="empty-state">
                 <p>{t("dashboard.noExpenseCategories")}</p>
               </div>
             ) : (
-              <ResponsiveContainer width="100%" height={340}>
-                <PieChart>
-                  <Pie
-                    data={topPieData}
-                    dataKey="total"
-                    nameKey="category"
-                    cx="50%"
-                    cy="46%"
-                    outerRadius={100}
-                    innerRadius={52}
-                    paddingAngle={4}
-                    labelLine={false}
-                    label={({ name, percent }) =>
-                      percent >= 0.05 ? `${name} ${(percent * 100).toFixed(0)}%` : ""
-                    }
-                  >
-                    {topPieData.map((entry, index) => (
-                      <Cell
-                        key={`cell-${index}`}
-                        fill={chartTheme.pieColors[index % chartTheme.pieColors.length]}
-                      />
-                    ))}
-                  </Pie>
-
+              <ResponsiveContainer width="100%" height={categoryChartHeight}>
+                <BarChart
+                  data={categoryChartData}
+                  layout="vertical"
+                  margin={{ top: 8, right: 42, bottom: 8, left: 18 }}
+                >
+                  <CartesianGrid strokeDasharray="3 3" stroke={chartTheme.grid} horizontal={false} />
+                  <XAxis
+                    type="number"
+                    tick={{ fill: chartTheme.text, fontSize: 12 }}
+                    tickFormatter={(value) => `$${Number(value).toFixed(0)}`}
+                  />
+                  <YAxis
+                    type="category"
+                    dataKey="category"
+                    width={118}
+                    tick={{ fill: chartTheme.text, fontSize: 12 }}
+                  />
                   <Tooltip
-                    formatter={pieTooltipFormatter}
+                    formatter={(value) => [formatMoney(value), t("common.amount")]}
                     contentStyle={customTooltipStyle}
                   />
-
-                  <Legend
-                    verticalAlign="bottom"
-                    height={36}
-                    formatter={(value) => (
-                      <span style={{ color: chartTheme.text }}>{value}</span>
-                    )}
+                  <Bar
+                    dataKey="total"
+                    fill={chartTheme.patternLine}
+                    radius={[0, 10, 10, 0]}
+                    label={{
+                      dataKey: "totalLabel",
+                      position: "right",
+                      fill: chartTheme.text,
+                      fontSize: 12,
+                    }}
+                    onClick={(entry) => handleCategoryDrilldown(entry?.category)}
+                    cursor="pointer"
                   />
-                </PieChart>
+                </BarChart>
               </ResponsiveContainer>
             )}
           </div>
@@ -1050,10 +1020,15 @@ function AnalyticsPage() {
           ) : (
             <div className="category-list">
               {mergedCategoryBreakdown.map((item) => (
-                <div key={item.category} className="category-item">
+                <button
+                  key={item.category}
+                  type="button"
+                  className="category-item category-drilldown-item"
+                  onClick={() => handleCategoryDrilldown(item.category)}
+                >
                   <span>{formatCategoryName(item.category, t)}</span>
-                  <strong>${item.total.toFixed(2)}</strong>
-                </div>
+                  <strong>{formatMoney(item.total)}</strong>
+                </button>
               ))}
             </div>
           )}

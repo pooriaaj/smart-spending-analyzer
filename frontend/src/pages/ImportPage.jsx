@@ -455,17 +455,10 @@ function ImportPage() {
 
   const handlePreviewRowChange = (index, field, value) => {
     setPreviewRows((prev) => {
-      const editedRow = prev[index];
       const normalizedValue = field === "amount" ? (value === "" ? "" : Number(value)) : value;
-      const similarityKey = field === "category" && editedRow ? getPreviewSimilarityKey(editedRow) : "";
 
       return prev.map((row, rowIndex) => {
-        const shouldApplyToSimilar =
-          field === "category" &&
-          similarityKey &&
-          rowIndex !== index &&
-          getPreviewSimilarityKey(row) === similarityKey;
-        if (rowIndex !== index && !shouldApplyToSimilar) {
+        if (rowIndex !== index) {
           return row;
         }
 
@@ -474,13 +467,10 @@ function ImportPage() {
           [field]: normalizedValue,
           ...(field === "category"
             ? {
-                category_review_required: false,
-                category_review_reason: null,
-                category_confidence: 1,
-                category_source: shouldApplyToSimilar ? "user_review_similar" : "user_review",
-                category_reason: shouldApplyToSimilar
-                  ? t("import.categoryAppliedToSimilarReason")
-                  : t("import.categoryEditedReason"),
+                category_review_required: true,
+                category_review_reason: t("import.categoryEditedReason"),
+                category_source: "user_editing",
+                category_reason: t("import.categoryEditedReason"),
               }
             : {}),
           is_duplicate: false,
@@ -501,20 +491,39 @@ function ImportPage() {
   };
 
   const handleApprovePreviewCategory = (index) => {
-    setPreviewRows((prev) =>
-      prev.map((row, rowIndex) =>
-        rowIndex === index
-          ? {
-              ...row,
-              category_review_required: false,
-              category_review_reason: null,
-              category_confidence: Math.max(Number(row.category_confidence || 0), 0.9),
-              category_source: row.category_source || "user_review",
-              category_reason: t("import.categoryApprovedReason"),
-            }
-          : row
-      )
-    );
+    setPreviewRows((prev) => {
+      const reviewedRow = prev[index];
+      const reviewedCategory = reviewedRow?.category?.trim();
+
+      if (!reviewedRow || !reviewedCategory) {
+        return prev;
+      }
+
+      const similarityKey = getPreviewSimilarityKey(reviewedRow);
+
+      return prev.map((row, rowIndex) => {
+        const shouldApplyToSimilar =
+          similarityKey &&
+          rowIndex !== index &&
+          getPreviewSimilarityKey(row) === similarityKey;
+
+        if (rowIndex !== index && !shouldApplyToSimilar) {
+          return row;
+        }
+
+        return {
+          ...row,
+          category: reviewedCategory,
+          category_review_required: false,
+          category_review_reason: null,
+          category_confidence: Math.max(Number(row.category_confidence || 0), 0.9),
+          category_source: shouldApplyToSimilar ? "user_review_similar" : "user_review",
+          category_reason: shouldApplyToSimilar
+            ? t("import.categoryAppliedToSimilarReason")
+            : t("import.categoryApprovedReason"),
+        };
+      });
+    });
   };
 
   const handleRemovePreviewRow = (index) => {
@@ -1214,7 +1223,7 @@ function ImportPage() {
                                   type="button"
                                   className="import-remove-row-button"
                                   onClick={() => handleApprovePreviewCategory(index)}
-                                  disabled={confirmingPreview}
+                                  disabled={confirmingPreview || !row.category?.trim()}
                                 >
                                   {t("common.approveCategory")}
                                 </button>
