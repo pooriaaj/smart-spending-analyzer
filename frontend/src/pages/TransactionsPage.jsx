@@ -149,11 +149,12 @@ function TransactionsPage() {
   useEffect(() => {
     setTypeFilter(searchParams.get("type") || "");
     setMonthFilter(searchParams.get("month") || "");
-    setCategoryFilter(searchParams.get("category") || "");
+    const categoryParam = searchParams.get("category") || "";
+    setCategoryFilter(categoryParam ? formatCategoryLabel(categoryParam, t) : "");
     setSearchFilter(searchParams.get("description") || "");
     setAmountRangeFilter(searchParams.get("amountRange") || "");
     setRecurringOnlyFilter(false);
-  }, [searchParams]);
+  }, [searchParams, t]);
 
   const fetchTransactions = useCallback(async () => {
     try {
@@ -224,8 +225,14 @@ function TransactionsPage() {
   }, [transactions]);
 
   const availableCategories = useMemo(() => {
-    return Array.from(new Set(transactions.map((transaction) => transaction.category))).sort();
-  }, [transactions]);
+    return Array.from(
+      new Set(
+        transactions
+          .map((transaction) => formatCategoryLabel(transaction.category, t))
+          .filter(Boolean)
+      )
+    ).sort();
+  }, [transactions, t]);
 
   const recurringDescriptionKeys = useMemo(
     () =>
@@ -247,10 +254,11 @@ function TransactionsPage() {
           (option) => option.value === amountRangeFilter
         );
         const absoluteAmount = Math.abs(Number(transaction.amount || 0));
+        const displayCategory = formatCategoryLabel(transaction.category, t);
 
         if (typeFilter && transaction.type !== typeFilter) return false;
         if (monthFilter && transactionMonth !== monthFilter) return false;
-        if (categoryFilter && transaction.category !== categoryFilter) return false;
+        if (categoryFilter && displayCategory !== categoryFilter) return false;
         if (selectedAmountRange) {
           const belowMinimum = selectedAmountRange.minExclusive
             ? absoluteAmount <= selectedAmountRange.min
@@ -277,6 +285,7 @@ function TransactionsPage() {
     categoryFilter,
     searchFilter,
     amountRangeFilter,
+    t,
   ]);
 
   const totalPages = Math.max(

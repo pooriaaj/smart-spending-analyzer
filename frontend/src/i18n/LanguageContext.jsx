@@ -535,6 +535,7 @@ const translations = {
       noMonthlyData: "No monthly data found.",
       top5ExpenseCategories: "Top 5 Expense Categories",
       top5ExpenseCategoriesDetail: "Focus on the categories that have the biggest effect on your balance.",
+      otherCategories: "Other categories",
       expenseCategoriesDetail:
         "Ranked from highest to lowest total expense, with duplicates merged cleanly.",
     },
@@ -1808,6 +1809,7 @@ const translations = {
       noMonthlyData: "Aucune donnée mensuelle trouvée.",
       top5ExpenseCategories: "Top 5 des catégories de dépenses",
       top5ExpenseCategoriesDetail: "Concentrez-vous sur les catégories qui influencent le plus votre solde.",
+      otherCategories: "Autres catégories",
       expenseCategoriesDetail:
         "Classées du total de dépenses le plus élevé au plus faible, avec les doublons fusionnés proprement.",
     },

@@ -44,6 +44,22 @@ CASHFLOW_NEUTRAL_DESCRIPTION_MARKERS = (
     "virement en ligne",
 )
 
+ANALYTICS_CATEGORY_ALIASES = {
+    "cafe": {"cafe", "coffee"},
+    "car maintenance": {"car maintenance", "car_maintenance"},
+    "debt": {"debt", "debt payment", "debt payments", "debt_payment", "debt_payments"},
+    "education": {"education", "school", "tuition"},
+    "groceries": {"grocery", "groceries"},
+    "healthcare": {"health", "healthcare"},
+    "other": {"other", "misc", "miscellaneous", "uncategorized", "unknown"},
+    "restaurant": {"restaurant", "restaurants"},
+    "smoking": {"smoking", "smokes", "weed", "cigarette", "cigarettes", "cigar", "cigars"},
+    "subscriptions": {"subscription", "subscriptions"},
+    "transfer": {"transfer", "transfers"},
+    "transport": {"transport", "transportation"},
+    "utilities": {"utility", "utilities"},
+}
+
 
 def parse_iso_date(value: str | None) -> date | None:
     if not value:
@@ -59,7 +75,42 @@ def month_bucket_expression(db: Session):
 
 
 def normalize_analytics_category(value: str | None) -> str:
-    return re.sub(r"\s+", " ", str(value or "").strip().lower())
+    cleaned = str(value or "").strip().lower().replace("&", "and")
+    cleaned = re.sub(r"[_\-]+", " ", cleaned)
+    return re.sub(r"\s+", " ", cleaned)
+
+
+def normalized_category_expression():
+    return func.lower(
+        func.replace(
+            func.replace(func.coalesce(Transaction.category, ""), "_", " "),
+            "-",
+            " ",
+        )
+    )
+
+
+def analytics_category_alias_match(value: str | None) -> tuple[str, set[str]]:
+    normalized = normalize_analytics_category(value)
+    if not normalized:
+        return "other", {"other"}
+
+    for canonical, aliases in ANALYTICS_CATEGORY_ALIASES.items():
+        normalized_aliases = {normalize_analytics_category(alias) for alias in aliases}
+        if normalized == canonical or normalized in normalized_aliases:
+            return canonical, normalized_aliases | {canonical}
+
+    return normalized, {normalized}
+
+
+def canonical_analytics_category(value: str | None) -> str:
+    canonical, _ = analytics_category_alias_match(value)
+    return canonical
+
+
+def get_analytics_category_variants(category: str | None) -> set[str]:
+    _, variants = analytics_category_alias_match(category)
+    return variants
 
 
 def is_cashflow_neutral_category(category: str | None) -> bool:
@@ -67,7 +118,7 @@ def is_cashflow_neutral_category(category: str | None) -> bool:
 
 
 def cashflow_neutral_filter():
-    normalized_category = func.lower(func.coalesce(Transaction.category, ""))
+    normalized_category = normalized_category_expression()
     normalized_description = func.lower(func.coalesce(Transaction.description, ""))
     description_filters = [
         normalized_description.like(f"%{marker}%")
@@ -105,7 +156,9 @@ def build_filtered_query(
     if transaction_type:
         query = query.filter(Transaction.type == transaction_type)
     if category:
-        query = query.filter(func.lower(Transaction.category) == category.strip().lower())
+        category_variants = get_analytics_category_variants(category)
+        if category_variants:
+            query = query.filter(normalized_category_expression().in_(tuple(category_variants)))
     if account_id is not None:
         query = query.filter(Transaction.account_id == account_id)
     if not include_cashflow_neutral and not is_cashflow_neutral_category(category):
@@ -155,6 +208,23 @@ def get_summary(
     }
 
 
+def merge_category_totals(rows) -> list[dict[str, Any]]:
+    totals_by_category: dict[str, float] = {}
+
+    for row in rows:
+        category = canonical_analytics_category(row.category)
+        totals_by_category[category] = totals_by_category.get(category, 0.0) + float(row.total or 0.0)
+
+    return sorted(
+        (
+            {"category": category, "total": round(total, 2)}
+            for category, total in totals_by_category.items()
+        ),
+        key=lambda item: item["total"],
+        reverse=True,
+    )
+
+
 def get_category_breakdown(
     db: Session,
     user_id: int,
@@ -186,7 +256,7 @@ def get_category_breakdown(
         .all()
     )
 
-    return [{"category": row.category, "total": float(row.total)} for row in rows]
+    return merge_category_totals(rows)
 
 
 def get_monthly_summary(
@@ -277,26 +347,7 @@ def get_top_expense_categories(
     account_id: int | None = None,
     limit: int = 3,
 ) -> list[dict[str, Any]]:
-    query = db.query(
-        Transaction.category.label("category"),
-        func.coalesce(func.sum(Transaction.amount), 0.0).label("total"),
-    ).filter(
-        Transaction.owner_id == user_id,
-        Transaction.type == "expense",
-        ~cashflow_neutral_filter(),
-    )
-
-    if account_id is not None:
-        query = query.filter(Transaction.account_id == account_id)
-
-    rows = (
-        query.group_by(Transaction.category)
-        .order_by(func.sum(Transaction.amount).desc())
-        .limit(limit)
-        .all()
-    )
-
-    return [{"category": row.category, "total": float(row.total)} for row in rows]
+    return get_category_breakdown(db, user_id, account_id=account_id)[:limit]
 
 
 def get_transactions_for_category(
@@ -306,10 +357,10 @@ def get_transactions_for_category(
     account_id: int | None = None,
     limit: int = 5,
 ) -> list[Transaction]:
-    query = db.query(Transaction).filter(
-        Transaction.owner_id == user_id,
-        func.lower(Transaction.category) == category.strip().lower(),
-    )
+    category_variants = get_analytics_category_variants(category)
+    query = db.query(Transaction).filter(Transaction.owner_id == user_id)
+    if category_variants:
+        query = query.filter(normalized_category_expression().in_(tuple(category_variants)))
 
     if account_id is not None:
         query = query.filter(Transaction.account_id == account_id)
@@ -403,7 +454,7 @@ def get_top_expense_category(
     category: str | None = None,
     account_id: int | None = None,
 ) -> dict[str, Any] | None:
-    query = build_filtered_query(
+    breakdown = get_category_breakdown(
         db,
         user_id,
         month=month,
@@ -412,25 +463,11 @@ def get_top_expense_category(
         transaction_type=transaction_type,
         category=category,
         account_id=account_id,
-    ).filter(Transaction.type == "expense")
-
-    row = (
-        query.with_entities(
-            Transaction.category.label("category"),
-            func.coalesce(func.sum(Transaction.amount), 0.0).label("total"),
-        )
-        .group_by(Transaction.category)
-        .order_by(func.sum(Transaction.amount).desc())
-        .first()
     )
 
-    if not row:
-        return None
+    return breakdown[0] if breakdown else None
 
-    return {
-        "category": row.category,
-        "total": float(row.total),
-    }
+
 def get_budget_progress_snapshot(
     db: Session,
     user_id: int,

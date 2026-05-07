@@ -97,15 +97,17 @@ function buildTopPieData(items, topN = 5, t) {
     return merged;
   }
 
-  const topItems = merged.slice(0, topN);
+  const visibleCount = Math.max(topN - 1, 1);
+  const topItems = merged.slice(0, visibleCount);
   const remainingTotal = merged
-    .slice(topN)
+    .slice(visibleCount)
     .reduce((sum, item) => sum + item.total, 0);
 
   if (remainingTotal > 0) {
     topItems.push({
-      category: "Other",
+      category: t("analytics.otherCategories"),
       total: Number(remainingTotal.toFixed(2)),
+      isRollup: true,
     });
   }
 
@@ -500,19 +502,13 @@ function AnalyticsPage() {
     total_expenses: 0,
     balance: 0,
   };
-  const topCategory = dashboardData?.top_category;
   const monthlySummary = dashboardData?.monthly_summary || [];
   const spendingInsights = dashboardData?.spending_insights;
   const overspendingAlerts = dashboardData?.overspending_alerts;
   const categoryTrends = dashboardData?.category_trends;
   const accountComparison = dashboardData?.account_comparison || [];
 
-  const normalizedTopCategory = topCategory
-    ? {
-        ...topCategory,
-        category: formatCategoryName(topCategory.category, t),
-      }
-    : null;
+  const normalizedTopCategory = mergedCategoryBreakdown[0] || null;
 
   return (
     <div className="page-container dashboard-page">
