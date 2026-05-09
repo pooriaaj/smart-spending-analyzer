@@ -151,6 +151,70 @@ class SmartImportRouteTest(unittest.TestCase):
         self.assertIsNone(payload[0]["account_id"])
         self.assertEqual(payload[0]["description"], "Older imported transaction")
 
+    def test_transactions_page_filters_and_paginates_in_database(self) -> None:
+        with self.session_local() as session:
+            session.add_all(
+                [
+                    Transaction(
+                        amount=8.25,
+                        category="cafe",
+                        description="Coffee",
+                        date=date(2026, 4, 10),
+                        type="expense",
+                        owner_id=self.user_id,
+                        account_id=self.account_id,
+                    ),
+                    Transaction(
+                        amount=54.20,
+                        category="groceries",
+                        description="Metro grocery",
+                        date=date(2026, 4, 11),
+                        type="expense",
+                        owner_id=self.user_id,
+                        account_id=self.account_id,
+                    ),
+                    Transaction(
+                        amount=2200.00,
+                        category="salary",
+                        description="Payroll",
+                        date=date(2026, 4, 12),
+                        type="income",
+                        owner_id=self.user_id,
+                        account_id=self.account_id,
+                    ),
+                ]
+            )
+            session.commit()
+
+        page_response = self.client.get(
+            "/transactions/page",
+            params={"account_id": self.account_id, "page": 2, "page_size": 2},
+        )
+        self.assertEqual(page_response.status_code, 200, page_response.text)
+        page_payload = page_response.json()
+        self.assertEqual(page_payload["total"], 3)
+        self.assertEqual(page_payload["scope_total"], 3)
+        self.assertEqual(page_payload["page"], 2)
+        self.assertEqual(len(page_payload["items"]), 1)
+        self.assertEqual(page_payload["available_months"], ["2026-04"])
+        self.assertEqual(page_payload["available_categories"], ["cafe", "groceries", "salary"])
+
+        filtered_response = self.client.get(
+            "/transactions/page",
+            params={
+                "account_id": self.account_id,
+                "type": "expense",
+                "category": "groceries",
+                "amount_min": 50,
+                "amount_max": 100,
+            },
+        )
+        self.assertEqual(filtered_response.status_code, 200, filtered_response.text)
+        filtered_payload = filtered_response.json()
+        self.assertEqual(filtered_payload["total"], 1)
+        self.assertEqual(filtered_payload["scope_total"], 3)
+        self.assertEqual(filtered_payload["items"][0]["description"], "Metro grocery")
+
     def test_import_file_returns_rbc_preview_from_pdf_upload(self) -> None:
         pdf_bytes = build_text_pdf(
             [
@@ -201,6 +265,52 @@ class SmartImportRouteTest(unittest.TestCase):
         self.assertEqual([row["amount"] for row in preview_rows], [100.0, 200.0])
         self.assertTrue(all("7100" not in row["source_line"] for row in preview_rows))
         self.assertTrue(all("5200" not in row["source_line"] for row in preview_rows))
+
+    def test_transfer_income_rules_override_stale_learned_income_memory(self) -> None:
+        with self.session_local() as session:
+            session.add_all(
+                [
+                    CategoryMemory(
+                        keyword="mahtaalijani",
+                        category="income",
+                        transaction_type="income",
+                        owner_id=self.user_id,
+                    ),
+                    MerchantCategoryProfile(
+                        merchant_key="mahtaalijani",
+                        display_name="Mahtaalijani",
+                        category="income",
+                        transaction_type="income",
+                        confidence=0.99,
+                        confirmation_count=5,
+                        last_amount=100.00,
+                        owner_id=self.user_id,
+                    ),
+                ]
+            )
+            session.commit()
+
+        pdf_bytes = build_text_pdf(
+            [
+                "Royal Bank of Canada",
+                "Details of your account activity",
+                "From January 1, 2026 to January 31, 2026",
+                "27 Jan e-Transfer received MAHTAALIJANI CAmGNFb7 100.00 126.21",
+            ]
+        )
+
+        response = self.client.post(
+            "/transactions/import/file",
+            data={"account_id": str(self.account_id)},
+            files={"file": ("rbc-transfer-memory.pdf", pdf_bytes, "application/pdf")},
+        )
+
+        self.assertEqual(response.status_code, 200, response.text)
+        preview_row = response.json()["preview_rows"][0]
+        self.assertEqual(preview_row["type"], "income")
+        self.assertEqual(preview_row["category"], "transfer")
+        self.assertEqual(preview_row["category_source"], "protected_rule")
+        self.assertIn("not treated as earned income", preview_row["category_reason"])
 
     def test_suspicious_amount_repair_reviews_legacy_reference_digit_merges(self) -> None:
         with self.session_local() as session:

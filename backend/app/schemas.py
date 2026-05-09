@@ -351,6 +351,17 @@ class TransactionResponse(ORMBaseModel):
     owner_id: int
 
 
+class TransactionListResponse(BaseModel):
+    items: list[TransactionResponse] = Field(default_factory=list)
+    total: int = 0
+    scope_total: int = 0
+    page: int = 1
+    page_size: int = 12
+    total_pages: int = 1
+    available_months: list[str] = Field(default_factory=list)
+    available_categories: list[str] = Field(default_factory=list)
+
+
 class SuspiciousAmountRepairItem(BaseModel):
     transaction_id: int
     date: date

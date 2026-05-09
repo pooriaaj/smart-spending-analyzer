@@ -16,30 +16,6 @@ const getCurrentMonthStart = () => {
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`;
 };
 
-const normalizeTextForMatching = (value = "") =>
-  value.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
-
-const normalizeRecurringDescription = (value = "") => {
-  let normalized = normalizeTextForMatching(value);
-  if (!normalized) return "";
-
-  normalized = normalized.replace(
-    /\b(?:jan|january|feb|february|mar|march|apr|april|may|jun|june|jul|july|aug|august|sep|sept|september|oct|october|nov|november|dec|december)\b/g,
-    " "
-  );
-  normalized = normalized.replace(/\b\d+\b/g, " ");
-  return normalized.replace(/\s+/g, " ").trim();
-};
-
-const cleanRecurringDisplayName = (value = "") => {
-  let cleaned = String(value || "Recurring transaction").replace(/\s+/g, " ").trim();
-  cleaned = cleaned.replace(/^from .*?date description.*?balance \(\$\)\s*/i, "");
-  cleaned = cleaned.replace(/^contactless interac purchase\s*-\s*\d+\s*/i, "");
-  cleaned = cleaned.replace(/^interac purchase\s*-\s*\d+\s*/i, "");
-  cleaned = cleaned.replace(/\s+-\s+\d{3,}\s+/g, " ");
-  return cleaned.length > 92 ? `${cleaned.slice(0, 89)}...` : cleaned;
-};
-
 const TRANSACTIONS_PER_PAGE = 12;
 
 const AMOUNT_RANGE_OPTIONS = [
@@ -54,6 +30,16 @@ const AMOUNT_RANGE_OPTIONS = [
   { value: "5000-10000", label: "$5,000-$10,000", min: 5000, max: 10000 },
   { value: "10000-plus", labelKey: "transactions.overAmount", amount: "10,000", min: 10000, max: null, minExclusive: true },
 ];
+
+const DEFAULT_TRANSACTION_PAGE_META = {
+  total: 0,
+  scopeTotal: 0,
+  page: 1,
+  pageSize: TRANSACTIONS_PER_PAGE,
+  totalPages: 1,
+  availableMonths: [],
+  availableCategories: [],
+};
 
 const buildPaginationItems = (currentPage, totalPages) => {
   if (totalPages <= 7) {
@@ -94,16 +80,15 @@ const buildPaginationItems = (currentPage, totalPages) => {
 function TransactionsPage() {
   const { t } = useLanguage();
   const [transactions, setTransactions] = useState([]);
+  const [transactionPageMeta, setTransactionPageMeta] = useState(DEFAULT_TRANSACTION_PAGE_META);
   const [typeFilter, setTypeFilter] = useState("");
   const [monthFilter, setMonthFilter] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("");
   const [searchFilter, setSearchFilter] = useState("");
   const [amountRangeFilter, setAmountRangeFilter] = useState("");
-  const [recurringOnlyFilter, setRecurringOnlyFilter] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [selectedAccountId, setSelectedAccountId] = useState(getSelectedAccountId());
   const [loading, setLoading] = useState(true);
-  const [recurringPatterns, setRecurringPatterns] = useState([]);
   const [scopeNotice, setScopeNotice] = useState("");
   const [freshStartDate, setFreshStartDate] = useState(getCurrentMonthStart());
   const [freshStartConfirm, setFreshStartConfirm] = useState("");
@@ -150,27 +135,40 @@ function TransactionsPage() {
     setTypeFilter(searchParams.get("type") || "");
     setMonthFilter(searchParams.get("month") || "");
     const categoryParam = searchParams.get("category") || "";
-    setCategoryFilter(categoryParam ? formatCategoryLabel(categoryParam, t) : "");
+    setCategoryFilter(categoryParam);
     setSearchFilter(searchParams.get("description") || "");
     setAmountRangeFilter(searchParams.get("amountRange") || "");
-    setRecurringOnlyFilter(false);
-  }, [searchParams, t]);
+  }, [searchParams]);
 
   const fetchTransactions = useCallback(async () => {
     try {
-      let [transactionsResponse, recurringResponse, amountRepairsResponse] = await Promise.all([
-        api.get("/transactions/", {
-          params: {
-            account_id: normalizedAccountId,
-          },
+      const selectedAmountRange = AMOUNT_RANGE_OPTIONS.find(
+        (option) => option.value === amountRangeFilter
+      );
+      const transactionParams = {
+        account_id: normalizedAccountId,
+        type: typeFilter || undefined,
+        month: monthFilter || undefined,
+        category: categoryFilter || undefined,
+        description: searchFilter || undefined,
+        amount_min: selectedAmountRange?.min,
+        amount_max: selectedAmountRange?.max,
+        amount_min_exclusive: selectedAmountRange?.minExclusive || undefined,
+        page: currentPage,
+        page_size: TRANSACTIONS_PER_PAGE,
+      };
+      const hasActiveFilters = Boolean(
+        typeFilter ||
+          monthFilter ||
+          categoryFilter ||
+          searchFilter ||
+          amountRangeFilter
+      );
+
+      let [transactionsResponse, amountRepairsResponse] = await Promise.all([
+        api.get("/transactions/page", {
+          params: transactionParams,
         }),
-        api
-          .get("/analytics/recurring-transactions", {
-            params: {
-              account_id: normalizedAccountId,
-            },
-          })
-          .catch(() => null),
         api
           .get("/transactions/amount-repairs/preview", {
             params: {
@@ -180,18 +178,23 @@ function TransactionsPage() {
           .catch(() => null),
       ]);
 
-      if (normalizedAccountId && (transactionsResponse.data || []).length === 0) {
-        const [allTransactionsResponse, allRecurringResponse] = await Promise.all([
-          api.get("/transactions/"),
-          api.get("/analytics/recurring-transactions").catch(() => null),
+      if (
+        normalizedAccountId &&
+        !hasActiveFilters &&
+        Number(transactionsResponse.data?.scope_total || 0) === 0
+      ) {
+        const [allTransactionsResponse, allAmountRepairsResponse] = await Promise.all([
+          api.get("/transactions/page", {
+            params: {
+              page: currentPage,
+              page_size: TRANSACTIONS_PER_PAGE,
+            },
+          }),
+          api.get("/transactions/amount-repairs/preview").catch(() => null),
         ]);
 
-        if ((allTransactionsResponse.data || []).length > 0) {
-          const allAmountRepairsResponse = await api
-            .get("/transactions/amount-repairs/preview")
-            .catch(() => null);
+        if (Number(allTransactionsResponse.data?.scope_total || 0) > 0) {
           transactionsResponse = allTransactionsResponse;
-          recurringResponse = allRecurringResponse;
           amountRepairsResponse = allAmountRepairsResponse;
           persistSelectedAccountId(ALL_ACCOUNTS_VALUE);
           setSelectedAccountId(ALL_ACCOUNTS_VALUE);
@@ -203,102 +206,57 @@ function TransactionsPage() {
         setScopeNotice("");
       }
 
-      setTransactions(transactionsResponse.data);
-      setRecurringPatterns(recurringResponse?.data?.items || []);
+      const pagePayload = transactionsResponse.data || {};
+      setTransactions(pagePayload.items || []);
+      setTransactionPageMeta({
+        total: Number(pagePayload.total || 0),
+        scopeTotal: Number(pagePayload.scope_total || 0),
+        page: Number(pagePayload.page || 1),
+        pageSize: Number(pagePayload.page_size || TRANSACTIONS_PER_PAGE),
+        totalPages: Number(pagePayload.total_pages || 1),
+        availableMonths: pagePayload.available_months || [],
+        availableCategories: pagePayload.available_categories || [],
+      });
+      if (pagePayload.page && Number(pagePayload.page) !== currentPage) {
+        setCurrentPage(Number(pagePayload.page));
+      }
       setAmountRepairCandidates(amountRepairsResponse?.data?.candidates || []);
     } catch (error) {
       handleApiAuthError(error, navigate);
     } finally {
       setLoading(false);
     }
-  }, [navigate, normalizedAccountId, t]);
+  }, [
+    amountRangeFilter,
+    categoryFilter,
+    currentPage,
+    monthFilter,
+    navigate,
+    normalizedAccountId,
+    searchFilter,
+    t,
+    typeFilter,
+  ]);
 
   useEffect(() => {
     fetchTransactions();
   }, [fetchTransactions]);
 
-  const availableMonths = useMemo(() => {
-    const months = new Set(
-      transactions.map((transaction) => new Date(transaction.date).toISOString().slice(0, 7))
-    );
-    return Array.from(months).sort().reverse();
-  }, [transactions]);
-
-  const availableCategories = useMemo(() => {
-    return Array.from(
-      new Set(
-        transactions
-          .map((transaction) => formatCategoryLabel(transaction.category, t))
-          .filter(Boolean)
-      )
-    ).sort();
-  }, [transactions, t]);
-
-  const recurringDescriptionKeys = useMemo(
-    () =>
-      new Set(
-        recurringPatterns
-          .map((item) => normalizeRecurringDescription(item.description))
-          .filter(Boolean)
-      ),
-    [recurringPatterns]
-  );
-
-  const filteredTransactions = useMemo(() => {
-    return transactions
-      .filter((transaction) => {
-        const transactionMonth = new Date(transaction.date).toISOString().slice(0, 7);
-        const normalizedDescription = normalizeTextForMatching(transaction.description);
-        const normalizedSearch = normalizeTextForMatching(searchFilter);
-        const selectedAmountRange = AMOUNT_RANGE_OPTIONS.find(
-          (option) => option.value === amountRangeFilter
-        );
-        const absoluteAmount = Math.abs(Number(transaction.amount || 0));
-        const displayCategory = formatCategoryLabel(transaction.category, t);
-
-        if (typeFilter && transaction.type !== typeFilter) return false;
-        if (monthFilter && transactionMonth !== monthFilter) return false;
-        if (categoryFilter && displayCategory !== categoryFilter) return false;
-        if (selectedAmountRange) {
-          const belowMinimum = selectedAmountRange.minExclusive
-            ? absoluteAmount <= selectedAmountRange.min
-            : absoluteAmount < selectedAmountRange.min;
-          const atOrAboveMaximum =
-            selectedAmountRange.max != null && absoluteAmount >= selectedAmountRange.max;
-
-          if (belowMinimum || atOrAboveMaximum) return false;
-        }
-        if (
-          searchFilter &&
-          !normalizedDescription.includes(normalizedSearch)
-        ) {
-          return false;
-        }
-
-        return true;
-      })
-      .sort((a, b) => new Date(b.date) - new Date(a.date));
-  }, [
-    transactions,
-    typeFilter,
-    monthFilter,
-    categoryFilter,
-    searchFilter,
-    amountRangeFilter,
-    t,
-  ]);
-
-  const totalPages = Math.max(
-    1,
-    Math.ceil(filteredTransactions.length / TRANSACTIONS_PER_PAGE)
-  );
-  const activePage = Math.min(currentPage, totalPages);
-  const pageStartIndex = (activePage - 1) * TRANSACTIONS_PER_PAGE;
-  const pageEndIndex = Math.min(
-    pageStartIndex + TRANSACTIONS_PER_PAGE,
-    filteredTransactions.length
-  );
-  const paginatedTransactions = filteredTransactions.slice(pageStartIndex, pageEndIndex);
+  const availableMonths = transactionPageMeta.availableMonths;
+  const availableCategories = transactionPageMeta.availableCategories;
+  const filteredTransactionTotal = transactionPageMeta.total;
+  const scopeTransactionTotal = transactionPageMeta.scopeTotal;
+  const totalPages = Math.max(1, transactionPageMeta.totalPages);
+  const activePage = Math.min(transactionPageMeta.page || currentPage, totalPages);
+  const pageStartIndex =
+    filteredTransactionTotal === 0
+      ? 0
+      : (activePage - 1) * transactionPageMeta.pageSize;
+  const pageEndIndex =
+    filteredTransactionTotal === 0
+      ? 0
+      : Math.min(pageStartIndex + transactions.length, filteredTransactionTotal);
+  const paginatedTransactions = transactions;
   const paginationItems = useMemo(
     () => buildPaginationItems(activePage, totalPages),
     [activePage, totalPages]
@@ -327,7 +285,6 @@ function TransactionsPage() {
     setCategoryFilter("");
     setSearchFilter("");
     setAmountRangeFilter("");
-    setRecurringOnlyFilter(false);
     setCurrentPage(1);
   };
 
@@ -853,9 +810,9 @@ function TransactionsPage() {
             <h2>{t("transactions.transactionFilters")}</h2>
             <p>
               {t("transactions.showingTransactions", {
-                filtered: filteredTransactions.length,
-                total: transactions.length,
-                plural: transactions.length === 1 ? "" : "s",
+                filtered: filteredTransactionTotal,
+                total: scopeTransactionTotal,
+                plural: scopeTransactionTotal === 1 ? "" : "s",
               })}
             </p>
           </div>
@@ -941,14 +898,14 @@ function TransactionsPage() {
             <p>{t("transactions.tableDetail")}</p>
           </div>
 
-          {filteredTransactions.length === 0 ? (
+          {filteredTransactionTotal === 0 ? (
             <div className="empty-state">
               <p>
-                {transactions.length === 0
+                {scopeTransactionTotal === 0
                   ? t("transactions.noTransactions")
                   : t("transactions.filtersHidingTransactions")}
               </p>
-              {transactions.length === 0 ? (
+              {scopeTransactionTotal === 0 ? (
                 <button className="secondary-button" onClick={() => navigate("/dashboard")}>
                   {t("transactions.addToday")}
                 </button>
@@ -971,8 +928,8 @@ function TransactionsPage() {
                     {t("transactions.pageSummary", {
                       start: pageStartIndex + 1,
                       end: pageEndIndex,
-                      total: filteredTransactions.length,
-                      plural: filteredTransactions.length === 1 ? "" : "s",
+                      total: filteredTransactionTotal,
+                      plural: filteredTransactionTotal === 1 ? "" : "s",
                     })}
                   </p>
                 </div>

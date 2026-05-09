@@ -111,6 +111,9 @@ class Transaction(Base):
         Index("ix_transactions_owner_type", "owner_id", "type"),
         Index("ix_transactions_owner_category", "owner_id", "category"),
         Index("ix_transactions_account_date", "account_id", "date"),
+        Index("ix_transactions_owner_account_date", "owner_id", "account_id", "date"),
+        Index("ix_transactions_owner_account_type_date", "owner_id", "account_id", "type", "date"),
+        Index("ix_transactions_owner_account_category_date", "owner_id", "account_id", "category", "date"),
     )
 
 

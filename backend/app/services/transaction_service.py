@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from typing import Iterable
 
-from sqlalchemy import inspect, or_
+from sqlalchemy import func, inspect, or_
 from sqlalchemy.orm import Session
 
 from app.models import CategoryMemory, MerchantCategoryProfile, Transaction
@@ -31,6 +31,7 @@ STATEMENT_RECONCILIATION_AMOUNT_TOLERANCE = 0.01
 CATEGORY_REVIEW_CONFIDENCE_THRESHOLD = 0.75
 CATEGORY_REVIEW_REQUIRED_SOURCES = {"fallback", "payment_processor"}
 EXPENSE_INCOMPATIBLE_CATEGORIES = {"income", "salary", "refund"}
+MAX_TRANSACTION_PAGE_SIZE = 100
 
 HEADER_ALIASES = {
     "date": {"date", "transaction_date", "posted_date"},
@@ -524,6 +525,21 @@ def parse_date(value: str) -> date:
             continue
 
     raise ValueError(f"Invalid date format: {value}")
+
+
+def month_date_bounds(month: str | None) -> tuple[date | None, date | None]:
+    if not month:
+        return None, None
+    if not re.fullmatch(r"\d{4}-\d{2}", month):
+        raise ValueError("Month filter must use YYYY-MM format.")
+
+    year, month_number = (int(part) for part in month.split("-", 1))
+    start = date(year, month_number, 1)
+    if month_number == 12:
+        end = date(year + 1, 1, 1)
+    else:
+        end = date(year, month_number + 1, 1)
+    return start, end
 
 
 def parse_amount(value: str) -> float:
@@ -1441,6 +1457,53 @@ def learnable_category_from_memory(
     return normalize_category_name(best_match[1]), best_match[0]
 
 
+def protected_income_category_decision(description: str, tx_type: str) -> CategoryDecision | None:
+    """Apply hard safety rules before user memory for cashflow-neutral income.
+
+    A user may teach SQDC or Orange Mart as a personal category, but bank
+    funding language like e-Transfer received should not be learned as earned
+    income just because old imports created stale memory rows.
+    """
+
+    if tx_type != "income":
+        return None
+
+    lowered = normalize_category_signal_text(description)
+    raw_lowered = description.lower()
+
+    for keyword in CATEGORY_RULES["salary"]:
+        if keyword_matches_description(keyword, lowered, raw_lowered):
+            return CategoryDecision(
+                category="salary",
+                confidence=0.94,
+                matched_keyword=keyword,
+                reason="Matched an income rule in the transaction description.",
+                source="rule",
+            )
+
+    for keyword in CATEGORY_RULES["refund"]:
+        if keyword_matches_description(keyword, lowered, raw_lowered):
+            return CategoryDecision(
+                category="refund",
+                confidence=0.91,
+                matched_keyword=keyword,
+                reason="Matched a refund or statement-credit rule in the transaction description.",
+                source="rule",
+            )
+
+    for keyword in CATEGORY_RULES["transfer"]:
+        if keyword_matches_description(keyword, lowered, raw_lowered):
+            return CategoryDecision(
+                category="transfer",
+                confidence=0.93,
+                matched_keyword=keyword,
+                reason="Matched a transfer/funding rule before learned memory, so this is not treated as earned income.",
+                source="protected_rule",
+            )
+
+    return None
+
+
 def categorize_transaction_details(
     db: Session,
     owner_id: int,
@@ -1448,6 +1511,10 @@ def categorize_transaction_details(
     tx_type: str,
     amount: float | None = None,
 ) -> CategoryDecision:
+    protected_decision = protected_income_category_decision(description, tx_type)
+    if protected_decision:
+        return protected_decision
+
     merchant_profile = learnable_category_from_merchant_profile(
         db,
         owner_id,
@@ -1949,6 +2016,140 @@ def parse_csv_statement_preview(
     return {
         "preview_rows": preview_rows,
         "invalid_rows_skipped": invalid_rows_skipped,
+    }
+
+
+def build_transaction_scope_query(
+    db: Session,
+    owner_id: int,
+    account_id: int | None = None,
+):
+    query = db.query(Transaction).filter(Transaction.owner_id == owner_id)
+    if account_id is not None:
+        query = query.filter(Transaction.account_id == account_id)
+    return query
+
+
+def apply_transaction_filters(
+    query,
+    *,
+    transaction_type: str | None = None,
+    month: str | None = None,
+    category: str | None = None,
+    description: str | None = None,
+    amount_min: float | None = None,
+    amount_max: float | None = None,
+    amount_min_exclusive: bool = False,
+):
+    if transaction_type in {"income", "expense"}:
+        query = query.filter(Transaction.type == transaction_type)
+
+    month_start, month_end = month_date_bounds(month)
+    if month_start and month_end:
+        query = query.filter(Transaction.date >= month_start, Transaction.date < month_end)
+
+    if category:
+        normalized_category = normalize_category_name(category)
+        category_values = {
+            normalized_category,
+            category.strip().lower(),
+        }
+        query = query.filter(func.lower(Transaction.category).in_(tuple(category_values)))
+
+    if description:
+        normalized_description = re.sub(r"\s+", " ", description.strip().lower())
+        if normalized_description:
+            query = query.filter(func.lower(Transaction.description).like(f"%{normalized_description}%"))
+
+    absolute_amount = func.abs(Transaction.amount)
+    if amount_min is not None:
+        if amount_min_exclusive:
+            query = query.filter(absolute_amount > amount_min)
+        else:
+            query = query.filter(absolute_amount >= amount_min)
+    if amount_max is not None:
+        query = query.filter(absolute_amount < amount_max)
+
+    return query
+
+
+def get_transaction_filter_options(db: Session, owner_id: int, account_id: int | None = None) -> dict:
+    scope_query = build_transaction_scope_query(db, owner_id, account_id=account_id)
+    date_rows = scope_query.with_entities(Transaction.date).distinct().all()
+    category_rows = scope_query.with_entities(Transaction.category).distinct().all()
+
+    months = sorted(
+        {
+            row[0].isoformat()[:7]
+            for row in date_rows
+            if row[0] is not None
+        },
+        reverse=True,
+    )
+    categories = sorted(
+        {
+            normalize_category_name(row[0])
+            for row in category_rows
+            if row[0]
+        }
+    )
+
+    return {
+        "available_months": months,
+        "available_categories": categories,
+    }
+
+
+def get_transactions_page_for_user(
+    db: Session,
+    owner_id: int,
+    account_id: int | None = None,
+    transaction_type: str | None = None,
+    month: str | None = None,
+    category: str | None = None,
+    description: str | None = None,
+    amount_min: float | None = None,
+    amount_max: float | None = None,
+    amount_min_exclusive: bool = False,
+    page: int = 1,
+    page_size: int = 12,
+) -> dict:
+    safe_page = max(1, int(page or 1))
+    safe_page_size = min(MAX_TRANSACTION_PAGE_SIZE, max(1, int(page_size or 12)))
+
+    scope_query = build_transaction_scope_query(db, owner_id, account_id=account_id)
+    scope_total = scope_query.count()
+    filtered_query = apply_transaction_filters(
+        scope_query,
+        transaction_type=transaction_type,
+        month=month,
+        category=category,
+        description=description,
+        amount_min=amount_min,
+        amount_max=amount_max,
+        amount_min_exclusive=amount_min_exclusive,
+    )
+
+    total = filtered_query.count()
+    total_pages = max(1, (total + safe_page_size - 1) // safe_page_size)
+    safe_page = min(safe_page, total_pages)
+    offset = (safe_page - 1) * safe_page_size
+    items = (
+        filtered_query.order_by(Transaction.date.desc(), Transaction.id.desc())
+        .offset(offset)
+        .limit(safe_page_size)
+        .all()
+    )
+    filter_options = get_transaction_filter_options(db, owner_id, account_id=account_id)
+
+    return {
+        "items": items,
+        "total": total,
+        "scope_total": scope_total,
+        "page": safe_page,
+        "page_size": safe_page_size,
+        "total_pages": total_pages,
+        **filter_options,
     }
 
 

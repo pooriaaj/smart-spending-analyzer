@@ -21,6 +21,7 @@ from app.schemas import (
     SuspiciousAmountRepairItem,
     SuspiciousAmountRepairPreviewResponse,
     TransactionCreate,
+    TransactionListResponse,
     TransactionResponse,
 )
 from app.services.account_service import ensure_default_account, get_account_for_user
@@ -34,6 +35,7 @@ from app.services.transaction_service import (
     find_likely_statement_match,
     get_existing_duplicate_keys,
     get_existing_statement_match_map,
+    get_transactions_page_for_user,
     get_transactions_for_user,
     get_uncategorized_candidates,
     merchant_category_amount_matches,
@@ -97,6 +99,52 @@ def get_transactions(
             raise HTTPException(status_code=404, detail="Account not found")
 
     return get_transactions_for_user(db, current_user.id, account_id=account_id)
+
+
+@router.get("/page", response_model=TransactionListResponse)
+def get_transactions_page(
+    account_id: int | None = Query(default=None),
+    transaction_type: str | None = Query(default=None, alias="type"),
+    month: str | None = Query(default=None),
+    category: str | None = Query(default=None),
+    description: str | None = Query(default=None),
+    amount_min: float | None = Query(default=None),
+    amount_max: float | None = Query(default=None),
+    amount_min_exclusive: bool = Query(default=False),
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=12, ge=1, le=100),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    ensure_default_account(db, current_user)
+
+    if account_id is not None:
+        account = get_account_for_user(db, current_user.id, account_id)
+        if not account:
+            raise HTTPException(status_code=404, detail="Account not found")
+
+    if transaction_type is not None and transaction_type not in {"income", "expense"}:
+        raise HTTPException(status_code=400, detail="Transaction type must be income or expense")
+
+    try:
+        result = get_transactions_page_for_user(
+            db=db,
+            owner_id=current_user.id,
+            account_id=account_id,
+            transaction_type=transaction_type,
+            month=month,
+            category=category,
+            description=description,
+            amount_min=amount_min,
+            amount_max=amount_max,
+            amount_min_exclusive=amount_min_exclusive,
+            page=page,
+            page_size=page_size,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+    return TransactionListResponse(**result)
 
 
 @router.post("/", response_model=TransactionResponse)

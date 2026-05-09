@@ -7,6 +7,15 @@ ON transactions (owner_id, type);
 CREATE INDEX IF NOT EXISTS ix_transactions_owner_category
 ON transactions (owner_id, category);
 
+CREATE INDEX IF NOT EXISTS ix_transactions_owner_account_date
+ON transactions (owner_id, account_id, date);
+
+CREATE INDEX IF NOT EXISTS ix_transactions_owner_account_type_date
+ON transactions (owner_id, account_id, type, date);
+
+CREATE INDEX IF NOT EXISTS ix_transactions_owner_account_category_date
+ON transactions (owner_id, account_id, category, date);
+
 CREATE INDEX IF NOT EXISTS ix_transactions_date
 ON transactions (date);
 
