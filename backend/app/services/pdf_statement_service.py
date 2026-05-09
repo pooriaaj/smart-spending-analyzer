@@ -1574,6 +1574,7 @@ def finalize_pending_transaction(
         owner_id=owner_id,
         description=description,
         tx_type=tx_type,
+        amount=abs(amount),
     )
     category = category_decision.category
     category_review_required, category_review_reason = build_category_review_metadata(category_decision)

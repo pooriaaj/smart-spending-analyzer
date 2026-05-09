@@ -166,6 +166,7 @@ Rules:
         owner_id=owner_id,
         description=description_for_category or (merchant or filename),
         tx_type=transaction_type,
+        amount=amount,
     )
 
     confidence = _compute_confidence(

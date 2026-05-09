@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from typing import Iterable
 
-from sqlalchemy import inspect
+from sqlalchemy import inspect, or_
 from sqlalchemy.orm import Session
 
 from app.models import CategoryMemory, MerchantCategoryProfile, Transaction
@@ -403,6 +403,22 @@ MERCHANT_PHRASE_ALIASES = {
 MERCHANT_PHRASE_ALIASES.update(MERCHANT_ALIAS_EXPANSION)
 
 AMBIGUOUS_PRIMARY_MERCHANTS = {"apple", "google", "amazon", "bell", "rogers", "td", "rbc"}
+AMOUNT_SENSITIVE_MERCHANT_KEYS = {
+    "amazon",
+    "amazon marketplace",
+    "apple",
+    "apple com bill",
+    "bell",
+    "costco",
+    "dollarama",
+    "google",
+    "orange mart",
+    "paypal",
+    "rogers",
+    "shoppers drug mart",
+    "walmart",
+}
+AMOUNT_PROFILE_SEPARATOR = "|amount:"
 REPEATING_DESCRIPTION_STOPWORDS = MERCHANT_PROFILE_STOPWORDS - {
     "deposit",
     "direct",
@@ -703,6 +719,97 @@ def merchant_profile_confidence(confirmation_count: int) -> float:
     return 0.9
 
 
+def merchant_profile_base_key(merchant_key: str | None) -> str:
+    if not merchant_key:
+        return ""
+    return merchant_key.split(AMOUNT_PROFILE_SEPARATOR, 1)[0]
+
+
+def merchant_key_requires_amount_guard(merchant_key: str | None) -> bool:
+    base_key = merchant_profile_base_key(merchant_key).strip().lower()
+    return base_key in AMOUNT_SENSITIVE_MERCHANT_KEYS
+
+
+def normalize_amount_for_learning(amount: float | None) -> float | None:
+    if amount is None:
+        return None
+    try:
+        normalized_amount = abs(float(amount))
+    except (TypeError, ValueError):
+        return None
+    if normalized_amount <= 0:
+        return None
+    return normalized_amount
+
+
+def learned_amount_bucket(amount: float | None) -> str | None:
+    normalized_amount = normalize_amount_for_learning(amount)
+    if normalized_amount is None:
+        return None
+
+    if normalized_amount < 20:
+        bucket = round(normalized_amount / 5) * 5
+    elif normalized_amount < 100:
+        bucket = round(normalized_amount / 10) * 10
+    elif normalized_amount < 500:
+        bucket = round(normalized_amount / 25) * 25
+    else:
+        bucket = round(normalized_amount / 100) * 100
+
+    return str(int(max(1, bucket)))
+
+
+def learned_profile_key_for_amount(merchant_key: str, amount: float | None) -> str:
+    if not merchant_key_requires_amount_guard(merchant_key):
+        return merchant_key
+
+    amount_bucket = learned_amount_bucket(amount)
+    if not amount_bucket:
+        return merchant_key
+
+    return f"{merchant_key}{AMOUNT_PROFILE_SEPARATOR}{amount_bucket}"[:160]
+
+
+def amounts_are_similar_for_learning(
+    known_amount: float | None,
+    candidate_amount: float | None,
+) -> bool:
+    known = normalize_amount_for_learning(known_amount)
+    candidate = normalize_amount_for_learning(candidate_amount)
+    if known is None or candidate is None:
+        return False
+
+    smaller = min(known, candidate)
+    difference = abs(known - candidate)
+    if smaller < 20:
+        tolerance = max(3.0, smaller * 0.25)
+    elif smaller < 100:
+        tolerance = max(6.0, smaller * 0.22)
+    else:
+        tolerance = max(15.0, smaller * 0.18)
+
+    return difference <= tolerance
+
+
+def merchant_category_amount_matches(
+    merchant_key: str | None,
+    learned_amount: float | None,
+    candidate_amount: float | None,
+) -> bool:
+    if not merchant_key_requires_amount_guard(merchant_key):
+        return True
+    return amounts_are_similar_for_learning(learned_amount, candidate_amount)
+
+
+def merchant_profile_amount_matches(
+    profile: MerchantCategoryProfile,
+    candidate_amount: float | None,
+) -> bool:
+    if not merchant_key_requires_amount_guard(profile.merchant_key):
+        return True
+    return amounts_are_similar_for_learning(profile.last_amount, candidate_amount)
+
+
 def merchant_profile_table_available(db: Session) -> bool:
     try:
         return inspect(db.get_bind()).has_table(MerchantCategoryProfile.__tablename__)
@@ -730,11 +837,12 @@ def save_merchant_category_profile(
         return {"created": 0, "updated": 0}
 
     merchant_key, display_name = fingerprint
+    profile_key = learned_profile_key_for_amount(merchant_key, amount)
     existing = (
         db.query(MerchantCategoryProfile)
         .filter(
             MerchantCategoryProfile.owner_id == owner_id,
-            MerchantCategoryProfile.merchant_key == merchant_key,
+            MerchantCategoryProfile.merchant_key == profile_key,
             MerchantCategoryProfile.transaction_type == tx_type,
         )
         .first()
@@ -751,7 +859,7 @@ def save_merchant_category_profile(
 
     db.add(
         MerchantCategoryProfile(
-            merchant_key=merchant_key,
+            merchant_key=profile_key,
             display_name=display_name,
             category=normalized_category,
             transaction_type=tx_type,
@@ -827,6 +935,7 @@ def apply_category_to_similar_transactions(
     description: str,
     category: str,
     tx_type: str,
+    amount: float | None = None,
 ) -> int:
     normalized_category = normalize_category_name(category)
     if not should_store_category_memory(normalized_category):
@@ -850,6 +959,8 @@ def apply_category_to_similar_transactions(
     for transaction in candidates:
         transaction_fingerprint = extract_merchant_fingerprint(transaction.description)
         if not transaction_fingerprint or transaction_fingerprint[0] != merchant_key:
+            continue
+        if not merchant_category_amount_matches(merchant_key, amount, transaction.amount):
             continue
         if normalize_category_name(transaction.category) == normalized_category:
             continue
@@ -1191,6 +1302,7 @@ def learnable_category_from_merchant_profile(
     owner_id: int,
     description: str,
     tx_type: str,
+    amount: float | None = None,
 ) -> MerchantCategoryProfile | None:
     if not merchant_profile_table_available(db):
         return None
@@ -1200,15 +1312,89 @@ def learnable_category_from_merchant_profile(
         return None
 
     merchant_key, _ = fingerprint
-    return (
+    candidate_query = (
         db.query(MerchantCategoryProfile)
         .filter(
             MerchantCategoryProfile.owner_id == owner_id,
-            MerchantCategoryProfile.merchant_key == merchant_key,
             MerchantCategoryProfile.transaction_type == tx_type,
         )
-        .first()
     )
+
+    if merchant_key_requires_amount_guard(merchant_key):
+        candidate_profiles = (
+            candidate_query.filter(
+                or_(
+                    MerchantCategoryProfile.merchant_key == merchant_key,
+                    MerchantCategoryProfile.merchant_key.like(
+                        f"{merchant_key}{AMOUNT_PROFILE_SEPARATOR}%"
+                    ),
+                )
+            )
+            .all()
+        )
+        candidate_profiles = [
+            profile
+            for profile in candidate_profiles
+            if merchant_profile_amount_matches(profile, amount)
+        ]
+    else:
+        candidate_profiles = (
+            candidate_query.filter(MerchantCategoryProfile.merchant_key == merchant_key)
+            .all()
+        )
+
+    if not candidate_profiles:
+        return None
+
+    return sorted(
+        candidate_profiles,
+        key=lambda profile: (
+            merchant_profile_amount_matches(profile, amount),
+            int(profile.confirmation_count or 0),
+            float(profile.confidence or 0),
+            (profile.updated_at or profile.created_at or datetime.min),
+        ),
+        reverse=True,
+    )[0]
+
+
+def category_memory_amount_matches(
+    db: Session,
+    owner_id: int,
+    description: str,
+    tx_type: str,
+    category: str,
+    amount: float | None = None,
+) -> bool:
+    fingerprint = extract_merchant_fingerprint(description)
+    if not fingerprint:
+        return True
+
+    merchant_key, _ = fingerprint
+    if not merchant_key_requires_amount_guard(merchant_key):
+        return True
+
+    if not merchant_profile_table_available(db):
+        return False
+
+    normalized_category = normalize_category_name(category)
+    profiles = (
+        db.query(MerchantCategoryProfile)
+        .filter(
+            MerchantCategoryProfile.owner_id == owner_id,
+            MerchantCategoryProfile.transaction_type == tx_type,
+            MerchantCategoryProfile.category == normalized_category,
+            or_(
+                MerchantCategoryProfile.merchant_key == merchant_key,
+                MerchantCategoryProfile.merchant_key.like(
+                    f"{merchant_key}{AMOUNT_PROFILE_SEPARATOR}%"
+                ),
+            ),
+        )
+        .all()
+    )
+
+    return any(merchant_profile_amount_matches(profile, amount) for profile in profiles)
 
 
 def learnable_category_from_memory(
@@ -1216,6 +1402,7 @@ def learnable_category_from_memory(
     owner_id: int,
     description: str,
     tx_type: str,
+    amount: float | None = None,
 ) -> tuple[str, str] | None:
     normalized_description = normalize_category_signal_text(description)
     raw_description = description.lower()
@@ -1235,8 +1422,18 @@ def learnable_category_from_memory(
         if keyword in CATEGORY_MEMORY_STOPWORDS:
             continue
         if keyword and keyword_matches_description(keyword, normalized_description, raw_description):
+            normalized_category = normalize_category_name(item.category)
+            if not category_memory_amount_matches(
+                db=db,
+                owner_id=owner_id,
+                description=description,
+                tx_type=tx_type,
+                category=normalized_category,
+                amount=amount,
+            ):
+                continue
             if best_match is None or len(keyword) > len(best_match[0]):
-                best_match = (keyword, item.category)
+                best_match = (keyword, normalized_category)
 
     if not best_match:
         return None
@@ -1249,18 +1446,21 @@ def categorize_transaction_details(
     owner_id: int,
     description: str,
     tx_type: str,
+    amount: float | None = None,
 ) -> CategoryDecision:
     merchant_profile = learnable_category_from_merchant_profile(
         db,
         owner_id,
         description,
         tx_type,
+        amount,
     )
     if merchant_profile:
+        matched_merchant = merchant_profile_base_key(merchant_profile.merchant_key)
         return CategoryDecision(
             category=normalize_category_name(merchant_profile.category),
             confidence=float(merchant_profile.confidence or merchant_profile_confidence(1)),
-            matched_keyword=merchant_profile.merchant_key,
+            matched_keyword=matched_merchant,
             reason=(
                 "Matched learned category memory from your learned merchant profile "
                 "and previous confirmed categories "
@@ -1270,7 +1470,7 @@ def categorize_transaction_details(
             source="merchant_profile",
         )
 
-    memory_match = learnable_category_from_memory(db, owner_id, description, tx_type)
+    memory_match = learnable_category_from_memory(db, owner_id, description, tx_type, amount)
     if memory_match:
         category, matched_keyword = memory_match
         return CategoryDecision(
@@ -1398,12 +1598,19 @@ def categorize_transaction_details(
     )
 
 
-def categorize_transaction(db: Session, owner_id: int, description: str, tx_type: str) -> str:
+def categorize_transaction(
+    db: Session,
+    owner_id: int,
+    description: str,
+    tx_type: str,
+    amount: float | None = None,
+) -> str:
     return categorize_transaction_details(
         db=db,
         owner_id=owner_id,
         description=description,
         tx_type=tx_type,
+        amount=amount,
     ).category
 
 
@@ -1413,6 +1620,7 @@ def resolve_import_category_for_transaction(
     description: str,
     tx_type: str,
     category: str | None,
+    amount: float | None = None,
 ) -> str:
     normalized_category = normalize_category_name(category)
     if tx_type == "expense" and normalized_category in EXPENSE_INCOMPATIBLE_CATEGORIES:
@@ -1421,6 +1629,7 @@ def resolve_import_category_for_transaction(
             owner_id=owner_id,
             description=description,
             tx_type=tx_type,
+            amount=amount,
         )
         if decision.category not in EXPENSE_INCOMPATIBLE_CATEGORIES:
             return decision.category
@@ -1597,9 +1806,10 @@ def import_transactions_from_csv(
                     description=description,
                     tx_type=tx_type,
                     category=row[header_mapping["category"]],
+                    amount=amount,
                 )
             else:
-                category = categorize_transaction(db, owner_id, description, tx_type)
+                category = categorize_transaction(db, owner_id, description, tx_type, amount=amount)
 
             if not description or not category:
                 raise ValueError("Description and category are required.")
@@ -1682,6 +1892,7 @@ def parse_csv_statement_preview(
                     description=description,
                     tx_type=tx_type,
                     category=supplied_category,
+                    amount=amount,
                 )
                 if category != supplied_category:
                     category_confidence = 0.88
@@ -1701,6 +1912,7 @@ def parse_csv_statement_preview(
                     owner_id=owner_id,
                     description=description,
                     tx_type=tx_type,
+                    amount=amount,
                 )
                 category = decision.category
                 category_confidence = decision.confidence
@@ -1825,6 +2037,7 @@ def normalize_existing_categories_for_user(
             owner_id=owner_id,
             description=transaction.description,
             tx_type=transaction.type,
+            amount=transaction.amount,
         )
         suggested_category = normalize_category_name(category_decision.category)
         should_apply_suggestion = (

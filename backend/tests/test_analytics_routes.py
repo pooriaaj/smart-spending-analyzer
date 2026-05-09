@@ -179,7 +179,7 @@ class AnalyticsRouteTest(unittest.TestCase):
         self.assertEqual(payload["summary"]["total_income"], 1200.0)
         self.assertEqual(payload["summary"]["total_expenses"], 150.0)
         self.assertEqual(payload["summary"]["balance"], 1050.0)
-        self.assertEqual(payload["top_category"]["category"], "Entertainment")
+        self.assertEqual(payload["top_category"]["category"], "entertainment")
         self.assertEqual(payload["account_comparison"], [])
         self.assertTrue(
             all(item["account_id"] == self.savings_account_id for item in payload["recent_transactions"])
@@ -496,15 +496,16 @@ class AnalyticsRouteTest(unittest.TestCase):
             )
             session.commit()
 
-        response = self.client.get(
-            "/analytics/future-simulator",
-            params={
-                "account_id": self.chequing_account_id,
-                "months": 3,
-                "income_adjustment": 100,
-                "expense_adjustment": -50,
-            },
-        )
+        with patch("app.services.budget_metrics.date", FixedBudgetDate):
+            response = self.client.get(
+                "/analytics/future-simulator",
+                params={
+                    "account_id": self.chequing_account_id,
+                    "months": 3,
+                    "income_adjustment": 100,
+                    "expense_adjustment": -50,
+                },
+            )
 
         self.assertEqual(response.status_code, 200, response.text)
         payload = response.json()
@@ -773,16 +774,17 @@ class AnalyticsRouteTest(unittest.TestCase):
             )
             session.commit()
 
-        response = self.client.get(
-            "/analytics/future-simulator",
-            params={
-                "account_id": self.chequing_account_id,
-                "months": 3,
-                "event_amount": -1200,
-                "event_month_offset": 2,
-                "event_label": "Planned Trip",
-            },
-        )
+        with patch("app.services.budget_metrics.date", FixedBudgetDate):
+            response = self.client.get(
+                "/analytics/future-simulator",
+                params={
+                    "account_id": self.chequing_account_id,
+                    "months": 3,
+                    "event_amount": -1200,
+                    "event_month_offset": 2,
+                    "event_label": "Planned Trip",
+                },
+            )
 
         self.assertEqual(response.status_code, 200, response.text)
         payload = response.json()
@@ -906,8 +908,8 @@ class AnalyticsRouteTest(unittest.TestCase):
         self.assertEqual(response.status_code, 200, response.text)
         suggestions = response.json()["suggestions"]
 
-        self.assertIn("Why is Entertainment my top expense category?", suggestions)
-        self.assertIn("How can I reduce Entertainment spending?", suggestions)
+        self.assertIn("Why is entertainment my top expense category?", suggestions)
+        self.assertIn("How can I reduce entertainment spending?", suggestions)
         self.assertIn("What will my balance look like in 3 months?", suggestions)
         self.assertNotIn("Why is Groceries my top expense category?", suggestions)
 
@@ -968,7 +970,10 @@ class AnalyticsRouteTest(unittest.TestCase):
     def test_assistant_response_reports_scoped_balance(self) -> None:
         self.seed_transactions()
 
-        with patch("app.services.analytics_service.generate_llm_assistant_response", return_value=None):
+        with patch("app.services.budget_metrics.date", FixedBudgetDate), patch(
+            "app.services.analytics_service.generate_llm_assistant_response",
+            return_value=None,
+        ):
             response = self.client.post(
                 "/analytics/assistant-response",
                 json={
@@ -989,7 +994,10 @@ class AnalyticsRouteTest(unittest.TestCase):
     def test_assistant_response_focuses_on_explicit_category(self) -> None:
         self.seed_transactions()
 
-        with patch("app.services.analytics_service.generate_llm_assistant_response", return_value=None):
+        with patch("app.services.budget_metrics.date", FixedBudgetDate), patch(
+            "app.services.analytics_service.generate_llm_assistant_response",
+            return_value=None,
+        ):
             response = self.client.post(
                 "/analytics/assistant-response",
                 json={
@@ -1441,7 +1449,10 @@ class AnalyticsRouteTest(unittest.TestCase):
             )
             session.commit()
 
-        with patch("app.services.analytics_service.generate_llm_assistant_response", return_value=None):
+        with patch("app.services.budget_metrics.date", FixedBudgetDate), patch(
+            "app.services.analytics_service.generate_llm_assistant_response",
+            return_value=None,
+        ):
             response = self.client.post(
                 "/analytics/assistant-response",
                 json={

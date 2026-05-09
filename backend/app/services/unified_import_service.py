@@ -34,6 +34,8 @@ def annotate_preview_rows_for_duplicates(
     existing_keys = get_existing_duplicate_keys(db, owner_id, account_id=account_id)
     existing_statement_matches = get_existing_statement_match_map(db, owner_id, account_id=account_id)
     seen_matched_transaction_ids: set[int] = set()
+    seen_preview_duplicate_keys: set[tuple] = set()
+    seen_preview_statement_keys: set[tuple] = set()
     annotated_rows: list[StatementPreviewRow] = []
 
     for row in preview_rows:
@@ -79,6 +81,12 @@ def annotate_preview_rows_for_duplicates(
         elif statement_match_key in existing_statement_matches:
             matched_transaction = existing_statement_matches[statement_match_key]
             duplicate_reason = f"Already written as {matched_transaction.description}."
+        elif (
+            duplicate_key in seen_preview_duplicate_keys
+            or statement_match_key in seen_preview_statement_keys
+        ):
+            matched_transaction = None
+            duplicate_reason = "Duplicate of another row in this preview."
         else:
             matched_transaction = find_likely_statement_match(
                 db=db,
@@ -101,6 +109,9 @@ def annotate_preview_rows_for_duplicates(
             reconciliation_status = "matched"
         elif duplicate_reason == "Already written in this account.":
             reconciliation_status = "matched"
+
+        seen_preview_duplicate_keys.add(duplicate_key)
+        seen_preview_statement_keys.add(statement_match_key)
 
         annotated_rows.append(
             row.model_copy(

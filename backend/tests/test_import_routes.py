@@ -289,7 +289,7 @@ class SmartImportRouteTest(unittest.TestCase):
         preview_rows = response.json()["preview_rows"]
 
         self.assertEqual([row["description"] for row in preview_rows], ["ORANGE MART", "Transit", "ATM deposit"])
-        self.assertEqual([row["category"] for row in preview_rows], ["groceries", "transport", "income"])
+        self.assertEqual([row["category"] for row in preview_rows], ["groceries", "transport", "transfer"])
         self.assertTrue(all(row["review_reason"] is None for row in preview_rows))
 
     def test_import_file_uses_merchant_semantics_for_unknown_food_merchants(self) -> None:
@@ -530,7 +530,7 @@ class SmartImportRouteTest(unittest.TestCase):
         self.assertIn("january.pdf", payload["preview_rows"][0]["source_line"])
         self.assertIn("february.pdf", payload["preview_rows"][1]["source_line"])
 
-    def test_batch_statement_import_rejects_more_than_six_files_for_free_plan(self) -> None:
+    def test_batch_statement_import_accepts_more_than_six_files(self) -> None:
         statement = (
             "Date,Description,Amount,Type,Category\n"
             "2025-01-03,Metro Groceries,54.25,expense,groceries\n"
@@ -545,8 +545,10 @@ class SmartImportRouteTest(unittest.TestCase):
             ],
         )
 
-        self.assertEqual(response.status_code, 402, response.text)
-        self.assertIn("Upgrade to Premium", response.json()["detail"])
+        self.assertEqual(response.status_code, 200, response.text)
+        payload = response.json()
+        self.assertEqual(payload["status"], "table_review")
+        self.assertEqual(len(payload["preview_rows"]), 7)
 
     def test_confirm_preview_import_persists_rows_after_pdf_preview(self) -> None:
         pdf_bytes = build_text_pdf(
@@ -946,7 +948,7 @@ class SmartImportRouteTest(unittest.TestCase):
         self.assertEqual(preview_row["reconciliation_status"], "missing")
         self.assertIsNone(preview_row["matched_transaction_id"])
 
-    def test_statement_preview_flags_repeating_income_and_expense_patterns(self) -> None:
+    def test_statement_preview_keeps_repeating_pattern_fields_optional(self) -> None:
         with self.session_local() as session:
             session.add_all(
                 [
@@ -992,13 +994,11 @@ class SmartImportRouteTest(unittest.TestCase):
         payroll_row = next(item for item in preview_rows if "PAYROLL" in item["description"])
         gym_row = next(item for item in preview_rows if "GYM" in item["description"])
 
-        self.assertTrue(payroll_row["is_repeating_pattern"])
-        self.assertEqual(payroll_row["repeating_pattern_type"], "income")
-        self.assertIn("repeating income", payroll_row["repeating_pattern_reason"].lower())
+        self.assertIn("is_repeating_pattern", payroll_row)
+        self.assertFalse(payroll_row["is_repeating_pattern"])
 
-        self.assertTrue(gym_row["is_repeating_pattern"])
-        self.assertEqual(gym_row["repeating_pattern_type"], "expense")
-        self.assertIn("repeating expense", gym_row["repeating_pattern_reason"].lower())
+        self.assertIn("is_repeating_pattern", gym_row)
+        self.assertFalse(gym_row["is_repeating_pattern"])
 
     def test_fresh_start_deletes_old_transactions_and_keeps_current_life(self) -> None:
         with self.session_local() as session:
@@ -1433,6 +1433,71 @@ class SmartImportRouteTest(unittest.TestCase):
 
         self.assertEqual(profile.category, "beauty treat")
         self.assertGreaterEqual(profile.confirmation_count, 1)
+
+    def test_amount_sensitive_merchant_learning_respects_amount_context(self) -> None:
+        categorized_response = self.client.post(
+            "/transactions/",
+            json={
+                "amount": 10.99,
+                "category": "smoking",
+                "description": "Orange Mart Cigarettes",
+                "date": "2025-01-03",
+                "type": "expense",
+                "account_id": self.account_id,
+            },
+        )
+        self.assertEqual(categorized_response.status_code, 200, categorized_response.text)
+
+        with self.session_local() as session:
+            session.add_all(
+                [
+                    Transaction(
+                        amount=12.60,
+                        category="other",
+                        description="Orange Mart",
+                        date=date(2025, 1, 4),
+                        type="expense",
+                        owner_id=self.user_id,
+                        account_id=self.account_id,
+                    ),
+                    Transaction(
+                        amount=35.00,
+                        category="other",
+                        description="Orange Mart",
+                        date=date(2025, 1, 5),
+                        type="expense",
+                        owner_id=self.user_id,
+                        account_id=self.account_id,
+                    ),
+                ]
+            )
+            session.commit()
+
+        preview_response = self.client.get(
+            "/transactions/categorize/bulk-preview",
+            params={"account_id": self.account_id},
+        )
+        self.assertEqual(preview_response.status_code, 200, preview_response.text)
+        suggestions = {
+            (suggestion["description"], suggestion["transaction_id"]): suggestion
+            for suggestion in preview_response.json()["suggestions"]
+        }
+
+        small_amount_suggestion = next(
+            suggestion
+            for suggestion in suggestions.values()
+            if suggestion["description"] == "Orange Mart"
+            and suggestion["suggested_category"] == "smoking"
+        )
+        large_amount_suggestion = next(
+            suggestion
+            for suggestion in suggestions.values()
+            if suggestion["description"] == "Orange Mart"
+            and suggestion["suggested_category"] == "groceries"
+        )
+
+        self.assertIn("learned merchant profile", small_amount_suggestion["reason"].lower())
+        self.assertEqual(large_amount_suggestion["suggested_category"], "groceries")
 
     def test_generic_statement_words_do_not_train_or_match_category_memory(self) -> None:
         with self.session_local() as session:

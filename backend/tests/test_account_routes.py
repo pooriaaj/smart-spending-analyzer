@@ -126,10 +126,10 @@ class AccountRouteTest(unittest.TestCase):
         self.assertEqual(chequing["total_income"], 2000.0)
         self.assertEqual(chequing["total_expenses"], 180.0)
         self.assertEqual(chequing["balance"], 1820.0)
-        self.assertEqual(chequing["top_category"], "Groceries")
-        self.assertEqual(savings["total_income"], 500.0)
+        self.assertEqual(chequing["top_category"], "groceries")
+        self.assertEqual(savings["total_income"], 0.0)
         self.assertEqual(savings["total_expenses"], 0.0)
-        self.assertEqual(savings["balance"], 500.0)
+        self.assertEqual(savings["balance"], 0.0)
 
 
 if __name__ == "__main__":

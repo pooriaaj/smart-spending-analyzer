@@ -36,6 +36,7 @@ from app.services.transaction_service import (
     get_existing_statement_match_map,
     get_transactions_for_user,
     get_uncategorized_candidates,
+    merchant_category_amount_matches,
     normalize_category_name,
     normalize_existing_categories_for_user,
     normalize_description,
@@ -167,6 +168,7 @@ def update_transaction(
         description=updated_data.description,
         category=updated_data.category,
         tx_type=updated_data.type,
+        amount=updated_data.amount,
     )
     db.commit()
     db.refresh(transaction)
@@ -393,7 +395,7 @@ def confirm_preview_import(
         account_id=payload.account_id,
     )
     seen_matched_transaction_ids = set()
-    reviewed_categories_by_merchant: dict[tuple[str, str], str] = {}
+    reviewed_categories_by_merchant: dict[tuple[str, str], list[tuple[str, float]]] = {}
 
     for row in payload.rows:
         normalized_row_category = normalize_category_name(row.category)
@@ -402,7 +404,9 @@ def confirm_preview_import(
 
         fingerprint = extract_merchant_fingerprint(row.description)
         if fingerprint:
-            reviewed_categories_by_merchant[(fingerprint[0], row.type)] = normalized_row_category
+            reviewed_categories_by_merchant.setdefault((fingerprint[0], row.type), []).append(
+                (normalized_row_category, row.amount)
+            )
 
     imported = 0
     duplicates_skipped = 0
@@ -417,7 +421,12 @@ def confirm_preview_import(
             row_needs_category_review = row.category_review_required
             fingerprint = extract_merchant_fingerprint(description)
             if fingerprint:
-                learned_category = reviewed_categories_by_merchant.get((fingerprint[0], row.type))
+                learned_category = None
+                reviewed_categories = reviewed_categories_by_merchant.get((fingerprint[0], row.type), [])
+                for reviewed_category, reviewed_amount in reviewed_categories:
+                    if merchant_category_amount_matches(fingerprint[0], reviewed_amount, row.amount):
+                        learned_category = reviewed_category
+                        break
                 if learned_category and (
                     row_needs_category_review
                     or not should_store_category_memory(normalize_category_name(row_category))
@@ -431,6 +440,7 @@ def confirm_preview_import(
                 description=description,
                 tx_type=row.type,
                 category=row_category,
+                amount=row.amount,
             )
 
             if row_needs_category_review:
@@ -575,6 +585,7 @@ def get_bulk_category_preview(
             owner_id=current_user.id,
             description=transaction.description,
             tx_type=transaction.type,
+            amount=transaction.amount,
         )
         suggested_category = decision.category
 
@@ -624,6 +635,7 @@ def apply_bulk_category_suggestions(
             owner_id=current_user.id,
             description=transaction.description,
             tx_type=transaction.type,
+            amount=transaction.amount,
         )
         suggestion_map[transaction.id] = decision.category
 

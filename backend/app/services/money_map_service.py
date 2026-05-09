@@ -239,6 +239,7 @@ def get_money_map_payload(
             owner_id=user_id,
             description=transaction.description,
             tx_type=transaction.type,
+            amount=transaction.amount,
         )
         if decision.source == "fallback":
             continue
