@@ -498,6 +498,46 @@ class SmartImportRouteTest(unittest.TestCase):
         self.assertEqual(preview_row["category_source"], "community_profile")
         self.assertGreaterEqual(preview_row["category_confidence"], 0.8)
 
+        with self.session_local() as session:
+            cached_learning = (
+                session.query(MerchantLookupCache)
+                .filter(
+                    MerchantLookupCache.merchant_key == "narcos",
+                    MerchantLookupCache.transaction_type == "expense",
+                    MerchantLookupCache.provider == "community",
+                )
+                .one_or_none()
+            )
+
+        self.assertIsNotNone(cached_learning)
+        self.assertEqual(cached_learning.category, "clothing")
+
+        with self.session_local() as session:
+            session.add(
+                MerchantCategoryProfile(
+                    merchant_key="narcos",
+                    display_name="Narcos",
+                    category="entertainment",
+                    transaction_type="expense",
+                    confidence=0.97,
+                    confirmation_count=3,
+                    last_amount=44.0,
+                    owner_id=self.user_id,
+                )
+            )
+            session.commit()
+
+        personal_response = self.client.post(
+            "/transactions/import/file",
+            data={"account_id": str(self.account_id)},
+            files={"file": ("personal-learning-wins.pdf", pdf_bytes, "application/pdf")},
+        )
+
+        self.assertEqual(personal_response.status_code, 200, personal_response.text)
+        personal_row = personal_response.json()["preview_rows"][0]
+        self.assertEqual(personal_row["category"], "entertainment")
+        self.assertEqual(personal_row["category_source"], "merchant_profile")
+
     def test_import_file_uses_expanded_lifestyle_categories(self) -> None:
         pdf_bytes = build_text_pdf(
             [

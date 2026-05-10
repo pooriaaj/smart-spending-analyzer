@@ -11,7 +11,7 @@ from typing import Iterable
 from sqlalchemy import func, inspect, or_
 from sqlalchemy.orm import Session
 
-from app.models import CategoryMemory, MerchantCategoryProfile, Transaction
+from app.models import CategoryMemory, MerchantCategoryProfile, MerchantLookupCache, Transaction
 from app.services.category_taxonomy import (
     CATEGORY_ALIAS_EXPANSION,
     CATEGORY_KEYWORD_EXPANSION,
@@ -863,6 +863,173 @@ def merchant_profile_table_available(db: Session) -> bool:
         return False
 
 
+def build_community_profile_decision(
+    *,
+    merchant_key: str,
+    profiles: Iterable[MerchantCategoryProfile],
+) -> CategoryDecision | None:
+    category_owners: dict[str, set[int]] = {}
+    category_confirmations: Counter[str] = Counter()
+
+    for profile in profiles:
+        normalized_category = normalize_category_name(profile.category)
+        if normalized_category in UNCATEGORIZED_VALUES:
+            continue
+        if normalized_category in COMMUNITY_PROFILE_EXCLUDED_CATEGORIES:
+            continue
+        category_owners.setdefault(normalized_category, set()).add(profile.owner_id)
+        category_confirmations[normalized_category] += max(1, int(profile.confirmation_count or 1))
+
+    if not category_owners:
+        return None
+
+    all_owner_ids = set().union(*category_owners.values())
+    if len(all_owner_ids) < COMMUNITY_PROFILE_MIN_OWNER_COUNT:
+        return None
+
+    best_category = max(
+        category_owners,
+        key=lambda category: (
+            len(category_owners[category]),
+            category_confirmations[category],
+            category,
+        ),
+    )
+    best_owner_count = len(category_owners[best_category])
+    category_share = best_owner_count / len(all_owner_ids)
+    if (
+        best_owner_count < COMMUNITY_PROFILE_MIN_OWNER_COUNT
+        or category_share < COMMUNITY_PROFILE_MIN_CATEGORY_SHARE
+    ):
+        return None
+
+    confirmation_count = category_confirmations[best_category]
+    confidence = min(
+        0.9,
+        0.72 + (best_owner_count * 0.05) + (min(confirmation_count, 8) * 0.01),
+    )
+
+    return CategoryDecision(
+        category=best_category,
+        confidence=round(confidence, 2),
+        matched_keyword=merchant_key,
+        reason=(
+            "Matched anonymized community merchant learning from multiple users who "
+            "confirmed this merchant category. Personal memory still overrides this."
+        ),
+        source="community_profile",
+    )
+
+
+def get_cached_community_profile_decision(
+    db: Session,
+    merchant_key: str,
+    tx_type: str,
+) -> CategoryDecision | None:
+    cached = (
+        db.query(MerchantLookupCache)
+        .filter(
+            MerchantLookupCache.merchant_key == merchant_key,
+            MerchantLookupCache.transaction_type == tx_type,
+            MerchantLookupCache.provider == "community",
+        )
+        .first()
+    )
+    if not cached:
+        return None
+
+    category = normalize_category_name(cached.category)
+    if category in UNCATEGORIZED_VALUES or category in COMMUNITY_PROFILE_EXCLUDED_CATEGORIES:
+        return None
+
+    return CategoryDecision(
+        category=category,
+        confidence=min(0.9, float(cached.confidence or 0.78)),
+        matched_keyword=cached.matched_signal or merchant_key,
+        reason=(
+            "Matched stored anonymized community merchant consensus. "
+            "Personal memory still overrides this."
+        ),
+        source="community_profile",
+    )
+
+
+def save_community_profile_decision(
+    db: Session,
+    merchant_key: str,
+    tx_type: str,
+    decision: CategoryDecision,
+) -> None:
+    existing = (
+        db.query(MerchantLookupCache)
+        .filter(
+            MerchantLookupCache.merchant_key == merchant_key,
+            MerchantLookupCache.transaction_type == tx_type,
+        )
+        .first()
+    )
+    if existing:
+        existing.display_name = title_case_merchant_key(merchant_key)
+        existing.category = decision.category
+        existing.confidence = decision.confidence
+        existing.matched_signal = decision.matched_keyword
+        existing.provider = "community"
+        return
+
+    db.add(
+        MerchantLookupCache(
+            merchant_key=merchant_key,
+            display_name=title_case_merchant_key(merchant_key),
+            category=decision.category,
+            transaction_type=tx_type,
+            confidence=decision.confidence,
+            matched_signal=decision.matched_keyword,
+            provider="community",
+        )
+    )
+
+
+def clear_stale_community_profile_decision(db: Session, merchant_key: str, tx_type: str) -> None:
+    existing = (
+        db.query(MerchantLookupCache)
+        .filter(
+            MerchantLookupCache.merchant_key == merchant_key,
+            MerchantLookupCache.transaction_type == tx_type,
+            MerchantLookupCache.provider == "community",
+        )
+        .first()
+    )
+    if existing:
+        db.delete(existing)
+
+
+def refresh_community_merchant_profile_cache(
+    db: Session,
+    merchant_key: str,
+    tx_type: str,
+) -> None:
+    if tx_type != "expense":
+        return
+    if merchant_key_requires_amount_guard(merchant_key):
+        # Amount-sensitive merchants can mean different things at different
+        # price points. Keep those user-specific instead of global-cached.
+        return
+
+    profiles = (
+        db.query(MerchantCategoryProfile)
+        .filter(
+            MerchantCategoryProfile.merchant_key == merchant_key,
+            MerchantCategoryProfile.transaction_type == tx_type,
+        )
+        .all()
+    )
+    decision = build_community_profile_decision(merchant_key=merchant_key, profiles=profiles)
+    if decision:
+        save_community_profile_decision(db, merchant_key, tx_type, decision)
+    else:
+        clear_stale_community_profile_decision(db, merchant_key, tx_type)
+
+
 def save_merchant_category_profile(
     db: Session,
     owner_id: int,
@@ -901,6 +1068,8 @@ def save_merchant_category_profile(
             existing.category = normalized_category
         existing.confirmation_count = int(existing.confirmation_count or 0) + 1
         existing.confidence = merchant_profile_confidence(existing.confirmation_count)
+        db.flush()
+        refresh_community_merchant_profile_cache(db, merchant_key, tx_type)
         return {"created": 0, "updated": 1}
 
     db.add(
@@ -915,6 +1084,8 @@ def save_merchant_category_profile(
             owner_id=owner_id,
         )
     )
+    db.flush()
+    refresh_community_merchant_profile_cache(db, merchant_key, tx_type)
     return {"created": 1, "updated": 0}
 
 
@@ -1690,6 +1861,11 @@ def learnable_category_from_community_profiles(
         return None
 
     merchant_key, _ = fingerprint
+    if not merchant_key_requires_amount_guard(merchant_key):
+        cached = get_cached_community_profile_decision(db, merchant_key, tx_type)
+        if cached:
+            return cached
+
     profile_query = (
         db.query(MerchantCategoryProfile)
         .filter(
@@ -1722,56 +1898,11 @@ def learnable_category_from_community_profiles(
             .all()
         )
 
-    category_owners: dict[str, set[int]] = {}
-    category_confirmations: Counter[str] = Counter()
-    for profile in profiles:
-        normalized_category = normalize_category_name(profile.category)
-        if normalized_category in UNCATEGORIZED_VALUES:
-            continue
-        if normalized_category in COMMUNITY_PROFILE_EXCLUDED_CATEGORIES:
-            continue
-        category_owners.setdefault(normalized_category, set()).add(profile.owner_id)
-        category_confirmations[normalized_category] += max(1, int(profile.confirmation_count or 1))
+    decision = build_community_profile_decision(merchant_key=merchant_key, profiles=profiles)
+    if decision and not merchant_key_requires_amount_guard(merchant_key):
+        save_community_profile_decision(db, merchant_key, tx_type, decision)
 
-    if not category_owners:
-        return None
-
-    all_owner_ids = set().union(*category_owners.values())
-    if len(all_owner_ids) < COMMUNITY_PROFILE_MIN_OWNER_COUNT:
-        return None
-
-    best_category = max(
-        category_owners,
-        key=lambda category: (
-            len(category_owners[category]),
-            category_confirmations[category],
-            category,
-        ),
-    )
-    best_owner_count = len(category_owners[best_category])
-    category_share = best_owner_count / len(all_owner_ids)
-    if (
-        best_owner_count < COMMUNITY_PROFILE_MIN_OWNER_COUNT
-        or category_share < COMMUNITY_PROFILE_MIN_CATEGORY_SHARE
-    ):
-        return None
-
-    confirmation_count = category_confirmations[best_category]
-    confidence = min(
-        0.9,
-        0.72 + (best_owner_count * 0.05) + (min(confirmation_count, 8) * 0.01),
-    )
-
-    return CategoryDecision(
-        category=best_category,
-        confidence=round(confidence, 2),
-        matched_keyword=merchant_key,
-        reason=(
-            "Matched anonymized community merchant learning from multiple users who "
-            "confirmed this merchant category. Personal memory still overrides this."
-        ),
-        source="community_profile",
-    )
+    return decision
 
 
 def protected_income_category_decision(description: str, tx_type: str) -> CategoryDecision | None:

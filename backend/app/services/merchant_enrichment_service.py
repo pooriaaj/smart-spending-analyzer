@@ -573,12 +573,19 @@ def get_cached_merchant_enrichment(
     if not cached:
         return None
 
+    source = "community_profile" if cached.provider == "community" else "merchant_lookup_cache"
+    reason = (
+        "Matched anonymized community merchant learning from multiple confirmed users."
+        if cached.provider == "community"
+        else f"Matched cached merchant enrichment from {cached.provider}."
+    )
+
     return MerchantEnrichmentResult(
         category=cached.category,
         confidence=float(cached.confidence or 0.78),
         matched_keyword=cached.matched_signal,
-        reason=f"Matched cached merchant enrichment from {cached.provider}.",
-        source="merchant_lookup_cache",
+        reason=reason,
+        source=source,
     )
 
 
