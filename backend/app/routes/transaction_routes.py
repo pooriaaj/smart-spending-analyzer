@@ -12,6 +12,10 @@ from app.schemas import (
     BulkCategoryApplyResponse,
     BulkCategorySuggestionItem,
     BulkCategorySuggestionResponse,
+    CategoryLearningApplyRequest,
+    CategoryLearningApplyResponse,
+    CategoryLearningCandidateItem,
+    CategoryLearningCandidatesResponse,
     ConfirmPreviewImportRequest,
     FreshStartRequest,
     FreshStartResponse,
@@ -27,6 +31,7 @@ from app.schemas import (
 from app.services.account_service import ensure_default_account, get_account_for_user
 from app.services.seed_service import seed_realistic_transactions
 from app.services.transaction_service import (
+    apply_category_to_merchant_learning_group,
     apply_bulk_categories,
     build_duplicate_key,
     build_statement_match_key,
@@ -35,6 +40,7 @@ from app.services.transaction_service import (
     find_likely_statement_match,
     get_existing_duplicate_keys,
     get_existing_statement_match_map,
+    get_category_learning_candidates,
     get_transactions_page_for_user,
     get_transactions_for_user,
     get_uncategorized_candidates,
@@ -611,6 +617,70 @@ def seed_realistic_data(
         db.commit()
 
     return result
+
+
+@router.get("/categorize/learning-candidates", response_model=CategoryLearningCandidatesResponse)
+def get_category_learning_candidates_route(
+    account_id: int | None = Query(default=None),
+    limit: int = Query(default=12, ge=1, le=50),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    if account_id is not None:
+        account = get_account_for_user(db, current_user.id, account_id)
+        if not account:
+            raise HTTPException(status_code=404, detail="Account not found")
+
+    candidates = get_category_learning_candidates(
+        db=db,
+        owner_id=current_user.id,
+        account_id=account_id,
+        limit=limit,
+    )
+
+    return CategoryLearningCandidatesResponse(
+        total_candidates=len(candidates),
+        candidates=[
+            CategoryLearningCandidateItem(
+                merchant_key=item.merchant_key,
+                display_name=item.display_name,
+                type=item.type,
+                transaction_count=item.transaction_count,
+                current_category=item.current_category,
+                suggested_category=item.suggested_category,
+                confidence=item.confidence,
+                total_amount=item.total_amount,
+                amount_min=item.amount_min,
+                amount_max=item.amount_max,
+                example_descriptions=item.example_descriptions,
+                reason=item.reason,
+                review_required=item.review_required,
+            )
+            for item in candidates
+        ],
+    )
+
+
+@router.post("/categorize/learning-apply", response_model=CategoryLearningApplyResponse)
+def apply_category_learning_candidate_route(
+    payload: CategoryLearningApplyRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    if payload.account_id is not None:
+        account = get_account_for_user(db, current_user.id, payload.account_id)
+        if not account:
+            raise HTTPException(status_code=404, detail="Account not found")
+
+    result = apply_category_to_merchant_learning_group(
+        db=db,
+        owner_id=current_user.id,
+        merchant_key=payload.merchant_key,
+        tx_type=payload.type,
+        category=payload.category,
+        account_id=payload.account_id,
+    )
+    return CategoryLearningApplyResponse(**result)
 
 
 @router.get("/categorize/bulk-preview", response_model=BulkCategorySuggestionResponse)

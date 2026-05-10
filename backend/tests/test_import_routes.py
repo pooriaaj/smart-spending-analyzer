@@ -1377,6 +1377,84 @@ class SmartImportRouteTest(unittest.TestCase):
 
         self.assertTrue(any(memory.keyword == "chipotle" for memory in memories))
 
+    def test_learning_candidates_group_similar_merchants_for_user_review(self) -> None:
+        for amount in (8.90, 12.60, 10.25):
+            response = self.client.post(
+                "/transactions/",
+                json={
+                    "amount": amount,
+                    "category": "other",
+                    "description": "SQDC77068 MTL",
+                    "date": "2026-03-16",
+                    "type": "expense",
+                    "account_id": self.account_id,
+                },
+            )
+            self.assertEqual(response.status_code, 200, response.text)
+
+        preview_response = self.client.get(
+            "/transactions/categorize/learning-candidates",
+            params={"account_id": self.account_id},
+        )
+        self.assertEqual(preview_response.status_code, 200, preview_response.text)
+        payload = preview_response.json()
+        self.assertEqual(payload["total_candidates"], 1)
+        candidate = payload["candidates"][0]
+        self.assertEqual(candidate["merchant_key"], "sqdc")
+        self.assertEqual(candidate["transaction_count"], 3)
+        self.assertEqual(candidate["current_category"], "other")
+        self.assertTrue(candidate["review_required"])
+
+    def test_learning_apply_updates_similar_transactions_and_memory(self) -> None:
+        for amount in (8.90, 12.60, 10.25):
+            response = self.client.post(
+                "/transactions/",
+                json={
+                    "amount": amount,
+                    "category": "other",
+                    "description": "SQDC77068 MTL",
+                    "date": "2026-03-16",
+                    "type": "expense",
+                    "account_id": self.account_id,
+                },
+            )
+            self.assertEqual(response.status_code, 200, response.text)
+
+        apply_response = self.client.post(
+            "/transactions/categorize/learning-apply",
+            json={
+                "merchant_key": "sqdc",
+                "type": "expense",
+                "category": "smoking",
+                "account_id": self.account_id,
+            },
+        )
+        self.assertEqual(apply_response.status_code, 200, apply_response.text)
+        payload = apply_response.json()
+        self.assertEqual(payload["matched_count"], 3)
+        self.assertEqual(payload["updated_count"], 3)
+
+        with self.session_local() as session:
+            transactions = (
+                session.query(Transaction)
+                .filter(Transaction.owner_id == self.user_id, Transaction.description == "SQDC77068 MTL")
+                .all()
+            )
+            profile = (
+                session.query(MerchantCategoryProfile)
+                .filter(
+                    MerchantCategoryProfile.owner_id == self.user_id,
+                    MerchantCategoryProfile.merchant_key == "sqdc",
+                    MerchantCategoryProfile.transaction_type == "expense",
+                )
+                .one_or_none()
+            )
+
+        self.assertTrue(transactions)
+        self.assertTrue(all(transaction.category == "smoking" for transaction in transactions))
+        self.assertIsNotNone(profile)
+        self.assertEqual(profile.category, "smoking")
+
     def test_create_transaction_persists_when_category_memory_fails(self) -> None:
         with patch(
             "app.routes.transaction_routes.save_category_memory",

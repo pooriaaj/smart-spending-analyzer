@@ -3,6 +3,7 @@ from __future__ import annotations
 import csv
 import io
 import re
+from collections import Counter
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from typing import Iterable
@@ -451,6 +452,23 @@ class SuspiciousAmountRepairCandidate:
     suggested_amount: float
     confidence: float
     reason: str
+
+
+@dataclass(frozen=True)
+class CategoryLearningCandidate:
+    merchant_key: str
+    display_name: str
+    type: str
+    transaction_count: int
+    current_category: str
+    suggested_category: str
+    confidence: float
+    total_amount: float
+    amount_min: float
+    amount_max: float
+    example_descriptions: list[str]
+    reason: str
+    review_required: bool
 
 
 REFERENCE_CODE_AMOUNT_DESCRIPTORS = (
@@ -985,6 +1003,187 @@ def apply_category_to_similar_transactions(
         updated_count += 1
 
     return updated_count
+
+
+def get_category_learning_candidates(
+    db: Session,
+    owner_id: int,
+    account_id: int | None = None,
+    limit: int = 12,
+) -> list[CategoryLearningCandidate]:
+    max_candidates = max(1, min(int(limit or 12), 50))
+    query = db.query(Transaction).filter(Transaction.owner_id == owner_id)
+    if account_id is not None:
+        query = query.filter(Transaction.account_id == account_id)
+
+    transactions = query.order_by(Transaction.date.desc(), Transaction.id.desc()).all()
+    grouped: dict[tuple[str, str], list[Transaction]] = {}
+    display_names: dict[tuple[str, str], str] = {}
+
+    for transaction in transactions:
+        fingerprint = extract_merchant_fingerprint(transaction.description)
+        if not fingerprint:
+            continue
+        merchant_key, display_name = fingerprint
+        group_key = (merchant_key, transaction.type)
+        grouped.setdefault(group_key, []).append(transaction)
+        display_names.setdefault(group_key, display_name)
+
+    candidates: list[CategoryLearningCandidate] = []
+    for (merchant_key, tx_type), items in grouped.items():
+        if len(items) < 2:
+            continue
+
+        category_counts = Counter(normalize_category_name(item.category) for item in items)
+        current_category, _ = category_counts.most_common(1)[0]
+        representative = next(
+            (item for item in items if normalize_category_name(item.category) in UNCATEGORIZED_VALUES),
+            items[0],
+        )
+        decision = categorize_transaction_details(
+            db=db,
+            owner_id=owner_id,
+            description=representative.description,
+            tx_type=representative.type,
+            amount=representative.amount,
+        )
+        suggested_category = normalize_category_name(decision.category)
+        review_required, review_reason = build_category_review_metadata(decision)
+
+        has_uncategorized = any(category in UNCATEGORIZED_VALUES for category in category_counts)
+        has_mixed_categories = len(category_counts) > 1
+        would_change_category = (
+            suggested_category not in UNCATEGORIZED_VALUES
+            and suggested_category != current_category
+        )
+        should_surface = has_uncategorized or has_mixed_categories or would_change_category or review_required
+        if not should_surface:
+            continue
+
+        amounts = [abs(float(item.amount or 0.0)) for item in items]
+        examples: list[str] = []
+        seen_examples = set()
+        for item in items:
+            description = normalize_description(item.description)
+            if not description or description.lower() in seen_examples:
+                continue
+            examples.append(description)
+            seen_examples.add(description.lower())
+            if len(examples) >= 3:
+                break
+
+        reason_parts = []
+        if has_uncategorized:
+            reason_parts.append("some transactions are still Other")
+        if has_mixed_categories:
+            reason_parts.append("similar transactions currently use different categories")
+        if would_change_category:
+            reason_parts.append(f"the learning engine suggests {suggested_category}")
+        if review_required and review_reason:
+            reason_parts.append(review_reason)
+
+        candidates.append(
+            CategoryLearningCandidate(
+                merchant_key=merchant_key,
+                display_name=display_names.get((merchant_key, tx_type), title_case_merchant_key(merchant_key)),
+                type=tx_type,
+                transaction_count=len(items),
+                current_category=current_category,
+                suggested_category=(
+                    suggested_category
+                    if suggested_category not in UNCATEGORIZED_VALUES
+                    else current_category
+                ),
+                confidence=float(decision.confidence or 0.0),
+                total_amount=round(sum(amounts), 2),
+                amount_min=round(min(amounts), 2) if amounts else 0.0,
+                amount_max=round(max(amounts), 2) if amounts else 0.0,
+                example_descriptions=examples,
+                reason="; ".join(reason_parts) or decision.reason,
+                review_required=(
+                    has_uncategorized
+                    or has_mixed_categories
+                    or review_required
+                    or suggested_category in UNCATEGORIZED_VALUES
+                ),
+            )
+        )
+
+    candidates.sort(
+        key=lambda item: (
+            item.current_category not in UNCATEGORIZED_VALUES,
+            -item.transaction_count,
+            -item.total_amount,
+            item.display_name.lower(),
+        )
+    )
+    return candidates[:max_candidates]
+
+
+def apply_category_to_merchant_learning_group(
+    db: Session,
+    owner_id: int,
+    merchant_key: str,
+    tx_type: str,
+    category: str,
+    account_id: int | None = None,
+) -> dict[str, int]:
+    normalized_category = normalize_category_name(category)
+    if not should_store_category_memory(normalized_category):
+        return {
+            "matched_count": 0,
+            "updated_count": 0,
+            "memory_entries_created": 0,
+            "memory_entries_updated": 0,
+        }
+
+    normalized_merchant_key = re.sub(r"\s+", " ", merchant_key.strip().lower())[:160]
+    query = db.query(Transaction).filter(
+        Transaction.owner_id == owner_id,
+        Transaction.type == tx_type,
+    )
+    if account_id is not None:
+        query = query.filter(Transaction.account_id == account_id)
+
+    matched_count = 0
+    updated_count = 0
+    memory_created = 0
+    memory_updated = 0
+    representative_transaction: Transaction | None = None
+
+    for transaction in query.all():
+        fingerprint = extract_merchant_fingerprint(transaction.description)
+        if not fingerprint or fingerprint[0] != normalized_merchant_key:
+            continue
+
+        matched_count += 1
+        if representative_transaction is None:
+            representative_transaction = transaction
+        if normalize_category_name(transaction.category) != normalized_category:
+            transaction.category = normalized_category
+            updated_count += 1
+
+    if representative_transaction is not None:
+        memory_stats = save_category_memory(
+            db=db,
+            owner_id=owner_id,
+            description=representative_transaction.description,
+            category=normalized_category,
+            tx_type=tx_type,
+            amount=representative_transaction.amount,
+        )
+        memory_created += memory_stats["created"]
+        memory_updated += memory_stats["updated"]
+
+    if matched_count > 0:
+        db.commit()
+
+    return {
+        "matched_count": matched_count,
+        "updated_count": updated_count,
+        "memory_entries_created": memory_created,
+        "memory_entries_updated": memory_updated,
+    }
 
 
 def suggest_reference_code_amount_repair(transaction: Transaction) -> SuspiciousAmountRepairCandidate | None:

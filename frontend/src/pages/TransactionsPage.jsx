@@ -99,6 +99,10 @@ function TransactionsPage() {
   const [bulkSuggestions, setBulkSuggestions] = useState([]);
   const [bulkLoading, setBulkLoading] = useState(false);
   const [bulkApplying, setBulkApplying] = useState(false);
+  const [learningCandidates, setLearningCandidates] = useState([]);
+  const [learningLoading, setLearningLoading] = useState(false);
+  const [learningApplyingKey, setLearningApplyingKey] = useState("");
+  const [learningCategoryEdits, setLearningCategoryEdits] = useState({});
   const [normalizingCategories, setNormalizingCategories] = useState(false);
   const [amountRepairCandidates, setAmountRepairCandidates] = useState([]);
   const [amountRepairLoading, setAmountRepairLoading] = useState(false);
@@ -383,6 +387,71 @@ function TransactionsPage() {
       }
     } finally {
       setBulkApplying(false);
+    }
+  };
+
+  const handleFindLearningCandidates = async () => {
+    try {
+      setLearningLoading(true);
+      setBulkMessage("");
+      const response = await api.get("/transactions/categorize/learning-candidates", {
+        params: {
+          account_id: normalizedAccountId,
+        },
+      });
+      const candidates = response.data?.candidates || [];
+      setLearningCandidates(candidates);
+      setLearningCategoryEdits(
+        candidates.reduce((drafts, item) => {
+          drafts[`${item.merchant_key}:${item.type}`] = item.suggested_category || item.current_category || "";
+          return drafts;
+        }, {})
+      );
+      if (candidates.length === 0) {
+        setBulkMessage(t("transactions.noLearningCandidates"));
+      }
+    } catch (error) {
+      if (!handleApiAuthError(error, navigate)) {
+        setBulkMessage(t("transactions.learningAnalyzeFailed"));
+      }
+    } finally {
+      setLearningLoading(false);
+    }
+  };
+
+  const handleApplyLearningCandidate = async (candidate) => {
+    const candidateKey = `${candidate.merchant_key}:${candidate.type}`;
+    const category = (learningCategoryEdits[candidateKey] || candidate.suggested_category || "").trim();
+    if (!category) return;
+
+    try {
+      setLearningApplyingKey(candidateKey);
+      setBulkMessage("");
+      const response = await api.post("/transactions/categorize/learning-apply", {
+        merchant_key: candidate.merchant_key,
+        type: candidate.type,
+        category,
+        account_id: normalizedAccountId || null,
+      });
+
+      setBulkMessage(
+        t("transactions.learningApplySuccess", {
+          matched: response.data?.matched_count || 0,
+          updated: response.data?.updated_count || 0,
+          category: formatCategoryLabel(category, t),
+        })
+      );
+      setLearningCandidates((prev) =>
+        prev.filter((item) => `${item.merchant_key}:${item.type}` !== candidateKey)
+      );
+      setBulkSuggestions([]);
+      await fetchTransactions();
+    } catch (error) {
+      if (!handleApiAuthError(error, navigate)) {
+        setBulkMessage(t("transactions.learningApplyFailed"));
+      }
+    } finally {
+      setLearningApplyingKey("");
     }
   };
 
@@ -683,6 +752,17 @@ function TransactionsPage() {
 
             <button
               type="button"
+              className="secondary-button"
+              onClick={handleFindLearningCandidates}
+              disabled={learningLoading}
+            >
+              {learningLoading
+                ? t("transactions.findingLearningGroups")
+                : t("transactions.findLearningGroups")}
+            </button>
+
+            <button
+              type="button"
               className="smart-apply-button"
               onClick={handleBulkApply}
               disabled={bulkApplying || bulkSuggestions.length === 0}
@@ -725,6 +805,81 @@ function TransactionsPage() {
           </div>
 
           {bulkMessage && <div className="bulk-message-box">{bulkMessage}</div>}
+
+          {learningCandidates.length > 0 && (
+            <div className="bulk-suggestions-list">
+              {learningCandidates.map((item) => {
+                const candidateKey = `${item.merchant_key}:${item.type}`;
+                const draftCategory =
+                  learningCategoryEdits[candidateKey] ?? item.suggested_category ?? item.current_category ?? "";
+
+                return (
+                  <div key={candidateKey} className="bulk-suggestion-card">
+                    <div className="bulk-suggestion-top">
+                      <div>
+                        <h3>{item.display_name}</h3>
+                        <p>
+                          {t("transactions.learningGroupSummary", {
+                            count: item.transaction_count,
+                            plural: item.transaction_count === 1 ? "" : "s",
+                            total: Number(item.total_amount || 0).toFixed(2),
+                          })}
+                        </p>
+                      </div>
+                      <div className="bulk-suggestion-badges">
+                        <span className="bulk-confidence-pill bulk-confidence-pill-review">
+                          {t("transactions.teachMemory")}
+                        </span>
+                        <span className="bulk-confidence-pill">
+                          {Math.round(Number(item.confidence || 0) * 100)}%
+                        </span>
+                      </div>
+                    </div>
+
+                    <p className="bulk-suggestion-meta">
+                      {t("common.current")}:{" "}
+                      <strong>{formatCategoryLabel(item.current_category, t)}</strong>{" "}
+                      {"->"} {t("common.suggested")}:{" "}
+                      <strong>{formatCategoryLabel(item.suggested_category, t)}</strong>
+                    </p>
+                    <p className="bulk-suggestion-meta">{item.reason}</p>
+                    {item.example_descriptions?.length > 0 && (
+                      <p className="bulk-suggestion-meta">
+                        {t("transactions.examples")}: {item.example_descriptions.join(" | ")}
+                      </p>
+                    )}
+
+                    <div className="filter-bar compact-filter-bar">
+                      <div>
+                        <label>{t("transactions.correctCategory")}</label>
+                        <input
+                          type="text"
+                          value={draftCategory}
+                          onChange={(event) =>
+                            setLearningCategoryEdits((prev) => ({
+                              ...prev,
+                              [candidateKey]: event.target.value,
+                            }))
+                          }
+                          placeholder={t("transactions.correctCategoryPlaceholder")}
+                        />
+                      </div>
+                      <button
+                        type="button"
+                        className="smart-apply-button"
+                        onClick={() => handleApplyLearningCandidate(item)}
+                        disabled={learningApplyingKey === candidateKey || !draftCategory.trim()}
+                      >
+                        {learningApplyingKey === candidateKey
+                          ? t("transactions.teaching")
+                          : t("transactions.applyToSimilar")}
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
 
           {amountRepairCandidates.length > 0 && (
             <div className="bulk-suggestions-list">
@@ -798,7 +953,11 @@ function TransactionsPage() {
             </div>
           )}
 
-          {!bulkLoading && bulkSuggestions.length === 0 && amountRepairCandidates.length === 0 && !bulkMessage && (
+          {!bulkLoading &&
+            learningCandidates.length === 0 &&
+            bulkSuggestions.length === 0 &&
+            amountRepairCandidates.length === 0 &&
+            !bulkMessage && (
             <div className="empty-state">
               <p>{t("transactions.noBulkSuggestions")}</p>
             </div>

@@ -469,6 +469,41 @@ class BulkCategoryApplyResponse(BaseModel):
     updated_count: int
 
 
+class CategoryLearningCandidateItem(BaseModel):
+    merchant_key: str
+    display_name: str
+    type: TransactionType
+    transaction_count: int
+    current_category: str
+    suggested_category: str
+    confidence: float
+    total_amount: float
+    amount_min: float
+    amount_max: float
+    example_descriptions: list[str] = Field(default_factory=list)
+    reason: str
+    review_required: bool
+
+
+class CategoryLearningCandidatesResponse(BaseModel):
+    total_candidates: int
+    candidates: list[CategoryLearningCandidateItem]
+
+
+class CategoryLearningApplyRequest(BaseModel):
+    merchant_key: str = Field(min_length=1, max_length=160)
+    type: TransactionType
+    category: str = Field(min_length=1, max_length=100)
+    account_id: int | None = None
+
+
+class CategoryLearningApplyResponse(BaseModel):
+    matched_count: int
+    updated_count: int
+    memory_entries_created: int
+    memory_entries_updated: int
+
+
 class SpendingInsights(BaseModel):
     current_month: str | None = None
     current_month_expenses: float
