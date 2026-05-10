@@ -13,6 +13,7 @@ from app.services.analytics_service import (
 from app.services.transaction_service import (
     UNCATEGORIZED_VALUES,
     categorize_transaction_details,
+    get_category_learning_candidates,
     get_uncategorized_candidates,
     merchant_profile_table_available,
 )
@@ -99,6 +100,7 @@ def build_money_map_actions(
     transaction_count: int,
     month_count: int,
     uncategorized_count: int,
+    learning_candidate_count: int,
     recurring_count: int,
 ) -> list[dict[str, str]]:
     if transaction_count <= 0:
@@ -118,6 +120,15 @@ def build_money_map_actions(
         ]
 
     actions: list[dict[str, str]] = []
+    if learning_candidate_count > 0:
+        actions.append(
+            {
+                "label": "Teach merchant groups",
+                "detail": "Confirm one category for similar merchants so the app fixes the whole group.",
+                "page": "transactions",
+                "priority": "high",
+            }
+        )
     if uncategorized_count > 0:
         actions.append(
             {
@@ -255,6 +266,13 @@ def get_money_map_payload(
             }
         )
 
+    learning_candidates = get_category_learning_candidates(
+        db=db,
+        owner_id=user_id,
+        account_id=account_id,
+        limit=4,
+    )
+
     learning_signals = [
         {
             "label": "History depth",
@@ -303,11 +321,30 @@ def get_money_map_payload(
             for item in recurring_patterns
         ],
         "category_suggestions": category_suggestions,
+        "learning_candidates": [
+            {
+                "merchant_key": item.merchant_key,
+                "display_name": item.display_name,
+                "type": item.type,
+                "transaction_count": item.transaction_count,
+                "current_category": item.current_category,
+                "suggested_category": item.suggested_category,
+                "confidence": item.confidence,
+                "total_amount": item.total_amount,
+                "amount_min": item.amount_min,
+                "amount_max": item.amount_max,
+                "example_descriptions": item.example_descriptions,
+                "reason": item.reason,
+                "review_required": item.review_required,
+            }
+            for item in learning_candidates
+        ],
         "learning_signals": learning_signals,
         "actions": build_money_map_actions(
             transaction_count=transaction_count,
             month_count=month_count,
             uncategorized_count=uncategorized_count,
+            learning_candidate_count=len(learning_candidates),
             recurring_count=len(recurring_patterns),
         ),
         "narrative": build_money_map_narrative(

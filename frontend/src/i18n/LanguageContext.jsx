@@ -732,6 +732,9 @@ const translations = {
       actionSimulateRecurringCutsDetail: "Turn detected subscriptions and repeat charges into future balance scenarios.",
       actionBuildBudgets: "Build starter budgets",
       actionBuildBudgetsDetail: "Use the learned spending map as the starting point for monthly targets.",
+      actionTeachMerchantGroups: "Teach merchant groups",
+      actionTeachMerchantGroupsDetail:
+        "Confirm one category for similar merchants so the app fixes the whole group.",
       signalHistoryDepth: "History depth",
       signalHistoryDepthValue: "{count} month{plural}",
       signalHistoryDepthDetail: "Two to three months makes forecasts and recurring detection much stronger.",
@@ -769,6 +772,13 @@ const translations = {
       openTransactions: "Open Transactions",
       noCategoryReviewItems: "No high-confidence category review items right now.",
       suggestAtConfidence: "Suggest {category} at {confidence} confidence.",
+      merchantLearningQueue: "Merchant Learning Queue",
+      merchantLearningQueueDetail:
+        "Similar merchants that need one human-approved category before they become trusted memory.",
+      teachInTransactions: "Teach in Transactions",
+      noMerchantLearningItems: "No merchant groups need teaching right now.",
+      groupNeedsTeaching:
+        "{count} similar transaction{plural}, {amount} total. Suggested category: {category}.",
     },
     budgets: {
       scopeTitle: "Budget Scope",
@@ -2042,6 +2052,9 @@ const translations = {
       actionSimulateRecurringCutsDetail: "Transformez les abonnements et charges répétées détectés en scénarios de solde futur.",
       actionBuildBudgets: "Créer des budgets de départ",
       actionBuildBudgetsDetail: "Utilisez la carte de dépenses apprise comme point de départ pour les cibles mensuelles.",
+      actionTeachMerchantGroups: "Enseigner les groupes de marchands",
+      actionTeachMerchantGroupsDetail:
+        "Confirmez une categorie pour des marchands similaires afin que l'app corrige tout le groupe.",
       signalHistoryDepth: "Profondeur de l'historique",
       signalHistoryDepthValue: "{count} mois",
       signalHistoryDepthDetail: "Deux ou trois mois rendent les prévisions et la détection récurrente beaucoup plus solides.",
@@ -2077,6 +2090,13 @@ const translations = {
       categoryReviewQueue: "File de vérification des catégories",
       categoryReviewQueueDetail: "Suggestions sûres seulement: les faibles confiances restent hors de cette liste.",
       openTransactions: "Ouvrir les transactions",
+      merchantLearningQueue: "File d'apprentissage des marchands",
+      merchantLearningQueueDetail:
+        "Marchands similaires qui ont besoin d'une categorie approuvee avant de devenir une memoire fiable.",
+      teachInTransactions: "Enseigner dans Transactions",
+      noMerchantLearningItems: "Aucun groupe de marchands n'a besoin d'apprentissage.",
+      groupNeedsTeaching:
+        "{count} transaction{plural} similaire{plural}, {amount} au total. Categorie suggeree: {category}.",
       noCategoryReviewItems: "Aucun élément de vérification à haute confiance pour le moment.",
       suggestAtConfidence: "Suggérer {category} avec {confidence} de confiance.",
     },

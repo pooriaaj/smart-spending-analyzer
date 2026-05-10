@@ -618,6 +618,7 @@ class MoneyMapResponse(BaseModel):
     top_categories: list[MoneyMapCategoryItem] = Field(default_factory=list)
     recurring_highlights: list[MoneyMapRecurringItem] = Field(default_factory=list)
     category_suggestions: list[MoneyMapCategorySuggestionItem] = Field(default_factory=list)
+    learning_candidates: list[CategoryLearningCandidateItem] = Field(default_factory=list)
     learning_signals: list[MoneyMapLearningSignal] = Field(default_factory=list)
     actions: list[MoneyMapAction] = Field(default_factory=list)
     narrative: str

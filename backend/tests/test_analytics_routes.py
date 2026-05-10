@@ -310,6 +310,48 @@ class AnalyticsRouteTest(unittest.TestCase):
         self.assertTrue(any(item["category"] == "entertainment" for item in payload["top_categories"]))
         self.assertTrue(any(item["description"] == "Spotify Premium" for item in payload["recurring_highlights"]))
 
+    def test_money_map_exposes_grouped_category_learning_candidates(self) -> None:
+        with self.session_local() as session:
+            session.add_all(
+                [
+                    Transaction(
+                        amount=8.90,
+                        category="other",
+                        description="SQDC77068 MTL",
+                        date=date(2026, 3, 16),
+                        type="expense",
+                        owner_id=self.user_id,
+                        account_id=self.chequing_account_id,
+                    ),
+                    Transaction(
+                        amount=12.60,
+                        category="other",
+                        description="SQDC77068 MTL",
+                        date=date(2026, 3, 16),
+                        type="expense",
+                        owner_id=self.user_id,
+                        account_id=self.chequing_account_id,
+                    ),
+                ]
+            )
+            session.commit()
+
+        response = self.client.get(
+            "/analytics/money-map",
+            params={"account_id": self.chequing_account_id},
+        )
+
+        self.assertEqual(response.status_code, 200, response.text)
+        payload = response.json()
+
+        self.assertEqual(len(payload["learning_candidates"]), 1)
+        candidate = payload["learning_candidates"][0]
+        self.assertEqual(candidate["merchant_key"], "sqdc")
+        self.assertEqual(candidate["suggested_category"], "smoking")
+        self.assertEqual(candidate["transaction_count"], 2)
+        self.assertTrue(candidate["review_required"])
+        self.assertTrue(any(action["label"] == "Teach merchant groups" for action in payload["actions"]))
+
     def test_recurring_expenses_route_detects_monthly_patterns(self) -> None:
         with self.session_local() as session:
             session.add_all(

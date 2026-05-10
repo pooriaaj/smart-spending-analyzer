@@ -35,6 +35,7 @@ const MONEY_MAP_ACTION_KEYS = {
   "Upload more history": ["actionUploadMoreHistory", "actionUploadMoreHistoryDetail"],
   "Simulate recurring cuts": ["actionSimulateRecurringCuts", "actionSimulateRecurringCutsDetail"],
   "Build starter budgets": ["actionBuildBudgets", "actionBuildBudgetsDetail"],
+  "Teach merchant groups": ["actionTeachMerchantGroups", "actionTeachMerchantGroupsDetail"],
 };
 
 function formatMoneyMapNarrative(moneyMap, t) {
@@ -423,6 +424,42 @@ function MoneyMapPage() {
                         })}
                       </p>
                       <small>{t("moneyMap.reviewInTransactions")}</small>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="dashboard-card">
+              <div className="section-header">
+                <div>
+                  <h2>{t("moneyMap.merchantLearningQueue")}</h2>
+                  <p>{t("moneyMap.merchantLearningQueueDetail")}</p>
+                </div>
+                <button className="secondary-button" onClick={() => navigate("/transactions")}>
+                  {t("moneyMap.teachInTransactions")}
+                </button>
+              </div>
+
+              {(moneyMap?.learning_candidates || []).length === 0 ? (
+                <div className="empty-state">
+                  <p>{t("moneyMap.noMerchantLearningItems")}</p>
+                </div>
+              ) : (
+                <div className="money-map-suggestion-grid">
+                  {moneyMap.learning_candidates.map((item) => (
+                    <div key={`${item.merchant_key}-${item.type}`} className="money-map-suggestion-card">
+                      <span>{item.type === "income" ? t("common.income") : t("common.expense")}</span>
+                      <strong>{item.display_name}</strong>
+                      <p>
+                        {t("moneyMap.groupNeedsTeaching", {
+                          count: item.transaction_count,
+                          plural: item.transaction_count === 1 ? "" : "s",
+                          category: formatCategoryLabel(item.suggested_category, t),
+                          amount: formatMoney(item.total_amount),
+                        })}
+                      </p>
+                      <small>{item.example_descriptions?.slice(0, 2).join(" | ")}</small>
                     </div>
                   ))}
                 </div>
