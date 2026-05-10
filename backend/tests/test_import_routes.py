@@ -442,6 +442,62 @@ class SmartImportRouteTest(unittest.TestCase):
             )
         )
 
+    def test_import_file_uses_anonymized_community_merchant_learning(self) -> None:
+        with self.session_local() as session:
+            first_user = User(email="community-one@example.com", password_hash="hashed")
+            second_user = User(email="community-two@example.com", password_hash="hashed")
+            session.add_all([first_user, second_user])
+            session.flush()
+            session.add_all(
+                [
+                    MerchantCategoryProfile(
+                        merchant_key="narcos",
+                        display_name="Narcos",
+                        category="clothing",
+                        transaction_type="expense",
+                        confidence=0.97,
+                        confirmation_count=3,
+                        last_amount=44.0,
+                        owner_id=first_user.id,
+                    ),
+                    MerchantCategoryProfile(
+                        merchant_key="narcos",
+                        display_name="Narcos",
+                        category="clothing",
+                        transaction_type="expense",
+                        confidence=0.94,
+                        confirmation_count=2,
+                        last_amount=45.0,
+                        owner_id=second_user.id,
+                    ),
+                ]
+            )
+            session.commit()
+
+        pdf_bytes = build_text_pdf(
+            [
+                "Royal Bank of Canada",
+                "Details of your account activity",
+                "From March 2, 2026 to April 2, 2026",
+                "Date Description Withdrawals ($) Deposits ($) Balance ($)",
+                "3 Mar Contactless Interac purchase - 3001",
+                "NARCOS DRIP 44.00 56.00",
+            ]
+        )
+
+        response = self.client.post(
+            "/transactions/import/file",
+            data={"account_id": str(self.account_id)},
+            files={"file": ("community-learning.pdf", pdf_bytes, "application/pdf")},
+        )
+
+        self.assertEqual(response.status_code, 200, response.text)
+        preview_row = response.json()["preview_rows"][0]
+
+        self.assertEqual(preview_row["category"], "clothing")
+        self.assertEqual(preview_row["category_source"], "community_profile")
+        self.assertGreaterEqual(preview_row["category_confidence"], 0.8)
+
     def test_import_file_uses_expanded_lifestyle_categories(self) -> None:
         pdf_bytes = build_text_pdf(
             [

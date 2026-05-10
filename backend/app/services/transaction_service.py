@@ -32,6 +32,18 @@ STATEMENT_RECONCILIATION_AMOUNT_TOLERANCE = 0.01
 CATEGORY_REVIEW_CONFIDENCE_THRESHOLD = 0.75
 CATEGORY_REVIEW_REQUIRED_SOURCES = {"fallback", "payment_processor"}
 EXPENSE_INCOMPATIBLE_CATEGORIES = {"income", "salary", "refund"}
+COMMUNITY_PROFILE_MIN_OWNER_COUNT = 2
+COMMUNITY_PROFILE_MIN_CATEGORY_SHARE = 0.67
+COMMUNITY_PROFILE_EXCLUDED_CATEGORIES = {
+    "bank fees",
+    "debt payments",
+    "income",
+    "refund",
+    "rent",
+    "salary",
+    "taxes",
+    "transfer",
+}
 MAX_TRANSACTION_PAGE_SIZE = 100
 
 HEADER_ALIASES = {
@@ -1656,6 +1668,112 @@ def learnable_category_from_memory(
     return normalize_category_name(best_match[1]), best_match[0]
 
 
+def learnable_category_from_community_profiles(
+    db: Session,
+    owner_id: int,
+    description: str,
+    tx_type: str,
+    amount: float | None = None,
+) -> CategoryDecision | None:
+    """Use anonymized merchant consensus when personal memory is unavailable.
+
+    This reads only learned merchant profile rows, not raw statement files or
+    full transaction histories. A single user cannot train the global behavior:
+    at least two other owners must agree on the same category.
+    """
+
+    if tx_type != "expense" or not merchant_profile_table_available(db):
+        return None
+
+    fingerprint = extract_merchant_fingerprint(description)
+    if not fingerprint:
+        return None
+
+    merchant_key, _ = fingerprint
+    profile_query = (
+        db.query(MerchantCategoryProfile)
+        .filter(
+            MerchantCategoryProfile.owner_id != owner_id,
+            MerchantCategoryProfile.transaction_type == tx_type,
+        )
+    )
+
+    if merchant_key_requires_amount_guard(merchant_key):
+        profiles = (
+            profile_query.filter(
+                or_(
+                    MerchantCategoryProfile.merchant_key == merchant_key,
+                    MerchantCategoryProfile.merchant_key.like(
+                        f"{merchant_key}{AMOUNT_PROFILE_SEPARATOR}%"
+                    ),
+                )
+            )
+            .all()
+        )
+        profiles = [
+            profile
+            for profile in profiles
+            if merchant_profile_base_key(profile.merchant_key) == merchant_key
+            and merchant_profile_amount_matches(profile, amount)
+        ]
+    else:
+        profiles = (
+            profile_query.filter(MerchantCategoryProfile.merchant_key == merchant_key)
+            .all()
+        )
+
+    category_owners: dict[str, set[int]] = {}
+    category_confirmations: Counter[str] = Counter()
+    for profile in profiles:
+        normalized_category = normalize_category_name(profile.category)
+        if normalized_category in UNCATEGORIZED_VALUES:
+            continue
+        if normalized_category in COMMUNITY_PROFILE_EXCLUDED_CATEGORIES:
+            continue
+        category_owners.setdefault(normalized_category, set()).add(profile.owner_id)
+        category_confirmations[normalized_category] += max(1, int(profile.confirmation_count or 1))
+
+    if not category_owners:
+        return None
+
+    all_owner_ids = set().union(*category_owners.values())
+    if len(all_owner_ids) < COMMUNITY_PROFILE_MIN_OWNER_COUNT:
+        return None
+
+    best_category = max(
+        category_owners,
+        key=lambda category: (
+            len(category_owners[category]),
+            category_confirmations[category],
+            category,
+        ),
+    )
+    best_owner_count = len(category_owners[best_category])
+    category_share = best_owner_count / len(all_owner_ids)
+    if (
+        best_owner_count < COMMUNITY_PROFILE_MIN_OWNER_COUNT
+        or category_share < COMMUNITY_PROFILE_MIN_CATEGORY_SHARE
+    ):
+        return None
+
+    confirmation_count = category_confirmations[best_category]
+    confidence = min(
+        0.9,
+        0.72 + (best_owner_count * 0.05) + (min(confirmation_count, 8) * 0.01),
+    )
+
+    return CategoryDecision(
+        category=best_category,
+        confidence=round(confidence, 2),
+        matched_keyword=merchant_key,
+        reason=(
+            "Matched anonymized community merchant learning from multiple users who "
+            "confirmed this merchant category. Personal memory still overrides this."
+        ),
+        source="community_profile",
+    )
+
+
 def protected_income_category_decision(description: str, tx_type: str) -> CategoryDecision | None:
     """Apply hard safety rules before user memory for cashflow-neutral income.
 
@@ -1831,6 +1949,16 @@ def categorize_transaction_details(
             ),
             source="merchant_override",
         )
+
+    community_profile = learnable_category_from_community_profiles(
+        db,
+        owner_id,
+        description,
+        tx_type,
+        amount,
+    )
+    if community_profile:
+        return community_profile
 
     for category, keywords in CATEGORY_RULES.items():
         if category == "salary":
