@@ -626,6 +626,16 @@ const translations = {
       categoryEditedReason: "Reviewed or edited by you during import.",
       categoryAppliedToSimilarReason: "Applied from your review to matching rows in this import.",
       categoryApprovedReason: "Reviewed and approved by you during import.",
+      groupCategoryAppliedReason:
+        "Applied your category review to similar {merchant} rows in this import.",
+      reviewSimilarGroupsTitle: "Teach similar rows together",
+      reviewSimilarGroupsDetail:
+        "When several statement rows look like the same merchant, name the category once and apply it to the whole group before importing.",
+      similarGroupSummary: "{count} similar row{plural}, ${amount} total",
+      examples: "Examples",
+      correctCategory: "Correct category",
+      correctCategoryPlaceholder: "Example: Smoking, Groceries, Subscriptions",
+      applyToSimilarRows: "Apply to similar rows",
       lowCategoryConfidenceReason:
         "Category confidence is low; verify this label before importing.",
       lowParserConfidenceReason:
@@ -1926,6 +1936,16 @@ const translations = {
       categoryEditedReason: "Vérifié ou modifié par vous pendant l'importation.",
       categoryAppliedToSimilarReason: "Appliqué depuis votre vérification aux lignes similaires de cet import.",
       categoryApprovedReason: "Vérifié et approuvé par vous pendant l'importation.",
+      groupCategoryAppliedReason:
+        "Categorie appliquee a vos lignes similaires {merchant} dans cet import.",
+      reviewSimilarGroupsTitle: "Apprendre les lignes similaires ensemble",
+      reviewSimilarGroupsDetail:
+        "Quand plusieurs lignes ressemblent au meme marchand, nommez la categorie une fois et appliquez-la au groupe avant l'importation.",
+      similarGroupSummary: "{count} ligne{plural} similaire{plural}, ${amount} au total",
+      examples: "Exemples",
+      correctCategory: "Categorie correcte",
+      correctCategoryPlaceholder: "Exemple: Tabac, epicerie, abonnements",
+      applyToSimilarRows: "Appliquer aux lignes similaires",
       lowCategoryConfidenceReason:
         "La confiance de catégorie est faible; vérifiez cette étiquette avant l'importation.",
       lowParserConfidenceReason:

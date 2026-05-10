@@ -907,6 +907,69 @@ textarea:focus,
   box-shadow: 0 10px 24px rgba(59, 130, 246, 0.1);
 }
 
+.import-learning-panel {
+  margin-bottom: 18px;
+  padding: 18px;
+  border-radius: 22px;
+  border: 1px solid rgba(20, 184, 166, 0.2);
+  background:
+    radial-gradient(circle at 12% 16%, rgba(45, 212, 191, 0.16), transparent 34%),
+    rgba(240, 253, 250, 0.72);
+}
+
+.import-learning-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 14px;
+}
+
+.import-learning-card {
+  display: grid;
+  gap: 16px;
+  padding: 16px;
+  border-radius: 18px;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  background: rgba(255, 255, 255, 0.82);
+}
+
+.import-learning-card h4 {
+  margin: 4px 0 8px;
+  color: var(--text-main);
+  font-size: 18px;
+}
+
+.import-learning-card p {
+  margin: 0;
+  color: var(--text-soft);
+  line-height: 1.55;
+}
+
+.import-learning-examples {
+  margin-top: 10px !important;
+  font-size: 13px;
+}
+
+.import-learning-controls {
+  display: grid;
+  gap: 10px;
+}
+
+.import-learning-controls label {
+  color: var(--text-main);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.import-learning-controls input {
+  width: 100%;
+  min-height: 46px;
+  border-radius: 14px;
+  border: 1px solid rgba(15, 23, 42, 0.1);
+  background: rgba(255, 255, 255, 0.94);
+  padding: 0 14px;
+  color: var(--text-main);
+}
+
 .import-validation-box {
   margin-bottom: 18px;
   padding: 16px 18px;
@@ -3130,6 +3193,24 @@ textarea:focus,
   background: rgba(16, 185, 129, 0.12);
   border-color: rgba(52, 211, 153, 0.22);
   color: #6ee7b7;
+}
+
+:root[data-theme="dark"] .import-learning-panel {
+  background:
+    radial-gradient(circle at 12% 16%, rgba(45, 212, 191, 0.16), transparent 34%),
+    rgba(15, 23, 42, 0.72);
+  border-color: rgba(45, 212, 191, 0.18);
+}
+
+:root[data-theme="dark"] .import-learning-card {
+  background: rgba(15, 23, 42, 0.82);
+  border-color: rgba(148, 163, 184, 0.14);
+}
+
+:root[data-theme="dark"] .import-learning-controls input {
+  background: rgba(15, 23, 42, 0.86);
+  border-color: rgba(148, 163, 184, 0.18);
+  color: #f8fafc;
 }
 
 :root[data-theme="dark"] .import-error-guidance {

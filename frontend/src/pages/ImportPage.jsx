@@ -139,6 +139,15 @@ const getPreviewSimilarityKey = (row) => {
   return `${row.type || "expense"}:${tokens.slice(0, 2).join(" ")}`;
 };
 
+const getSimilarityDisplayName = (similarityKey = "") => {
+  const [, merchant = similarityKey] = similarityKey.split(":");
+  return merchant
+    .split(" ")
+    .filter(Boolean)
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(" ");
+};
+
 const getPreviewRowConfidence = (row) => {
   const confidence = Number(row?.confidence);
   if (!Number.isFinite(confidence) || confidence <= 0) {
@@ -232,6 +241,7 @@ function ImportPage() {
   const [confirmingPreview, setConfirmingPreview] = useState(false);
   const [savingDraft, setSavingDraft] = useState(false);
   const [previewFilter, setPreviewFilter] = useState("all");
+  const [previewGroupCategoryDrafts, setPreviewGroupCategoryDrafts] = useState({});
   const manualSourceLine = t("import.manualSourceLine");
 
   const normalizedAccountId =
@@ -331,6 +341,58 @@ function ImportPage() {
           : null,
     };
   });
+  const previewLearningGroups = Object.values(
+    previewRowItems.reduce((groups, item) => {
+      const { row, index, duplicateReason, validation, categoryReviewRequired } = item;
+      const similarityKey = getPreviewSimilarityKey(row);
+      if (!similarityKey || duplicateReason || validation.messages.length > 0) {
+        return groups;
+      }
+
+      if (!groups[similarityKey]) {
+        groups[similarityKey] = {
+          key: similarityKey,
+          displayName: getSimilarityDisplayName(similarityKey),
+          type: row.type || "expense",
+          rowIndexes: [],
+          examples: [],
+          categories: {},
+          needsReviewCount: 0,
+          totalAmount: 0,
+        };
+      }
+
+      const group = groups[similarityKey];
+      const category = String(row.category || "other").trim() || "other";
+      group.rowIndexes.push(index);
+      group.categories[category] = (group.categories[category] || 0) + 1;
+      group.totalAmount += Math.abs(Number(row.amount) || 0);
+      if (categoryReviewRequired || category.toLowerCase() === "other") {
+        group.needsReviewCount += 1;
+      }
+      if (row.description && !group.examples.includes(row.description) && group.examples.length < 3) {
+        group.examples.push(row.description);
+      }
+
+      return groups;
+    }, {})
+  )
+    .map((group) => {
+      const categoryEntries = Object.entries(group.categories).sort((a, b) => b[1] - a[1]);
+      const nonOtherCategory = categoryEntries.find(([category]) => category.toLowerCase() !== "other");
+      return {
+        ...group,
+        count: group.rowIndexes.length,
+        suggestedCategory: (nonOtherCategory || categoryEntries[0] || ["other"])[0],
+        hasMixedCategories: categoryEntries.length > 1,
+      };
+    })
+    .filter(
+      (group) =>
+        group.count >= 2 &&
+        (group.needsReviewCount > 0 || group.hasMixedCategories)
+    )
+    .sort((a, b) => b.needsReviewCount - a.needsReviewCount || b.count - a.count);
   const invalidPreviewRowCount = previewRowValidations.filter(
     (validation) => validation.messages.length > 0
   ).length;
@@ -376,6 +438,7 @@ function ImportPage() {
     setSelectedFileName("");
     setImportResult(null);
     setPreviewRows([]);
+    setPreviewGroupCategoryDrafts({});
     setReceiptDraft(null);
     setError("");
     setPreviewFilter("all");
@@ -408,6 +471,7 @@ function ImportPage() {
     setSelectedFileName(formatSelectedFilesLabel(selectedFiles, t));
     setImportResult(null);
     setPreviewRows([]);
+    setPreviewGroupCategoryDrafts({});
     setReceiptDraft(null);
     setError("");
     setLoading(true);
@@ -526,12 +590,47 @@ function ImportPage() {
     });
   };
 
+  const handleApplyPreviewLearningGroup = (group) => {
+    const reviewedCategory = (
+      previewGroupCategoryDrafts[group.key] ||
+      group.suggestedCategory ||
+      ""
+    ).trim();
+    if (!reviewedCategory) return;
+
+    const groupIndexes = new Set(group.rowIndexes);
+    setPreviewRows((prev) =>
+      prev.map((row, rowIndex) => {
+        if (!groupIndexes.has(rowIndex)) {
+          return row;
+        }
+
+        return {
+          ...row,
+          category: reviewedCategory,
+          category_review_required: false,
+          category_review_reason: null,
+          category_confidence: Math.max(Number(row.category_confidence || 0), 0.92),
+          category_source: "user_group_review",
+          category_reason: t("import.groupCategoryAppliedReason", {
+            merchant: group.displayName,
+          }),
+        };
+      })
+    );
+    setPreviewGroupCategoryDrafts((prev) => ({
+      ...prev,
+      [group.key]: reviewedCategory,
+    }));
+  };
+
   const handleRemovePreviewRow = (index) => {
     setPreviewRows((prev) => prev.filter((_, rowIndex) => rowIndex !== index));
   };
 
   const handleRestorePreviewRows = () => {
     setPreviewRows(detectedPreviewRows);
+    setPreviewGroupCategoryDrafts({});
     setPreviewFilter("all");
   };
 
@@ -1103,6 +1202,68 @@ function ImportPage() {
                   })}
                 </strong>
                 <p>{t("import.confidenceChecksDetail")}</p>
+              </div>
+            )}
+
+            {previewLearningGroups.length > 0 && (
+              <div className="import-learning-panel">
+                <div className="section-header">
+                  <h3>{t("import.reviewSimilarGroupsTitle")}</h3>
+                  <p>{t("import.reviewSimilarGroupsDetail")}</p>
+                </div>
+
+                <div className="import-learning-grid">
+                  {previewLearningGroups.map((group) => {
+                    const draftCategory =
+                      previewGroupCategoryDrafts[group.key] ?? group.suggestedCategory ?? "";
+
+                    return (
+                      <div key={group.key} className="import-learning-card">
+                        <div>
+                          <span className="import-source-label">
+                            {group.type === "income" ? t("common.income") : t("common.expense")}
+                          </span>
+                          <h4>{group.displayName}</h4>
+                          <p>
+                            {t("import.similarGroupSummary", {
+                              count: group.count,
+                              plural: group.count === 1 ? "" : "s",
+                              amount: group.totalAmount.toFixed(2),
+                            })}
+                          </p>
+                          {group.examples.length > 0 && (
+                            <p className="import-learning-examples">
+                              {t("import.examples")}: {group.examples.join(" | ")}
+                            </p>
+                          )}
+                        </div>
+
+                        <div className="import-learning-controls">
+                          <label>{t("import.correctCategory")}</label>
+                          <input
+                            type="text"
+                            value={draftCategory}
+                            onChange={(event) =>
+                              setPreviewGroupCategoryDrafts((prev) => ({
+                                ...prev,
+                                [group.key]: event.target.value,
+                              }))
+                            }
+                            placeholder={t("import.correctCategoryPlaceholder")}
+                          />
+                          <button
+                            type="button"
+                            className="smart-apply-button"
+                            onClick={() => handleApplyPreviewLearningGroup(group)}
+                            disabled={confirmingPreview || !draftCategory.trim()}
+                          >
+                            {t("import.applyToSimilarRows")}
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
             )}
 
