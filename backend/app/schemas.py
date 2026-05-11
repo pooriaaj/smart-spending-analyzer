@@ -35,10 +35,15 @@ class Token(BaseModel):
 class UserProfileResponse(ORMBaseModel):
     id: int
     email: EmailStr
+    community_learning_enabled: bool = True
 
 
 class UserProfileUpdate(BaseModel):
     email: EmailStr
+
+
+class UserLearningPreferenceUpdate(BaseModel):
+    community_learning_enabled: bool
 
 
 class ChangePasswordRequest(BaseModel):

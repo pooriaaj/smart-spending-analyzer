@@ -13,7 +13,15 @@ from sqlalchemy.pool import StaticPool
 
 from app.database import Base
 from app.dependencies import get_current_user, get_db
-from app.models import Account, CategoryMemory, MerchantCategoryProfile, MerchantLookupCache, Transaction, User
+from app.models import (
+    Account,
+    CategoryMemory,
+    MerchantCategoryProfile,
+    MerchantLookupCache,
+    Transaction,
+    User,
+    UserLearningPreference,
+)
 from app.routes.transaction_routes import router as transaction_router
 from app.services import pdf_statement_service
 
@@ -126,6 +134,8 @@ class SmartImportRouteTest(unittest.TestCase):
             session.query(CategoryMemory).delete()
             session.query(MerchantCategoryProfile).delete()
             session.query(MerchantLookupCache).delete()
+            session.query(UserLearningPreference).delete()
+            session.query(User).filter(User.id != self.user_id).delete()
             session.commit()
 
     def test_transactions_route_returns_legacy_rows_without_account(self) -> None:
@@ -537,6 +547,67 @@ class SmartImportRouteTest(unittest.TestCase):
         personal_row = personal_response.json()["preview_rows"][0]
         self.assertEqual(personal_row["category"], "entertainment")
         self.assertEqual(personal_row["category_source"], "merchant_profile")
+
+    def test_import_file_excludes_users_who_disabled_community_learning(self) -> None:
+        with self.session_local() as session:
+            disabled_user = User(email="community-disabled@example.com", password_hash="hashed")
+            enabled_user = User(email="community-enabled@example.com", password_hash="hashed")
+            session.add_all([disabled_user, enabled_user])
+            session.flush()
+            session.add(
+                UserLearningPreference(
+                    owner_id=disabled_user.id,
+                    community_learning_enabled=False,
+                )
+            )
+            session.add_all(
+                [
+                    MerchantCategoryProfile(
+                        merchant_key="narcos",
+                        display_name="Narcos",
+                        category="clothing",
+                        transaction_type="expense",
+                        confidence=0.97,
+                        confirmation_count=3,
+                        last_amount=44.0,
+                        owner_id=disabled_user.id,
+                    ),
+                    MerchantCategoryProfile(
+                        merchant_key="narcos",
+                        display_name="Narcos",
+                        category="clothing",
+                        transaction_type="expense",
+                        confidence=0.94,
+                        confirmation_count=2,
+                        last_amount=45.0,
+                        owner_id=enabled_user.id,
+                    ),
+                ]
+            )
+            session.commit()
+
+        pdf_bytes = build_text_pdf(
+            [
+                "Royal Bank of Canada",
+                "Details of your account activity",
+                "From March 2, 2026 to April 2, 2026",
+                "Date Description Withdrawals ($) Deposits ($) Balance ($)",
+                "3 Mar Contactless Interac purchase - 3001",
+                "NARCOS DRIP 44.00 56.00",
+            ]
+        )
+
+        response = self.client.post(
+            "/transactions/import/file",
+            data={"account_id": str(self.account_id)},
+            files={"file": ("community-opt-out.pdf", pdf_bytes, "application/pdf")},
+        )
+
+        self.assertEqual(response.status_code, 200, response.text)
+        preview_row = response.json()["preview_rows"][0]
+
+        self.assertNotEqual(preview_row["category_source"], "community_profile")
+        self.assertNotEqual(preview_row["category"], "clothing")
 
     def test_import_file_uses_expanded_lifestyle_categories(self) -> None:
         pdf_bytes = build_text_pdf(
@@ -1889,20 +1960,19 @@ class SmartImportRouteTest(unittest.TestCase):
         )
         self.assertEqual(normalize_response.status_code, 200, normalize_response.text)
         payload = normalize_response.json()
-        self.assertEqual(payload["updated_count"], 1)
+        self.assertEqual(payload["updated_count"], 2)
         self.assertGreaterEqual(payload["memory_entries_created"], 1)
 
-        preview_response = self.client.get(
-            "/transactions/categorize/bulk-preview",
-            params={"account_id": self.account_id},
-        )
-        self.assertEqual(preview_response.status_code, 200, preview_response.text)
-        suggestions = preview_response.json()["suggestions"]
-        self.assertEqual(len(suggestions), 1)
-        self.assertEqual(suggestions[0]["description"], "Aesop King")
-        self.assertEqual(suggestions[0]["suggested_category"], "personal")
-        self.assertEqual(suggestions[0]["matched_keyword"], "aesop")
-        self.assertIn("learned category memory", suggestions[0]["reason"].lower())
+        with self.session_local() as session:
+            categories = {
+                transaction.description: transaction.category
+                for transaction in session.query(Transaction)
+                .filter(Transaction.description.like("Aesop%"))
+                .all()
+            }
+
+        self.assertEqual(categories["Aesop Queen"], "personal")
+        self.assertEqual(categories["Aesop King"], "personal")
 
     def test_bulk_category_preview_returns_rule_based_explanation(self) -> None:
         with self.session_local() as session:

@@ -8,10 +8,16 @@ from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from typing import Iterable
 
-from sqlalchemy import func, inspect, or_
+from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
-from app.models import CategoryMemory, MerchantCategoryProfile, MerchantLookupCache, Transaction
+from app.models import (
+    CategoryMemory,
+    MerchantCategoryProfile,
+    MerchantLookupCache,
+    Transaction,
+    UserLearningPreference,
+)
 from app.services.category_taxonomy import (
     CATEGORY_ALIAS_EXPANSION,
     CATEGORY_KEYWORD_EXPANSION,
@@ -857,10 +863,19 @@ def merchant_profile_amount_matches(
 
 
 def merchant_profile_table_available(db: Session) -> bool:
-    try:
-        return inspect(db.get_bind()).has_table(MerchantCategoryProfile.__tablename__)
-    except Exception:
-        return False
+    # The app creates this table at startup through Base.metadata.create_all.
+    # Avoid runtime SQLAlchemy inspection here: on SQLite it can rollback the
+    # current transaction and discard pending learning changes.
+    return True
+
+
+def user_allows_community_learning(db: Session, owner_id: int) -> bool:
+    preference = (
+        db.query(UserLearningPreference)
+        .filter(UserLearningPreference.owner_id == owner_id)
+        .one_or_none()
+    )
+    return True if preference is None else bool(preference.community_learning_enabled)
 
 
 def build_community_profile_decision(
@@ -1023,6 +1038,11 @@ def refresh_community_merchant_profile_cache(
         )
         .all()
     )
+    profiles = [
+        profile
+        for profile in profiles
+        if user_allows_community_learning(db, profile.owner_id)
+    ]
     decision = build_community_profile_decision(merchant_key=merchant_key, profiles=profiles)
     if decision:
         save_community_profile_decision(db, merchant_key, tx_type, decision)
@@ -1069,7 +1089,8 @@ def save_merchant_category_profile(
         existing.confirmation_count = int(existing.confirmation_count or 0) + 1
         existing.confidence = merchant_profile_confidence(existing.confirmation_count)
         db.flush()
-        refresh_community_merchant_profile_cache(db, merchant_key, tx_type)
+        if user_allows_community_learning(db, owner_id):
+            refresh_community_merchant_profile_cache(db, merchant_key, tx_type)
         return {"created": 0, "updated": 1}
 
     db.add(
@@ -1085,7 +1106,8 @@ def save_merchant_category_profile(
         )
     )
     db.flush()
-    refresh_community_merchant_profile_cache(db, merchant_key, tx_type)
+    if user_allows_community_learning(db, owner_id):
+        refresh_community_merchant_profile_cache(db, merchant_key, tx_type)
     return {"created": 1, "updated": 0}
 
 
@@ -1891,12 +1913,18 @@ def learnable_category_from_community_profiles(
             for profile in profiles
             if merchant_profile_base_key(profile.merchant_key) == merchant_key
             and merchant_profile_amount_matches(profile, amount)
+            and user_allows_community_learning(db, profile.owner_id)
         ]
     else:
         profiles = (
             profile_query.filter(MerchantCategoryProfile.merchant_key == merchant_key)
             .all()
         )
+        profiles = [
+            profile
+            for profile in profiles
+            if user_allows_community_learning(db, profile.owner_id)
+        ]
 
     decision = build_community_profile_decision(merchant_key=merchant_key, profiles=profiles)
     if decision and not merchant_key_requires_amount_guard(merchant_key):

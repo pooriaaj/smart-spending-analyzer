@@ -11,6 +11,10 @@ function ProfilePage() {
 
   const [email, setEmail] = useState("");
   const [profileLoading, setProfileLoading] = useState(true);
+  const [communityLearningEnabled, setCommunityLearningEnabled] = useState(true);
+  const [learningSaving, setLearningSaving] = useState(false);
+  const [learningMessage, setLearningMessage] = useState("");
+  const [learningError, setLearningError] = useState("");
 
   const [profileMessage, setProfileMessage] = useState("");
   const [profileError, setProfileError] = useState("");
@@ -29,6 +33,7 @@ function ProfilePage() {
     try {
       const response = await api.get("/users/me");
       setEmail(response.data.email);
+      setCommunityLearningEnabled(response.data.community_learning_enabled ?? true);
     } catch (error) {
       handleApiAuthError(error, navigate);
     } finally {
@@ -55,6 +60,29 @@ function ProfilePage() {
           error?.response?.data?.detail || t("profile.profileUpdateFailed")
         );
       }
+    }
+  };
+
+  const handleToggleCommunityLearning = async () => {
+    const nextValue = !communityLearningEnabled;
+    setLearningSaving(true);
+    setLearningMessage("");
+    setLearningError("");
+
+    try {
+      const response = await api.put("/users/me/learning", {
+        community_learning_enabled: nextValue,
+      });
+      setCommunityLearningEnabled(response.data.community_learning_enabled ?? nextValue);
+      setLearningMessage(t("profile.learningUpdated"));
+    } catch (error) {
+      if (!handleApiAuthError(error, navigate)) {
+        setLearningError(
+          error?.response?.data?.detail || t("profile.learningUpdateFailed")
+        );
+      }
+    } finally {
+      setLearningSaving(false);
     }
   };
 
@@ -176,6 +204,56 @@ function ProfilePage() {
 
           {profileMessage && <p style={{ color: "green" }}>{profileMessage}</p>}
           {profileError && <p className="error-text">{profileError}</p>}
+        </div>
+
+        <div className="dashboard-card large-card learning-privacy-card">
+          <div className="section-header">
+            <h2>{t("profile.learningPrivacyTitle")}</h2>
+            <p>{t("profile.learningPrivacyDetail")}</p>
+          </div>
+
+          <div className="learning-privacy-grid">
+            <div className="learning-privacy-item">
+              <span className="learning-privacy-kicker">
+                {t("profile.personalLearningTitle")}
+              </span>
+              <h3>{t("profile.personalLearningStatus")}</h3>
+              <p>{t("profile.personalLearningDetail")}</p>
+            </div>
+
+            <div className="learning-privacy-item">
+              <span className="learning-privacy-kicker">
+                {t("profile.communityLearningTitle")}
+              </span>
+              <h3>
+                {communityLearningEnabled
+                  ? t("profile.communityLearningOn")
+                  : t("profile.communityLearningOff")}
+              </h3>
+              <p>{t("profile.communityLearningDetail")}</p>
+              <button
+                className={
+                  communityLearningEnabled ? "secondary-button" : "premium-header-button"
+                }
+                type="button"
+                onClick={handleToggleCommunityLearning}
+                disabled={learningSaving}
+              >
+                {learningSaving
+                  ? t("profile.savingLearning")
+                  : communityLearningEnabled
+                    ? t("profile.turnCommunityLearningOff")
+                    : t("profile.turnCommunityLearningOn")}
+              </button>
+            </div>
+          </div>
+
+          <p className="learning-privacy-note">
+            {t("profile.learningPrivacyNote")}
+          </p>
+
+          {learningMessage && <p style={{ color: "green" }}>{learningMessage}</p>}
+          {learningError && <p className="error-text">{learningError}</p>}
         </div>
 
         <div className="dashboard-card large-card">

@@ -1266,6 +1266,25 @@ const translations = {
       currentPasswordPlaceholder: "Enter your current password",
       newPassword: "New Password",
       newPasswordPlaceholder: "Enter your new password",
+      learningPrivacyTitle: "Learning & Privacy",
+      learningPrivacyDetail:
+        "Control how Smart Spending Analyzer learns from your confirmed categories.",
+      personalLearningTitle: "Personal learning",
+      personalLearningStatus: "Always on for your account",
+      personalLearningDetail:
+        "Your own category corrections teach your account first, so merchants like SQDC, Orange Mart, or OpenAI become more accurate for you over time.",
+      communityLearningTitle: "Anonymous community learning",
+      communityLearningOn: "Enabled",
+      communityLearningOff: "Disabled",
+      communityLearningDetail:
+        "When enabled, only cleaned merchant/category confirmations can improve shared category intelligence. Raw PDFs, full statements, account names, dates, and transaction lists are not shared.",
+      learningPrivacyNote:
+        "Personal memory still works when community learning is off. Turning this off only stops your confirmations from training the shared merchant consensus.",
+      turnCommunityLearningOff: "Turn Off Anonymous Learning",
+      turnCommunityLearningOn: "Turn On Anonymous Learning",
+      savingLearning: "Saving...",
+      learningUpdated: "Learning preference updated.",
+      learningUpdateFailed: "Failed to update learning preference.",
       premiumPlans: "Premium Plans",
       premiumPlansDetail:
         "Free is for daily tracking and month-end reconciliation. Premium is for deeper forecasting, larger statement workflows, and smarter decision support.",
@@ -2586,6 +2605,25 @@ const translations = {
       currentPasswordPlaceholder: "Entrez votre mot de passe actuel",
       newPassword: "Nouveau mot de passe",
       newPasswordPlaceholder: "Entrez votre nouveau mot de passe",
+      learningPrivacyTitle: "Confidentialite et apprentissage",
+      learningPrivacyDetail:
+        "Controlez comment Smart Spending Analyzer apprend de vos categories confirmees.",
+      personalLearningTitle: "Apprentissage personnel",
+      personalLearningStatus: "Toujours actif pour votre compte",
+      personalLearningDetail:
+        "Vos corrections de categorie apprennent d'abord a votre compte, donc des marchands comme SQDC, Orange Mart ou OpenAI deviennent plus precis pour vous avec le temps.",
+      communityLearningTitle: "Apprentissage communautaire anonyme",
+      communityLearningOn: "Active",
+      communityLearningOff: "Desactive",
+      communityLearningDetail:
+        "Quand il est active, seules les confirmations marchands/categories nettoyees peuvent ameliorer l'intelligence partagee. Les PDF bruts, releves complets, noms de comptes, dates et listes de transactions ne sont pas partages.",
+      learningPrivacyNote:
+        "La memoire personnelle fonctionne encore quand l'apprentissage communautaire est desactive. Cette option empeche seulement vos confirmations d'entrainer le consensus marchand partage.",
+      turnCommunityLearningOff: "Desactiver l'apprentissage anonyme",
+      turnCommunityLearningOn: "Activer l'apprentissage anonyme",
+      savingLearning: "Enregistrement...",
+      learningUpdated: "Preference d'apprentissage mise a jour.",
+      learningUpdateFailed: "Impossible de mettre a jour la preference d'apprentissage.",
       premiumPlans: "Forfaits avancés",
       premiumPlansDetail:
         "Le gratuit sert au suivi quotidien et au rapprochement de fin de mois. Le forfait avancé sert aux prévisions, gros lots de relevés et décisions plus intelligentes.",

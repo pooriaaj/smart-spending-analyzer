@@ -43,6 +43,14 @@ class User(Base):
         passive_deletes=True,
     )
 
+    learning_preference = relationship(
+        "UserLearningPreference",
+        back_populates="owner",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+        uselist=False,
+    )
+
     budgets = relationship(
         "BudgetPlan",
         back_populates="owner",
@@ -165,6 +173,18 @@ class MerchantCategoryProfile(Base):
         ),
         Index("ix_merchant_profiles_owner_key", "owner_id", "merchant_key"),
     )
+
+
+class UserLearningPreference(Base):
+    __tablename__ = "user_learning_preferences"
+
+    id = Column(Integer, primary_key=True, index=True)
+    community_learning_enabled = Column(Boolean, nullable=False, default=True)
+    owner_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, unique=True, index=True)
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now())
+
+    owner = relationship("User", back_populates="learning_preference")
 
 
 class MerchantLookupCache(Base):
