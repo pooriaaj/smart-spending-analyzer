@@ -2012,6 +2012,120 @@ def learnable_category_from_memory(
     return normalize_category_name(best_match[1]), best_match[0]
 
 
+def category_learning_event_amount_matches(
+    event: CategoryLearningEvent,
+    merchant_key: str,
+    amount: float | None = None,
+) -> bool:
+    if not merchant_key_requires_amount_guard(merchant_key):
+        return True
+
+    candidate_bucket = learned_amount_bucket(amount)
+    if not event.amount_bucket or not candidate_bucket:
+        return False
+
+    try:
+        learned_bucket = float(event.amount_bucket)
+        current_bucket = float(candidate_bucket)
+    except (TypeError, ValueError):
+        return event.amount_bucket == candidate_bucket
+
+    tolerance = max(5.0, min(50.0, learned_bucket * 0.25))
+    return abs(learned_bucket - current_bucket) <= tolerance
+
+
+def learnable_category_from_learning_events(
+    db: Session,
+    owner_id: int,
+    description: str,
+    tx_type: str,
+    amount: float | None = None,
+) -> CategoryDecision | None:
+    """Use durable user-confirmed learning events when profile/memory rows are absent.
+
+    Merchant profiles and keyword memory stay faster and stronger. This function
+    is a safety net for historical corrections and bulk learning events, with
+    enough confirmation required to avoid teaching the app from one noisy click.
+    """
+
+    fingerprint = extract_merchant_fingerprint(description)
+    if not fingerprint:
+        return None
+
+    merchant_key, _ = fingerprint
+    events = (
+        db.query(CategoryLearningEvent)
+        .filter(
+            CategoryLearningEvent.owner_id == owner_id,
+            CategoryLearningEvent.merchant_key == merchant_key,
+            CategoryLearningEvent.transaction_type == tx_type,
+        )
+        .order_by(CategoryLearningEvent.created_at.desc(), CategoryLearningEvent.id.desc())
+        .limit(40)
+        .all()
+    )
+    if not events:
+        return None
+
+    category_weights: Counter[str] = Counter()
+    category_counts: Counter[str] = Counter()
+    category_latest_ids: dict[str, int] = {}
+
+    for event in events:
+        category = normalize_category_name(event.category)
+        if not should_store_category_memory(category):
+            continue
+        if not category_learning_event_amount_matches(event, merchant_key, amount):
+            continue
+
+        confidence = max(0.0, min(1.0, float(event.confidence or 0.0)))
+        affected_count = max(1, int(event.affected_count or 1))
+        if confidence < 0.7 and affected_count < 2:
+            continue
+
+        category_weights[category] += affected_count
+        category_counts[category] += 1
+        category_latest_ids[category] = max(category_latest_ids.get(category, 0), int(event.id or 0))
+
+    if not category_weights:
+        return None
+
+    best_category, best_weight = max(
+        category_weights.items(),
+        key=lambda item: (
+            item[1],
+            category_counts[item[0]],
+            category_latest_ids.get(item[0], 0),
+        ),
+    )
+    total_weight = sum(category_weights.values())
+    best_count = category_counts[best_category]
+
+    if best_weight < 2 and best_count < 2:
+        return None
+    if total_weight > best_weight and best_weight / total_weight < 0.6:
+        return None
+
+    confidence = min(
+        0.96,
+        0.76
+        + 0.04 * min(best_weight, 5)
+        + 0.02 * min(best_count, 4)
+        + (0.04 if best_weight == total_weight else 0.0),
+    )
+
+    return CategoryDecision(
+        category=best_category,
+        confidence=round(confidence, 2),
+        matched_keyword=merchant_key,
+        reason=(
+            "Matched your confirmed category learning history for this merchant "
+            f"({best_weight} saved signal{'' if best_weight == 1 else 's'})."
+        ),
+        source="learning_event",
+    )
+
+
 def learnable_category_from_community_profiles(
     db: Session,
     owner_id: int,
@@ -2174,6 +2288,16 @@ def categorize_transaction_details(
             reason="Matched learned category memory from your previous confirmed edits or imports.",
             source="memory",
         )
+
+    learning_event_decision = learnable_category_from_learning_events(
+        db,
+        owner_id,
+        description,
+        tx_type,
+        amount,
+    )
+    if learning_event_decision:
+        return learning_event_decision
 
     lowered = normalize_category_signal_text(description)
     raw_lowered = description.lower()

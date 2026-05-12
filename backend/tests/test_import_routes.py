@@ -1760,6 +1760,158 @@ class SmartImportRouteTest(unittest.TestCase):
         self.assertEqual(learning_event.merchant_key, "sephora")
         self.assertEqual(learning_event.signal_source, "import_review")
 
+    def test_confirmed_learning_events_feed_future_category_suggestions(self) -> None:
+        with self.session_local() as session:
+            session.add_all(
+                [
+                    CategoryLearningEvent(
+                        merchant_key="mooncrate",
+                        display_name="Mooncrate",
+                        category="hobby",
+                        transaction_type="expense",
+                        signal_source="learning_apply",
+                        confidence=0.95,
+                        affected_count=1,
+                        owner_id=self.user_id,
+                        account_id=self.account_id,
+                    ),
+                    CategoryLearningEvent(
+                        merchant_key="mooncrate",
+                        display_name="Mooncrate",
+                        category="hobby",
+                        transaction_type="expense",
+                        signal_source="manual_edit",
+                        confidence=0.95,
+                        affected_count=1,
+                        owner_id=self.user_id,
+                        account_id=self.account_id,
+                    ),
+                    Transaction(
+                        amount=24.50,
+                        category="other",
+                        description="Mooncrate Shop",
+                        date=date(2025, 1, 7),
+                        type="expense",
+                        owner_id=self.user_id,
+                        account_id=self.account_id,
+                    ),
+                ]
+            )
+            session.commit()
+
+        preview_response = self.client.get(
+            "/transactions/categorize/bulk-preview",
+            params={"account_id": self.account_id},
+        )
+        self.assertEqual(preview_response.status_code, 200, preview_response.text)
+        suggestions = preview_response.json()["suggestions"]
+        self.assertEqual(len(suggestions), 1)
+        self.assertEqual(suggestions[0]["suggested_category"], "hobby")
+        self.assertEqual(suggestions[0]["matched_keyword"], "mooncrate")
+        self.assertIn("confirmed category learning history", suggestions[0]["reason"].lower())
+
+    def test_single_learning_event_does_not_override_known_rules(self) -> None:
+        with self.session_local() as session:
+            session.add_all(
+                [
+                    CategoryLearningEvent(
+                        merchant_key="starbucks",
+                        display_name="Starbucks",
+                        category="rent",
+                        transaction_type="expense",
+                        signal_source="manual_edit",
+                        confidence=1.0,
+                        affected_count=1,
+                        owner_id=self.user_id,
+                        account_id=self.account_id,
+                    ),
+                    Transaction(
+                        amount=7.45,
+                        category="other",
+                        description="Starbucks Front",
+                        date=date(2025, 1, 5),
+                        type="expense",
+                        owner_id=self.user_id,
+                        account_id=self.account_id,
+                    ),
+                ]
+            )
+            session.commit()
+
+        preview_response = self.client.get(
+            "/transactions/categorize/bulk-preview",
+            params={"account_id": self.account_id},
+        )
+        self.assertEqual(preview_response.status_code, 200, preview_response.text)
+        suggestions = preview_response.json()["suggestions"]
+        self.assertEqual(len(suggestions), 1)
+        self.assertEqual(suggestions[0]["suggested_category"], "cafe")
+        self.assertEqual(suggestions[0]["matched_keyword"], "starbucks")
+
+    def test_learning_events_respect_amount_sensitive_merchants(self) -> None:
+        with self.session_local() as session:
+            session.add_all(
+                [
+                    CategoryLearningEvent(
+                        merchant_key="orange mart",
+                        display_name="Orange Mart",
+                        category="smoking",
+                        transaction_type="expense",
+                        signal_source="learning_apply",
+                        confidence=0.95,
+                        affected_count=2,
+                        amount_bucket="10",
+                        owner_id=self.user_id,
+                        account_id=self.account_id,
+                    ),
+                    Transaction(
+                        amount=12.60,
+                        category="other",
+                        description="Orange Mart",
+                        date=date(2025, 1, 4),
+                        type="expense",
+                        owner_id=self.user_id,
+                        account_id=self.account_id,
+                    ),
+                    Transaction(
+                        amount=35.00,
+                        category="other",
+                        description="Orange Mart",
+                        date=date(2025, 1, 5),
+                        type="expense",
+                        owner_id=self.user_id,
+                        account_id=self.account_id,
+                    ),
+                ]
+            )
+            session.commit()
+
+        preview_response = self.client.get(
+            "/transactions/categorize/bulk-preview",
+            params={"account_id": self.account_id},
+        )
+        self.assertEqual(preview_response.status_code, 200, preview_response.text)
+        suggestions = {
+            suggestion["transaction_id"]: suggestion
+            for suggestion in preview_response.json()["suggestions"]
+        }
+
+        smoking_suggestion = next(
+            suggestion
+            for suggestion in suggestions.values()
+            if suggestion["description"] == "Orange Mart"
+            and suggestion["suggested_category"] == "smoking"
+        )
+        grocery_suggestion = next(
+            suggestion
+            for suggestion in suggestions.values()
+            if suggestion["description"] == "Orange Mart"
+            and suggestion["suggested_category"] == "groceries"
+        )
+
+        self.assertIn("confirmed category learning history", smoking_suggestion["reason"].lower())
+        self.assertEqual(grocery_suggestion["matched_keyword"], "orange mart")
+
     def test_confirm_preview_import_does_not_fail_when_learning_memory_fails(self) -> None:
         with patch(
             "app.routes.transaction_routes.save_category_memory",
