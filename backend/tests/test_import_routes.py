@@ -15,6 +15,7 @@ from app.database import Base
 from app.dependencies import get_current_user, get_db
 from app.models import (
     Account,
+    CategoryLearningEvent,
     CategoryMemory,
     MerchantCategoryProfile,
     MerchantLookupCache,
@@ -131,6 +132,7 @@ class SmartImportRouteTest(unittest.TestCase):
     def tearDown(self) -> None:
         with self.session_local() as session:
             session.query(Transaction).delete()
+            session.query(CategoryLearningEvent).delete()
             session.query(CategoryMemory).delete()
             session.query(MerchantCategoryProfile).delete()
             session.query(MerchantLookupCache).delete()
@@ -1661,6 +1663,10 @@ class SmartImportRouteTest(unittest.TestCase):
         self.assertEqual(payload["learning_candidate_count"], 1)
         self.assertGreaterEqual(payload["personal_memory_count"], 1)
         self.assertGreaterEqual(payload["merchant_profile_count"], 1)
+        self.assertEqual(payload["learning_event_count"], 1)
+        self.assertEqual(len(payload["recent_learning_events"]), 1)
+        self.assertEqual(payload["recent_learning_events"][0]["merchant_key"], "sqdc")
+        self.assertEqual(payload["recent_learning_events"][0]["signal_source"], "manual_create")
         self.assertTrue(payload["community_learning_enabled"])
         self.assertIn(payload["confidence_level"], {"low", "medium", "high"})
 
@@ -1710,6 +1716,8 @@ class SmartImportRouteTest(unittest.TestCase):
                         "amount": 42.15,
                         "type": "expense",
                         "category": "personal",
+                        "category_source": "user_review",
+                        "category_confidence": 0.96,
                     }
                 ],
             },
@@ -1740,6 +1748,17 @@ class SmartImportRouteTest(unittest.TestCase):
         self.assertEqual(suggestions[0]["suggested_category"], "personal")
         self.assertEqual(suggestions[0]["matched_keyword"], "sephora")
         self.assertIn("learned category memory", suggestions[0]["reason"].lower())
+
+        with self.session_local() as session:
+            learning_event = (
+                session.query(CategoryLearningEvent)
+                .filter(CategoryLearningEvent.owner_id == self.user_id)
+                .one_or_none()
+            )
+
+        self.assertIsNotNone(learning_event)
+        self.assertEqual(learning_event.merchant_key, "sephora")
+        self.assertEqual(learning_event.signal_source, "import_review")
 
     def test_confirm_preview_import_does_not_fail_when_learning_memory_fails(self) -> None:
         with patch(

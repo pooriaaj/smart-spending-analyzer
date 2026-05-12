@@ -43,6 +43,13 @@ class User(Base):
         passive_deletes=True,
     )
 
+    category_learning_events = relationship(
+        "CategoryLearningEvent",
+        back_populates="owner",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
+
     learning_preference = relationship(
         "UserLearningPreference",
         back_populates="owner",
@@ -185,6 +192,31 @@ class UserLearningPreference(Base):
     updated_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now())
 
     owner = relationship("User", back_populates="learning_preference")
+
+
+class CategoryLearningEvent(Base):
+    __tablename__ = "category_learning_events"
+
+    id = Column(Integer, primary_key=True, index=True)
+    merchant_key = Column(String(160), nullable=False, index=True)
+    display_name = Column(String(160), nullable=False)
+    category = Column(String(100), nullable=False, index=True)
+    transaction_type = Column(String(20), nullable=False, index=True)
+    signal_source = Column(String(40), nullable=False, default="manual")
+    confidence = Column(Float, nullable=False, default=1.0)
+    affected_count = Column(Integer, nullable=False, default=1)
+    amount_bucket = Column(String(20), nullable=True)
+    owner_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    account_id = Column(Integer, ForeignKey("accounts.id", ondelete="SET NULL"), nullable=True, index=True)
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+    owner = relationship("User", back_populates="category_learning_events")
+
+    __table_args__ = (
+        Index("ix_category_learning_events_owner_created", "owner_id", "created_at"),
+        Index("ix_category_learning_events_owner_merchant", "owner_id", "merchant_key"),
+        Index("ix_category_learning_events_owner_category", "owner_id", "category"),
+    )
 
 
 class MerchantLookupCache(Base):

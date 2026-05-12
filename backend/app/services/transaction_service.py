@@ -12,6 +12,7 @@ from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
 from app.models import (
+    CategoryLearningEvent,
     CategoryMemory,
     MerchantCategoryProfile,
     MerchantLookupCache,
@@ -1168,6 +1169,46 @@ def save_category_memory(
     return {"created": created, "updated": updated}
 
 
+def record_category_learning_event(
+    db: Session,
+    owner_id: int,
+    description: str,
+    category: str,
+    tx_type: str,
+    *,
+    amount: float | None = None,
+    account_id: int | None = None,
+    signal_source: str = "manual",
+    confidence: float = 1.0,
+    affected_count: int = 1,
+) -> bool:
+    normalized_category = normalize_category_name(category)
+    if not should_store_category_memory(normalized_category):
+        return False
+
+    fingerprint = extract_merchant_fingerprint(description)
+    if not fingerprint:
+        return False
+
+    merchant_key, display_name = fingerprint
+    amount_bucket = learned_amount_bucket(amount) if merchant_key_requires_amount_guard(merchant_key) else None
+    db.add(
+        CategoryLearningEvent(
+            merchant_key=merchant_key,
+            display_name=display_name,
+            category=normalized_category,
+            transaction_type=tx_type,
+            signal_source=signal_source[:40],
+            confidence=max(0.0, min(1.0, float(confidence or 0.0))),
+            affected_count=max(1, int(affected_count or 1)),
+            amount_bucket=amount_bucket,
+            owner_id=owner_id,
+            account_id=account_id,
+        )
+    )
+    return True
+
+
 def apply_category_to_similar_transactions(
     db: Session,
     owner_id: int,
@@ -1360,6 +1401,18 @@ def get_category_learning_summary(
         if community_learning_enabled
         else 0
     )
+    learning_event_count = (
+        db.query(CategoryLearningEvent)
+        .filter(CategoryLearningEvent.owner_id == owner_id)
+        .count()
+    )
+    recent_learning_events = (
+        db.query(CategoryLearningEvent)
+        .filter(CategoryLearningEvent.owner_id == owner_id)
+        .order_by(CategoryLearningEvent.created_at.desc(), CategoryLearningEvent.id.desc())
+        .limit(5)
+        .all()
+    )
 
     if transaction_count == 0:
         confidence_level = "empty"
@@ -1391,6 +1444,20 @@ def get_category_learning_summary(
         "merchant_profile_count": merchant_profile_count,
         "community_learning_enabled": community_learning_enabled,
         "community_pattern_count": community_pattern_count,
+        "learning_event_count": learning_event_count,
+        "recent_learning_events": [
+            {
+                "merchant_key": event.merchant_key,
+                "display_name": event.display_name,
+                "category": event.category,
+                "type": event.transaction_type,
+                "signal_source": event.signal_source,
+                "confidence": round(float(event.confidence or 0.0), 2),
+                "affected_count": int(event.affected_count or 1),
+                "created_at": event.created_at,
+            }
+            for event in recent_learning_events
+        ],
         "confidence_level": confidence_level,
         "confidence_score": round(confidence_score, 2),
         "message": message,
@@ -1451,6 +1518,18 @@ def apply_category_to_merchant_learning_group(
         )
         memory_created += memory_stats["created"]
         memory_updated += memory_stats["updated"]
+        record_category_learning_event(
+            db=db,
+            owner_id=owner_id,
+            description=representative_transaction.description,
+            category=normalized_category,
+            tx_type=tx_type,
+            amount=representative_transaction.amount,
+            account_id=representative_transaction.account_id,
+            signal_source="learning_apply",
+            confidence=1.0,
+            affected_count=matched_count,
+        )
 
     if matched_count > 0:
         db.commit()

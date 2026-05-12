@@ -284,6 +284,13 @@ function TransactionsPage() {
       low: t("transactions.learningHealthLow"),
       empty: t("transactions.learningHealthEmpty"),
     }[learningLevel] || t("transactions.learningHealthEmpty");
+  const formatLearningSource = (source) =>
+    ({
+      manual_create: t("transactions.learningSourceManualCreate"),
+      manual_edit: t("transactions.learningSourceManualEdit"),
+      import_review: t("transactions.learningSourceImportReview"),
+      learning_apply: t("transactions.learningSourceGroupApply"),
+    }[source] || t("transactions.learningSourceConfirmed"));
 
   useEffect(() => {
     setCurrentPage(1);
@@ -800,6 +807,11 @@ function TransactionsPage() {
                   </small>
                 </div>
                 <div className="learning-health-card">
+                  <span>{t("transactions.learningEvents")}</span>
+                  <strong>{learningSummary.learning_event_count}</strong>
+                  <small>{t("transactions.learningEventsDetail")}</small>
+                </div>
+                <div className="learning-health-card">
                   <span>{t("transactions.learningCommunity")}</span>
                   <strong>
                     {learningSummary.community_learning_enabled
@@ -813,6 +825,31 @@ function TransactionsPage() {
                   </small>
                 </div>
               </div>
+
+              {(learningSummary.recent_learning_events || []).length > 0 && (
+                <div className="learning-events-list">
+                  <h4>{t("transactions.recentLessons")}</h4>
+                  {learningSummary.recent_learning_events.map((event, index) => (
+                    <div
+                      key={`${event.merchant_key}-${event.created_at}-${index}`}
+                      className="learning-event-row"
+                    >
+                      <div>
+                        <strong>{event.display_name}</strong>
+                        <span>
+                          {formatCategoryLabel(event.category, t)} ·{" "}
+                          {formatLearningSource(event.signal_source)}
+                        </span>
+                      </div>
+                      <span className="learning-event-count">
+                        {t("transactions.learningAffected", {
+                          count: event.affected_count,
+                        })}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           )}
 

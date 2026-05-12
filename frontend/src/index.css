@@ -1593,6 +1593,52 @@ textarea:focus,
   letter-spacing: -0.03em;
 }
 
+.learning-events-list {
+  margin-top: 14px;
+  display: grid;
+  gap: 10px;
+}
+
+.learning-events-list h4 {
+  margin: 0;
+  color: var(--text);
+  font-size: 16px;
+}
+
+.learning-event-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+  padding: 12px 14px;
+  border-radius: 16px;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.learning-event-row strong,
+.learning-event-row span {
+  display: block;
+}
+
+.learning-event-row strong {
+  color: var(--text);
+}
+
+.learning-event-row span {
+  color: var(--text-soft);
+  font-size: 13px;
+}
+
+.learning-event-count {
+  flex: 0 0 auto;
+  border-radius: 999px;
+  padding: 7px 10px;
+  background: rgba(59, 130, 246, 0.12);
+  color: #1d4ed8 !important;
+  font-weight: 850;
+}
+
 .recurring-charge-actions {
   margin-top: 14px;
   display: flex;
@@ -3386,6 +3432,15 @@ textarea:focus,
 :root[data-theme="dark"] .learning-health-card {
   background: rgba(15, 23, 42, 0.78);
   border-color: rgba(148, 163, 184, 0.14);
+}
+
+:root[data-theme="dark"] .learning-event-row {
+  background: rgba(15, 23, 42, 0.72);
+  border-color: rgba(148, 163, 184, 0.14);
+}
+
+:root[data-theme="dark"] .learning-event-count {
+  color: #93c5fd !important;
 }
 
 :root[data-theme="dark"] .learning-health-high {

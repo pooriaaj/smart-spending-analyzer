@@ -490,6 +490,17 @@ class CategoryLearningCandidateItem(BaseModel):
     review_required: bool
 
 
+class CategoryLearningEventItem(BaseModel):
+    merchant_key: str
+    display_name: str
+    category: str
+    type: TransactionType
+    signal_source: str
+    confidence: float
+    affected_count: int
+    created_at: datetime
+
+
 class CategoryLearningCandidatesResponse(BaseModel):
     total_candidates: int
     candidates: list[CategoryLearningCandidateItem]
@@ -503,6 +514,8 @@ class CategoryLearningSummaryResponse(BaseModel):
     merchant_profile_count: int
     community_learning_enabled: bool
     community_pattern_count: int
+    learning_event_count: int
+    recent_learning_events: list[CategoryLearningEventItem] = Field(default_factory=list)
     confidence_level: str
     confidence_score: float
     message: str

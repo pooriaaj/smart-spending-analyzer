@@ -49,6 +49,7 @@ from app.services.transaction_service import (
     merchant_category_amount_matches,
     normalize_category_name,
     normalize_existing_categories_for_user,
+    record_category_learning_event,
     normalize_description,
     resolve_import_category_for_transaction,
     apply_category_to_similar_transactions,
@@ -71,6 +72,11 @@ def save_category_memory_safely(
     category: str,
     tx_type: str,
     amount: float,
+    account_id: int | None = None,
+    signal_source: str = "manual",
+    confidence: float = 1.0,
+    affected_count: int = 1,
+    record_event: bool = True,
 ) -> None:
     try:
         save_category_memory(
@@ -81,6 +87,19 @@ def save_category_memory_safely(
             tx_type=tx_type,
             amount=amount,
         )
+        if record_event:
+            record_category_learning_event(
+                db=db,
+                owner_id=owner_id,
+                description=description,
+                category=category,
+                tx_type=tx_type,
+                amount=amount,
+                account_id=account_id,
+                signal_source=signal_source,
+                confidence=confidence,
+                affected_count=affected_count,
+            )
         db.commit()
     except Exception:
         db.rollback()
@@ -187,6 +206,8 @@ def create_transaction(
         category=transaction.category,
         tx_type=transaction.type,
         amount=transaction.amount,
+        account_id=transaction.account_id,
+        signal_source="manual_create",
     )
     return new_transaction
 
@@ -225,6 +246,8 @@ def update_transaction(
         category=updated_data.category,
         tx_type=updated_data.type,
         amount=updated_data.amount,
+        account_id=updated_data.account_id,
+        signal_source="manual_edit",
     )
     db.commit()
     db.refresh(transaction)
@@ -559,6 +582,9 @@ def confirm_preview_import(
                     "category": normalized_category,
                     "tx_type": row.type,
                     "amount": row.amount,
+                    "account_id": payload.account_id,
+                    "source": row.category_source or "import",
+                    "confidence": row.category_confidence,
                 }
             )
             imported += 1
@@ -576,6 +602,14 @@ def confirm_preview_import(
                 category=event["category"],
                 tx_type=event["tx_type"],
                 amount=event["amount"],
+                account_id=event["account_id"],
+                signal_source=(
+                    "import_review"
+                    if str(event["source"]).startswith("user_")
+                    else "import_confirm"
+                ),
+                confidence=float(event.get("confidence") or 0.0),
+                record_event=str(event["source"]).startswith("user_"),
             )
         db.commit()
     except Exception:
