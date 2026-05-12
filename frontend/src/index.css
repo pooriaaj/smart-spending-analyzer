@@ -1500,6 +1500,99 @@ textarea:focus,
   background: rgba(239, 246, 255, 0.78);
 }
 
+.learning-health-panel {
+  margin-bottom: 18px;
+  padding: 18px;
+  border-radius: 24px;
+  border: 1px solid rgba(20, 184, 166, 0.18);
+  background:
+    radial-gradient(circle at 10% 10%, rgba(45, 212, 191, 0.14), transparent 28%),
+    rgba(240, 253, 250, 0.7);
+}
+
+.learning-health-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: flex-start;
+  margin-bottom: 16px;
+}
+
+.learning-health-eyebrow {
+  color: var(--blue);
+  font-size: 12px;
+  font-weight: 850;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.learning-health-head h3 {
+  margin: 6px 0;
+  color: var(--text);
+  font-size: 24px;
+}
+
+.learning-health-head p {
+  margin: 0;
+  color: var(--text-soft);
+  line-height: 1.6;
+}
+
+.learning-health-pill {
+  flex: 0 0 auto;
+  border-radius: 999px;
+  padding: 10px 14px;
+  background: rgba(59, 130, 246, 0.12);
+  color: #1d4ed8;
+  font-size: 13px;
+  font-weight: 850;
+}
+
+.learning-health-high {
+  background: rgba(34, 197, 94, 0.14);
+  color: #15803d;
+}
+
+.learning-health-medium {
+  background: rgba(245, 158, 11, 0.16);
+  color: #b45309;
+}
+
+.learning-health-low,
+.learning-health-empty {
+  background: rgba(239, 68, 68, 0.12);
+  color: #b91c1c;
+}
+
+.learning-health-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 12px;
+}
+
+.learning-health-card {
+  padding: 14px 16px;
+  border-radius: 18px;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  background: rgba(255, 255, 255, 0.78);
+}
+
+.learning-health-card span,
+.learning-health-card small {
+  display: block;
+  color: var(--text-faint);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.learning-health-card strong {
+  display: block;
+  margin: 8px 0 4px;
+  color: var(--text);
+  font-size: 24px;
+  letter-spacing: -0.03em;
+}
+
 .recurring-charge-actions {
   margin-top: 14px;
   display: flex;
@@ -3281,6 +3374,31 @@ textarea:focus,
 :root[data-theme="dark"] .learning-privacy-note {
   background: rgba(59, 130, 246, 0.1);
   border-color: rgba(96, 165, 250, 0.2);
+}
+
+:root[data-theme="dark"] .learning-health-panel {
+  background:
+    radial-gradient(circle at 10% 10%, rgba(45, 212, 191, 0.16), transparent 28%),
+    rgba(15, 23, 42, 0.72);
+  border-color: rgba(45, 212, 191, 0.18);
+}
+
+:root[data-theme="dark"] .learning-health-card {
+  background: rgba(15, 23, 42, 0.78);
+  border-color: rgba(148, 163, 184, 0.14);
+}
+
+:root[data-theme="dark"] .learning-health-high {
+  color: #86efac;
+}
+
+:root[data-theme="dark"] .learning-health-medium {
+  color: #fcd34d;
+}
+
+:root[data-theme="dark"] .learning-health-low,
+:root[data-theme="dark"] .learning-health-empty {
+  color: #fca5a5;
 }
 
 :root[data-theme="dark"] .import-error-guidance {

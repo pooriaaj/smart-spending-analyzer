@@ -16,6 +16,7 @@ from app.schemas import (
     CategoryLearningApplyResponse,
     CategoryLearningCandidateItem,
     CategoryLearningCandidatesResponse,
+    CategoryLearningSummaryResponse,
     ConfirmPreviewImportRequest,
     FreshStartRequest,
     FreshStartResponse,
@@ -41,6 +42,7 @@ from app.services.transaction_service import (
     get_existing_duplicate_keys,
     get_existing_statement_match_map,
     get_category_learning_candidates,
+    get_category_learning_summary,
     get_transactions_page_for_user,
     get_transactions_for_user,
     get_uncategorized_candidates,
@@ -659,6 +661,25 @@ def get_category_learning_candidates_route(
             for item in candidates
         ],
     )
+
+
+@router.get("/categorize/learning-summary", response_model=CategoryLearningSummaryResponse)
+def get_category_learning_summary_route(
+    account_id: int | None = Query(default=None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    if account_id is not None:
+        account = get_account_for_user(db, current_user.id, account_id)
+        if not account:
+            raise HTTPException(status_code=404, detail="Account not found")
+
+    summary = get_category_learning_summary(
+        db=db,
+        owner_id=current_user.id,
+        account_id=account_id,
+    )
+    return CategoryLearningSummaryResponse(**summary)
 
 
 @router.post("/categorize/learning-apply", response_model=CategoryLearningApplyResponse)

@@ -495,6 +495,19 @@ class CategoryLearningCandidatesResponse(BaseModel):
     candidates: list[CategoryLearningCandidateItem]
 
 
+class CategoryLearningSummaryResponse(BaseModel):
+    transaction_count: int
+    uncategorized_count: int
+    learning_candidate_count: int
+    personal_memory_count: int
+    merchant_profile_count: int
+    community_learning_enabled: bool
+    community_pattern_count: int
+    confidence_level: str
+    confidence_score: float
+    message: str
+
+
 class CategoryLearningApplyRequest(BaseModel):
     merchant_key: str = Field(min_length=1, max_length=160)
     type: TransactionType

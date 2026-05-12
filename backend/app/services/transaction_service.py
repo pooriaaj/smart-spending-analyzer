@@ -1325,6 +1325,78 @@ def get_category_learning_candidates(
     return candidates[:max_candidates]
 
 
+def get_category_learning_summary(
+    db: Session,
+    owner_id: int,
+    account_id: int | None = None,
+) -> dict:
+    scope_query = build_transaction_scope_query(db, owner_id, account_id=account_id)
+    transaction_count = scope_query.count()
+    uncategorized_count = (
+        scope_query.filter(func.lower(Transaction.category).in_(tuple(UNCATEGORIZED_VALUES))).count()
+    )
+    personal_memory_count = (
+        db.query(CategoryMemory)
+        .filter(CategoryMemory.owner_id == owner_id)
+        .count()
+    )
+    merchant_profile_count = (
+        db.query(MerchantCategoryProfile)
+        .filter(MerchantCategoryProfile.owner_id == owner_id)
+        .count()
+    )
+    learning_candidates = get_category_learning_candidates(
+        db=db,
+        owner_id=owner_id,
+        account_id=account_id,
+        limit=50,
+    )
+    learning_candidate_count = len(learning_candidates)
+    community_learning_enabled = user_allows_community_learning(db, owner_id)
+    community_pattern_count = (
+        db.query(MerchantLookupCache)
+        .filter(MerchantLookupCache.provider == "community")
+        .count()
+        if community_learning_enabled
+        else 0
+    )
+
+    if transaction_count == 0:
+        confidence_level = "empty"
+        confidence_score = 0.0
+        message = "Start by adding transactions or importing this month's statement."
+    else:
+        uncategorized_share = uncategorized_count / max(transaction_count, 1)
+        review_penalty = min(0.3, learning_candidate_count * 0.04)
+        memory_bonus = min(0.18, (personal_memory_count + merchant_profile_count) * 0.015)
+        confidence_score = max(
+            0.05,
+            min(0.98, 0.82 - (uncategorized_share * 0.65) - review_penalty + memory_bonus),
+        )
+        if confidence_score >= 0.82 and learning_candidate_count == 0:
+            confidence_level = "high"
+            message = "Category learning looks healthy. Keep correcting new merchants as they appear."
+        elif confidence_score >= 0.62:
+            confidence_level = "medium"
+            message = "Learning is improving, but a few merchant groups still need review."
+        else:
+            confidence_level = "low"
+            message = "The app needs more confirmed categories before suggestions become reliable."
+
+    return {
+        "transaction_count": transaction_count,
+        "uncategorized_count": uncategorized_count,
+        "learning_candidate_count": learning_candidate_count,
+        "personal_memory_count": personal_memory_count,
+        "merchant_profile_count": merchant_profile_count,
+        "community_learning_enabled": community_learning_enabled,
+        "community_pattern_count": community_pattern_count,
+        "confidence_level": confidence_level,
+        "confidence_score": round(confidence_score, 2),
+        "message": message,
+    }
+
+
 def apply_category_to_merchant_learning_group(
     db: Session,
     owner_id: int,

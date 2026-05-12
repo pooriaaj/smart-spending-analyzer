@@ -1622,6 +1622,48 @@ class SmartImportRouteTest(unittest.TestCase):
         self.assertIsNotNone(profile)
         self.assertEqual(profile.category, "smoking")
 
+    def test_learning_summary_reports_category_memory_health(self) -> None:
+        categorized_response = self.client.post(
+            "/transactions/",
+            json={
+                "amount": 8.90,
+                "category": "smoking",
+                "description": "SQDC77068 MTL",
+                "date": "2026-03-16",
+                "type": "expense",
+                "account_id": self.account_id,
+            },
+        )
+        self.assertEqual(categorized_response.status_code, 200, categorized_response.text)
+
+        uncategorized_response = self.client.post(
+            "/transactions/",
+            json={
+                "amount": 12.60,
+                "category": "other",
+                "description": "SQDC77068 MTL",
+                "date": "2026-03-17",
+                "type": "expense",
+                "account_id": self.account_id,
+            },
+        )
+        self.assertEqual(uncategorized_response.status_code, 200, uncategorized_response.text)
+
+        summary_response = self.client.get(
+            "/transactions/categorize/learning-summary",
+            params={"account_id": self.account_id},
+        )
+
+        self.assertEqual(summary_response.status_code, 200, summary_response.text)
+        payload = summary_response.json()
+        self.assertEqual(payload["transaction_count"], 2)
+        self.assertEqual(payload["uncategorized_count"], 1)
+        self.assertEqual(payload["learning_candidate_count"], 1)
+        self.assertGreaterEqual(payload["personal_memory_count"], 1)
+        self.assertGreaterEqual(payload["merchant_profile_count"], 1)
+        self.assertTrue(payload["community_learning_enabled"])
+        self.assertIn(payload["confidence_level"], {"low", "medium", "high"})
+
     def test_create_transaction_persists_when_category_memory_fails(self) -> None:
         with patch(
             "app.routes.transaction_routes.save_category_memory",

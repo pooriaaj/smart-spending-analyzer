@@ -100,6 +100,7 @@ function TransactionsPage() {
   const [bulkLoading, setBulkLoading] = useState(false);
   const [bulkApplying, setBulkApplying] = useState(false);
   const [learningCandidates, setLearningCandidates] = useState([]);
+  const [learningSummary, setLearningSummary] = useState(null);
   const [learningLoading, setLearningLoading] = useState(false);
   const [learningApplyingKey, setLearningApplyingKey] = useState("");
   const [learningCategoryEdits, setLearningCategoryEdits] = useState({});
@@ -169,12 +170,19 @@ function TransactionsPage() {
           amountRangeFilter
       );
 
-      let [transactionsResponse, amountRepairsResponse] = await Promise.all([
+      let [transactionsResponse, amountRepairsResponse, learningSummaryResponse] = await Promise.all([
         api.get("/transactions/page", {
           params: transactionParams,
         }),
         api
           .get("/transactions/amount-repairs/preview", {
+            params: {
+              account_id: normalizedAccountId,
+            },
+          })
+          .catch(() => null),
+        api
+          .get("/transactions/categorize/learning-summary", {
             params: {
               account_id: normalizedAccountId,
             },
@@ -187,7 +195,7 @@ function TransactionsPage() {
         !hasActiveFilters &&
         Number(transactionsResponse.data?.scope_total || 0) === 0
       ) {
-        const [allTransactionsResponse, allAmountRepairsResponse] = await Promise.all([
+        const [allTransactionsResponse, allAmountRepairsResponse, allLearningSummaryResponse] = await Promise.all([
           api.get("/transactions/page", {
             params: {
               page: currentPage,
@@ -195,11 +203,13 @@ function TransactionsPage() {
             },
           }),
           api.get("/transactions/amount-repairs/preview").catch(() => null),
+          api.get("/transactions/categorize/learning-summary").catch(() => null),
         ]);
 
         if (Number(allTransactionsResponse.data?.scope_total || 0) > 0) {
           transactionsResponse = allTransactionsResponse;
           amountRepairsResponse = allAmountRepairsResponse;
+          learningSummaryResponse = allLearningSummaryResponse;
           persistSelectedAccountId(ALL_ACCOUNTS_VALUE);
           setSelectedAccountId(ALL_ACCOUNTS_VALUE);
           setScopeNotice(t("transactions.switchedAllAccountsNotice"));
@@ -225,6 +235,7 @@ function TransactionsPage() {
         setCurrentPage(Number(pagePayload.page));
       }
       setAmountRepairCandidates(amountRepairsResponse?.data?.candidates || []);
+      setLearningSummary(learningSummaryResponse?.data || null);
     } catch (error) {
       handleApiAuthError(error, navigate);
     } finally {
@@ -265,6 +276,14 @@ function TransactionsPage() {
     () => buildPaginationItems(activePage, totalPages),
     [activePage, totalPages]
   );
+  const learningLevel = learningSummary?.confidence_level || "empty";
+  const learningLevelLabel =
+    {
+      high: t("transactions.learningHealthHigh"),
+      medium: t("transactions.learningHealthMedium"),
+      low: t("transactions.learningHealthLow"),
+      empty: t("transactions.learningHealthEmpty"),
+    }[learningLevel] || t("transactions.learningHealthEmpty");
 
   useEffect(() => {
     setCurrentPage(1);
@@ -739,6 +758,63 @@ function TransactionsPage() {
             <h2>{t("transactions.smartCategorization")}</h2>
             <p>{t("transactions.smartCategorizationDetail")}</p>
           </div>
+
+          {learningSummary && (
+            <div className="learning-health-panel">
+              <div className="learning-health-head">
+                <div>
+                  <span className="learning-health-eyebrow">
+                    {t("transactions.learningHealthTitle")}
+                  </span>
+                  <h3>{learningLevelLabel}</h3>
+                  <p>
+                    {t("transactions.learningHealthDetail")}
+                  </p>
+                </div>
+                <span className={`learning-health-pill learning-health-${learningLevel}`}>
+                  {Math.round(Number(learningSummary.confidence_score || 0) * 100)}%
+                </span>
+              </div>
+
+              <div className="learning-health-grid">
+                <div className="learning-health-card">
+                  <span>{t("transactions.learningTracked")}</span>
+                  <strong>{learningSummary.transaction_count}</strong>
+                </div>
+                <div className="learning-health-card">
+                  <span>{t("transactions.learningNeedsReview")}</span>
+                  <strong>{learningSummary.uncategorized_count}</strong>
+                  <small>
+                    {t("transactions.learningGroups", {
+                      count: learningSummary.learning_candidate_count,
+                    })}
+                  </small>
+                </div>
+                <div className="learning-health-card">
+                  <span>{t("transactions.learningPersonalMemory")}</span>
+                  <strong>{learningSummary.merchant_profile_count}</strong>
+                  <small>
+                    {t("transactions.learningKeywordRules", {
+                      count: learningSummary.personal_memory_count,
+                    })}
+                  </small>
+                </div>
+                <div className="learning-health-card">
+                  <span>{t("transactions.learningCommunity")}</span>
+                  <strong>
+                    {learningSummary.community_learning_enabled
+                      ? t("transactions.learningOn")
+                      : t("transactions.learningOff")}
+                  </strong>
+                  <small>
+                    {t("transactions.learningCommunityPatterns", {
+                      count: learningSummary.community_pattern_count,
+                    })}
+                  </small>
+                </div>
+              </div>
+            </div>
+          )}
 
           <div className="smart-actions-row">
             <button
