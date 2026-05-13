@@ -1221,6 +1221,8 @@ def apply_category_to_similar_transactions(
     category: str,
     tx_type: str,
     amount: float | None = None,
+    account_id: int | None = None,
+    signal_source: str | None = None,
 ) -> int:
     normalized_category = normalize_category_name(category)
     if not should_store_category_memory(normalized_category):
@@ -1231,14 +1233,14 @@ def apply_category_to_similar_transactions(
         return 0
 
     merchant_key, _ = fingerprint
-    candidates = (
-        db.query(Transaction)
-        .filter(
-            Transaction.owner_id == owner_id,
-            Transaction.type == tx_type,
-        )
-        .all()
+    query = db.query(Transaction).filter(
+        Transaction.owner_id == owner_id,
+        Transaction.type == tx_type,
     )
+    if account_id is not None:
+        query = query.filter(Transaction.account_id == account_id)
+
+    candidates = query.all()
 
     updated_count = 0
     for transaction in candidates:

@@ -227,6 +227,73 @@ class SmartImportRouteTest(unittest.TestCase):
         self.assertEqual(filtered_payload["scope_total"], 3)
         self.assertEqual(filtered_payload["items"][0]["description"], "Metro grocery")
 
+    def test_update_transaction_applies_category_to_similar_account_rows(self) -> None:
+        with self.session_local() as session:
+            target = Transaction(
+                amount=8.90,
+                category="other",
+                description="SQDC77068 MTL",
+                date=date(2026, 3, 16),
+                type="expense",
+                owner_id=self.user_id,
+                account_id=self.account_id,
+            )
+            sibling = Transaction(
+                amount=12.60,
+                category="other",
+                description="SQDC77068 MTL",
+                date=date(2026, 3, 16),
+                type="expense",
+                owner_id=self.user_id,
+                account_id=self.account_id,
+            )
+            legacy_row = Transaction(
+                amount=10.00,
+                category="other",
+                description="SQDC77068 MTL",
+                date=date(2026, 3, 16),
+                type="expense",
+                owner_id=self.user_id,
+                account_id=None,
+            )
+            session.add_all([target, sibling, legacy_row])
+            session.commit()
+            target_id = target.id
+            sibling_id = sibling.id
+            legacy_row_id = legacy_row.id
+
+        response = self.client.put(
+            f"/transactions/{target_id}",
+            json={
+                "amount": 8.90,
+                "category": "Smoking",
+                "description": "SQDC77068 MTL",
+                "date": "2026-03-16",
+                "type": "expense",
+                "account_id": self.account_id,
+            },
+        )
+
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(response.json()["category"], "smoking")
+
+        with self.session_local() as session:
+            sibling = session.get(Transaction, sibling_id)
+            legacy_row = session.get(Transaction, legacy_row_id)
+            event = (
+                session.query(CategoryLearningEvent)
+                .filter(
+                    CategoryLearningEvent.owner_id == self.user_id,
+                    CategoryLearningEvent.merchant_key == "sqdc",
+                )
+                .one()
+            )
+
+            self.assertEqual(sibling.category, "smoking")
+            self.assertEqual(legacy_row.category, "other")
+            self.assertEqual(event.signal_source, "manual_edit")
+            self.assertEqual(event.affected_count, 2)
+
     def test_import_file_returns_rbc_preview_from_pdf_upload(self) -> None:
         pdf_bytes = build_text_pdf(
             [

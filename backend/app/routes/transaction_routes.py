@@ -239,7 +239,7 @@ def update_transaction(
     transaction.type = updated_data.type
     transaction.account_id = updated_data.account_id
 
-    apply_category_to_similar_transactions(
+    similar_updated_count = apply_category_to_similar_transactions(
         db=db,
         owner_id=current_user.id,
         description=updated_data.description,
@@ -259,6 +259,9 @@ def update_transaction(
         category=updated_data.category,
         tx_type=updated_data.type,
         amount=updated_data.amount,
+        account_id=updated_data.account_id,
+        signal_source="manual_edit",
+        affected_count=similar_updated_count + 1,
     )
     return transaction
 
