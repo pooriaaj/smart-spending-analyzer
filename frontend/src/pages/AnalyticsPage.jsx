@@ -966,57 +966,6 @@ function AnalyticsPage() {
                 </BarChart>
               </ResponsiveContainer>
             )}
-          </div>
-
-          <div className="dashboard-card">
-            <div className="section-header">
-              <h2>{t("analytics.categoryChartTitle")}</h2>
-              <p>{t("analytics.categoryChartDetail")}</p>
-            </div>
-
-            {categoryChartData.length === 0 ? (
-              <div className="empty-state">
-                <p>{t("dashboard.noExpenseCategories")}</p>
-              </div>
-            ) : (
-              <ResponsiveContainer width="100%" height={categoryChartHeight}>
-                <BarChart
-                  data={categoryChartData}
-                  layout="vertical"
-                  margin={{ top: 8, right: 42, bottom: 8, left: 18 }}
-                >
-                  <CartesianGrid strokeDasharray="3 3" stroke={chartTheme.grid} horizontal={false} />
-                  <XAxis
-                    type="number"
-                    tick={{ fill: chartTheme.text, fontSize: 12 }}
-                    tickFormatter={(value) => `$${Number(value).toFixed(0)}`}
-                  />
-                  <YAxis
-                    type="category"
-                    dataKey="category"
-                    width={118}
-                    tick={{ fill: chartTheme.text, fontSize: 12 }}
-                  />
-                  <Tooltip
-                    formatter={(value) => [formatMoney(value), t("common.amount")]}
-                    contentStyle={customTooltipStyle}
-                  />
-                  <Bar
-                    dataKey="total"
-                    fill={chartTheme.patternLine}
-                    radius={[0, 10, 10, 0]}
-                    label={{
-                      dataKey: "totalLabel",
-                      position: "right",
-                      fill: chartTheme.text,
-                      fontSize: 12,
-                    }}
-                    onClick={(entry) => handleCategoryDrilldown(entry?.category)}
-                    cursor="pointer"
-                  />
-                </BarChart>
-              </ResponsiveContainer>
-            )}
 
             {topCategoryPieData.length > 0 && (
               <div className="analytics-top-pie">
@@ -1072,6 +1021,57 @@ function AnalyticsPage() {
                   </div>
                 </div>
               </div>
+            )}
+          </div>
+
+          <div className="dashboard-card">
+            <div className="section-header">
+              <h2>{t("analytics.categoryChartTitle")}</h2>
+              <p>{t("analytics.categoryChartDetail")}</p>
+            </div>
+
+            {categoryChartData.length === 0 ? (
+              <div className="empty-state">
+                <p>{t("dashboard.noExpenseCategories")}</p>
+              </div>
+            ) : (
+              <ResponsiveContainer width="100%" height={categoryChartHeight}>
+                <BarChart
+                  data={categoryChartData}
+                  layout="vertical"
+                  margin={{ top: 8, right: 42, bottom: 8, left: 18 }}
+                >
+                  <CartesianGrid strokeDasharray="3 3" stroke={chartTheme.grid} horizontal={false} />
+                  <XAxis
+                    type="number"
+                    tick={{ fill: chartTheme.text, fontSize: 12 }}
+                    tickFormatter={(value) => `$${Number(value).toFixed(0)}`}
+                  />
+                  <YAxis
+                    type="category"
+                    dataKey="category"
+                    width={118}
+                    tick={{ fill: chartTheme.text, fontSize: 12 }}
+                  />
+                  <Tooltip
+                    formatter={(value) => [formatMoney(value), t("common.amount")]}
+                    contentStyle={customTooltipStyle}
+                  />
+                  <Bar
+                    dataKey="total"
+                    fill={chartTheme.patternLine}
+                    radius={[0, 10, 10, 0]}
+                    label={{
+                      dataKey: "totalLabel",
+                      position: "right",
+                      fill: chartTheme.text,
+                      fontSize: 12,
+                    }}
+                    onClick={(entry) => handleCategoryDrilldown(entry?.category)}
+                    cursor="pointer"
+                  />
+                </BarChart>
+              </ResponsiveContainer>
             )}
           </div>
         </div>
