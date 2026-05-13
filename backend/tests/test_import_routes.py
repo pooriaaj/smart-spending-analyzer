@@ -1651,6 +1651,64 @@ class SmartImportRouteTest(unittest.TestCase):
 
         self.assertTrue(any(memory.keyword == "chipotle" for memory in memories))
 
+    def test_bulk_apply_records_learning_event_for_accepted_suggestion(self) -> None:
+        categorized_response = self.client.post(
+            "/transactions/",
+            json={
+                "amount": 18.25,
+                "category": "restaurant",
+                "description": "Chipotle Yorkdale",
+                "date": "2025-01-03",
+                "type": "expense",
+                "account_id": self.account_id,
+            },
+        )
+        self.assertEqual(categorized_response.status_code, 200, categorized_response.text)
+
+        uncategorized_response = self.client.post(
+            "/transactions/",
+            json={
+                "amount": 16.10,
+                "category": "other",
+                "description": "Chipotle Union",
+                "date": "2025-01-04",
+                "type": "expense",
+                "account_id": self.account_id,
+            },
+        )
+        self.assertEqual(uncategorized_response.status_code, 200, uncategorized_response.text)
+
+        preview_response = self.client.get(
+            "/transactions/categorize/bulk-preview",
+            params={"account_id": self.account_id},
+        )
+        self.assertEqual(preview_response.status_code, 200, preview_response.text)
+        suggestions = preview_response.json()["suggestions"]
+        self.assertEqual(len(suggestions), 1)
+
+        apply_response = self.client.post(
+            "/transactions/categorize/bulk-apply",
+            json={"transaction_ids": [suggestions[0]["transaction_id"]]},
+        )
+        self.assertEqual(apply_response.status_code, 200, apply_response.text)
+        self.assertEqual(apply_response.json()["updated_count"], 1)
+
+        with self.session_local() as session:
+            updated_transaction = session.get(Transaction, suggestions[0]["transaction_id"])
+            learning_event = (
+                session.query(CategoryLearningEvent)
+                .filter(
+                    CategoryLearningEvent.owner_id == self.user_id,
+                    CategoryLearningEvent.merchant_key == "chipotle",
+                    CategoryLearningEvent.signal_source == "bulk_apply",
+                )
+                .one_or_none()
+            )
+
+        self.assertEqual(updated_transaction.category, "restaurant")
+        self.assertIsNotNone(learning_event)
+        self.assertEqual(learning_event.category, "restaurant")
+
     def test_learning_candidates_group_similar_merchants_for_user_review(self) -> None:
         for amount in (8.90, 12.60, 10.25):
             response = self.client.post(

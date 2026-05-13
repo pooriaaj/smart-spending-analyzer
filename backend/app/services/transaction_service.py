@@ -2953,6 +2953,7 @@ def apply_bulk_categories(
     updated_count = 0
     memory_created = 0
     memory_updated = 0
+    learning_events_created = 0
 
     transactions = (
         db.query(Transaction)
@@ -2975,8 +2976,21 @@ def apply_bulk_categories(
             )
             memory_created += memory_stats["created"]
             memory_updated += memory_stats["updated"]
+            if record_category_learning_event(
+                db=db,
+                owner_id=owner_id,
+                description=transaction.description,
+                category=new_category,
+                tx_type=transaction.type,
+                amount=transaction.amount,
+                account_id=transaction.account_id,
+                signal_source="bulk_apply",
+                confidence=0.88,
+                affected_count=1,
+            ):
+                learning_events_created += 1
 
-    if updated_count > 0 or memory_created > 0 or memory_updated > 0:
+    if updated_count > 0 or memory_created > 0 or memory_updated > 0 or learning_events_created > 0:
         db.commit()
 
     return updated_count
