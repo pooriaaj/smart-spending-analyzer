@@ -17,6 +17,9 @@ import {
   Legend,
   LineChart,
   Line,
+  PieChart,
+  Pie,
+  Cell,
 } from "recharts";
 
 const CATEGORY_ALIASES = {
@@ -63,6 +66,7 @@ const CASHFLOW_NEUTRAL_DESCRIPTION_MARKERS = [
   "virement interac",
   "virement en ligne",
 ];
+const CATEGORY_PIE_COLORS = ["#60a5fa", "#34d399", "#f87171", "#fbbf24", "#a78bfa"];
 
 function formatCategoryName(category, t) {
   if (!category || typeof category !== "string") return formatCategoryLabel("other", t);
@@ -381,6 +385,18 @@ function AnalyticsPage() {
     return mergedCategoryBreakdown.map((item) => ({
       ...item,
       totalLabel: formatMoney(item.total),
+    }));
+  }, [mergedCategoryBreakdown]);
+
+  const topCategoryPieData = useMemo(() => {
+    const topCategories = mergedCategoryBreakdown.slice(0, 5);
+    const total = topCategories.reduce((sum, item) => sum + Number(item.total || 0), 0);
+
+    return topCategories.map((item, index) => ({
+      ...item,
+      fill: CATEGORY_PIE_COLORS[index % CATEGORY_PIE_COLORS.length],
+      percent: total > 0 ? (Number(item.total || 0) / total) * 100 : 0,
+      label: `${item.category} ${total > 0 ? `${((Number(item.total || 0) / total) * 100).toFixed(0)}%` : ""}`,
     }));
   }, [mergedCategoryBreakdown]);
 
@@ -1000,6 +1016,62 @@ function AnalyticsPage() {
                   />
                 </BarChart>
               </ResponsiveContainer>
+            )}
+
+            {topCategoryPieData.length > 0 && (
+              <div className="analytics-top-pie">
+                <div className="section-header compact-section-header">
+                  <h3>{t("analytics.topFivePieTitle")}</h3>
+                  <p>{t("analytics.topFivePieDetail")}</p>
+                </div>
+                <div className="analytics-top-pie-layout">
+                  <ResponsiveContainer width="100%" height={260}>
+                    <PieChart>
+                      <Pie
+                        data={topCategoryPieData}
+                        dataKey="total"
+                        nameKey="category"
+                        cx="50%"
+                        cy="50%"
+                        innerRadius={58}
+                        outerRadius={96}
+                        paddingAngle={3}
+                        labelLine={false}
+                        label={({ percent }) => `${(percent * 100).toFixed(0)}%`}
+                        onClick={(entry) => handleCategoryDrilldown(entry?.category)}
+                        cursor="pointer"
+                      >
+                        {topCategoryPieData.map((item) => (
+                          <Cell key={`pie-cell-${item.category}`} fill={item.fill} />
+                        ))}
+                      </Pie>
+                      <Tooltip
+                        formatter={(value, _name, props) => [
+                          `${formatMoney(value)} (${Number(props?.payload?.percent || 0).toFixed(1)}%)`,
+                          props?.payload?.category || t("common.category"),
+                        ]}
+                        contentStyle={customTooltipStyle}
+                      />
+                    </PieChart>
+                  </ResponsiveContainer>
+
+                  <div className="analytics-top-pie-legend">
+                    {topCategoryPieData.map((item) => (
+                      <button
+                        key={`pie-legend-${item.category}`}
+                        type="button"
+                        className="analytics-top-pie-row"
+                        onClick={() => handleCategoryDrilldown(item.category)}
+                      >
+                        <span style={{ backgroundColor: item.fill }} />
+                        <strong>{formatCategoryName(item.category, t)}</strong>
+                        <em>{formatMoney(item.total)}</em>
+                        <small>{item.percent.toFixed(1)}%</small>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
             )}
           </div>
         </div>

@@ -578,6 +578,9 @@ const translations = {
       categoryChartTitle: "Expense Categories by Amount",
       categoryChartDetail:
         "Every spending category is shown by total amount. Click a bar or category row to inspect the matching transactions.",
+      topFivePieTitle: "Top 5 Spending Mix",
+      topFivePieDetail:
+        "A quick pie view of your five biggest spending categories in this filter.",
       expenseCategoriesDetail:
         "Ranked from highest to lowest total expense. Click a category to review the exact transactions behind it.",
     },
@@ -1942,6 +1945,9 @@ const translations = {
       categoryChartTitle: "Catégories de dépenses par montant",
       categoryChartDetail:
         "Chaque catégorie de dépense est affichée par montant total. Cliquez sur une barre ou une ligne de catégorie pour voir les transactions correspondantes.",
+      topFivePieTitle: "Répartition du top 5 des dépenses",
+      topFivePieDetail:
+        "Vue circulaire rapide de vos cinq plus grandes catégories de dépenses dans ce filtre.",
       expenseCategoriesDetail:
         "Classées du total de dépenses le plus élevé au plus faible. Cliquez sur une catégorie pour vérifier les transactions exactes derrière ce total.",
     },
