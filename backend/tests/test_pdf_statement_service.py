@@ -31,6 +31,21 @@ class PdfStatementServiceHelpersTest(unittest.TestCase):
         self.assertEqual(body, "GROCERY STORE TORONTO")
         self.assertEqual(trailing_amounts, ["$45.67", "$1,234.56"])
 
+    def test_split_line_and_trailing_amounts_handles_unicode_dash_placeholders(self) -> None:
+        body, trailing_amounts = service.split_line_and_trailing_amounts(
+            "Jan 02 PAYROLL \u2013 1,500.00 1,700.00"
+        )
+
+        self.assertEqual(body, "Jan 02 PAYROLL")
+        self.assertEqual(trailing_amounts, ["\u2013", "1,500.00", "1,700.00"])
+
+        body, trailing_amounts = service.split_line_and_trailing_amounts(
+            "Jan 03 MONTHLY FEE 15.99 \u2014 1,684.01"
+        )
+
+        self.assertEqual(body, "Jan 03 MONTHLY FEE")
+        self.assertEqual(trailing_amounts, ["15.99", "\u2014", "1,684.01"])
+
     def test_split_line_and_trailing_amounts_handles_comma_decimal_balance_layout(self) -> None:
         body, trailing_amounts = service.split_line_and_trailing_amounts(
             "Achat par carte de d\u00e8bit, MCDONALD'S #400 6,21 260,05"

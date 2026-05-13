@@ -55,7 +55,7 @@ FULL_AMOUNT_TOKEN_REGEX = re.compile(
     rf"(?i)^(?:{AMOUNT_TOKEN_PATTERN})$"
 )
 TRAILING_AMOUNT_CAPTURE_REGEX = re.compile(
-    rf"(?i)(?<![A-Za-z0-9,.-])(?P<amount>{AMOUNT_TOKEN_PATTERN}|[-â€“â€”]+)\s*$"
+    rf"(?i)(?<![A-Za-z0-9,.-])(?P<amount>{AMOUNT_TOKEN_PATTERN}|[-\u2013\u2014]+)\s*$"
 )
 PLACEHOLDER_AMOUNT_TOKEN_REGEX = re.compile(r"^[-–—]+$")
 WORD_STATEMENT_RANGE_REGEX = re.compile(

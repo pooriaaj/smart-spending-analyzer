@@ -837,7 +837,7 @@ function TransactionsPage() {
                       <div>
                         <strong>{event.display_name}</strong>
                         <span>
-                          {formatCategoryLabel(event.category, t)} ·{" "}
+                          {formatCategoryLabel(event.category, t)}{" - "}
                           {formatLearningSource(event.signal_source)}
                         </span>
                       </div>
