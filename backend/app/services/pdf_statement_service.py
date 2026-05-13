@@ -12,6 +12,7 @@ from pypdf import PdfReader
 from sqlalchemy.orm import Session
 
 from app.schemas import StatementPreviewRow
+from app.services.category_taxonomy import strip_payment_processor_prefixes
 from app.services.local_ocr_service import is_local_ocr_enabled, run_local_ocr_image
 from app.services.transaction_service import (
     build_category_review_metadata,
@@ -896,6 +897,8 @@ def clean_statement_description(value: str) -> str:
 
     for pattern, replacement in replacements:
         cleaned = re.sub(pattern, replacement, cleaned).strip()
+
+    cleaned = strip_payment_processor_prefixes(cleaned)
 
     cleaned = re.sub(
         r"(?i)\b(e-transfer\s+received\s+[A-Z][A-Z\s.'-]*?)\s+CA[a-z0-9]+\b",

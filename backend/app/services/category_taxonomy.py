@@ -275,11 +275,34 @@ BANK_DESCRIPTOR_STOPWORDS = {
     "recu",
     "regl",
     "retail",
+    "clv",
+    "pp",
+    "pypl",
+    "sq",
     "terminal",
     "tf",
+    "tst",
     "virement",
     "visa",
 }
+
+
+PAYMENT_PROCESSOR_PREFIX_REPLACEMENTS: tuple[tuple[str, str], ...] = (
+    (r"(?i)^\s*amzn\s*mktp\s*", "Amazon Marketplace "),
+    (r"(?i)^\s*(?:pypl|pp)(?:\s*[*#:_./\\-]\s*|\s+)", ""),
+    (r"(?i)^\s*paypal\s*[*#:_./\\-]?\s+", ""),
+    (r"(?i)^\s*sq(?:\s*[*#:_./\\-]\s*|\s+)", ""),
+    (r"(?i)^\s*tst(?:\s*[*#:_./\\-]\s*|\s+)", ""),
+    (r"(?i)^\s*clv(?:\s*[*#:_./\\-]\s*|\s+)", ""),
+    (r"(?i)^\s*sp(?:\s*[*#:_./\\-]\s*|\s+)", ""),
+)
+
+
+def strip_payment_processor_prefixes(value: str) -> str:
+    cleaned = re.sub(r"\s+", " ", value.strip())
+    for pattern, replacement in PAYMENT_PROCESSOR_PREFIX_REPLACEMENTS:
+        cleaned = re.sub(pattern, replacement, cleaned).strip()
+    return re.sub(r"\s+", " ", cleaned).strip(" -|")
 
 
 TERM_REPLACEMENTS: tuple[tuple[str, str], ...] = (
@@ -706,10 +729,13 @@ CATEGORY_KEYWORD_EXPANSION: dict[str, tuple[str, ...]] = {
     ),
     "subscriptions": (
         "adobe",
+        "anthropic",
         "apple com bill",
         "periodic payment apple",
         "audible",
         "canva",
+        "chatgpt",
+        "claude",
         "crave",
         "disney plus",
         "dropbox",
@@ -721,6 +747,7 @@ CATEGORY_KEYWORD_EXPANSION: dict[str, tuple[str, ...]] = {
         "kindle",
         "microsoft 365",
         "netflix",
+        "openai",
         "paramount plus",
         "peacock",
         "plex",
@@ -828,7 +855,7 @@ GOOGLE_PLACE_TYPE_CATEGORY_EXPANSION: dict[str, tuple[str, float]] = {
 
 
 def normalize_category_signal_text(value: str) -> str:
-    normalized = unicodedata.normalize("NFKD", value.lower())
+    normalized = unicodedata.normalize("NFKD", strip_payment_processor_prefixes(value).lower())
     normalized = "".join(ch for ch in normalized if not unicodedata.combining(ch))
     normalized = normalized.replace("&", " and ")
     normalized = re.sub(r"[*#:_./\\-]+", " ", normalized)

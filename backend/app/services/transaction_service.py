@@ -27,6 +27,7 @@ from app.services.category_taxonomy import (
     match_merchant_category_override,
     normalize_category_signal_text,
     strip_location_and_bank_noise_tokens,
+    strip_payment_processor_prefixes,
 )
 from app.services.merchant_enrichment_service import enrich_merchant_category
 from app.schemas import StatementPreviewRow
@@ -241,9 +242,13 @@ CATEGORY_RULES["phone"].extend(["bell mobility", "koodo", "phone bill", "virgin 
 CATEGORY_RULES["internet"].extend(["teksavvy", "internet provider"])
 CATEGORY_RULES["subscriptions"].extend([
     "apple.com/bill",
+    "anthropic",
+    "chatgpt",
+    "claude",
     "doordashdashpass",
     "microsoft*micro",
     "microsoft 365",
+    "openai",
     "spotify",
 ])
 CATEGORY_RULES["clothing"].extend(["gap.com", "lids"])
@@ -1724,6 +1729,7 @@ def normalize_description(value: str) -> str:
     text = re.sub(r"\s+", " ", value.strip())
     text = strip_statement_header_noise(text)
     text = strip_statement_transaction_prefixes(text)
+    text = strip_payment_processor_prefixes(text)
     text = re.sub(r"\bpos\b|\bpurchase\b|\bpayment\b|\bdebit\b|\bcredit\b", "", text, flags=re.IGNORECASE)
     text = re.sub(r"\s+", " ", text).strip(" -")
     return text or value.strip()

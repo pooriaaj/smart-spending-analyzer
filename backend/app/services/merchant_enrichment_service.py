@@ -18,6 +18,7 @@ from app.services.category_taxonomy import (
     SEMANTIC_CATEGORY_MARKER_EXPANSION,
     match_merchant_category_override,
     normalize_category_signal_text,
+    strip_payment_processor_prefixes,
 )
 
 
@@ -52,13 +53,18 @@ LOOKUP_STOPWORDS = {
     "periodiq",
     "periodique",
     "paypal",
+    "clv",
+    "pp",
+    "pypl",
     "pos",
     "purchase",
     "pymt",
     "pmt",
     "recu",
     "regl",
+    "sq",
     "tf",
+    "tst",
     "transaction",
     "virement",
     "visa",
@@ -462,7 +468,7 @@ def title_case_merchant(value: str) -> str:
 
 
 def normalize_merchant_lookup_query(description: str) -> str | None:
-    value = normalize_category_signal_text(description)
+    value = normalize_category_signal_text(strip_payment_processor_prefixes(description))
     value = re.sub(r"\bpaypal\s*[*#:-]?\s*", " ", value)
     value = re.sub(r"\b(?:misc(?:ellaneous)?\s+)?payment\b", " ", value)
     value = re.sub(r"\s+", " ", value).strip()

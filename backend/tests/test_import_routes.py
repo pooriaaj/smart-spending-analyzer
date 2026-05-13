@@ -652,6 +652,44 @@ class SmartImportRouteTest(unittest.TestCase):
         self.assertIn("weak or generic signal", paypal_row["category_review_reason"])
         self.assertEqual(preview_rows[3]["category_source"], "merchant_override")
 
+    def test_import_file_strips_payment_processor_prefixes_safely(self) -> None:
+        pdf_bytes = build_text_pdf(
+            [
+                "Royal Bank of Canada",
+                "Details of your account activity",
+                "From March 2, 2026 to April 2, 2026",
+                "Date Description Withdrawals ($) Deposits ($) Balance ($)",
+                "3 Mar Contactless Interac purchase - 2201",
+                "SQ *BAGEL NASH 12.00 100.00",
+                "4 Mar Contactless Interac purchase - 2202",
+                "TST*OPENAI 20.00 80.00",
+                "5 Mar Contactless Interac purchase - 2203",
+                "PYPL*CANVA 18.00 62.00",
+                "6 Mar Contactless Interac purchase - 2204",
+                "SQDC77068 MTL 8.90 53.10",
+            ]
+        )
+
+        response = self.client.post(
+            "/transactions/import/file",
+            data={"account_id": str(self.account_id)},
+            files={"file": ("processor-prefixes.pdf", pdf_bytes, "application/pdf")},
+        )
+
+        self.assertEqual(response.status_code, 200, response.text)
+        preview_rows = response.json()["preview_rows"]
+
+        self.assertEqual(
+            [row["description"] for row in preview_rows],
+            ["BAGEL NASH", "OPENAI", "CANVA", "SQDC77068 MTL"],
+        )
+        self.assertEqual(
+            [row["category"] for row in preview_rows],
+            ["restaurant", "subscriptions", "subscriptions", "smoking"],
+        )
+        self.assertNotIn("sq ", preview_rows[0]["description"].lower())
+        self.assertEqual(preview_rows[-1]["category_source"], "merchant_override")
+
     def test_ambrosia_food_shop_does_not_pollute_ambrosia_restaurant_names(self) -> None:
         pdf_bytes = build_text_pdf(
             [
@@ -987,7 +1025,7 @@ class SmartImportRouteTest(unittest.TestCase):
                 session.query(Transaction)
                 .filter(
                     Transaction.owner_id == self.user_id,
-                    Transaction.description == "PAYPAL BAGEL NASH",
+                    Transaction.description == "BAGEL NASH",
                 )
                 .one_or_none()
             )
