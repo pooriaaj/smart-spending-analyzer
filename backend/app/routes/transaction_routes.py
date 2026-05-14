@@ -17,6 +17,8 @@ from app.schemas import (
     CategoryLearningCandidateItem,
     CategoryLearningCandidatesResponse,
     CategoryLearningSummaryResponse,
+    CategorySuggestionRequest,
+    CategorySuggestionResponse,
     ConfirmPreviewImportRequest,
     FreshStartRequest,
     FreshStartResponse,
@@ -739,6 +741,27 @@ def apply_category_learning_candidate_route(
         account_id=payload.account_id,
     )
     return CategoryLearningApplyResponse(**result)
+
+
+@router.post("/categorize/suggest", response_model=CategorySuggestionResponse)
+def suggest_transaction_category(
+    payload: CategorySuggestionRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    decision = categorize_transaction_details(
+        db=db,
+        owner_id=current_user.id,
+        description=payload.description,
+        tx_type=payload.type,
+        amount=payload.amount,
+    )
+    return CategorySuggestionResponse(
+        suggested_category=decision.category,
+        confidence=decision.confidence,
+        matched_keyword=decision.matched_keyword,
+        reason=decision.reason,
+    )
 
 
 @router.get("/categorize/bulk-preview", response_model=BulkCategorySuggestionResponse)

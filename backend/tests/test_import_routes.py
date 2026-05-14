@@ -811,6 +811,22 @@ class SmartImportRouteTest(unittest.TestCase):
         self.assertEqual(preview_rows[0]["category_source"], "merchant_override")
         self.assertEqual(preview_rows[1]["category_source"], "merchant_override")
 
+    def test_category_suggest_route_uses_backend_learning_engine(self) -> None:
+        response = self.client.post(
+            "/transactions/categorize/suggest",
+            json={
+                "description": "IDP EDUCATION LIMITED TORONTO ON",
+                "type": "expense",
+                "amount": 359.00,
+            },
+        )
+
+        self.assertEqual(response.status_code, 200, response.text)
+        payload = response.json()
+        self.assertEqual(payload["suggested_category"], "education")
+        self.assertGreaterEqual(payload["confidence"], 0.9)
+        self.assertEqual(payload["matched_keyword"], "idp education limited")
+
     def test_import_file_uses_north_america_merchant_taxonomy(self) -> None:
         pdf_bytes = build_text_pdf(
             [

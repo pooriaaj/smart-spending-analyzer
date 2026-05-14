@@ -8,18 +8,6 @@ import { buildBudgetForecastSummary } from "../utils/budgetDisplay";
 import { useLanguage } from "../i18n/LanguageContext";
 import { formatAccountLabel, formatCategoryLabel } from "../utils/displayLabels";
 
-const CATEGORY_RULES = {
-  groceries: ["walmart", "costco", "freshco", "nofrills", "grocery", "supermarket"],
-  transport: ["uber", "lyft", "ttc", "metro", "gas", "shell", "esso"],
-  cafe: ["coffee", "cafe", "starbucks", "tim hortons"],
-  restaurant: ["pizza", "burger", "restaurant", "mcdonald", "shawarma", "subway", "kfc"],
-  rent: ["rent", "lease", "landlord"],
-  salary: ["salary", "payroll", "paycheck", "paycheque"],
-  internet: ["internet", "wifi", "rogers", "bell"],
-  phone: ["phone", "mobile", "cell", "freedom", "telus"],
-  entertainment: ["netflix", "spotify", "youtube", "cinema", "movie"],
-};
-
 const normalizeRepeatDescription = (value = "") => {
   let normalized = value.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
   normalized = normalized.replace(
@@ -86,6 +74,7 @@ function DashboardPage() {
   const [submitting, setSubmitting] = useState(false);
 
   const [suggestion, setSuggestion] = useState(null);
+  const [suggestingCategory, setSuggestingCategory] = useState(false);
 
   const navigate = useNavigate();
 
@@ -284,8 +273,8 @@ function DashboardPage() {
       })
     : "";
 
-  const suggestCategory = () => {
-    const text = description.trim().toLowerCase();
+  const suggestCategory = async () => {
+    const text = description.trim();
 
     if (!text) {
       setSuggestion({
@@ -296,50 +285,40 @@ function DashboardPage() {
       return;
     }
 
-    if (transactionType === "income") {
-      const salaryMatch = CATEGORY_RULES.salary.find((keyword) => text.includes(keyword));
-      if (salaryMatch) {
-        const suggested = {
-          category: "Salary",
-          confidence: 95,
-          reason: t("dashboard.matchedKeywordReason", { keyword: salaryMatch }),
+    setSuggestingCategory(true);
+    try {
+      const numericAmount = Number(amount);
+      const response = await api.post("/transactions/categorize/suggest", {
+        description: text,
+        type: transactionType,
+        ...(Number.isFinite(numericAmount) && numericAmount > 0 ? { amount: numericAmount } : {}),
+      });
+
+      const confidenceScore = Number(response.data?.confidence || 0);
+      const confidencePercent =
+        confidenceScore <= 1 ? Math.round(confidenceScore * 100) : Math.round(confidenceScore);
+      const suggestedCategory = response.data?.suggested_category || "other";
+
+      setSuggestion({
+        category: suggestedCategory,
+        confidence: Math.max(0, Math.min(100, confidencePercent)),
+        reason: response.data?.reason || t("dashboard.noRuleFallback"),
+      });
+      setCategory(suggestedCategory);
+    } catch (error) {
+      console.error("Failed to suggest category:", error);
+      if (!handleApiAuthError(error, navigate)) {
+        const fallback = {
+          category: "Other",
+          confidence: 35,
+          reason: t("dashboard.noRuleFallback"),
         };
-        setSuggestion(suggested);
-        setCategory(suggested.category);
-        return;
+        setSuggestion(fallback);
+        setCategory(fallback.category);
       }
-
-      const suggested = {
-        category: "Income",
-        confidence: 70,
-        reason: t("dashboard.noSalaryFallback"),
-      };
-      setSuggestion(suggested);
-      setCategory(suggested.category);
-      return;
+    } finally {
+      setSuggestingCategory(false);
     }
-
-    for (const [ruleCategory, keywords] of Object.entries(CATEGORY_RULES)) {
-      const matchedKeyword = keywords.find((keyword) => text.includes(keyword));
-      if (matchedKeyword) {
-        const suggested = {
-          category: ruleCategory.charAt(0).toUpperCase() + ruleCategory.slice(1),
-          confidence: 92,
-          reason: t("dashboard.matchedKeywordReason", { keyword: matchedKeyword }),
-        };
-        setSuggestion(suggested);
-        setCategory(suggested.category);
-        return;
-      }
-    }
-
-    const suggested = {
-      category: "Other",
-      confidence: 35,
-      reason: t("dashboard.noRuleFallback"),
-    };
-    setSuggestion(suggested);
-    setCategory(suggested.category);
   };
 
   const handleAddTransaction = async (e) => {
@@ -690,8 +669,8 @@ function DashboardPage() {
               <option value="income">{t("common.income")}</option>
             </select>
 
-            <button type="button" className="suggest-button" onClick={suggestCategory}>
-              {t("transactionForm.suggestCategory")}
+            <button type="button" className="suggest-button" onClick={suggestCategory} disabled={suggestingCategory}>
+              {suggestingCategory ? t("transactionForm.suggesting") : t("transactionForm.suggestCategory")}
             </button>
 
             <button type="submit" disabled={submitting || accounts.length === 0}>

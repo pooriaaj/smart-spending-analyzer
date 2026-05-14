@@ -441,6 +441,7 @@ class TopExpenseCategory(BaseModel):
 class CategorySuggestionRequest(BaseModel):
     description: str = Field(min_length=1, max_length=500)
     type: TransactionType
+    amount: float | None = None
 
 
 class CategorySuggestionResponse(BaseModel):
