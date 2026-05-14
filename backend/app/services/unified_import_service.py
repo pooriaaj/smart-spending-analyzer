@@ -173,7 +173,11 @@ def process_smart_import(
             db=db,
             owner_id=owner_id,
             account_id=account_id,
-            preview_rows=result.get("preview_rows", []),
+            preview_rows=add_file_context_to_preview_rows(
+                result.get("preview_rows", []),
+                filename,
+                detected_type,
+            ),
         )
         return {
             "detected_type": "csv_statement",
@@ -225,7 +229,11 @@ def process_smart_import(
             db=db,
             owner_id=owner_id,
             account_id=account_id,
-            preview_rows=result.get("preview_rows", []),
+            preview_rows=add_file_context_to_preview_rows(
+                result.get("preview_rows", []),
+                filename,
+                detected_type,
+            ),
         )
         return {
             "detected_type": "pdf_statement",
@@ -241,6 +249,7 @@ def process_smart_import(
 def add_file_context_to_preview_rows(
     preview_rows: list[StatementPreviewRow],
     filename: str,
+    detected_type: str,
 ) -> list[StatementPreviewRow]:
     rows: list[StatementPreviewRow] = []
     for row in preview_rows:
@@ -249,6 +258,8 @@ def add_file_context_to_preview_rows(
             row.model_copy(
                 update={
                     "source_line": f"{filename}: {source_line}",
+                    "source_file_name": filename,
+                    "source_file_type": detected_type,
                 }
             )
         )
@@ -293,7 +304,7 @@ def process_smart_import_batch(
             file_invalid = result.get("invalid_rows_skipped", 0)
             invalid_rows_skipped += file_invalid
             file_rows = result.get("preview_rows", [])
-            preview_rows.extend(add_file_context_to_preview_rows(file_rows, filename))
+            preview_rows.extend(add_file_context_to_preview_rows(file_rows, filename, detected_type))
             notes.append(
                 f"{filename}: detected {len(file_rows)} row{'' if len(file_rows) == 1 else 's'} for reconciliation, skipped {file_invalid} invalid row"
                 f"{'' if file_invalid == 1 else 's'}."
@@ -307,7 +318,7 @@ def process_smart_import_batch(
                 file_bytes=file_bytes,
             )
             file_rows = result.get("preview_rows", [])
-            preview_rows.extend(add_file_context_to_preview_rows(file_rows, filename))
+            preview_rows.extend(add_file_context_to_preview_rows(file_rows, filename, detected_type))
             notes.append(
                 f"{filename}: detected {len(file_rows)} row{'' if len(file_rows) == 1 else 's'} for review."
             )

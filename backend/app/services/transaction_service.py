@@ -6,7 +6,7 @@ import re
 import unicodedata
 from collections import Counter
 from dataclasses import dataclass
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 from typing import Iterable
 
 from sqlalchemy import func, or_
@@ -489,6 +489,7 @@ class CategoryLearningCandidate:
     suggested_category: str
     confidence: float
     total_amount: float
+    representative_amount: float | None
     amount_min: float
     amount_max: float
     example_descriptions: list[str]
@@ -1298,20 +1299,43 @@ def get_category_learning_candidates(
         query = query.filter(Transaction.account_id == account_id)
 
     transactions = query.order_by(Transaction.date.desc(), Transaction.id.desc()).all()
-    grouped: dict[tuple[str, str], list[Transaction]] = {}
-    display_names: dict[tuple[str, str], str] = {}
+    grouped: dict[tuple[str, str, int], list[Transaction]] = {}
+    display_names: dict[tuple[str, str, int], str] = {}
+    representative_amounts: dict[tuple[str, str, int], float | None] = {}
+    cluster_counts: dict[tuple[str, str], int] = {}
 
     for transaction in transactions:
         fingerprint = extract_merchant_fingerprint(transaction.description)
         if not fingerprint:
             continue
         merchant_key, display_name = fingerprint
-        group_key = (merchant_key, transaction.type)
+        group_base = (merchant_key, transaction.type)
+        group_key: tuple[str, str, int] | None = None
+
+        if merchant_key_requires_amount_guard(merchant_key):
+            normalized_amount = normalize_amount_for_learning(transaction.amount)
+            for existing_key, representative_amount in representative_amounts.items():
+                if existing_key[:2] != group_base:
+                    continue
+                if amounts_are_similar_for_learning(representative_amount, normalized_amount):
+                    group_key = existing_key
+                    break
+
+            if group_key is None:
+                next_cluster = cluster_counts.get(group_base, 0) + 1
+                cluster_counts[group_base] = next_cluster
+                group_key = (merchant_key, transaction.type, next_cluster)
+                representative_amounts[group_key] = normalized_amount
+        else:
+            group_key = (merchant_key, transaction.type, 0)
+            representative_amounts.setdefault(group_key, None)
+
         grouped.setdefault(group_key, []).append(transaction)
         display_names.setdefault(group_key, display_name)
 
     candidates: list[CategoryLearningCandidate] = []
-    for (merchant_key, tx_type), items in grouped.items():
+    for (merchant_key, tx_type, _cluster_index), items in grouped.items():
+        candidate_group_key = (merchant_key, tx_type, _cluster_index)
         if len(items) < 2:
             continue
 
@@ -1362,11 +1386,16 @@ def get_category_learning_candidates(
             reason_parts.append(f"the learning engine suggests {suggested_category}")
         if review_required and review_reason:
             reason_parts.append(review_reason)
+        representative_amount = representative_amounts.get((merchant_key, tx_type, _cluster_index))
+        if merchant_key_requires_amount_guard(merchant_key) and representative_amount is not None:
+            reason_parts.append(
+                f"amount-sensitive merchant grouped around ${representative_amount:.2f}"
+            )
 
         candidates.append(
             CategoryLearningCandidate(
                 merchant_key=merchant_key,
-                display_name=display_names.get((merchant_key, tx_type), title_case_merchant_key(merchant_key)),
+                display_name=display_names.get(candidate_group_key, title_case_merchant_key(merchant_key)),
                 type=tx_type,
                 transaction_count=len(items),
                 current_category=current_category,
@@ -1377,6 +1406,11 @@ def get_category_learning_candidates(
                 ),
                 confidence=float(decision.confidence or 0.0),
                 total_amount=round(sum(amounts), 2),
+                representative_amount=(
+                    round(float(representative_amount), 2)
+                    if representative_amount is not None
+                    else None
+                ),
                 amount_min=round(min(amounts), 2) if amounts else 0.0,
                 amount_max=round(max(amounts), 2) if amounts else 0.0,
                 example_descriptions=examples,
@@ -1506,6 +1540,7 @@ def apply_category_to_merchant_learning_group(
     tx_type: str,
     category: str,
     account_id: int | None = None,
+    representative_amount: float | None = None,
 ) -> dict[str, int]:
     normalized_category = normalize_category_name(category)
     if not should_store_category_memory(normalized_category):
@@ -1516,7 +1551,19 @@ def apply_category_to_merchant_learning_group(
             "memory_entries_updated": 0,
         }
 
-    normalized_merchant_key = re.sub(r"\s+", " ", merchant_key.strip().lower())[:160]
+    normalized_merchant_key = merchant_profile_base_key(
+        re.sub(r"\s+", " ", merchant_key.strip().lower())[:160]
+    )
+    amount_guard_required = merchant_key_requires_amount_guard(normalized_merchant_key)
+    normalized_representative_amount = normalize_amount_for_learning(representative_amount)
+    if amount_guard_required and normalized_representative_amount is None:
+        return {
+            "matched_count": 0,
+            "updated_count": 0,
+            "memory_entries_created": 0,
+            "memory_entries_updated": 0,
+        }
+
     query = db.query(Transaction).filter(
         Transaction.owner_id == owner_id,
         Transaction.type == tx_type,
@@ -1533,6 +1580,12 @@ def apply_category_to_merchant_learning_group(
     for transaction in query.all():
         fingerprint = extract_merchant_fingerprint(transaction.description)
         if not fingerprint or fingerprint[0] != normalized_merchant_key:
+            continue
+        if amount_guard_required and not merchant_category_amount_matches(
+            normalized_merchant_key,
+            normalized_representative_amount,
+            transaction.amount,
+        ):
             continue
 
         matched_count += 1
@@ -2701,6 +2754,9 @@ def import_transactions_from_csv(
                     description=description,
                     date=tx_date,
                     type=tx_type,
+                    entry_source="csv_import",
+                    import_file_type="csv_statement",
+                    imported_at=datetime.now(timezone.utc),
                     owner_id=owner_id,
                     account_id=account_id,
                 )
@@ -2833,6 +2889,7 @@ def apply_transaction_filters(
     transaction_type: str | None = None,
     month: str | None = None,
     category: str | None = None,
+    entry_source: str | None = None,
     description: str | None = None,
     amount_min: float | None = None,
     amount_max: float | None = None,
@@ -2848,6 +2905,11 @@ def apply_transaction_filters(
     if category:
         category_values = get_category_filter_values(category)
         query = query.filter(func.lower(Transaction.category).in_(tuple(category_values)))
+
+    if entry_source:
+        normalized_source = str(entry_source).strip().lower()
+        if normalized_source:
+            query = query.filter(func.lower(Transaction.entry_source) == normalized_source)
 
     if description:
         normalized_description = re.sub(r"\s+", " ", description.strip().lower())
@@ -2900,6 +2962,7 @@ def get_transactions_page_for_user(
     transaction_type: str | None = None,
     month: str | None = None,
     category: str | None = None,
+    entry_source: str | None = None,
     description: str | None = None,
     amount_min: float | None = None,
     amount_max: float | None = None,
@@ -2917,6 +2980,7 @@ def get_transactions_page_for_user(
         transaction_type=transaction_type,
         month=month,
         category=category,
+        entry_source=entry_source,
         description=description,
         amount_min=amount_min,
         amount_max=amount_max,

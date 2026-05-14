@@ -22,6 +22,21 @@ const MERCHANT_ALIAS_PATTERNS = [
   [/stm\s+angrignon|(?:^|\s)stm(?:\s|$)/i, "stm"],
   [/smoke\s+king/i, "smoke king"],
 ];
+const AMOUNT_SENSITIVE_PREVIEW_MERCHANTS = new Set([
+  "amazon",
+  "amazon marketplace",
+  "apple",
+  "apple com bill",
+  "bell",
+  "costco",
+  "dollarama",
+  "google",
+  "orange mart",
+  "paypal",
+  "rogers",
+  "shoppers drug mart",
+  "walmart",
+]);
 const MERCHANT_NOISE_WORDS = new Set([
   "achat",
   "amount",
@@ -134,11 +149,36 @@ const normalizeMerchantText = (value = "") =>
     .replace(/\s+/g, " ")
     .trim();
 
+const normalizePreviewAmount = (amount) => {
+  const normalizedAmount = Math.abs(Number(amount));
+  return Number.isFinite(normalizedAmount) && normalizedAmount > 0 ? normalizedAmount : null;
+};
+
+const getPreviewAmountBucket = (amount) => {
+  const normalizedAmount = normalizePreviewAmount(amount);
+  if (normalizedAmount === null) return "";
+
+  if (normalizedAmount < 20) return String(Math.max(1, Math.round(normalizedAmount / 5) * 5));
+  if (normalizedAmount < 100) return String(Math.round(normalizedAmount / 10) * 10);
+  if (normalizedAmount < 500) return String(Math.round(normalizedAmount / 25) * 25);
+  return String(Math.round(normalizedAmount / 100) * 100);
+};
+
+const buildPreviewSimilarityKey = (row, merchantKey) => {
+  const baseKey = `${row.type || "expense"}:${merchantKey}`;
+  if (!AMOUNT_SENSITIVE_PREVIEW_MERCHANTS.has(merchantKey)) {
+    return baseKey;
+  }
+
+  const amountBucket = getPreviewAmountBucket(row.amount);
+  return amountBucket ? `${baseKey}:amount-${amountBucket}` : baseKey;
+};
+
 const getPreviewSimilarityKey = (row) => {
   const candidateText = `${row.description || ""} ${row.source_line || ""}`;
   for (const [pattern, alias] of MERCHANT_ALIAS_PATTERNS) {
     if (pattern.test(candidateText)) {
-      return `${row.type || "expense"}:${alias}`;
+      return buildPreviewSimilarityKey(row, alias);
     }
   }
 
@@ -147,7 +187,7 @@ const getPreviewSimilarityKey = (row) => {
     .filter((token) => token.length >= 3 && !MERCHANT_NOISE_WORDS.has(token));
 
   if (tokens.length === 0) return "";
-  return `${row.type || "expense"}:${tokens.slice(0, 2).join(" ")}`;
+  return buildPreviewSimilarityKey(row, tokens.slice(0, 2).join(" "));
 };
 
 const getSimilarityDisplayName = (similarityKey = "") => {
@@ -361,23 +401,32 @@ function ImportPage() {
       }
 
       if (!groups[similarityKey]) {
+        const amountValue = normalizePreviewAmount(row.amount);
         groups[similarityKey] = {
           key: similarityKey,
           displayName: getSimilarityDisplayName(similarityKey),
           type: row.type || "expense",
+          isAmountSensitive: similarityKey.includes(":amount-"),
           rowIndexes: [],
           examples: [],
           categories: {},
           needsReviewCount: 0,
           totalAmount: 0,
+          amountMin: amountValue,
+          amountMax: amountValue,
         };
       }
 
       const group = groups[similarityKey];
+      const amountValue = normalizePreviewAmount(row.amount);
       const category = String(row.category || "other").trim() || "other";
       group.rowIndexes.push(index);
       group.categories[category] = (group.categories[category] || 0) + 1;
       group.totalAmount += Math.abs(Number(row.amount) || 0);
+      if (amountValue !== null) {
+        group.amountMin = group.amountMin === null ? amountValue : Math.min(group.amountMin, amountValue);
+        group.amountMax = group.amountMax === null ? amountValue : Math.max(group.amountMax, amountValue);
+      }
       if (categoryReviewRequired || category.toLowerCase() === "other") {
         group.needsReviewCount += 1;
       }
@@ -1242,6 +1291,14 @@ function ImportPage() {
                               amount: group.totalAmount.toFixed(2),
                             })}
                           </p>
+                          {group.isAmountSensitive && group.amountMin !== null && (
+                            <p className="import-learning-examples">
+                              {t("import.amountSensitiveGroup", {
+                                min: group.amountMin.toFixed(2),
+                                max: group.amountMax.toFixed(2),
+                              })}
+                            </p>
+                          )}
                           {group.examples.length > 0 && (
                             <p className="import-learning-examples">
                               {t("import.examples")}: {group.examples.join(" | ")}

@@ -91,6 +91,7 @@ def seed_realistic_transactions(
                 description=salary_desc,
                 date=salary_date,
                 type="income",
+                entry_source="seed",
             )
         )
 
@@ -104,6 +105,7 @@ def seed_realistic_transactions(
                     description=desc,
                     date=random_day_in_month(year, month),
                     type="income",
+                    entry_source="seed",
                 )
             )
 
@@ -117,6 +119,7 @@ def seed_realistic_transactions(
                     description=desc,
                     date=random_day_in_month(year, month),
                     type="income",
+                    entry_source="seed",
                 )
             )
 
@@ -130,6 +133,7 @@ def seed_realistic_transactions(
                         description=random.choice(descriptions),
                         date=random_day_in_month(year, month),
                         type="expense",
+                        entry_source="seed",
                     )
                 )
 
@@ -143,6 +147,7 @@ def seed_realistic_transactions(
                     description=spike_desc,
                     date=random_day_in_month(year, month),
                     type="expense",
+                    entry_source="seed",
                 )
             )
 
@@ -162,6 +167,7 @@ def seed_realistic_transactions(
                     ),
                     date=random_day_in_month(year, month),
                     type="expense",
+                    entry_source="seed",
                 )
             )
 

@@ -430,6 +430,7 @@ const translations = {
       teachMemory: "Teach memory",
       learningGroupSummary:
         "{count} similar transaction{plural} totaling ${total}. Confirm the category once and apply it to the whole group.",
+      amountSensitiveGroup: "Amount-sensitive group: ${min} to ${max}",
       examples: "Examples",
       correctCategory: "Correct category",
       correctCategoryPlaceholder: "Example: Smoking, Groceries, Subscriptions",
@@ -661,6 +662,7 @@ const translations = {
       reviewSimilarGroupsDetail:
         "When several statement rows look like the same merchant, name the category once and apply it to the whole group before importing.",
       similarGroupSummary: "{count} similar row{plural}, ${amount} total",
+      amountSensitiveGroup: "Amount-sensitive group: ${min} to ${max}",
       examples: "Examples",
       correctCategory: "Correct category",
       correctCategoryPlaceholder: "Example: Smoking, Groceries, Subscriptions",
@@ -1797,6 +1799,7 @@ const translations = {
       teachMemory: "Apprendre",
       learningGroupSummary:
         "{count} transaction{plural} similaire{plural} totalisant ${total}. Confirmez la categorie une fois et appliquez-la au groupe.",
+      amountSensitiveGroup: "Groupe sensible au montant: ${min} a ${max}",
       examples: "Exemples",
       correctCategory: "Categorie correcte",
       correctCategoryPlaceholder: "Exemple: Tabac, epicerie, abonnements",
@@ -2029,6 +2032,7 @@ const translations = {
       reviewSimilarGroupsDetail:
         "Quand plusieurs lignes ressemblent au meme marchand, nommez la categorie une fois et appliquez-la au groupe avant l'importation.",
       similarGroupSummary: "{count} ligne{plural} similaire{plural}, ${amount} au total",
+      amountSensitiveGroup: "Groupe sensible au montant: ${min} a ${max}",
       examples: "Exemples",
       correctCategory: "Categorie correcte",
       correctCategoryPlaceholder: "Exemple: Tabac, epicerie, abonnements",

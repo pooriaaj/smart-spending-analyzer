@@ -15,6 +15,7 @@ from app.routes.auth_routes import router as auth_router
 from app.routes.budget_routes import router as budget_router
 from app.routes.transaction_routes import router as transaction_router
 from app.routes.user_routes import router as user_router
+from app.services.database_maintenance_service import ensure_runtime_database_shape
 
 load_dotenv()
 
@@ -59,6 +60,7 @@ app.include_router(assistant_router)
 
 @app.on_event("startup")
 def on_startup() -> None:
+    ensure_runtime_database_shape(engine)
     logger.info("Smart Spending Analyzer API started")
 
 

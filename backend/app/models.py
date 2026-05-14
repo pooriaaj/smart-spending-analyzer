@@ -115,6 +115,10 @@ class Transaction(Base):
     description = Column(String(500), nullable=False)
     date = Column(Date, nullable=False, index=True)
     type = Column(String(20), nullable=False, index=True)
+    entry_source = Column(String(40), nullable=False, default="manual", index=True)
+    import_file_name = Column(String(255), nullable=True)
+    import_file_type = Column(String(40), nullable=True)
+    imported_at = Column(DateTime(timezone=True), nullable=True)
     owner_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     account_id = Column(Integer, ForeignKey("accounts.id", ondelete="CASCADE"), nullable=True, index=True)
 
@@ -129,6 +133,7 @@ class Transaction(Base):
         Index("ix_transactions_owner_account_date", "owner_id", "account_id", "date"),
         Index("ix_transactions_owner_account_type_date", "owner_id", "account_id", "type", "date"),
         Index("ix_transactions_owner_account_category_date", "owner_id", "account_id", "category", "date"),
+        Index("ix_transactions_owner_account_source_date", "owner_id", "account_id", "entry_source", "date"),
     )
 
 

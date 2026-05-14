@@ -77,6 +77,14 @@ const buildPaginationItems = (currentPage, totalPages) => {
   return items;
 };
 
+const getLearningCandidateKey = (candidate) => {
+  const amountKey =
+    candidate?.representative_amount === null || candidate?.representative_amount === undefined
+      ? "all"
+      : Number(candidate.representative_amount).toFixed(2);
+  return `${candidate?.merchant_key || ""}:${candidate?.type || ""}:${amountKey}`;
+};
+
 function TransactionsPage() {
   const { t } = useLanguage();
   const [transactions, setTransactions] = useState([]);
@@ -85,6 +93,7 @@ function TransactionsPage() {
   const [monthFilter, setMonthFilter] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("");
   const [searchFilter, setSearchFilter] = useState("");
+  const [debouncedSearchFilter, setDebouncedSearchFilter] = useState("");
   const [amountRangeFilter, setAmountRangeFilter] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const [selectedAccountId, setSelectedAccountId] = useState(getSelectedAccountId());
@@ -145,6 +154,14 @@ function TransactionsPage() {
     setAmountRangeFilter(searchParams.get("amountRange") || "");
   }, [searchParams]);
 
+  useEffect(() => {
+    const timeoutId = window.setTimeout(() => {
+      setDebouncedSearchFilter(searchFilter.trim());
+    }, 300);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [searchFilter]);
+
   const fetchTransactions = useCallback(async () => {
     try {
       const selectedAmountRange = AMOUNT_RANGE_OPTIONS.find(
@@ -155,7 +172,7 @@ function TransactionsPage() {
         type: typeFilter || undefined,
         month: monthFilter || undefined,
         category: categoryFilter || undefined,
-        description: searchFilter || undefined,
+        description: debouncedSearchFilter || undefined,
         amount_min: selectedAmountRange?.min,
         amount_max: selectedAmountRange?.max,
         amount_min_exclusive: selectedAmountRange?.minExclusive || undefined,
@@ -166,7 +183,7 @@ function TransactionsPage() {
         typeFilter ||
           monthFilter ||
           categoryFilter ||
-          searchFilter ||
+          debouncedSearchFilter ||
           amountRangeFilter
       );
 
@@ -245,10 +262,10 @@ function TransactionsPage() {
     amountRangeFilter,
     categoryFilter,
     currentPage,
+    debouncedSearchFilter,
     monthFilter,
     navigate,
     normalizedAccountId,
-    searchFilter,
     t,
     typeFilter,
   ]);
@@ -314,6 +331,7 @@ function TransactionsPage() {
     setMonthFilter("");
     setCategoryFilter("");
     setSearchFilter("");
+    setDebouncedSearchFilter("");
     setAmountRangeFilter("");
     setCurrentPage(1);
   };
@@ -429,7 +447,7 @@ function TransactionsPage() {
       setLearningCandidates(candidates);
       setLearningCategoryEdits(
         candidates.reduce((drafts, item) => {
-          drafts[`${item.merchant_key}:${item.type}`] = item.suggested_category || item.current_category || "";
+          drafts[getLearningCandidateKey(item)] = item.suggested_category || item.current_category || "";
           return drafts;
         }, {})
       );
@@ -446,7 +464,7 @@ function TransactionsPage() {
   };
 
   const handleApplyLearningCandidate = async (candidate) => {
-    const candidateKey = `${candidate.merchant_key}:${candidate.type}`;
+    const candidateKey = getLearningCandidateKey(candidate);
     const category = (learningCategoryEdits[candidateKey] || candidate.suggested_category || "").trim();
     if (!category) return;
 
@@ -458,6 +476,7 @@ function TransactionsPage() {
         type: candidate.type,
         category,
         account_id: normalizedAccountId || null,
+        representative_amount: candidate.representative_amount ?? null,
       });
 
       setBulkMessage(
@@ -468,7 +487,7 @@ function TransactionsPage() {
         })
       );
       setLearningCandidates((prev) =>
-        prev.filter((item) => `${item.merchant_key}:${item.type}` !== candidateKey)
+        prev.filter((item) => getLearningCandidateKey(item) !== candidateKey)
       );
       setBulkSuggestions([]);
       await fetchTransactions();
@@ -922,7 +941,7 @@ function TransactionsPage() {
           {learningCandidates.length > 0 && (
             <div className="bulk-suggestions-list">
               {learningCandidates.map((item) => {
-                const candidateKey = `${item.merchant_key}:${item.type}`;
+                const candidateKey = getLearningCandidateKey(item);
                 const draftCategory =
                   learningCategoryEdits[candidateKey] ?? item.suggested_category ?? item.current_category ?? "";
 
@@ -955,6 +974,14 @@ function TransactionsPage() {
                       {"->"} {t("common.suggested")}:{" "}
                       <strong>{formatCategoryLabel(item.suggested_category, t)}</strong>
                     </p>
+                    {item.representative_amount !== null && item.representative_amount !== undefined && (
+                      <p className="bulk-suggestion-meta">
+                        {t("transactions.amountSensitiveGroup", {
+                          min: Number(item.amount_min || 0).toFixed(2),
+                          max: Number(item.amount_max || 0).toFixed(2),
+                        })}
+                      </p>
+                    )}
                     <p className="bulk-suggestion-meta">{item.reason}</p>
                     {item.example_descriptions?.length > 0 && (
                       <p className="bulk-suggestion-meta">

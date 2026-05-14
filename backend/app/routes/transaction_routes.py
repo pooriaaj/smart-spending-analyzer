@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime, timezone
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 from sqlalchemy.orm import Session
@@ -123,6 +123,18 @@ def commit_pending_side_effects_safely(db: Session) -> None:
         db.rollback()
 
 
+def entry_source_for_preview_row(row) -> str:
+    if row.source_file_type == "csv_statement":
+        return "csv_import"
+    if row.source_file_type == "pdf_statement":
+        return "pdf_import"
+    if row.source_file_type == "receipt_image":
+        return "receipt_import"
+    if row.source_line and "manual" in row.source_line.lower():
+        return "manual_import_review"
+    return "statement_import"
+
+
 @router.get("/", response_model=list[TransactionResponse])
 def get_transactions(
     account_id: int | None = Query(default=None),
@@ -145,6 +157,7 @@ def get_transactions_page(
     transaction_type: str | None = Query(default=None, alias="type"),
     month: str | None = Query(default=None),
     category: str | None = Query(default=None),
+    entry_source: str | None = Query(default=None),
     description: str | None = Query(default=None),
     amount_min: float | None = Query(default=None),
     amount_max: float | None = Query(default=None),
@@ -172,6 +185,7 @@ def get_transactions_page(
             transaction_type=transaction_type,
             month=month,
             category=category,
+            entry_source=entry_source,
             description=description,
             amount_min=amount_min,
             amount_max=amount_max,
@@ -203,6 +217,7 @@ def create_transaction(
         description=transaction.description,
         date=transaction.date,
         type=transaction.type,
+        entry_source="manual",
         owner_id=current_user.id,
         account_id=transaction.account_id,
     )
@@ -313,6 +328,8 @@ def fresh_start_transactions(
     query = db.query(Transaction).filter(Transaction.owner_id == current_user.id)
     if payload.account_id is not None:
         query = query.filter(Transaction.account_id == payload.account_id)
+    if payload.entry_source is not None:
+        query = query.filter(Transaction.entry_source == payload.entry_source)
 
     if not payload.delete_all:
         if payload.keep_from is None:
@@ -592,6 +609,10 @@ def confirm_preview_import(
                 description=description,
                 date=tx_date,
                 type=row.type,
+                entry_source=entry_source_for_preview_row(row),
+                import_file_name=row.source_file_name,
+                import_file_type=row.source_file_type,
+                imported_at=datetime.now(timezone.utc),
                 owner_id=current_user.id,
                 account_id=payload.account_id,
             )
@@ -706,6 +727,7 @@ def get_category_learning_candidates_route(
                 suggested_category=item.suggested_category,
                 confidence=item.confidence,
                 total_amount=item.total_amount,
+                representative_amount=item.representative_amount,
                 amount_min=item.amount_min,
                 amount_max=item.amount_max,
                 example_descriptions=item.example_descriptions,
@@ -755,6 +777,7 @@ def apply_category_learning_candidate_route(
         tx_type=payload.type,
         category=payload.category,
         account_id=payload.account_id,
+        representative_amount=payload.representative_amount,
     )
     return CategoryLearningApplyResponse(**result)
 

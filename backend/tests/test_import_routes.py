@@ -182,6 +182,9 @@ class SmartImportRouteTest(unittest.TestCase):
                         description="Metro grocery",
                         date=date(2026, 4, 11),
                         type="expense",
+                        entry_source="pdf_import",
+                        import_file_name="april-statement.pdf",
+                        import_file_type="pdf_statement",
                         owner_id=self.user_id,
                         account_id=self.account_id,
                     ),
@@ -226,6 +229,20 @@ class SmartImportRouteTest(unittest.TestCase):
         self.assertEqual(filtered_payload["total"], 1)
         self.assertEqual(filtered_payload["scope_total"], 3)
         self.assertEqual(filtered_payload["items"][0]["description"], "Metro grocery")
+
+        source_response = self.client.get(
+            "/transactions/page",
+            params={
+                "account_id": self.account_id,
+                "entry_source": "pdf_import",
+            },
+        )
+        self.assertEqual(source_response.status_code, 200, source_response.text)
+        source_payload = source_response.json()
+        self.assertEqual(source_payload["total"], 1)
+        self.assertEqual(source_payload["items"][0]["description"], "Metro grocery")
+        self.assertEqual(source_payload["items"][0]["entry_source"], "pdf_import")
+        self.assertEqual(source_payload["items"][0]["import_file_name"], "april-statement.pdf")
 
         accented_category_response = self.client.get(
             "/transactions/page",
@@ -1080,6 +1097,8 @@ class SmartImportRouteTest(unittest.TestCase):
         preview_payload = preview_response.json()
         self.assertEqual(preview_payload["notes"], ["Used generic PDF parser. Accuracy may vary for this bank format."])
         self.assertEqual(len(preview_payload["preview_rows"]), 2)
+        self.assertEqual(preview_payload["preview_rows"][0]["source_file_name"], "generic-statement.pdf")
+        self.assertEqual(preview_payload["preview_rows"][0]["source_file_type"], "pdf_statement")
         reviewed_rows = [
             {
                 **row,
@@ -1116,6 +1135,10 @@ class SmartImportRouteTest(unittest.TestCase):
         self.assertEqual(transactions[0].date.isoformat(), "2024-12-28")
         self.assertEqual(transactions[0].amount, 12.34)
         self.assertEqual(transactions[0].type, "expense")
+        self.assertEqual(transactions[0].entry_source, "pdf_import")
+        self.assertEqual(transactions[0].import_file_name, "generic-statement.pdf")
+        self.assertEqual(transactions[0].import_file_type, "pdf_statement")
+        self.assertIsNotNone(transactions[0].imported_at)
         self.assertEqual(transactions[1].date.isoformat(), "2025-01-02")
         self.assertEqual(transactions[1].type, "income")
 
@@ -1225,6 +1248,70 @@ class SmartImportRouteTest(unittest.TestCase):
 
         self.assertIsNotNone(imported_transaction)
         self.assertEqual(imported_transaction.category, "restaurant")
+
+    def test_confirm_preview_import_applies_user_review_only_to_amount_similar_rows(self) -> None:
+        confirm_response = self.client.post(
+            "/transactions/import/confirm-preview",
+            json={
+                "account_id": self.account_id,
+                "rows": [
+                    {
+                        "date": "2026-03-26",
+                        "description": "ORANGE MART",
+                        "amount": 10.99,
+                        "type": "expense",
+                        "category": "Smoking",
+                        "category_source": "user_review",
+                        "category_confidence": 0.97,
+                        "category_review_required": False,
+                    },
+                    {
+                        "date": "2026-03-27",
+                        "description": "ORANGE MART",
+                        "amount": 12.60,
+                        "type": "expense",
+                        "category": "other",
+                        "category_source": "rule",
+                        "category_confidence": 0.24,
+                        "category_review_required": True,
+                    },
+                    {
+                        "date": "2026-03-28",
+                        "description": "ORANGE MART",
+                        "amount": 83.40,
+                        "type": "expense",
+                        "category": "other",
+                        "category_source": "rule",
+                        "category_confidence": 0.24,
+                        "category_review_required": True,
+                    },
+                ],
+            },
+        )
+
+        self.assertEqual(confirm_response.status_code, 200, confirm_response.text)
+        payload = confirm_response.json()
+        self.assertEqual(payload["imported"], 2)
+        self.assertEqual(payload["invalid_rows_skipped"], 1)
+
+        with self.session_local() as session:
+            imported_rows = (
+                session.query(Transaction)
+                .filter(Transaction.owner_id == self.user_id)
+                .order_by(Transaction.amount.asc())
+                .all()
+            )
+            learning_event = (
+                session.query(CategoryLearningEvent)
+                .filter(CategoryLearningEvent.owner_id == self.user_id)
+                .one_or_none()
+            )
+
+        self.assertEqual([row.amount for row in imported_rows], [10.99, 12.60])
+        self.assertTrue(all(row.category == "smoking" for row in imported_rows))
+        self.assertIsNotNone(learning_event)
+        self.assertEqual(learning_event.merchant_key, "orange mart")
+        self.assertEqual(learning_event.amount_bucket, "10")
 
     def test_import_file_marks_existing_and_in_preview_duplicates(self) -> None:
         with self.session_local() as session:
@@ -1554,6 +1641,55 @@ class SmartImportRouteTest(unittest.TestCase):
         self.assertEqual(len(remaining), 1)
         self.assertEqual(remaining[0].description, "Today groceries")
 
+    def test_fresh_start_can_delete_only_imported_statement_rows(self) -> None:
+        with self.session_local() as session:
+            session.add_all(
+                [
+                    Transaction(
+                        amount=20.00,
+                        category="shopping",
+                        description="Imported old statement row",
+                        date=date(2026, 1, 10),
+                        type="expense",
+                        entry_source="pdf_import",
+                        import_file_name="old-statement.pdf",
+                        import_file_type="pdf_statement",
+                        owner_id=self.user_id,
+                        account_id=self.account_id,
+                    ),
+                    Transaction(
+                        amount=9.50,
+                        category="groceries",
+                        description="Manual groceries",
+                        date=date(2026, 1, 10),
+                        type="expense",
+                        entry_source="manual",
+                        owner_id=self.user_id,
+                        account_id=self.account_id,
+                    ),
+                ]
+            )
+            session.commit()
+
+        response = self.client.post(
+            "/transactions/fresh-start",
+            json={
+                "account_id": self.account_id,
+                "delete_all": True,
+                "entry_source": "pdf_import",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(response.json()["deleted_count"], 1)
+
+        with self.session_local() as session:
+            remaining = session.query(Transaction).filter(Transaction.owner_id == self.user_id).all()
+
+        self.assertEqual(len(remaining), 1)
+        self.assertEqual(remaining[0].description, "Manual groceries")
+        self.assertEqual(remaining[0].entry_source, "manual")
+
     def test_import_file_reports_pdf_with_no_selectable_text(self) -> None:
         pdf_bytes = build_text_pdf([])
 
@@ -1746,6 +1882,7 @@ class SmartImportRouteTest(unittest.TestCase):
             },
         )
         self.assertEqual(categorized_response.status_code, 200, categorized_response.text)
+        self.assertEqual(categorized_response.json()["entry_source"], "manual")
 
         uncategorized_response = self.client.post(
             "/transactions/",
@@ -1912,6 +2049,98 @@ class SmartImportRouteTest(unittest.TestCase):
         self.assertTrue(all(transaction.category == "smoking" for transaction in transactions))
         self.assertIsNotNone(profile)
         self.assertEqual(profile.category, "smoking")
+
+    def test_learning_apply_respects_amount_sensitive_merchant_groups(self) -> None:
+        with self.session_local() as session:
+            session.add_all(
+                [
+                    Transaction(
+                        amount=10.99,
+                        category="other",
+                        description="Orange Mart",
+                        date=date(2026, 3, 10),
+                        type="expense",
+                        owner_id=self.user_id,
+                        account_id=self.account_id,
+                    ),
+                    Transaction(
+                        amount=12.60,
+                        category="other",
+                        description="Orange Mart",
+                        date=date(2026, 3, 11),
+                        type="expense",
+                        owner_id=self.user_id,
+                        account_id=self.account_id,
+                    ),
+                    Transaction(
+                        amount=35.00,
+                        category="other",
+                        description="Orange Mart",
+                        date=date(2026, 3, 12),
+                        type="expense",
+                        owner_id=self.user_id,
+                        account_id=self.account_id,
+                    ),
+                    Transaction(
+                        amount=38.00,
+                        category="other",
+                        description="Orange Mart",
+                        date=date(2026, 3, 13),
+                        type="expense",
+                        owner_id=self.user_id,
+                        account_id=self.account_id,
+                    ),
+                ]
+            )
+            session.commit()
+
+        candidates_response = self.client.get(
+            "/transactions/categorize/learning-candidates",
+            params={"account_id": self.account_id},
+        )
+        self.assertEqual(candidates_response.status_code, 200, candidates_response.text)
+        orange_candidates = [
+            item
+            for item in candidates_response.json()["candidates"]
+            if item["merchant_key"] == "orange mart"
+        ]
+        self.assertGreaterEqual(len(orange_candidates), 2)
+
+        small_group = next(item for item in orange_candidates if item["amount_max"] < 20)
+        large_group = next(item for item in orange_candidates if item["amount_min"] >= 20)
+
+        self.assertEqual(small_group["transaction_count"], 2)
+        self.assertEqual(large_group["transaction_count"], 2)
+        self.assertIsNotNone(small_group["representative_amount"])
+
+        apply_response = self.client.post(
+            "/transactions/categorize/learning-apply",
+            json={
+                "merchant_key": "orange mart",
+                "type": "expense",
+                "category": "smoking",
+                "account_id": self.account_id,
+                "representative_amount": small_group["representative_amount"],
+            },
+        )
+        self.assertEqual(apply_response.status_code, 200, apply_response.text)
+        payload = apply_response.json()
+        self.assertEqual(payload["matched_count"], 2)
+        self.assertEqual(payload["updated_count"], 2)
+
+        with self.session_local() as session:
+            transactions = (
+                session.query(Transaction)
+                .filter(Transaction.owner_id == self.user_id, Transaction.description == "Orange Mart")
+                .order_by(Transaction.amount.asc())
+                .all()
+            )
+
+        categories_by_amount = {float(item.amount): item.category for item in transactions}
+        self.assertEqual(categories_by_amount[10.99], "smoking")
+        self.assertEqual(categories_by_amount[12.60], "smoking")
+        self.assertEqual(categories_by_amount[35.00], "other")
+        self.assertEqual(categories_by_amount[38.00], "other")
 
     def test_learning_summary_reports_category_memory_health(self) -> None:
         categorized_response = self.client.post(

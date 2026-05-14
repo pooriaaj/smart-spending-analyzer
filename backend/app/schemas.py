@@ -11,6 +11,15 @@ AssistantMode = Literal["balanced", "strict", "coach"]
 AccountType = Literal["chequing", "savings", "credit_card", "cash", "business", "other"]
 ImportDetectedType = Literal["csv_statement", "receipt_image", "pdf_statement"]
 ImportStatus = Literal["completed", "draft_review", "table_review"]
+TransactionEntrySource = Literal[
+    "manual",
+    "manual_import_review",
+    "csv_import",
+    "pdf_import",
+    "receipt_import",
+    "statement_import",
+    "seed",
+]
 
 
 class ORMBaseModel(BaseModel):
@@ -352,6 +361,10 @@ class TransactionResponse(ORMBaseModel):
     description: str
     date: date
     type: TransactionType
+    entry_source: str = "manual"
+    import_file_name: str | None = None
+    import_file_type: str | None = None
+    imported_at: datetime | None = None
     account_id: int | None = None
     owner_id: int
 
@@ -398,6 +411,7 @@ class FreshStartRequest(BaseModel):
     keep_from: date | None = None
     account_id: int | None = None
     delete_all: bool = False
+    entry_source: TransactionEntrySource | None = None
 
 
 class FreshStartResponse(BaseModel):
@@ -484,6 +498,7 @@ class CategoryLearningCandidateItem(BaseModel):
     suggested_category: str
     confidence: float
     total_amount: float
+    representative_amount: float | None = None
     amount_min: float
     amount_max: float
     example_descriptions: list[str] = Field(default_factory=list)
@@ -527,6 +542,7 @@ class CategoryLearningApplyRequest(BaseModel):
     type: TransactionType
     category: str = Field(min_length=1, max_length=100)
     account_id: int | None = None
+    representative_amount: float | None = None
 
 
 class CategoryLearningApplyResponse(BaseModel):
@@ -737,6 +753,8 @@ class StatementPreviewRow(BaseModel):
     type: TransactionType
     category: str
     source_line: str | None = None
+    source_file_name: str | None = None
+    source_file_type: ImportDetectedType | None = None
     confidence: float = 0.0
     review_reason: str | None = None
     category_confidence: float = 0.0
