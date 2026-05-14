@@ -15,6 +15,7 @@ from app.database import Base
 from app.dependencies import get_current_user, get_db
 from app.models import Account, BudgetPlan, MerchantCategoryProfile, SavedScenario, Transaction, User
 from app.routes.analytics_routes import router as analytics_router
+from app.routes.assistant_routes import router as assistant_router
 
 
 class FixedBudgetDate(date):
@@ -61,6 +62,7 @@ class AnalyticsRouteTest(unittest.TestCase):
 
         app = FastAPI()
         app.include_router(analytics_router)
+        app.include_router(assistant_router)
 
         def override_get_db() -> Generator[Session, None, None]:
             session = cls.session_local()
@@ -977,7 +979,7 @@ class AnalyticsRouteTest(unittest.TestCase):
         self.seed_transactions()
 
         response = self.client.get(
-            "/analytics/assistant-suggestions",
+            "/assistant/suggestions",
             params={"account_id": self.savings_account_id},
         )
 
@@ -999,7 +1001,7 @@ class AnalyticsRouteTest(unittest.TestCase):
         )
 
         response = self.client.get(
-            "/analytics/assistant-suggestions",
+            "/assistant/suggestions",
             params={"account_id": self.chequing_account_id},
         )
 
@@ -1034,7 +1036,7 @@ class AnalyticsRouteTest(unittest.TestCase):
                 session.commit()
 
             response = self.client.get(
-                "/analytics/assistant-suggestions",
+                "/assistant/suggestions",
                 params={"account_id": self.chequing_account_id},
             )
 
@@ -1047,11 +1049,11 @@ class AnalyticsRouteTest(unittest.TestCase):
         self.seed_transactions()
 
         with patch("app.services.budget_metrics.date", FixedBudgetDate), patch(
-            "app.services.analytics_service.generate_llm_assistant_response",
+            "app.services.assistant_service.generate_llm_assistant_response",
             return_value=None,
         ):
             response = self.client.post(
-                "/analytics/assistant-response",
+                "/assistant/response",
                 json={
                     "question": "What is my balance?",
                     "history": [],
@@ -1071,11 +1073,11 @@ class AnalyticsRouteTest(unittest.TestCase):
         self.seed_transactions()
 
         with patch("app.services.budget_metrics.date", FixedBudgetDate), patch(
-            "app.services.analytics_service.generate_llm_assistant_response",
+            "app.services.assistant_service.generate_llm_assistant_response",
             return_value=None,
         ):
             response = self.client.post(
-                "/analytics/assistant-response",
+                "/assistant/response",
                 json={
                     "question": "How is groceries looking?",
                     "history": [],
@@ -1104,9 +1106,9 @@ class AnalyticsRouteTest(unittest.TestCase):
             account_id=self.chequing_account_id,
         )
 
-        with patch("app.services.analytics_service.generate_llm_assistant_response", return_value=None):
+        with patch("app.services.assistant_service.generate_llm_assistant_response", return_value=None):
             response = self.client.post(
-                "/analytics/assistant-response",
+                "/assistant/response",
                 json={
                     "question": "How is my groceries budget looking?",
                     "history": [],
@@ -1151,9 +1153,9 @@ class AnalyticsRouteTest(unittest.TestCase):
                 )
                 session.commit()
 
-            with patch("app.services.analytics_service.generate_llm_assistant_response", return_value=None):
+            with patch("app.services.assistant_service.generate_llm_assistant_response", return_value=None):
                 response = self.client.post(
-                    "/analytics/assistant-response",
+                    "/assistant/response",
                     json={
                         "question": "How is my groceries budget looking?",
                         "history": [],
@@ -1195,9 +1197,9 @@ class AnalyticsRouteTest(unittest.TestCase):
                 )
                 session.commit()
 
-            with patch("app.services.analytics_service.generate_llm_assistant_response", return_value=None):
+            with patch("app.services.assistant_service.generate_llm_assistant_response", return_value=None):
                 response = self.client.post(
-                    "/analytics/assistant-response",
+                    "/assistant/response",
                     json={
                         "question": "Give me saving advice",
                         "history": [],
@@ -1251,9 +1253,9 @@ class AnalyticsRouteTest(unittest.TestCase):
             )
             session.commit()
 
-        with patch("app.services.analytics_service.generate_llm_assistant_response", return_value=None):
+        with patch("app.services.assistant_service.generate_llm_assistant_response", return_value=None):
             response = self.client.post(
-                "/analytics/assistant-response",
+                "/assistant/response",
                 json={
                     "question": "Give me saving advice",
                     "history": [],
@@ -1274,9 +1276,9 @@ class AnalyticsRouteTest(unittest.TestCase):
     def test_assistant_response_shows_recent_transactions_for_focused_category(self) -> None:
         self.seed_transactions()
 
-        with patch("app.services.analytics_service.generate_llm_assistant_response", return_value=None):
+        with patch("app.services.assistant_service.generate_llm_assistant_response", return_value=None):
             response = self.client.post(
-                "/analytics/assistant-response",
+                "/assistant/response",
                 json={
                     "question": "Show me groceries transactions",
                     "history": [],
@@ -1358,9 +1360,9 @@ class AnalyticsRouteTest(unittest.TestCase):
             )
             session.commit()
 
-        with patch("app.services.analytics_service.generate_llm_assistant_response", return_value=None):
+        with patch("app.services.assistant_service.generate_llm_assistant_response", return_value=None):
             response = self.client.post(
-                "/analytics/assistant-response",
+                "/assistant/response",
                 json={
                     "question": "What will my balance look like in 3 months?",
                     "history": [],
@@ -1439,9 +1441,9 @@ class AnalyticsRouteTest(unittest.TestCase):
             )
             session.commit()
 
-        with patch("app.services.analytics_service.generate_llm_assistant_response", return_value=None):
+        with patch("app.services.assistant_service.generate_llm_assistant_response", return_value=None):
             response = self.client.post(
-                "/analytics/assistant-response",
+                "/assistant/response",
                 json={
                     "question": "How much do I need to save each month to reach 10000 in 3 months?",
                     "history": [],
@@ -1526,11 +1528,11 @@ class AnalyticsRouteTest(unittest.TestCase):
             session.commit()
 
         with patch("app.services.budget_metrics.date", FixedBudgetDate), patch(
-            "app.services.analytics_service.generate_llm_assistant_response",
+            "app.services.assistant_service.generate_llm_assistant_response",
             return_value=None,
         ):
             response = self.client.post(
-                "/analytics/assistant-response",
+                "/assistant/response",
                 json={
                     "question": "What happens if I have a 1200 repair in 2 months?",
                     "history": [],
@@ -1556,7 +1558,7 @@ class AnalyticsRouteTest(unittest.TestCase):
         self.seed_transactions()
 
         response = self.client.post(
-            "/analytics/assistant-response",
+            "/assistant/response",
             json={
                 "question": "Which account is driving my spending?",
                 "history": [],
@@ -1576,7 +1578,7 @@ class AnalyticsRouteTest(unittest.TestCase):
         self.seed_transactions()
 
         response = self.client.post(
-            "/analytics/assistant-response",
+            "/assistant/response",
             json={
                 "question": "Compare my accounts",
                 "history": [],
@@ -1770,7 +1772,7 @@ class AnalyticsRouteTest(unittest.TestCase):
             session.commit()
 
         response = self.client.post(
-            "/analytics/assistant-response",
+            "/assistant/response",
             json={
                 "question": "Which saved scenario looks strongest?",
                 "history": [],
@@ -1896,7 +1898,7 @@ class AnalyticsRouteTest(unittest.TestCase):
             session.commit()
 
         response = self.client.post(
-            "/analytics/assistant-response",
+            "/assistant/response",
             json={
                 "question": "Compare Aggressive Cut Plan and Repair Shock Plan",
                 "history": [],
@@ -2005,7 +2007,7 @@ class AnalyticsRouteTest(unittest.TestCase):
             session.commit()
 
         response = self.client.post(
-            "/analytics/assistant-response",
+            "/assistant/response",
             json={
                 "question": "Which saved scenario is safest?",
                 "history": [],
@@ -2115,7 +2117,7 @@ class AnalyticsRouteTest(unittest.TestCase):
             session.commit()
 
         response = self.client.post(
-            "/analytics/assistant-response",
+            "/assistant/response",
             json={
                 "question": "Which plan gets me closest to my goal?",
                 "history": [],
@@ -2234,7 +2236,7 @@ class AnalyticsRouteTest(unittest.TestCase):
             session.commit()
 
         response = self.client.post(
-            "/analytics/assistant-response",
+            "/assistant/response",
             json={
                 "question": "Show my saved plans",
                 "history": [],
@@ -2295,7 +2297,7 @@ class AnalyticsRouteTest(unittest.TestCase):
             session.commit()
 
         response = self.client.post(
-            "/analytics/assistant-response",
+            "/assistant/response",
             json={
                 "question": "Which subscriptions should I review first?",
                 "history": [],
@@ -2350,7 +2352,7 @@ class AnalyticsRouteTest(unittest.TestCase):
             session.commit()
 
         response = self.client.post(
-            "/analytics/assistant-response",
+            "/assistant/response",
             json={
                 "question": "What happens if I cancel my biggest subscription?",
                 "history": [],
@@ -2431,7 +2433,7 @@ class AnalyticsRouteTest(unittest.TestCase):
             session.commit()
 
         response = self.client.post(
-            "/analytics/assistant-response",
+            "/assistant/response",
             json={
                 "question": "Which savings scenario should I try first?",
                 "history": [],
@@ -2483,7 +2485,7 @@ class AnalyticsRouteTest(unittest.TestCase):
             session.commit()
 
         response = self.client.get(
-            "/analytics/assistant-suggestions",
+            "/assistant/suggestions",
             params={"account_id": self.chequing_account_id},
         )
 
@@ -2527,7 +2529,7 @@ class AnalyticsRouteTest(unittest.TestCase):
             session.commit()
 
         response = self.client.get(
-            "/analytics/assistant-suggestions",
+            "/assistant/suggestions",
             params={"account_id": self.chequing_account_id},
         )
 

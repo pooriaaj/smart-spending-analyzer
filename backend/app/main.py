@@ -10,6 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.database import Base, engine
 from app.routes.account_routes import router as account_router
 from app.routes.analytics_routes import router as analytics_router
+from app.routes.assistant_routes import router as assistant_router
 from app.routes.auth_routes import router as auth_router
 from app.routes.budget_routes import router as budget_router
 from app.routes.transaction_routes import router as transaction_router
@@ -53,6 +54,7 @@ app.include_router(account_router)
 app.include_router(budget_router)
 app.include_router(transaction_router)
 app.include_router(analytics_router)
+app.include_router(assistant_router)
 
 
 @app.on_event("startup")

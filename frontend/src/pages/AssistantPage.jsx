@@ -67,7 +67,7 @@ function AssistantPage() {
 
       try {
         setSuggestionsLoading(true);
-        const response = await api.get("/analytics/assistant-suggestions", {
+        const response = await api.get("/assistant/suggestions", {
           params: {
             account_id: normalizedAccountId,
           },
@@ -223,7 +223,7 @@ function AssistantPage() {
       setError("");
       setQuestion("");
 
-      const response = await api.post("/analytics/assistant-response", {
+      const response = await api.post("/assistant/response", {
         question: finalQuestion,
         history: buildHistoryPayload(messages, finalQuestion),
         mode: assistantMode,

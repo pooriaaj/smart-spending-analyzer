@@ -7,9 +7,6 @@ from app.dependencies import get_current_user, get_db
 from app.models import User
 from app.schemas import (
     AnalyticsSummary,
-    AssistantQueryRequest,
-    AssistantQueryResponse,
-    AssistantSuggestionsResponse,
     CategoryBreakdownItem,
     CategoryTrendsResponse,
     FutureSimulationRecommendationsResponse,
@@ -29,8 +26,6 @@ from app.services.analytics_service import (
     build_saved_scenario_projection_snapshots,
     build_future_simulation_recommendations,
     build_future_balance_simulation,
-    generate_assistant_response,
-    generate_assistant_suggestions,
     get_category_breakdown,
     get_category_trends,
     get_dashboard_payload,
@@ -426,36 +421,3 @@ def delete_saved_scenario_route(
     delete_saved_scenario(db, scenario)
     return MessageResponse(message="Saved scenario deleted")
 
-
-@router.post("/assistant-response", response_model=AssistantQueryResponse)
-def get_assistant_response_route(
-    payload: AssistantQueryRequest,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-):
-    scope_label = resolve_account_scope(db, current_user, payload.account_id)
-    return generate_assistant_response(
-        db=db,
-        user_id=current_user.id,
-        question=payload.question,
-        history=payload.history,
-        mode=payload.mode,
-        account_id=payload.account_id,
-        scope_label=scope_label,
-    )
-
-
-@router.get("/assistant-suggestions", response_model=AssistantSuggestionsResponse)
-def get_assistant_suggestions_route(
-    account_id: int | None = Query(default=None),
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-):
-    resolve_account_scope(db, current_user, account_id)
-    return {
-        "suggestions": generate_assistant_suggestions(
-            db=db,
-            user_id=current_user.id,
-            account_id=account_id,
-        )
-    }
