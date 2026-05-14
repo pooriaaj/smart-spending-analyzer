@@ -669,9 +669,18 @@ def normalize_category_name(value: str | None) -> str:
     return cleaned
 
 
+def is_usable_category_name(value: str | None) -> bool:
+    normalized = normalize_category_name(value)
+    if normalized in UNCATEGORIZED_VALUES:
+        return True
+
+    compact = re.sub(r"[^a-z0-9]+", "", normalized)
+    return len(compact) >= 2
+
+
 def should_store_category_memory(category: str | None) -> bool:
     normalized = normalize_category_name(category)
-    return normalized not in UNCATEGORIZED_VALUES
+    return normalized not in UNCATEGORIZED_VALUES and is_usable_category_name(normalized)
 
 
 def keyword_matches_description(keyword: str, normalized_description: str, raw_description: str = "") -> bool:
@@ -3016,6 +3025,7 @@ def normalize_existing_categories_for_user(
     for transaction in transactions:
         old_category = transaction.category or "other"
         new_category = normalize_category_name(old_category)
+        category_is_usable = is_usable_category_name(new_category)
         category_decision = categorize_transaction_details(
             db=db,
             owner_id=owner_id,
@@ -3025,10 +3035,11 @@ def normalize_existing_categories_for_user(
         )
         suggested_category = normalize_category_name(category_decision.category)
         should_apply_suggestion = (
-            category_decision.confidence >= 0.88
+            (category_decision.confidence >= 0.88 or not category_is_usable)
             and suggested_category != new_category
             and (
                 new_category in UNCATEGORIZED_VALUES
+                or not category_is_usable
                 or (
                     new_category == "income"
                     and suggested_category in {"refund", "transfer"}
@@ -3038,6 +3049,8 @@ def normalize_existing_categories_for_user(
 
         if should_apply_suggestion:
             new_category = suggested_category
+        elif not category_is_usable:
+            new_category = "other"
 
         if old_category != new_category:
             transaction.category = new_category

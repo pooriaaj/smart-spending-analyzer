@@ -827,6 +827,46 @@ class SmartImportRouteTest(unittest.TestCase):
         self.assertGreaterEqual(payload["confidence"], 0.9)
         self.assertEqual(payload["matched_keyword"], "idp education limited")
 
+    def test_single_letter_categories_are_rejected_before_they_train_memory(self) -> None:
+        create_response = self.client.post(
+            "/transactions/",
+            json={
+                "amount": 20.00,
+                "category": "S",
+                "description": "OPENAI",
+                "date": "2026-03-16",
+                "type": "expense",
+                "account_id": self.account_id,
+            },
+        )
+        self.assertEqual(create_response.status_code, 400, create_response.text)
+
+        confirm_response = self.client.post(
+            "/transactions/import/confirm-preview",
+            json={
+                "account_id": self.account_id,
+                "rows": [
+                    {
+                        "date": "2026-03-16",
+                        "description": "OPENAI",
+                        "amount": 20.00,
+                        "type": "expense",
+                        "category": "S",
+                        "confidence": 0.94,
+                        "category_confidence": 0.90,
+                        "category_review_required": False,
+                    }
+                ],
+            },
+        )
+        self.assertEqual(confirm_response.status_code, 200, confirm_response.text)
+        self.assertEqual(confirm_response.json()["imported"], 0)
+        self.assertEqual(confirm_response.json()["invalid_rows_skipped"], 1)
+
+        with self.session_local() as session:
+            self.assertEqual(session.query(Transaction).filter(Transaction.description == "OPENAI").count(), 0)
+            self.assertEqual(session.query(CategoryMemory).filter(CategoryMemory.category == "s").count(), 0)
+
     def test_import_file_uses_north_america_merchant_taxonomy(self) -> None:
         pdf_bytes = build_text_pdf(
             [
@@ -2392,6 +2432,57 @@ class SmartImportRouteTest(unittest.TestCase):
 
         self.assertEqual(categories["Aesop Queen"], "personal")
         self.assertEqual(categories["Aesop King"], "personal")
+
+    def test_normalize_categories_route_repairs_accidental_single_letter_categories(self) -> None:
+        with self.session_local() as session:
+            session.add_all(
+                [
+                    Transaction(
+                        amount=20.00,
+                        category="S",
+                        description="OPENAI",
+                        date=date(2026, 3, 16),
+                        type="expense",
+                        owner_id=self.user_id,
+                        account_id=self.account_id,
+                    ),
+                    Transaction(
+                        amount=359.00,
+                        category="E",
+                        description="IDP EDUCATION LIMITED TORONTO ON",
+                        date=date(2026, 3, 17),
+                        type="expense",
+                        owner_id=self.user_id,
+                        account_id=self.account_id,
+                    ),
+                ]
+            )
+            session.commit()
+
+        normalize_response = self.client.post(
+            "/transactions/normalize-categories",
+            params={"account_id": self.account_id},
+        )
+        self.assertEqual(normalize_response.status_code, 200, normalize_response.text)
+        payload = normalize_response.json()
+        self.assertEqual(payload["updated_count"], 2)
+
+        with self.session_local() as session:
+            categories = {
+                transaction.description: transaction.category
+                for transaction in session.query(Transaction)
+                .filter(Transaction.description.in_(["OPENAI", "IDP EDUCATION LIMITED TORONTO ON"]))
+                .all()
+            }
+            short_category_memories = (
+                session.query(CategoryMemory)
+                .filter(CategoryMemory.owner_id == self.user_id, CategoryMemory.category.in_(["s", "e"]))
+                .count()
+            )
+
+        self.assertEqual(categories["OPENAI"], "subscriptions")
+        self.assertEqual(categories["IDP EDUCATION LIMITED TORONTO ON"], "education")
+        self.assertEqual(short_category_memories, 0)
 
     def test_bulk_category_preview_returns_rule_based_explanation(self) -> None:
         with self.session_local() as session:

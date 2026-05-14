@@ -48,6 +48,7 @@ from app.services.transaction_service import (
     get_transactions_page_for_user,
     get_transactions_for_user,
     get_uncategorized_candidates,
+    is_usable_category_name,
     merchant_category_amount_matches,
     normalize_category_name,
     normalize_existing_categories_for_user,
@@ -64,6 +65,14 @@ from app.services.transaction_service import (
 from app.services.unified_import_service import process_smart_import, process_smart_import_batch
 
 router = APIRouter(prefix="/transactions", tags=["Transactions"])
+
+
+def validate_transaction_category(category: str) -> None:
+    if not is_usable_category_name(category):
+        raise HTTPException(
+            status_code=400,
+            detail="Category must be at least 2 letters or numbers. Use a full category name, not a single key.",
+        )
 
 
 def save_category_memory_safely(
@@ -183,6 +192,7 @@ def create_transaction(
     current_user: User = Depends(get_current_user),
 ):
     ensure_default_account(db, current_user)
+    validate_transaction_category(transaction.category)
     account = get_account_for_user(db, current_user.id, transaction.account_id)
     if not account:
         raise HTTPException(status_code=404, detail="Account not found")
@@ -230,6 +240,7 @@ def update_transaction(
     if not transaction:
         raise HTTPException(status_code=404, detail="Transaction not found")
 
+    validate_transaction_category(updated_data.category)
     account = get_account_for_user(db, current_user.id, updated_data.account_id)
     if not account:
         raise HTTPException(status_code=404, detail="Account not found")
@@ -503,6 +514,10 @@ def confirm_preview_import(
             description = normalize_description(row.description)
             row_category = row.category
             row_needs_category_review = row.category_review_required
+            if not is_usable_category_name(row_category):
+                invalid_rows_skipped += 1
+                continue
+
             fingerprint = extract_merchant_fingerprint(description)
             if fingerprint:
                 learned_category = None
@@ -727,6 +742,7 @@ def apply_category_learning_candidate_route(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    validate_transaction_category(payload.category)
     if payload.account_id is not None:
         account = get_account_for_user(db, current_user.id, payload.account_id)
         if not account:

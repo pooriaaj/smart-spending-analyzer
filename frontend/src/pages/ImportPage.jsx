@@ -55,13 +55,23 @@ const isValidIsoDate = (value) => {
   return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
 };
 
+const isUsableCategoryName = (value = "") => {
+  const normalized = String(value || "").trim().toLowerCase().replace(/[_-]+/g, " ").replace(/\s+/g, " ");
+  if (!normalized) return false;
+  if (["other", "misc", "uncategorized", "unknown"].includes(normalized)) return true;
+
+  return normalized.replace(/[^a-z0-9]+/g, "").length >= 2;
+};
+
 const validatePreviewRow = (row, t) => {
+  const hasCategory = Boolean(row.category?.trim());
+  const categoryTooShort = hasCategory && !isUsableCategoryName(row.category);
   const fieldIssues = {
     date: !isValidIsoDate(row.date),
     description: !row.description?.trim(),
     amount: !Number.isFinite(Number(row.amount)) || Number(row.amount) <= 0,
     type: !ALLOWED_TRANSACTION_TYPES.has(row.type),
-    category: !row.category?.trim(),
+    category: !hasCategory || categoryTooShort,
   };
 
   const messages = [];
@@ -70,7 +80,8 @@ const validatePreviewRow = (row, t) => {
   if (fieldIssues.description) messages.push(t("import.addDescription"));
   if (fieldIssues.amount) messages.push(t("import.amountGreaterThanZero"));
   if (fieldIssues.type) messages.push(t("import.chooseIncomeExpense"));
-  if (fieldIssues.category) messages.push(t("import.addCategory"));
+  if (!hasCategory) messages.push(t("import.addCategory"));
+  if (categoryTooShort) messages.push(t("import.useFullCategoryName"));
 
   return {
     fieldIssues,
