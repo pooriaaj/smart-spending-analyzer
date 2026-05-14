@@ -395,7 +395,7 @@ function AnalyticsPage() {
     return topCategories.map((item, index) => ({
       ...item,
       fill: CATEGORY_PIE_COLORS[index % CATEGORY_PIE_COLORS.length],
-      percent: total > 0 ? (Number(item.total || 0) / total) * 100 : 0,
+      sharePercent: total > 0 ? (Number(item.total || 0) / total) * 100 : 0,
       label: `${item.category} ${total > 0 ? `${((Number(item.total || 0) / total) * 100).toFixed(0)}%` : ""}`,
     }));
   }, [mergedCategoryBreakdown]);
@@ -986,7 +986,7 @@ function AnalyticsPage() {
                         outerRadius={96}
                         paddingAngle={3}
                         labelLine={false}
-                        label={({ percent }) => `${(percent * 100).toFixed(0)}%`}
+                        label={({ payload }) => `${Number(payload?.sharePercent || 0).toFixed(0)}%`}
                         onClick={(entry) => handleCategoryDrilldown(entry?.category)}
                         cursor="pointer"
                       >
@@ -996,7 +996,7 @@ function AnalyticsPage() {
                       </Pie>
                       <Tooltip
                         formatter={(value, _name, props) => [
-                          `${formatMoney(value)} (${Number(props?.payload?.percent || 0).toFixed(1)}%)`,
+                          `${formatMoney(value)} (${Number(props?.payload?.sharePercent || 0).toFixed(1)}%)`,
                           props?.payload?.category || t("common.category"),
                         ]}
                         contentStyle={customTooltipStyle}
@@ -1015,7 +1015,7 @@ function AnalyticsPage() {
                         <span style={{ backgroundColor: item.fill }} />
                         <strong>{formatCategoryName(item.category, t)}</strong>
                         <em>{formatMoney(item.total)}</em>
-                        <small>{item.percent.toFixed(1)}%</small>
+                        <small>{item.sharePercent.toFixed(1)}%</small>
                       </button>
                     ))}
                   </div>
