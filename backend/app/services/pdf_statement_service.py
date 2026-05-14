@@ -249,6 +249,7 @@ class StatementProfile:
     extra_balance_markers: tuple[str, ...] = ()
     match_all_markers: bool = False
     balance_delta_type_inference: bool = False
+    default_amount_type: str | None = None
 
 
 @dataclass(frozen=True)
@@ -271,6 +272,28 @@ STATEMENT_PROFILES = (
             "royal bank of canada",
         ),
         match_all_markers=True,
+    ),
+    StatementProfile(
+        profile_id="rbc_visa",
+        display_name="RBC Visa",
+        detection_markers=("rbc", "visa", "activity description amount"),
+        parser_kind="rbc",
+        extra_noise_prefixes=(
+            "rbc avion visa",
+            "transaction date",
+            "posting date",
+            "date activity description amount",
+            "payments and interest rates",
+            "calculating your balance",
+        ),
+        extra_balance_markers=(
+            "total account balance",
+            "previous account balance",
+            "new balance",
+            "minimum payment",
+        ),
+        match_all_markers=True,
+        default_amount_type="expense",
     ),
     StatementProfile(
         profile_id="td",
@@ -1405,8 +1428,8 @@ def extract_transaction_date_from_line(
 
 
 def build_profile_notes(profile: StatementProfile) -> list[str]:
-    if profile.profile_id == "rbc":
-        return ["Detected bank profile: RBC. Using RBC-tuned parser."]
+    if profile.parser_kind == "rbc":
+        return [f"Detected bank profile: {profile.display_name}. Using RBC-tuned parser."]
     if profile.balance_delta_type_inference:
         return [
             (
@@ -1562,7 +1585,17 @@ def finalize_pending_transaction(
     if credit_card_credit:
         amount = abs(amount)
 
-    resolved_explicit_type = "income" if credit_card_credit else balance_inferred_type or explicit_type
+    default_profile_type = None
+    if (
+        profile
+        and profile.default_amount_type
+        and not credit_card_credit
+        and not balance_inferred_type
+        and not explicit_type
+    ):
+        default_profile_type = profile.default_amount_type
+
+    resolved_explicit_type = "income" if credit_card_credit else balance_inferred_type or explicit_type or default_profile_type
     tx_type = resolved_explicit_type or resolve_transaction_type(amount_text_1, raw_description)
     confidence, review_reason = build_preview_row_review_metadata(
         trailing_amounts=trailing_amounts,

@@ -286,11 +286,13 @@ Closing balance $1.00
         self.assertEqual(result["preview_rows"], [])
         self.assertIn("Statement says no activity for this period.", result["notes"])
 
-    def test_generic_credit_card_parser_skips_balance_and_explainer_sections(self) -> None:
+    def test_rbc_visa_parser_skips_balance_and_explainer_sections(self) -> None:
         text = """
 RBC Avion Visa Platinum
 STATEMENT FROM FEB 12 TO MAR 11, 2026
 TRANSACTION DATE POSTING DATE ACTIVITY DESCRIPTION AMOUNT ($)
+FEB 13 FEB 14 FOOD BASICS $25.66
+FEB 18 FEB 18 PAYMENT - THANK YOU $100.00
 MAR 11 MAR 11 PURCHASE INTEREST 20.99% $39.61
 MAR 11 Time to Pay If you make only the Minimum Payment each month, we estimate it will take 17 years to fully repay the outstanding balance Purchases & Fees 20.99
 TOTAL ACCOUNT BALANCE $2,092.07
@@ -314,11 +316,20 @@ Purchases & Fees 20.99%
             )
 
         preview_rows = result["preview_rows"]
-        self.assertEqual(len(preview_rows), 1)
-        self.assertEqual(preview_rows[0].date, "2026-03-11")
-        self.assertEqual(preview_rows[0].description, "PURCHASE INTEREST 20.99%")
+        self.assertEqual(result["notes"], ["Detected bank profile: RBC Visa. Using RBC-tuned parser."])
+        self.assertEqual(len(preview_rows), 3)
+        self.assertEqual(preview_rows[0].date, "2026-02-13")
+        self.assertEqual(preview_rows[0].description, "FOOD BASICS")
         self.assertEqual(preview_rows[0].type, "expense")
-        self.assertEqual(preview_rows[0].amount, 39.61)
+        self.assertEqual(preview_rows[0].amount, 25.66)
+        self.assertGreaterEqual(preview_rows[0].confidence, 0.9)
+        self.assertEqual(preview_rows[1].description, "PAYMENT - THANK YOU")
+        self.assertEqual(preview_rows[1].type, "income")
+        self.assertEqual(preview_rows[1].amount, 100.00)
+        self.assertEqual(preview_rows[2].date, "2026-03-11")
+        self.assertEqual(preview_rows[2].description, "PURCHASE INTEREST 20.99%")
+        self.assertEqual(preview_rows[2].type, "expense")
+        self.assertEqual(preview_rows[2].amount, 39.61)
 
     def test_parse_pdf_statement_preview_uses_generic_parser_with_shared_date_logic(self) -> None:
         text = """
