@@ -784,6 +784,33 @@ class SmartImportRouteTest(unittest.TestCase):
         self.assertEqual(preview_rows[0]["category_source"], "merchant_override")
         self.assertEqual(preview_rows[1]["category_source"], "rule")
 
+    def test_import_file_recognizes_education_testing_merchants(self) -> None:
+        pdf_bytes = build_text_pdf(
+            [
+                "Royal Bank of Canada",
+                "Details of your account activity",
+                "From March 2, 2026 to April 2, 2026",
+                "Date Description Withdrawals ($) Deposits ($) Balance ($)",
+                "3 Mar Contactless Interac purchase - 2301",
+                "IDP EDUCATION LIMITED TORONTO ON 359.00 100.00",
+                "4 Mar Contactless Interac purchase - 2302",
+                "BRITISH COUNCIL IELTS TORONTO ON 65.00 35.00",
+            ]
+        )
+
+        response = self.client.post(
+            "/transactions/import/file",
+            data={"account_id": str(self.account_id)},
+            files={"file": ("education-testing.pdf", pdf_bytes, "application/pdf")},
+        )
+
+        self.assertEqual(response.status_code, 200, response.text)
+        preview_rows = response.json()["preview_rows"]
+
+        self.assertEqual([row["category"] for row in preview_rows], ["education", "education"])
+        self.assertEqual(preview_rows[0]["category_source"], "merchant_override")
+        self.assertEqual(preview_rows[1]["category_source"], "merchant_override")
+
     def test_import_file_uses_north_america_merchant_taxonomy(self) -> None:
         pdf_bytes = build_text_pdf(
             [

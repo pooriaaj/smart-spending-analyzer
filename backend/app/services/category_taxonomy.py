@@ -354,6 +354,7 @@ MERCHANT_ALIAS_EXPANSION = {
     "canna cabana": "canna cabana",
     "foodbasics": "food basics",
     "google youtube": "youtube",
+    "idp education": "idp education",
     "mckibbins": "mckibbins",
     "mckibbins bisho": "mckibbins",
     "paiem periodiq apple com bill": "apple com bill",
@@ -393,6 +394,9 @@ MERCHANT_CATEGORY_OVERRIDES: dict[str, tuple[str, float]] = {
     "depanneur macka": ("groceries", 0.92),
     "etoile kebab": ("restaurant", 0.95),
     "hazelview prop": ("rent", 0.97),
+    "idp education": ("education", 0.96),
+    "idp education limited": ("education", 0.96),
+    "ielts": ("education", 0.94),
     "khorak super": ("groceries", 0.94),
     "khorak supermarket": ("groceries", 0.94),
     "kourosh super": ("groceries", 0.94),
@@ -423,6 +427,7 @@ CATEGORY_ALIAS_EXPANSION = {
     "rideshare": "transport",
     "streaming": "subscriptions",
     "transit": "transport",
+    "ielts": "education",
 }
 
 
@@ -716,6 +721,14 @@ CATEGORY_KEYWORD_EXPANSION: dict[str, tuple[str, ...]] = {
         "newegg",
         "source electronics",
         "staples",
+    ),
+    "education": (
+        "british council ielts",
+        "college board",
+        "idp education",
+        "ielts",
+        "pearson vue",
+        "toefl",
     ),
     "shopping": (
         "costco wholesale",
