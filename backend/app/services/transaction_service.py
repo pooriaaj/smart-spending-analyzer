@@ -3,6 +3,7 @@ from __future__ import annotations
 import csv
 import io
 import re
+import unicodedata
 from collections import Counter
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
@@ -647,6 +648,11 @@ def normalize_category_name(value: str | None) -> str:
         return "other"
 
     cleaned = value.strip().lower()
+    cleaned = (
+        unicodedata.normalize("NFD", cleaned)
+        .encode("ascii", "ignore")
+        .decode("ascii")
+    )
     cleaned = cleaned.replace("&", "and")
     cleaned = re.sub(r"[_\-]+", " ", cleaned)
     cleaned = re.sub(r"\s+", " ", cleaned).strip()
@@ -667,6 +673,19 @@ def normalize_category_name(value: str | None) -> str:
         return singular_map[cleaned]
 
     return cleaned
+
+
+def get_category_filter_values(category: str | None) -> set[str]:
+    normalized_category = normalize_category_name(category)
+    raw_category = str(category or "").strip().lower()
+    category_values = {normalized_category, raw_category}
+
+    for alias, canonical in CATEGORY_ALIASES.items():
+        if canonical == normalized_category:
+            category_values.add(normalize_category_name(alias))
+            category_values.add(alias.strip().lower())
+
+    return {value for value in category_values if value}
 
 
 def is_usable_category_name(value: str | None) -> bool:
@@ -2827,11 +2846,7 @@ def apply_transaction_filters(
         query = query.filter(Transaction.date >= month_start, Transaction.date < month_end)
 
     if category:
-        normalized_category = normalize_category_name(category)
-        category_values = {
-            normalized_category,
-            category.strip().lower(),
-        }
+        category_values = get_category_filter_values(category)
         query = query.filter(func.lower(Transaction.category).in_(tuple(category_values)))
 
     if description:

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import date, timedelta
 import re
+import unicodedata
 from typing import Any
 
 from sqlalchemy import case, func, or_
@@ -45,7 +46,7 @@ CASHFLOW_NEUTRAL_DESCRIPTION_MARKERS = (
 )
 
 ANALYTICS_CATEGORY_ALIASES = {
-    "cafe": {"cafe", "coffee"},
+    "cafe": {"cafe", "café", "coffee"},
     "car maintenance": {"car maintenance", "car_maintenance"},
     "debt": {"debt", "debt payment", "debt payments", "debt_payment", "debt_payments"},
     "education": {"education", "school", "tuition"},
@@ -76,6 +77,11 @@ def month_bucket_expression(db: Session):
 
 def normalize_analytics_category(value: str | None) -> str:
     cleaned = str(value or "").strip().lower().replace("&", "and")
+    cleaned = (
+        unicodedata.normalize("NFD", cleaned)
+        .encode("ascii", "ignore")
+        .decode("ascii")
+    )
     cleaned = re.sub(r"[_\-]+", " ", cleaned)
     return re.sub(r"\s+", " ", cleaned)
 
@@ -97,8 +103,9 @@ def analytics_category_alias_match(value: str | None) -> tuple[str, set[str]]:
 
     for canonical, aliases in ANALYTICS_CATEGORY_ALIASES.items():
         normalized_aliases = {normalize_analytics_category(alias) for alias in aliases}
+        raw_aliases = {str(alias or "").strip().lower() for alias in aliases if str(alias or "").strip()}
         if normalized == canonical or normalized in normalized_aliases:
-            return canonical, normalized_aliases | {canonical}
+            return canonical, normalized_aliases | raw_aliases | {canonical}
 
     return normalized, {normalized}
 

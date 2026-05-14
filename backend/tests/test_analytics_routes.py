@@ -203,6 +203,40 @@ class AnalyticsRouteTest(unittest.TestCase):
         self.assertEqual(response.status_code, 404, response.text)
         self.assertEqual(response.json()["detail"], "Account not found")
 
+    def test_category_breakdown_merges_accented_category_aliases(self) -> None:
+        with self.session_local() as session:
+            session.add_all(
+                [
+                    Transaction(
+                        amount=7.5,
+                        category="Café",
+                        description="Morning latte",
+                        date=date(2026, 4, 2),
+                        type="expense",
+                        owner_id=self.user_id,
+                        account_id=self.chequing_account_id,
+                    ),
+                    Transaction(
+                        amount=4.25,
+                        category="coffee",
+                        description="Afternoon coffee",
+                        date=date(2026, 4, 3),
+                        type="expense",
+                        owner_id=self.user_id,
+                        account_id=self.chequing_account_id,
+                    ),
+                ]
+            )
+            session.commit()
+
+        response = self.client.get(
+            "/analytics/category-breakdown",
+            params={"account_id": self.chequing_account_id, "category": "Cafe"},
+        )
+
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(response.json(), [{"category": "cafe", "total": 11.75}])
+
     def test_money_map_guides_empty_users_to_import(self) -> None:
         response = self.client.get("/analytics/money-map")
 

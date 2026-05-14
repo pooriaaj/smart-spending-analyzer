@@ -227,6 +227,18 @@ class SmartImportRouteTest(unittest.TestCase):
         self.assertEqual(filtered_payload["scope_total"], 3)
         self.assertEqual(filtered_payload["items"][0]["description"], "Metro grocery")
 
+        accented_category_response = self.client.get(
+            "/transactions/page",
+            params={
+                "account_id": self.account_id,
+                "category": "Café",
+            },
+        )
+        self.assertEqual(accented_category_response.status_code, 200, accented_category_response.text)
+        accented_category_payload = accented_category_response.json()
+        self.assertEqual(accented_category_payload["total"], 1)
+        self.assertEqual(accented_category_payload["items"][0]["description"], "Coffee")
+
     def test_update_transaction_applies_category_to_similar_account_rows(self) -> None:
         with self.session_local() as session:
             target = Transaction(
