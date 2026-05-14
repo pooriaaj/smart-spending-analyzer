@@ -244,6 +244,30 @@ class SmartImportRouteTest(unittest.TestCase):
         self.assertEqual(source_payload["items"][0]["entry_source"], "pdf_import")
         self.assertEqual(source_payload["items"][0]["import_file_name"], "april-statement.pdf")
 
+        invalid_source_response = self.client.get(
+            "/transactions/page",
+            params={
+                "account_id": self.account_id,
+                "entry_source": "spreadsheet_magic",
+            },
+        )
+        self.assertEqual(invalid_source_response.status_code, 400, invalid_source_response.text)
+        self.assertEqual(invalid_source_response.json()["detail"], "Entry source filter is not supported")
+
+        invalid_amount_range_response = self.client.get(
+            "/transactions/page",
+            params={
+                "account_id": self.account_id,
+                "amount_min": 100,
+                "amount_max": 50,
+            },
+        )
+        self.assertEqual(invalid_amount_range_response.status_code, 400, invalid_amount_range_response.text)
+        self.assertEqual(
+            invalid_amount_range_response.json()["detail"],
+            "Amount minimum must be lower than amount maximum",
+        )
+
         accented_category_response = self.client.get(
             "/transactions/page",
             params={

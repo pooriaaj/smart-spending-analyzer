@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import date, datetime, timezone
+from typing import get_args
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 from sqlalchemy.orm import Session
@@ -28,6 +29,7 @@ from app.schemas import (
     SuspiciousAmountRepairItem,
     SuspiciousAmountRepairPreviewResponse,
     TransactionCreate,
+    TransactionEntrySource,
     TransactionListResponse,
     TransactionResponse,
     TransactionSourceSummaryResponse,
@@ -67,6 +69,7 @@ from app.services.transaction_service import (
 from app.services.unified_import_service import process_smart_import, process_smart_import_batch
 
 router = APIRouter(prefix="/transactions", tags=["Transactions"])
+VALID_ENTRY_SOURCES = set(get_args(TransactionEntrySource))
 
 
 def validate_transaction_category(category: str) -> None:
@@ -180,6 +183,10 @@ def get_transactions_page(
 
     if transaction_type is not None and transaction_type not in {"income", "expense"}:
         raise HTTPException(status_code=400, detail="Transaction type must be income or expense")
+    if entry_source is not None and entry_source not in VALID_ENTRY_SOURCES:
+        raise HTTPException(status_code=400, detail="Entry source filter is not supported")
+    if amount_min is not None and amount_max is not None and amount_min >= amount_max:
+        raise HTTPException(status_code=400, detail="Amount minimum must be lower than amount maximum")
 
     try:
         result = get_transactions_page_for_user(
