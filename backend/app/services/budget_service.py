@@ -24,7 +24,13 @@ from app.services.budget_metrics import (
     compute_budget_status,
     get_default_budget_month,
 )
-from app.services.analytics_service import get_category_breakdown, get_summary, month_bucket_expression
+from app.services.analytics_service import (
+    cashflow_neutral_filter,
+    get_category_breakdown,
+    get_summary,
+    month_bucket_expression,
+    transaction_amount_magnitude_expression,
+)
 from app.services.transaction_service import normalize_category_name
 
 
@@ -158,11 +164,12 @@ def build_budget_suggestions(
     query = db.query(
         Transaction.category.label("category"),
         month_expr.label("month"),
-        func.coalesce(func.sum(Transaction.amount), 0.0).label("total"),
+        func.coalesce(func.sum(transaction_amount_magnitude_expression()), 0.0).label("total"),
     ).filter(
         Transaction.owner_id == owner_id,
         Transaction.type == "expense",
         month_expr.in_(month_labels),
+        ~cashflow_neutral_filter(),
     )
 
     if account_id is not None:
@@ -170,7 +177,7 @@ def build_budget_suggestions(
 
     rows = (
         query.group_by(Transaction.category, month_expr)
-        .order_by(func.sum(Transaction.amount).desc())
+        .order_by(func.sum(transaction_amount_magnitude_expression()).desc())
         .all()
     )
 

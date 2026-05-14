@@ -326,10 +326,19 @@ class BudgetRouteTest(unittest.TestCase):
                         account_id=self.chequing_account_id,
                     ),
                     Transaction(
-                        amount=60.0,
+                        amount=-60.0,
                         category="transport",
-                        description="Gas",
+                        description="Imported gas with negative sign",
                         date=date(2026, 2, 3),
+                        type="expense",
+                        owner_id=self.user_id,
+                        account_id=self.chequing_account_id,
+                    ),
+                    Transaction(
+                        amount=-900.0,
+                        category="transfer",
+                        description="Online transfer to savings",
+                        date=date(2026, 2, 4),
                         type="expense",
                         owner_id=self.user_id,
                         account_id=self.chequing_account_id,
@@ -359,6 +368,9 @@ class BudgetRouteTest(unittest.TestCase):
         self.assertEqual(top_suggestion["latest_month_spent"], 150.0)
         self.assertIn("current month pace", top_suggestion["note"].lower())
         self.assertTrue(all(item["category"] != "groceries" for item in suggestions))
+        self.assertTrue(all(item["category"] != "transfer" for item in suggestions))
+        transport_suggestion = next(item for item in suggestions if item["category"] == "transport")
+        self.assertEqual(transport_suggestion["suggested_amount"], 60.0)
 
     def test_copy_previous_month_budgets_copies_missing_and_skips_existing(self) -> None:
         with self.session_local() as session:
