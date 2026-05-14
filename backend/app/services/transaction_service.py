@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
 from typing import Iterable
 
-from sqlalchemy import func, or_
+from sqlalchemy import case, func, or_
 from sqlalchemy.orm import Session
 
 from app.models import (
@@ -42,6 +42,7 @@ CATEGORY_REVIEW_CONFIDENCE_THRESHOLD = 0.75
 CATEGORY_REVIEW_REQUIRED_SOURCES = {"fallback", "payment_processor"}
 EXPENSE_INCOMPATIBLE_CATEGORIES = {"income", "salary", "refund"}
 COMMUNITY_PROFILE_MIN_OWNER_COUNT = 2
+COMMUNITY_PROFILE_MIN_OWNER_CONFIRMATIONS = 2
 COMMUNITY_PROFILE_MIN_CATEGORY_SHARE = 0.67
 COMMUNITY_PROFILE_EXCLUDED_CATEGORIES = {
     "bank fees",
@@ -54,6 +55,22 @@ COMMUNITY_PROFILE_EXCLUDED_CATEGORIES = {
     "transfer",
 }
 MAX_TRANSACTION_PAGE_SIZE = 100
+TRANSACTION_SOURCE_LABELS = {
+    "manual": "Written transactions",
+    "manual_import_review": "Manual import review rows",
+    "csv_import": "CSV statement imports",
+    "pdf_import": "PDF statement imports",
+    "receipt_import": "Receipt imports",
+    "statement_import": "Statement imports",
+    "seed": "Demo seed data",
+}
+IMPORTED_TRANSACTION_SOURCES = {
+    "manual_import_review",
+    "csv_import",
+    "pdf_import",
+    "receipt_import",
+    "statement_import",
+}
 
 HEADER_ALIASES = {
     "date": {"date", "transaction_date", "posted_date"},
@@ -926,6 +943,8 @@ def build_community_profile_decision(
         if normalized_category in UNCATEGORIZED_VALUES:
             continue
         if normalized_category in COMMUNITY_PROFILE_EXCLUDED_CATEGORIES:
+            continue
+        if int(profile.confirmation_count or 0) < COMMUNITY_PROFILE_MIN_OWNER_CONFIRMATIONS:
             continue
         category_owners.setdefault(normalized_category, set()).add(profile.owner_id)
         category_confirmations[normalized_category] += max(1, int(profile.confirmation_count or 1))
@@ -2952,6 +2971,116 @@ def get_transaction_filter_options(db: Session, owner_id: int, account_id: int |
     return {
         "available_months": months,
         "available_categories": categories,
+    }
+
+
+def get_transaction_source_summary(
+    db: Session,
+    owner_id: int,
+    account_id: int | None = None,
+) -> dict:
+    scope_query = build_transaction_scope_query(db, owner_id, account_id=account_id)
+    source_expression = func.coalesce(Transaction.entry_source, "manual")
+    income_amount = case((Transaction.type == "income", func.abs(Transaction.amount)), else_=0.0)
+    expense_amount = case((Transaction.type == "expense", func.abs(Transaction.amount)), else_=0.0)
+    income_count = case((Transaction.type == "income", 1), else_=0)
+    expense_count = case((Transaction.type == "expense", 1), else_=0)
+
+    rows = (
+        scope_query.with_entities(
+            source_expression.label("entry_source"),
+            func.count(Transaction.id).label("transaction_count"),
+            func.coalesce(func.sum(income_count), 0).label("income_count"),
+            func.coalesce(func.sum(expense_count), 0).label("expense_count"),
+            func.coalesce(func.sum(income_amount), 0.0).label("total_income"),
+            func.coalesce(func.sum(expense_amount), 0.0).label("total_expenses"),
+            func.count(func.distinct(Transaction.import_file_name)).label("imported_file_count"),
+            func.max(Transaction.date).label("latest_transaction_date"),
+            func.max(Transaction.imported_at).label("latest_imported_at"),
+        )
+        .group_by(source_expression)
+        .all()
+    )
+
+    source_order = {
+        "manual": 0,
+        "manual_import_review": 1,
+        "pdf_import": 2,
+        "csv_import": 3,
+        "receipt_import": 4,
+        "statement_import": 5,
+        "seed": 6,
+    }
+    sources: list[dict] = []
+    total_transactions = 0
+    manual_count = 0
+    imported_count = 0
+    seed_count = 0
+    total_income = 0.0
+    total_expenses = 0.0
+    imported_file_count = 0
+    latest_imported_at = None
+
+    for row in rows:
+        entry_source = str(row.entry_source or "manual").strip().lower() or "manual"
+        transaction_count = int(row.transaction_count or 0)
+        row_income = round(float(row.total_income or 0.0), 2)
+        row_expenses = round(float(row.total_expenses or 0.0), 2)
+        row_file_count = int(row.imported_file_count or 0)
+        row_latest_imported_at = row.latest_imported_at
+
+        total_transactions += transaction_count
+        total_income += row_income
+        total_expenses += row_expenses
+        imported_file_count += row_file_count
+
+        if entry_source == "manual":
+            manual_count += transaction_count
+        elif entry_source == "seed":
+            seed_count += transaction_count
+        elif entry_source in IMPORTED_TRANSACTION_SOURCES:
+            imported_count += transaction_count
+
+        if row_latest_imported_at and (
+            latest_imported_at is None or row_latest_imported_at > latest_imported_at
+        ):
+            latest_imported_at = row_latest_imported_at
+
+        sources.append(
+            {
+                "entry_source": entry_source,
+                "label": TRANSACTION_SOURCE_LABELS.get(entry_source, entry_source.replace("_", " ").title()),
+                "transaction_count": transaction_count,
+                "income_count": int(row.income_count or 0),
+                "expense_count": int(row.expense_count or 0),
+                "total_income": row_income,
+                "total_expenses": row_expenses,
+                "balance": round(row_income - row_expenses, 2),
+                "imported_file_count": row_file_count,
+                "latest_transaction_date": row.latest_transaction_date,
+                "latest_imported_at": row_latest_imported_at,
+            }
+        )
+
+    sources.sort(
+        key=lambda item: (
+            source_order.get(item["entry_source"], 99),
+            -int(item["transaction_count"]),
+            item["entry_source"],
+        )
+    )
+
+    return {
+        "total_transactions": total_transactions,
+        "manual_count": manual_count,
+        "imported_count": imported_count,
+        "seed_count": seed_count,
+        "total_income": round(total_income, 2),
+        "total_expenses": round(total_expenses, 2),
+        "balance": round(total_income - total_expenses, 2),
+        "imported_file_count": imported_file_count,
+        "latest_imported_at": latest_imported_at,
+        "sources": sources,
     }
 
 

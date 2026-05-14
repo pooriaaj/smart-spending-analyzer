@@ -380,6 +380,33 @@ class TransactionListResponse(BaseModel):
     available_categories: list[str] = Field(default_factory=list)
 
 
+class TransactionSourceSummaryItem(BaseModel):
+    entry_source: str
+    label: str
+    transaction_count: int = 0
+    income_count: int = 0
+    expense_count: int = 0
+    total_income: float = 0.0
+    total_expenses: float = 0.0
+    balance: float = 0.0
+    imported_file_count: int = 0
+    latest_transaction_date: date | None = None
+    latest_imported_at: datetime | None = None
+
+
+class TransactionSourceSummaryResponse(BaseModel):
+    total_transactions: int = 0
+    manual_count: int = 0
+    imported_count: int = 0
+    seed_count: int = 0
+    total_income: float = 0.0
+    total_expenses: float = 0.0
+    balance: float = 0.0
+    imported_file_count: int = 0
+    latest_imported_at: datetime | None = None
+    sources: list[TransactionSourceSummaryItem] = Field(default_factory=list)
+
+
 class SuspiciousAmountRepairItem(BaseModel):
     transaction_id: int
     date: date

@@ -30,6 +30,7 @@ from app.schemas import (
     TransactionCreate,
     TransactionListResponse,
     TransactionResponse,
+    TransactionSourceSummaryResponse,
 )
 from app.services.account_service import ensure_default_account, get_account_for_user
 from app.services.seed_service import seed_realistic_transactions
@@ -45,6 +46,7 @@ from app.services.transaction_service import (
     get_existing_statement_match_map,
     get_category_learning_candidates,
     get_category_learning_summary,
+    get_transaction_source_summary,
     get_transactions_page_for_user,
     get_transactions_for_user,
     get_uncategorized_candidates,
@@ -88,16 +90,18 @@ def save_category_memory_safely(
     confidence: float = 1.0,
     affected_count: int = 1,
     record_event: bool = True,
+    store_memory: bool = True,
 ) -> None:
     try:
-        save_category_memory(
-            db=db,
-            owner_id=owner_id,
-            description=description,
-            category=category,
-            tx_type=tx_type,
-            amount=amount,
-        )
+        if store_memory:
+            save_category_memory(
+                db=db,
+                owner_id=owner_id,
+                description=description,
+                category=category,
+                tx_type=tx_type,
+                amount=amount,
+            )
         if record_event:
             record_category_learning_event(
                 db=db,
@@ -197,6 +201,24 @@ def get_transactions_page(
         raise HTTPException(status_code=400, detail=str(exc))
 
     return TransactionListResponse(**result)
+
+
+@router.get("/sources/summary", response_model=TransactionSourceSummaryResponse)
+def get_transaction_sources_summary(
+    account_id: int | None = Query(default=None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    ensure_default_account(db, current_user)
+
+    if account_id is not None:
+        account = get_account_for_user(db, current_user.id, account_id)
+        if not account:
+            raise HTTPException(status_code=404, detail="Account not found")
+
+    return TransactionSourceSummaryResponse(
+        **get_transaction_source_summary(db, current_user.id, account_id=account_id)
+    )
 
 
 @router.post("/", response_model=TransactionResponse)
@@ -636,6 +658,7 @@ def confirm_preview_import(
 
     try:
         for event in category_memory_events:
+            user_reviewed_category = str(event["source"]).startswith("user_")
             save_category_memory_safely(
                 db=db,
                 owner_id=current_user.id,
@@ -646,11 +669,12 @@ def confirm_preview_import(
                 account_id=event["account_id"],
                 signal_source=(
                     "import_review"
-                    if str(event["source"]).startswith("user_")
+                    if user_reviewed_category
                     else "import_confirm"
                 ),
                 confidence=float(event.get("confidence") or 0.0),
-                record_event=str(event["source"]).startswith("user_"),
+                record_event=user_reviewed_category,
+                store_memory=user_reviewed_category,
             )
         db.commit()
     except Exception:

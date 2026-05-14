@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import unittest
 from collections.abc import Generator
-from datetime import date
+from datetime import date, datetime, timezone
 from unittest.mock import patch
 
 from fastapi import FastAPI
@@ -255,6 +255,95 @@ class SmartImportRouteTest(unittest.TestCase):
         accented_category_payload = accented_category_response.json()
         self.assertEqual(accented_category_payload["total"], 1)
         self.assertEqual(accented_category_payload["items"][0]["description"], "Coffee")
+
+    def test_transaction_source_summary_audits_manual_import_and_seed_rows(self) -> None:
+        imported_at = datetime(2026, 4, 12, 9, 30, tzinfo=timezone.utc)
+        with self.session_local() as session:
+            session.add_all(
+                [
+                    Transaction(
+                        amount=25.00,
+                        category="groceries",
+                        description="Manual grocery",
+                        date=date(2026, 4, 10),
+                        type="expense",
+                        entry_source="manual",
+                        owner_id=self.user_id,
+                        account_id=self.account_id,
+                    ),
+                    Transaction(
+                        amount=100.00,
+                        category="transfer",
+                        description="Manual transfer in",
+                        date=date(2026, 4, 11),
+                        type="income",
+                        entry_source="manual",
+                        owner_id=self.user_id,
+                        account_id=self.account_id,
+                    ),
+                    Transaction(
+                        amount=-50.00,
+                        category="restaurant",
+                        description="Imported dinner",
+                        date=date(2026, 4, 12),
+                        type="expense",
+                        entry_source="pdf_import",
+                        import_file_name="april-statement.pdf",
+                        import_file_type="pdf_statement",
+                        imported_at=imported_at,
+                        owner_id=self.user_id,
+                        account_id=self.account_id,
+                    ),
+                    Transaction(
+                        amount=20.00,
+                        category="income",
+                        description="CSV deposit",
+                        date=date(2026, 4, 13),
+                        type="income",
+                        entry_source="csv_import",
+                        import_file_name="april-export.csv",
+                        import_file_type="csv_statement",
+                        imported_at=imported_at,
+                        owner_id=self.user_id,
+                        account_id=self.account_id,
+                    ),
+                    Transaction(
+                        amount=9.00,
+                        category="demo",
+                        description="Demo seed row",
+                        date=date(2026, 4, 14),
+                        type="expense",
+                        entry_source="seed",
+                        owner_id=self.user_id,
+                        account_id=self.account_id,
+                    ),
+                ]
+            )
+            session.commit()
+
+        response = self.client.get(
+            "/transactions/sources/summary",
+            params={"account_id": self.account_id},
+        )
+
+        self.assertEqual(response.status_code, 200, response.text)
+        payload = response.json()
+        self.assertEqual(payload["total_transactions"], 5)
+        self.assertEqual(payload["manual_count"], 2)
+        self.assertEqual(payload["imported_count"], 2)
+        self.assertEqual(payload["seed_count"], 1)
+        self.assertEqual(payload["total_income"], 120.0)
+        self.assertEqual(payload["total_expenses"], 84.0)
+        self.assertEqual(payload["balance"], 36.0)
+        self.assertEqual(payload["imported_file_count"], 2)
+
+        sources = {item["entry_source"]: item for item in payload["sources"]}
+        self.assertEqual(sources["manual"]["label"], "Written transactions")
+        self.assertEqual(sources["manual"]["transaction_count"], 2)
+        self.assertEqual(sources["pdf_import"]["total_expenses"], 50.0)
+        self.assertEqual(sources["pdf_import"]["imported_file_count"], 1)
+        self.assertEqual(sources["csv_import"]["total_income"], 20.0)
+        self.assertEqual(sources["seed"]["transaction_count"], 1)
 
     def test_update_transaction_applies_category_to_similar_account_rows(self) -> None:
         with self.session_local() as session:
@@ -707,6 +796,60 @@ class SmartImportRouteTest(unittest.TestCase):
         self.assertNotEqual(preview_row["category_source"], "community_profile")
         self.assertNotEqual(preview_row["category"], "clothing")
 
+    def test_community_learning_ignores_single_confirmation_profiles(self) -> None:
+        with self.session_local() as session:
+            first_user = User(email="community-single-one@example.com", password_hash="hashed")
+            second_user = User(email="community-single-two@example.com", password_hash="hashed")
+            session.add_all([first_user, second_user])
+            session.flush()
+            session.add_all(
+                [
+                    MerchantCategoryProfile(
+                        merchant_key="glimmerbox",
+                        display_name="Glimmerbox",
+                        category="entertainment",
+                        transaction_type="expense",
+                        confidence=0.90,
+                        confirmation_count=1,
+                        last_amount=18.0,
+                        owner_id=first_user.id,
+                    ),
+                    MerchantCategoryProfile(
+                        merchant_key="glimmerbox",
+                        display_name="Glimmerbox",
+                        category="entertainment",
+                        transaction_type="expense",
+                        confidence=0.90,
+                        confirmation_count=1,
+                        last_amount=19.0,
+                        owner_id=second_user.id,
+                    ),
+                ]
+            )
+            session.commit()
+
+        pdf_bytes = build_text_pdf(
+            [
+                "Royal Bank of Canada",
+                "Details of your account activity",
+                "From March 2, 2026 to April 2, 2026",
+                "Date Description Withdrawals ($) Deposits ($) Balance ($)",
+                "3 Mar Contactless Interac purchase - 3001",
+                "GLIMMERBOX 18.00 56.00",
+            ]
+        )
+
+        response = self.client.post(
+            "/transactions/import/file",
+            data={"account_id": str(self.account_id)},
+            files={"file": ("low-confirmation-community.pdf", pdf_bytes, "application/pdf")},
+        )
+
+        self.assertEqual(response.status_code, 200, response.text)
+        preview_row = response.json()["preview_rows"][0]
+        self.assertNotEqual(preview_row["category_source"], "community_profile")
+        self.assertNotEqual(preview_row["category"], "entertainment")
+
     def test_import_file_uses_expanded_lifestyle_categories(self) -> None:
         pdf_bytes = build_text_pdf(
             [
@@ -895,6 +1038,47 @@ class SmartImportRouteTest(unittest.TestCase):
         with self.session_local() as session:
             self.assertEqual(session.query(Transaction).filter(Transaction.description == "OPENAI").count(), 0)
             self.assertEqual(session.query(CategoryMemory).filter(CategoryMemory.category == "s").count(), 0)
+
+    def test_confirm_preview_import_only_trains_memory_after_user_review(self) -> None:
+        confirm_response = self.client.post(
+            "/transactions/import/confirm-preview",
+            json={
+                "account_id": self.account_id,
+                "rows": [
+                    {
+                        "date": "2026-03-16",
+                        "description": "GLIMMERBOX",
+                        "amount": 18.00,
+                        "type": "expense",
+                        "category": "Entertainment",
+                        "confidence": 0.94,
+                        "category_confidence": 0.88,
+                        "category_source": "merchant_semantic",
+                        "category_review_required": False,
+                    }
+                ],
+            },
+        )
+        self.assertEqual(confirm_response.status_code, 200, confirm_response.text)
+        self.assertEqual(confirm_response.json()["imported"], 1)
+
+        with self.session_local() as session:
+            self.assertEqual(session.query(Transaction).filter(Transaction.description == "GLIMMERBOX").count(), 1)
+            self.assertEqual(
+                session.query(MerchantCategoryProfile)
+                .filter(
+                    MerchantCategoryProfile.owner_id == self.user_id,
+                    MerchantCategoryProfile.merchant_key == "glimmerbox",
+                )
+                .count(),
+                0,
+            )
+            self.assertEqual(
+                session.query(CategoryLearningEvent)
+                .filter(CategoryLearningEvent.owner_id == self.user_id)
+                .count(),
+                0,
+            )
 
     def test_import_file_uses_north_america_merchant_taxonomy(self) -> None:
         pdf_bytes = build_text_pdf(
