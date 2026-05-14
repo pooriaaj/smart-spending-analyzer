@@ -929,6 +929,37 @@ class SmartImportRouteTest(unittest.TestCase):
         )
         self.assertTrue(all(row["category_source"] == "rule" for row in preview_rows))
 
+    def test_import_file_recognizes_verified_local_merchant_gaps(self) -> None:
+        pdf_bytes = build_text_pdf(
+            [
+                "Royal Bank of Canada",
+                "Details of your account activity",
+                "From March 2, 2026 to April 2, 2026",
+                "Date Description Withdrawals ($) Deposits ($) Balance ($)",
+                "14 Mar Contactless Interac purchase - 4001",
+                "PARADISE AIR NORTH YORK ON 5.63 300.00",
+                "15 Mar Contactless Interac purchase - 4002",
+                "SHATTER ABBAS EXPRESS TORONTO ON 77.67 222.33",
+                "16 Mar Contactless Interac purchase - 4003",
+                "LONGO'S #10 TORONTO ON 25.64 196.69",
+            ]
+        )
+
+        response = self.client.post(
+            "/transactions/import/file",
+            data={"account_id": str(self.account_id)},
+            files={"file": ("verified-local-merchants.pdf", pdf_bytes, "application/pdf")},
+        )
+
+        self.assertEqual(response.status_code, 200, response.text)
+        preview_rows = response.json()["preview_rows"]
+
+        self.assertEqual(
+            [row["category"] for row in preview_rows],
+            ["smoking", "restaurant", "groceries"],
+        )
+        self.assertTrue(all(row["category_source"] == "merchant_override" for row in preview_rows))
+
     def test_batch_statement_import_accepts_up_to_six_files(self) -> None:
         csv_one = (
             "Date,Description,Amount,Type,Category\n"
