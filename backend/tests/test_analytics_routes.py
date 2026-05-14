@@ -239,6 +239,61 @@ class AnalyticsRouteTest(unittest.TestCase):
         self.assertEqual(response.status_code, 200, response.text)
         self.assertEqual(response.json(), [{"category": "cafe", "total": 11.75}])
 
+    def test_analytics_treats_signed_imported_amounts_by_transaction_type(self) -> None:
+        with self.session_local() as session:
+            session.add_all(
+                [
+                    Transaction(
+                        amount=-500.0,
+                        category="Salary",
+                        description="Imported payroll with negative sign",
+                        date=date(2026, 4, 1),
+                        type="income",
+                        owner_id=self.user_id,
+                        account_id=self.chequing_account_id,
+                    ),
+                    Transaction(
+                        amount=-75.0,
+                        category="Groceries",
+                        description="Imported grocery with negative sign",
+                        date=date(2026, 4, 2),
+                        type="expense",
+                        owner_id=self.user_id,
+                        account_id=self.chequing_account_id,
+                    ),
+                ]
+            )
+            session.commit()
+
+        summary_response = self.client.get(
+            "/analytics/summary",
+            params={"account_id": self.chequing_account_id, "month": "2026-04"},
+        )
+        category_response = self.client.get(
+            "/analytics/category-breakdown",
+            params={"account_id": self.chequing_account_id, "month": "2026-04"},
+        )
+        monthly_response = self.client.get(
+            "/analytics/monthly-summary",
+            params={
+                "account_id": self.chequing_account_id,
+                "start_date": "2026-04-01",
+                "end_date": "2026-04-30",
+            },
+        )
+
+        self.assertEqual(summary_response.status_code, 200, summary_response.text)
+        self.assertEqual(category_response.status_code, 200, category_response.text)
+        self.assertEqual(monthly_response.status_code, 200, monthly_response.text)
+
+        self.assertEqual(summary_response.json()["total_income"], 500.0)
+        self.assertEqual(summary_response.json()["total_expenses"], 75.0)
+        self.assertEqual(summary_response.json()["balance"], 425.0)
+        self.assertEqual(category_response.json(), [{"category": "groceries", "total": 75.0}])
+        self.assertEqual(monthly_response.json()[0]["income"], 500.0)
+        self.assertEqual(monthly_response.json()[0]["expenses"], 75.0)
+        self.assertEqual(monthly_response.json()[0]["balance"], 425.0)
+
     def test_money_map_guides_empty_users_to_import(self) -> None:
         response = self.client.get("/analytics/money-map")
 

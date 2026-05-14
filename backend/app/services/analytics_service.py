@@ -136,6 +136,18 @@ def cashflow_neutral_filter():
     )
 
 
+def transaction_amount_magnitude_expression():
+    return func.abs(func.coalesce(Transaction.amount, 0.0))
+
+
+def income_amount_expression():
+    return case((Transaction.type == "income", transaction_amount_magnitude_expression()), else_=0.0)
+
+
+def expense_amount_expression():
+    return case((Transaction.type == "expense", transaction_amount_magnitude_expression()), else_=0.0)
+
+
 def build_filtered_query(
     db: Session,
     user_id: int,
@@ -194,11 +206,11 @@ def get_summary(
         account_id=account_id,
     ).with_entities(
         func.coalesce(
-            func.sum(case((Transaction.type == "income", Transaction.amount), else_=0.0)),
+            func.sum(income_amount_expression()),
             0.0,
         ).label("total_income"),
         func.coalesce(
-            func.sum(case((Transaction.type == "expense", Transaction.amount), else_=0.0)),
+            func.sum(expense_amount_expression()),
             0.0,
         ).label("total_expenses"),
     )
@@ -252,13 +264,14 @@ def get_category_breakdown(
         account_id=account_id,
     ).filter(Transaction.type == "expense")
 
+    expense_total_expression = func.coalesce(func.sum(transaction_amount_magnitude_expression()), 0.0)
     rows = (
         query.with_entities(
             Transaction.category.label("category"),
-            func.coalesce(func.sum(Transaction.amount), 0.0).label("total"),
+            expense_total_expression.label("total"),
         )
         .group_by(Transaction.category)
-        .order_by(func.sum(Transaction.amount).desc())
+        .order_by(expense_total_expression.desc())
         .all()
     )
 
@@ -291,11 +304,11 @@ def get_monthly_summary(
         query.with_entities(
             month_expr.label("month"),
             func.coalesce(
-                func.sum(case((Transaction.type == "income", Transaction.amount), else_=0.0)),
+                func.sum(income_amount_expression()),
                 0.0,
             ).label("income"),
             func.coalesce(
-                func.sum(case((Transaction.type == "expense", Transaction.amount), else_=0.0)),
+                func.sum(expense_amount_expression()),
                 0.0,
             ).label("expenses"),
         )
@@ -933,7 +946,7 @@ def build_simulation_reduction_plan(
         query = db.query(
             Transaction.category.label("category"),
             month_expr.label("month"),
-            func.coalesce(func.sum(Transaction.amount), 0.0).label("total"),
+            func.coalesce(func.sum(transaction_amount_magnitude_expression()), 0.0).label("total"),
         ).filter(
             Transaction.owner_id == user_id,
             Transaction.type == "expense",
@@ -946,7 +959,7 @@ def build_simulation_reduction_plan(
 
         rows = (
             query.group_by(Transaction.category, month_expr)
-            .order_by(func.sum(Transaction.amount).desc())
+            .order_by(func.sum(transaction_amount_magnitude_expression()).desc())
             .all()
         )
 
