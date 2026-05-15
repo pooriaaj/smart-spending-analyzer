@@ -13,6 +13,9 @@ POSTGRES_COMPATIBILITY_STATEMENTS = (
     # create_all() does not add columns to existing production tables.
     "ALTER TABLE category_learning_events ADD COLUMN IF NOT EXISTS amount_bucket VARCHAR(20)",
     "ALTER TABLE transactions ADD COLUMN IF NOT EXISTS entry_source VARCHAR(40) DEFAULT 'manual'",
+    "ALTER TABLE transactions ADD COLUMN IF NOT EXISTS category_confidence DOUBLE PRECISION DEFAULT 0",
+    "ALTER TABLE transactions ADD COLUMN IF NOT EXISTS category_source VARCHAR(80)",
+    "ALTER TABLE transactions ADD COLUMN IF NOT EXISTS category_reason VARCHAR(500)",
     "ALTER TABLE transactions ADD COLUMN IF NOT EXISTS import_file_name VARCHAR(255)",
     "ALTER TABLE transactions ADD COLUMN IF NOT EXISTS import_file_type VARCHAR(40)",
     "ALTER TABLE transactions ADD COLUMN IF NOT EXISTS imported_at TIMESTAMP WITH TIME ZONE",

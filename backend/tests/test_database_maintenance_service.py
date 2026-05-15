@@ -33,6 +33,9 @@ class DatabaseMaintenanceServiceTest(unittest.TestCase):
             }
 
             self.assertIn("entry_source", transaction_columns)
+            self.assertIn("category_confidence", transaction_columns)
+            self.assertIn("category_source", transaction_columns)
+            self.assertIn("category_reason", transaction_columns)
             self.assertIn("import_file_name", transaction_columns)
             self.assertIn("import_file_type", transaction_columns)
             self.assertIn("imported_at", transaction_columns)

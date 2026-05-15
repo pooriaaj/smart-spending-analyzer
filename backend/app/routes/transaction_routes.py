@@ -315,6 +315,9 @@ def create_transaction(
     new_transaction = Transaction(
         amount=transaction.amount,
         category=normalize_category_name(transaction.category),
+        category_confidence=1.0,
+        category_source="manual",
+        category_reason="User entered this category manually.",
         description=transaction.description,
         date=transaction.date,
         type=transaction.type,
@@ -363,6 +366,9 @@ def update_transaction(
 
     transaction.amount = updated_data.amount
     transaction.category = normalize_category_name(updated_data.category)
+    transaction.category_confidence = 1.0
+    transaction.category_source = "manual_edit"
+    transaction.category_reason = "User edited this category manually."
     transaction.description = updated_data.description
     transaction.date = updated_data.date
     transaction.type = updated_data.type
@@ -377,6 +383,9 @@ def update_transaction(
         amount=updated_data.amount,
         account_id=updated_data.account_id,
         signal_source="manual_edit",
+        category_source="manual_edit",
+        category_confidence=1.0,
+        category_reason="User edited a similar transaction category manually.",
     )
     db.commit()
     db.refresh(transaction)
@@ -707,6 +716,13 @@ def confirm_preview_import(
             transaction = Transaction(
                 amount=row.amount,
                 category=normalized_category,
+                category_confidence=row.category_confidence or 0.0,
+                category_source=row.category_source or "import_review",
+                category_reason=(
+                    row.category_reason
+                    or row.category_review_reason
+                    or "Saved from the statement import review flow."
+                ),
                 description=description,
                 date=tx_date,
                 type=row.type,

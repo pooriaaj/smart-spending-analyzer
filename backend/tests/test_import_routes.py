@@ -650,6 +650,26 @@ class SmartImportRouteTest(unittest.TestCase):
         self.assertEqual(payload["items"][0]["transaction_count"], 1)
         self.assertEqual(payload["items"][0]["total_expenses"], 52.5)
 
+    def test_create_transaction_returns_manual_category_audit_fields(self) -> None:
+        response = self.client.post(
+            "/transactions/",
+            json={
+                "amount": 18.50,
+                "category": "Groceries",
+                "description": "LOCAL MARKET",
+                "date": "2026-03-16",
+                "type": "expense",
+                "account_id": self.account_id,
+            },
+        )
+
+        self.assertEqual(response.status_code, 200, response.text)
+        payload = response.json()
+        self.assertEqual(payload["category"], "groceries")
+        self.assertEqual(payload["category_source"], "manual")
+        self.assertEqual(payload["category_confidence"], 1.0)
+        self.assertIn("manually", payload["category_reason"])
+
     def test_update_transaction_applies_category_to_similar_account_rows(self) -> None:
         with self.session_local() as session:
             target = Transaction(
@@ -699,8 +719,11 @@ class SmartImportRouteTest(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200, response.text)
         self.assertEqual(response.json()["category"], "smoking")
+        self.assertEqual(response.json()["category_source"], "manual_edit")
+        self.assertEqual(response.json()["category_confidence"], 1.0)
 
         with self.session_local() as session:
+            target = session.get(Transaction, target_id)
             sibling = session.get(Transaction, sibling_id)
             legacy_row = session.get(Transaction, legacy_row_id)
             event = (
@@ -712,7 +735,11 @@ class SmartImportRouteTest(unittest.TestCase):
                 .one()
             )
 
+            self.assertEqual(target.category_source, "manual_edit")
+            self.assertEqual(target.category_confidence, 1.0)
             self.assertEqual(sibling.category, "smoking")
+            self.assertEqual(sibling.category_source, "manual_edit")
+            self.assertEqual(sibling.category_confidence, 1.0)
             self.assertEqual(legacy_row.category, "other")
             self.assertEqual(event.signal_source, "manual_edit")
             self.assertEqual(event.affected_count, 2)
@@ -1359,6 +1386,7 @@ class SmartImportRouteTest(unittest.TestCase):
                         "confidence": 0.94,
                         "category_confidence": 0.88,
                         "category_source": "merchant_semantic",
+                        "category_reason": "Matched a semantic merchant profile.",
                         "category_review_required": False,
                     }
                 ],
@@ -1368,7 +1396,15 @@ class SmartImportRouteTest(unittest.TestCase):
         self.assertEqual(confirm_response.json()["imported"], 1)
 
         with self.session_local() as session:
-            self.assertEqual(session.query(Transaction).filter(Transaction.description == "GLIMMERBOX").count(), 1)
+            transaction = (
+                session.query(Transaction)
+                .filter(Transaction.description == "GLIMMERBOX")
+                .one()
+            )
+            self.assertEqual(transaction.category, "entertainment")
+            self.assertEqual(transaction.category_source, "merchant_semantic")
+            self.assertEqual(transaction.category_confidence, 0.88)
+            self.assertEqual(transaction.category_reason, "Matched a semantic merchant profile.")
             self.assertEqual(
                 session.query(MerchantCategoryProfile)
                 .filter(

@@ -362,6 +362,9 @@ class TransactionResponse(ORMBaseModel):
     id: int
     amount: float
     category: str
+    category_confidence: float = 0.0
+    category_source: str | None = None
+    category_reason: str | None = None
     description: str
     date: date
     type: TransactionType

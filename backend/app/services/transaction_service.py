@@ -1284,6 +1284,9 @@ def apply_category_to_similar_transactions(
     amount: float | None = None,
     account_id: int | None = None,
     signal_source: str | None = None,
+    category_source: str | None = None,
+    category_confidence: float | None = None,
+    category_reason: str | None = None,
 ) -> int:
     normalized_category = normalize_category_name(category)
     if not should_store_category_memory(normalized_category):
@@ -1314,6 +1317,15 @@ def apply_category_to_similar_transactions(
             continue
 
         transaction.category = normalized_category
+        transaction.category_source = category_source or signal_source or "similar_category_update"
+        transaction.category_confidence = max(
+            0.0,
+            min(1.0, float(category_confidence if category_confidence is not None else 0.9)),
+        )
+        transaction.category_reason = (
+            category_reason
+            or "Applied because this transaction matched a merchant pattern the user corrected."
+        )
         updated_count += 1
 
     return updated_count
@@ -1625,6 +1637,11 @@ def apply_category_to_merchant_learning_group(
             representative_transaction = transaction
         if normalize_category_name(transaction.category) != normalized_category:
             transaction.category = normalized_category
+            transaction.category_source = "learning_apply"
+            transaction.category_confidence = 1.0
+            transaction.category_reason = (
+                "Applied from a user-confirmed merchant learning group."
+            )
             updated_count += 1
 
     if representative_transaction is not None:
@@ -2829,16 +2846,37 @@ def import_transactions_from_csv(
             tx_type, amount = infer_type_and_amount(row, header_mapping)
 
             if header_mapping.get("category") and row.get(header_mapping["category"]):
+                supplied_category = normalize_category_name(row[header_mapping["category"]])
                 category = resolve_import_category_for_transaction(
                     db=db,
                     owner_id=owner_id,
                     description=description,
                     tx_type=tx_type,
-                    category=row[header_mapping["category"]],
+                    category=supplied_category,
                     amount=amount,
                 )
+                if category != supplied_category:
+                    category_confidence = 0.88
+                    category_source = "rule"
+                    category_reason = (
+                        "Corrected a statement category that conflicted with the transaction direction."
+                    )
+                else:
+                    category_confidence = 1.0
+                    category_source = "statement"
+                    category_reason = "Used the category supplied by the statement file."
             else:
-                category = categorize_transaction(db, owner_id, description, tx_type, amount=amount)
+                category_decision = categorize_transaction_details(
+                    db=db,
+                    owner_id=owner_id,
+                    description=description,
+                    tx_type=tx_type,
+                    amount=amount,
+                )
+                category = category_decision.category
+                category_confidence = category_decision.confidence
+                category_source = category_decision.source
+                category_reason = category_decision.reason
 
             if not description or not category:
                 raise ValueError("Description and category are required.")
@@ -2863,6 +2901,9 @@ def import_transactions_from_csv(
                 Transaction(
                     amount=amount,
                     category=category,
+                    category_confidence=category_confidence,
+                    category_source=category_source,
+                    category_reason=category_reason,
                     description=description,
                     date=tx_date,
                     type=tx_type,
@@ -3624,6 +3665,9 @@ def apply_bulk_categories(
         new_category = normalize_category_name(suggested_category_map.get(transaction.id))
         if new_category and transaction.category != new_category:
             transaction.category = new_category
+            transaction.category_source = "bulk_apply"
+            transaction.category_confidence = 0.88
+            transaction.category_reason = "Applied from the smart categorization bulk review workflow."
             updated_count += 1
             memory_stats = save_category_memory(
                 db=db,
@@ -3704,6 +3748,15 @@ def normalize_existing_categories_for_user(
 
         if old_category != new_category:
             transaction.category = new_category
+            transaction.category_source = "normalize_existing"
+            transaction.category_confidence = (
+                category_decision.confidence if should_apply_suggestion else 0.8
+            )
+            transaction.category_reason = (
+                category_decision.reason
+                if should_apply_suggestion
+                else "Normalized a legacy category label into the supported category taxonomy."
+            )
             updated_count += 1
             if old_category not in changes:
                 changes[old_category] = new_category
