@@ -30,6 +30,7 @@ from app.services.analytics_service import (
 from app.services.budget_metrics import build_budget_action_insights, get_default_budget_month
 from app.services.llm_service import generate_llm_assistant_response
 from app.services.saved_scenario_service import list_saved_scenarios
+from app.services.transaction_service import get_transaction_data_quality_report
 
 def extract_recent_context(history: list[Any]) -> str:
     context_lines: list[str] = []
@@ -47,6 +48,21 @@ def extract_recent_context(history: list[Any]) -> str:
             context_lines.append(f"Assistant: {content}")
 
     return "\n".join(context_lines)
+
+
+def build_data_quality_supporting_point(data_quality: dict[str, Any]) -> str | None:
+    quality_level = str(data_quality.get("quality_level") or "empty").lower()
+    if quality_level == "high":
+        return None
+
+    score = float(data_quality.get("quality_score") or 0.0)
+    action_count = len(data_quality.get("actions") or [])
+    message = str(data_quality.get("message") or "Review transaction data before relying on predictions.")
+    return (
+        f"Data quality: {quality_level} ({score * 100:.0f}% confidence). "
+        f"{message} Review items: {action_count}."
+    )
+
 
 def get_saved_scenario_risk_rank(risk_level: str | None) -> int:
     if risk_level == "healthy":
@@ -775,6 +791,17 @@ def build_assistant_actions(
     target_category = focus_category or driver_category or top_category
     target_transaction_type = focus_transaction_type if focus_category else "expense"
     target_label_suffix = "transactions" if target_transaction_type == "income" else "expenses"
+    data_quality_level = str(snapshot.get("data_quality_level") or "high").lower()
+
+    if data_quality_level in {"empty", "low", "medium"}:
+        actions.append(
+            {
+                "label": "Review data quality",
+                "page": "transactions",
+                "section": "review",
+                "account_id": account_id,
+            }
+        )
 
     if intent == "balance":
         actions.append(
@@ -1310,6 +1337,11 @@ def generate_assistant_response(
     history = history or []
     snapshot = build_financial_snapshot(db, user_id, account_id=account_id)
     snapshot["scope_label"] = scope_label
+    data_quality = get_transaction_data_quality_report(db, user_id, account_id=account_id)
+    snapshot["data_quality_level"] = data_quality["quality_level"]
+    snapshot["data_quality_score"] = data_quality["quality_score"]
+    snapshot["data_quality_message"] = data_quality["message"]
+    snapshot["data_review_action_count"] = len(data_quality["actions"])
     category_trends = get_category_trends(db, user_id, account_id=account_id)
     overspending_alerts = get_overspending_alerts(db, user_id, account_id=account_id)
     recent_transactions = get_recent_transactions(
@@ -2955,6 +2987,10 @@ def generate_assistant_response(
             f"Total income: {format_currency(total_income)}",
             f"Total expenses: {format_currency(total_expenses)}",
         ]
+
+        data_quality_point = build_data_quality_supporting_point(data_quality)
+        if data_quality_point:
+            supporting_points.append(data_quality_point)
 
         if top_category:
             supporting_points.append(

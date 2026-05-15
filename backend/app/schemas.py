@@ -284,6 +284,10 @@ class FutureSimulationReductionItem(BaseModel):
 
 class FutureSimulationResponse(BaseModel):
     scope_label: str = "All accounts combined"
+    data_quality_level: str = "empty"
+    data_quality_score: float = 0.0
+    data_quality_message: str | None = None
+    data_review_action_count: int = 0
     start_month: str
     months: int
     starting_balance: float
@@ -405,6 +409,57 @@ class TransactionSourceSummaryResponse(BaseModel):
     imported_file_count: int = 0
     latest_imported_at: datetime | None = None
     sources: list[TransactionSourceSummaryItem] = Field(default_factory=list)
+
+
+class TransactionImportHistoryItem(BaseModel):
+    import_file_name: str
+    import_file_type: str | None = None
+    entry_source: str
+    account_id: int | None = None
+    transaction_count: int = 0
+    income_count: int = 0
+    expense_count: int = 0
+    total_income: float = 0.0
+    total_expenses: float = 0.0
+    balance: float = 0.0
+    first_transaction_date: date | None = None
+    latest_transaction_date: date | None = None
+    first_imported_at: datetime | None = None
+    latest_imported_at: datetime | None = None
+
+
+class TransactionImportHistoryResponse(BaseModel):
+    import_batch_count: int = 0
+    imported_file_count: int = 0
+    total_imported_transactions: int = 0
+    total_income: float = 0.0
+    total_expenses: float = 0.0
+    balance: float = 0.0
+    latest_imported_at: datetime | None = None
+    items: list[TransactionImportHistoryItem] = Field(default_factory=list)
+
+
+class TransactionDataQualityAction(BaseModel):
+    key: str
+    label: str
+    detail: str
+    severity: str = "info"
+    count: int = 0
+
+
+class TransactionDataQualityResponse(BaseModel):
+    transaction_count: int = 0
+    manual_count: int = 0
+    imported_count: int = 0
+    uncategorized_count: int = 0
+    learning_candidate_count: int = 0
+    suspicious_amount_count: int = 0
+    likely_duplicate_count: int = 0
+    quality_level: str = "empty"
+    quality_score: float = 0.0
+    message: str
+    actions: list[TransactionDataQualityAction] = Field(default_factory=list)
+    source_summary: TransactionSourceSummaryResponse
 
 
 class SuspiciousAmountRepairItem(BaseModel):
@@ -547,6 +602,29 @@ class CategoryLearningEventItem(BaseModel):
 class CategoryLearningCandidatesResponse(BaseModel):
     total_candidates: int
     candidates: list[CategoryLearningCandidateItem]
+
+
+class TransactionReviewQueueDuplicateItem(BaseModel):
+    transaction_ids: list[int] = Field(default_factory=list)
+    date: date
+    description: str
+    type: TransactionType
+    category: str
+    amount: float
+    account_id: int | None = None
+    occurrence_count: int
+    reason: str
+
+
+class TransactionReviewQueueResponse(BaseModel):
+    quality_report: TransactionDataQualityResponse
+    next_action: TransactionDataQualityAction | None = None
+    amount_repair_count: int = 0
+    amount_repairs: list[SuspiciousAmountRepairItem] = Field(default_factory=list)
+    category_learning_count: int = 0
+    category_learning_candidates: list[CategoryLearningCandidateItem] = Field(default_factory=list)
+    duplicate_group_count: int = 0
+    duplicate_groups: list[TransactionReviewQueueDuplicateItem] = Field(default_factory=list)
 
 
 class CategoryLearningSummaryResponse(BaseModel):

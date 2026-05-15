@@ -45,6 +45,10 @@ class DatabaseMaintenanceServiceTest(unittest.TestCase):
                 transaction_index_names,
             )
             self.assertIn(
+                "ix_transactions_runtime_owner_account_import_file_at",
+                transaction_index_names,
+            )
+            self.assertIn(
                 "ix_category_learning_events_runtime_owner_merchant_type_bucket",
                 learning_index_names,
             )

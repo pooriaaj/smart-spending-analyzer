@@ -369,6 +369,287 @@ class SmartImportRouteTest(unittest.TestCase):
         self.assertEqual(sources["csv_import"]["total_income"], 20.0)
         self.assertEqual(sources["seed"]["transaction_count"], 1)
 
+    def test_transaction_quality_report_surfaces_review_work(self) -> None:
+        with self.session_local() as session:
+            session.add_all(
+                [
+                    Transaction(
+                        amount=5.25,
+                        category="cafe",
+                        description="Morning Coffee",
+                        date=date(2026, 4, 10),
+                        type="expense",
+                        entry_source="manual",
+                        owner_id=self.user_id,
+                        account_id=self.account_id,
+                    ),
+                    Transaction(
+                        amount=-5.25,
+                        category="cafe",
+                        description="Morning Coffee",
+                        date=date(2026, 4, 10),
+                        type="expense",
+                        entry_source="pdf_import",
+                        import_file_name="april-statement.pdf",
+                        import_file_type="pdf_statement",
+                        imported_at=datetime(2026, 4, 12, 9, 30, tzinfo=timezone.utc),
+                        owner_id=self.user_id,
+                        account_id=self.account_id,
+                    ),
+                    Transaction(
+                        amount=8.90,
+                        category="other",
+                        description="SQDC77068 MTL",
+                        date=date(2026, 4, 11),
+                        type="expense",
+                        entry_source="pdf_import",
+                        import_file_name="april-statement.pdf",
+                        import_file_type="pdf_statement",
+                        imported_at=datetime(2026, 4, 12, 9, 30, tzinfo=timezone.utc),
+                        owner_id=self.user_id,
+                        account_id=self.account_id,
+                    ),
+                    Transaction(
+                        amount=12.60,
+                        category="other",
+                        description="SQDC77068 MTL",
+                        date=date(2026, 4, 12),
+                        type="expense",
+                        entry_source="pdf_import",
+                        import_file_name="april-statement.pdf",
+                        import_file_type="pdf_statement",
+                        imported_at=datetime(2026, 4, 12, 9, 30, tzinfo=timezone.utc),
+                        owner_id=self.user_id,
+                        account_id=self.account_id,
+                    ),
+                    Transaction(
+                        amount=5200.00,
+                        category="income",
+                        description="e-Transfer received MAHTAALIJANI",
+                        date=date(2026, 4, 13),
+                        type="income",
+                        entry_source="pdf_import",
+                        import_file_name="april-statement.pdf",
+                        import_file_type="pdf_statement",
+                        imported_at=datetime(2026, 4, 12, 9, 30, tzinfo=timezone.utc),
+                        owner_id=self.user_id,
+                        account_id=self.account_id,
+                    ),
+                ]
+            )
+            session.commit()
+
+        response = self.client.get(
+            "/transactions/quality-report",
+            params={"account_id": self.account_id},
+        )
+
+        self.assertEqual(response.status_code, 200, response.text)
+        payload = response.json()
+        action_keys = {item["key"] for item in payload["actions"]}
+
+        self.assertEqual(payload["transaction_count"], 5)
+        self.assertEqual(payload["manual_count"], 1)
+        self.assertEqual(payload["imported_count"], 4)
+        self.assertEqual(payload["uncategorized_count"], 2)
+        self.assertGreaterEqual(payload["learning_candidate_count"], 1)
+        self.assertEqual(payload["suspicious_amount_count"], 1)
+        self.assertEqual(payload["likely_duplicate_count"], 1)
+        self.assertIn(payload["quality_level"], {"low", "medium"})
+        self.assertIn("repair_amounts", action_keys)
+        self.assertIn("review_duplicates", action_keys)
+        self.assertIn("teach_categories", action_keys)
+        self.assertIn("review_uncategorized", action_keys)
+        self.assertEqual(payload["source_summary"]["imported_count"], 4)
+
+    def test_transaction_quality_report_handles_empty_scope(self) -> None:
+        response = self.client.get(
+            "/transactions/quality-report",
+            params={"account_id": self.account_id},
+        )
+
+        self.assertEqual(response.status_code, 200, response.text)
+        payload = response.json()
+        self.assertEqual(payload["transaction_count"], 0)
+        self.assertEqual(payload["quality_level"], "empty")
+        self.assertEqual(payload["quality_score"], 0.0)
+        self.assertEqual(payload["actions"][0]["key"], "start_tracking")
+
+    def test_transaction_review_queue_prioritizes_cleanup_work(self) -> None:
+        with self.session_local() as session:
+            session.add_all(
+                [
+                    Transaction(
+                        amount=5.25,
+                        category="cafe",
+                        description="Morning Coffee",
+                        date=date(2026, 4, 10),
+                        type="expense",
+                        entry_source="manual",
+                        owner_id=self.user_id,
+                        account_id=self.account_id,
+                    ),
+                    Transaction(
+                        amount=-5.25,
+                        category="cafe",
+                        description="Morning Coffee",
+                        date=date(2026, 4, 10),
+                        type="expense",
+                        entry_source="pdf_import",
+                        import_file_name="april-statement.pdf",
+                        import_file_type="pdf_statement",
+                        owner_id=self.user_id,
+                        account_id=self.account_id,
+                    ),
+                    Transaction(
+                        amount=8.90,
+                        category="other",
+                        description="SQDC77068 MTL",
+                        date=date(2026, 4, 11),
+                        type="expense",
+                        entry_source="pdf_import",
+                        import_file_name="april-statement.pdf",
+                        import_file_type="pdf_statement",
+                        owner_id=self.user_id,
+                        account_id=self.account_id,
+                    ),
+                    Transaction(
+                        amount=12.60,
+                        category="other",
+                        description="SQDC77068 MTL",
+                        date=date(2026, 4, 12),
+                        type="expense",
+                        entry_source="pdf_import",
+                        import_file_name="april-statement.pdf",
+                        import_file_type="pdf_statement",
+                        owner_id=self.user_id,
+                        account_id=self.account_id,
+                    ),
+                    Transaction(
+                        amount=5200.00,
+                        category="income",
+                        description="e-Transfer received MAHTAALIJANI",
+                        date=date(2026, 4, 13),
+                        type="income",
+                        entry_source="pdf_import",
+                        import_file_name="april-statement.pdf",
+                        import_file_type="pdf_statement",
+                        owner_id=self.user_id,
+                        account_id=self.account_id,
+                    ),
+                ]
+            )
+            session.commit()
+
+        response = self.client.get(
+            "/transactions/review-queue",
+            params={"account_id": self.account_id, "limit": 2},
+        )
+
+        self.assertEqual(response.status_code, 200, response.text)
+        payload = response.json()
+        self.assertEqual(payload["quality_report"]["transaction_count"], 5)
+        self.assertEqual(payload["next_action"]["key"], "repair_amounts")
+        self.assertEqual(payload["amount_repair_count"], 1)
+        self.assertEqual(payload["amount_repairs"][0]["suggested_amount"], 200.0)
+        self.assertGreaterEqual(payload["category_learning_count"], 1)
+        self.assertEqual(payload["category_learning_candidates"][0]["merchant_key"], "sqdc")
+        self.assertEqual(payload["duplicate_group_count"], 1)
+        self.assertEqual(payload["duplicate_groups"][0]["occurrence_count"], 2)
+        self.assertEqual(payload["duplicate_groups"][0]["amount"], 5.25)
+
+    def test_transaction_review_queue_handles_empty_scope(self) -> None:
+        response = self.client.get(
+            "/transactions/review-queue",
+            params={"account_id": self.account_id},
+        )
+
+        self.assertEqual(response.status_code, 200, response.text)
+        payload = response.json()
+        self.assertEqual(payload["quality_report"]["quality_level"], "empty")
+        self.assertEqual(payload["next_action"]["key"], "start_tracking")
+        self.assertEqual(payload["amount_repair_count"], 0)
+        self.assertEqual(payload["category_learning_count"], 0)
+        self.assertEqual(payload["duplicate_group_count"], 0)
+        self.assertEqual(payload["amount_repairs"], [])
+        self.assertEqual(payload["category_learning_candidates"], [])
+        self.assertEqual(payload["duplicate_groups"], [])
+
+    def test_import_history_groups_saved_import_metadata(self) -> None:
+        with self.session_local() as session:
+            session.add_all(
+                [
+                    Transaction(
+                        amount=22.50,
+                        category="groceries",
+                        description="Metro",
+                        date=date(2026, 4, 2),
+                        type="expense",
+                        entry_source="pdf_import",
+                        import_file_name="april-statement.pdf",
+                        import_file_type="pdf_statement",
+                        imported_at=datetime(2026, 4, 12, 9, 30, tzinfo=timezone.utc),
+                        owner_id=self.user_id,
+                        account_id=self.account_id,
+                    ),
+                    Transaction(
+                        amount=-30.0,
+                        category="income",
+                        description="Imported transfer with negative sign",
+                        date=date(2026, 4, 3),
+                        type="income",
+                        entry_source="pdf_import",
+                        import_file_name="april-statement.pdf",
+                        import_file_type="pdf_statement",
+                        imported_at=datetime(2026, 4, 12, 9, 30, tzinfo=timezone.utc),
+                        owner_id=self.user_id,
+                        account_id=self.account_id,
+                    ),
+                    Transaction(
+                        amount=-52.50,
+                        category="subscriptions",
+                        description="OpenAI",
+                        date=date(2026, 5, 2),
+                        type="expense",
+                        entry_source="csv_import",
+                        import_file_name="may-statement.csv",
+                        import_file_type="csv_statement",
+                        imported_at=datetime(2026, 5, 2, 8, 0, tzinfo=timezone.utc),
+                        owner_id=self.user_id,
+                        account_id=self.account_id,
+                    ),
+                    Transaction(
+                        amount=9.00,
+                        category="cafe",
+                        description="Manual coffee",
+                        date=date(2026, 5, 3),
+                        type="expense",
+                        entry_source="manual",
+                        owner_id=self.user_id,
+                        account_id=self.account_id,
+                    ),
+                ]
+            )
+            session.commit()
+
+        response = self.client.get(
+            "/transactions/import/history",
+            params={"account_id": self.account_id, "limit": 1},
+        )
+
+        self.assertEqual(response.status_code, 200, response.text)
+        payload = response.json()
+        self.assertEqual(payload["import_batch_count"], 2)
+        self.assertEqual(payload["imported_file_count"], 2)
+        self.assertEqual(payload["total_imported_transactions"], 3)
+        self.assertEqual(payload["total_income"], 30.0)
+        self.assertEqual(payload["total_expenses"], 75.0)
+        self.assertEqual(payload["balance"], -45.0)
+        self.assertEqual(len(payload["items"]), 1)
+        self.assertEqual(payload["items"][0]["import_file_name"], "may-statement.csv")
+        self.assertEqual(payload["items"][0]["transaction_count"], 1)
+        self.assertEqual(payload["items"][0]["total_expenses"], 52.5)
+
     def test_update_transaction_applies_category_to_similar_account_rows(self) -> None:
         with self.session_local() as session:
             target = Transaction(

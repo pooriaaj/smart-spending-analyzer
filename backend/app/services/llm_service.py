@@ -139,6 +139,12 @@ Balance summary:
 - Total expenses: {_safe_text(account_context.get("total_expenses"))}
 - Balance: {_safe_text(account_context.get("balance"))}
 
+Data quality:
+- Level: {_safe_text(account_context.get("data_quality_level"))}
+- Score: {_safe_text(account_context.get("data_quality_score"))}
+- Message: {_safe_text(account_context.get("data_quality_message"))}
+- Review action count: {_safe_text(account_context.get("data_review_action_count"))}
+
 Monthly context:
 - Current month: {_safe_text(account_context.get("current_month"))}
 - Previous month: {_safe_text(account_context.get("previous_month"))}

@@ -497,6 +497,19 @@ class SuspiciousAmountRepairCandidate:
 
 
 @dataclass(frozen=True)
+class DuplicateTransactionGroup:
+    transaction_ids: list[int]
+    date: date
+    description: str
+    type: str
+    category: str
+    amount: float
+    account_id: int | None
+    occurrence_count: int
+    reason: str
+
+
+@dataclass(frozen=True)
 class CategoryLearningCandidate:
     merchant_key: str
     display_name: str
@@ -1706,6 +1719,86 @@ def get_suspicious_amount_repair_candidates(
             candidates.append(candidate)
 
     return candidates
+
+
+def count_likely_duplicate_transactions(
+    db: Session,
+    owner_id: int,
+    account_id: int | None = None,
+) -> int:
+    query = db.query(Transaction).filter(Transaction.owner_id == owner_id)
+    if account_id is not None:
+        query = query.filter(Transaction.account_id == account_id)
+
+    seen_counts: Counter[tuple] = Counter()
+    for transaction in query.all():
+        duplicate_key = (
+            transaction.account_id or 0,
+            transaction.date.isoformat(),
+            normalize_description(transaction.description).lower(),
+            round(abs(float(transaction.amount or 0.0)), 2),
+            str(transaction.type or "").strip().lower(),
+        )
+        seen_counts[duplicate_key] += 1
+
+    return sum(count - 1 for count in seen_counts.values() if count > 1)
+
+
+def get_likely_duplicate_transaction_groups(
+    db: Session,
+    owner_id: int,
+    account_id: int | None = None,
+    limit: int = 10,
+) -> list[DuplicateTransactionGroup]:
+    max_groups = max(1, min(int(limit or 10), 50))
+    query = db.query(Transaction).filter(Transaction.owner_id == owner_id)
+    if account_id is not None:
+        query = query.filter(Transaction.account_id == account_id)
+
+    grouped: dict[tuple, list[Transaction]] = {}
+    for transaction in query.order_by(Transaction.date.desc(), Transaction.id.desc()).all():
+        duplicate_key = (
+            transaction.account_id or 0,
+            transaction.date.isoformat(),
+            normalize_description(transaction.description).lower(),
+            round(abs(float(transaction.amount or 0.0)), 2),
+            str(transaction.type or "").strip().lower(),
+        )
+        grouped.setdefault(duplicate_key, []).append(transaction)
+
+    duplicate_groups: list[DuplicateTransactionGroup] = []
+    for items in grouped.values():
+        if len(items) < 2:
+            continue
+
+        first = items[0]
+        amount = round(abs(float(first.amount or 0.0)), 2)
+        duplicate_groups.append(
+            DuplicateTransactionGroup(
+                transaction_ids=[int(item.id) for item in items],
+                date=first.date,
+                description=normalize_description(first.description),
+                type=str(first.type or "").strip().lower(),
+                category=normalize_category_name(first.category),
+                amount=amount,
+                account_id=first.account_id,
+                occurrence_count=len(items),
+                reason=(
+                    "These rows have the same account, date, description, type, and amount. "
+                    "Review before trusting analytics totals."
+                ),
+            )
+        )
+
+    duplicate_groups.sort(
+        key=lambda item: (
+            -item.occurrence_count,
+            -item.amount,
+            item.date,
+            item.description.lower(),
+        )
+    )
+    return duplicate_groups[:max_groups]
 
 
 def apply_suspicious_amount_repairs(
@@ -3081,6 +3174,355 @@ def get_transaction_source_summary(
         "imported_file_count": imported_file_count,
         "latest_imported_at": latest_imported_at,
         "sources": sources,
+    }
+
+
+def get_transaction_import_history(
+    db: Session,
+    owner_id: int,
+    account_id: int | None = None,
+    limit: int = 25,
+) -> dict:
+    scope_query = build_transaction_scope_query(db, owner_id, account_id=account_id)
+    import_query = scope_query.filter(
+        or_(
+            Transaction.entry_source.in_(tuple(IMPORTED_TRANSACTION_SOURCES)),
+            Transaction.import_file_name.is_not(None),
+        )
+    )
+    file_name_expression = func.coalesce(Transaction.import_file_name, "Unknown import")
+    file_type_expression = func.coalesce(Transaction.import_file_type, "statement")
+    source_expression = func.coalesce(Transaction.entry_source, "statement_import")
+    income_amount = case((Transaction.type == "income", func.abs(Transaction.amount)), else_=0.0)
+    expense_amount = case((Transaction.type == "expense", func.abs(Transaction.amount)), else_=0.0)
+    income_count = case((Transaction.type == "income", 1), else_=0)
+    expense_count = case((Transaction.type == "expense", 1), else_=0)
+
+    rows = (
+        import_query.with_entities(
+            file_name_expression.label("import_file_name"),
+            file_type_expression.label("import_file_type"),
+            source_expression.label("entry_source"),
+            Transaction.account_id.label("account_id"),
+            func.count(Transaction.id).label("transaction_count"),
+            func.coalesce(func.sum(income_count), 0).label("income_count"),
+            func.coalesce(func.sum(expense_count), 0).label("expense_count"),
+            func.coalesce(func.sum(income_amount), 0.0).label("total_income"),
+            func.coalesce(func.sum(expense_amount), 0.0).label("total_expenses"),
+            func.min(Transaction.date).label("first_transaction_date"),
+            func.max(Transaction.date).label("latest_transaction_date"),
+            func.min(Transaction.imported_at).label("first_imported_at"),
+            func.max(Transaction.imported_at).label("latest_imported_at"),
+        )
+        .group_by(
+            file_name_expression,
+            file_type_expression,
+            source_expression,
+            Transaction.account_id,
+        )
+        .all()
+    )
+
+    items: list[dict] = []
+    total_imported_transactions = 0
+    total_income = 0.0
+    total_expenses = 0.0
+    latest_imported_at = None
+    imported_file_names: set[str] = set()
+
+    for row in rows:
+        transaction_count = int(row.transaction_count or 0)
+        row_income = round(float(row.total_income or 0.0), 2)
+        row_expenses = round(float(row.total_expenses or 0.0), 2)
+        import_file_name = str(row.import_file_name or "Unknown import")
+        row_latest_imported_at = row.latest_imported_at
+
+        total_imported_transactions += transaction_count
+        total_income += row_income
+        total_expenses += row_expenses
+        if import_file_name and import_file_name != "Unknown import":
+            imported_file_names.add(import_file_name.lower())
+        if row_latest_imported_at and (
+            latest_imported_at is None or row_latest_imported_at > latest_imported_at
+        ):
+            latest_imported_at = row_latest_imported_at
+
+        items.append(
+            {
+                "import_file_name": import_file_name,
+                "import_file_type": row.import_file_type,
+                "entry_source": str(row.entry_source or "statement_import").strip().lower(),
+                "account_id": row.account_id,
+                "transaction_count": transaction_count,
+                "income_count": int(row.income_count or 0),
+                "expense_count": int(row.expense_count or 0),
+                "total_income": row_income,
+                "total_expenses": row_expenses,
+                "balance": round(row_income - row_expenses, 2),
+                "first_transaction_date": row.first_transaction_date,
+                "latest_transaction_date": row.latest_transaction_date,
+                "first_imported_at": row.first_imported_at,
+                "latest_imported_at": row_latest_imported_at,
+            }
+        )
+
+    items.sort(
+        key=lambda item: (
+            item["latest_imported_at"] is None,
+            -(item["latest_imported_at"].timestamp() if item["latest_imported_at"] else 0),
+            item["import_file_name"].lower(),
+        )
+    )
+    limited_items = items[:limit]
+
+    return {
+        "import_batch_count": len(items),
+        "imported_file_count": len(imported_file_names),
+        "total_imported_transactions": total_imported_transactions,
+        "total_income": round(total_income, 2),
+        "total_expenses": round(total_expenses, 2),
+        "balance": round(total_income - total_expenses, 2),
+        "latest_imported_at": latest_imported_at,
+        "items": limited_items,
+    }
+
+
+def get_transaction_data_quality_report(
+    db: Session,
+    owner_id: int,
+    account_id: int | None = None,
+) -> dict:
+    source_summary = get_transaction_source_summary(db, owner_id, account_id=account_id)
+    transaction_count = int(source_summary["total_transactions"])
+    manual_count = int(source_summary["manual_count"])
+    imported_count = int(source_summary["imported_count"])
+
+    scope_query = build_transaction_scope_query(db, owner_id, account_id=account_id)
+    uncategorized_count = (
+        scope_query.filter(func.lower(Transaction.category).in_(tuple(UNCATEGORIZED_VALUES))).count()
+    )
+    learning_candidate_count = len(
+        get_category_learning_candidates(
+            db=db,
+            owner_id=owner_id,
+            account_id=account_id,
+            limit=50,
+        )
+    )
+    suspicious_amount_count = len(
+        get_suspicious_amount_repair_candidates(
+            db=db,
+            owner_id=owner_id,
+            account_id=account_id,
+        )
+    )
+    likely_duplicate_count = count_likely_duplicate_transactions(
+        db=db,
+        owner_id=owner_id,
+        account_id=account_id,
+    )
+
+    actions: list[dict] = []
+    if transaction_count == 0:
+        actions.append(
+            {
+                "key": "start_tracking",
+                "label": "Add or import transactions",
+                "detail": "Add daily transactions or import a statement before analytics can become useful.",
+                "severity": "high",
+                "count": 0,
+            }
+        )
+        return {
+            "transaction_count": 0,
+            "manual_count": 0,
+            "imported_count": 0,
+            "uncategorized_count": 0,
+            "learning_candidate_count": 0,
+            "suspicious_amount_count": 0,
+            "likely_duplicate_count": 0,
+            "quality_level": "empty",
+            "quality_score": 0.0,
+            "message": "No transaction data yet. Start with daily entries or import a statement.",
+            "actions": actions,
+            "source_summary": source_summary,
+        }
+
+    if suspicious_amount_count:
+        actions.append(
+            {
+                "key": "repair_amounts",
+                "label": "Review suspicious amounts",
+                "detail": "Some amounts look like statement reference digits were merged into the real amount.",
+                "severity": "high",
+                "count": suspicious_amount_count,
+            }
+        )
+    if likely_duplicate_count:
+        actions.append(
+            {
+                "key": "review_duplicates",
+                "label": "Review likely duplicates",
+                "detail": "Some transactions have the same date, amount, type, and description.",
+                "severity": "medium",
+                "count": likely_duplicate_count,
+            }
+        )
+    if learning_candidate_count:
+        actions.append(
+            {
+                "key": "teach_categories",
+                "label": "Teach merchant categories",
+                "detail": "Confirm merchant groups once so similar transactions use the same category.",
+                "severity": "medium",
+                "count": learning_candidate_count,
+            }
+        )
+    if uncategorized_count:
+        actions.append(
+            {
+                "key": "review_uncategorized",
+                "label": "Review uncategorized transactions",
+                "detail": "Reducing Other/uncategorized rows makes charts and budgets more trustworthy.",
+                "severity": "medium",
+                "count": uncategorized_count,
+            }
+        )
+    if imported_count > 0 and manual_count == 0:
+        actions.append(
+            {
+                "key": "add_manual_entries",
+                "label": "Add daily written entries",
+                "detail": "Manual entries let the app reconcile bank statements against what you remembered to write.",
+                "severity": "info",
+                "count": imported_count,
+            }
+        )
+
+    uncategorized_share = uncategorized_count / transaction_count
+    duplicate_share = likely_duplicate_count / transaction_count
+    suspicious_share = suspicious_amount_count / transaction_count
+    learning_penalty = min(0.18, learning_candidate_count * 0.025)
+    score = 0.92
+    score -= min(0.42, uncategorized_share * 0.55)
+    score -= min(0.25, suspicious_share * 1.2)
+    score -= min(0.18, duplicate_share * 0.9)
+    score -= learning_penalty
+    score = round(max(0.05, min(0.98, score)), 2)
+
+    if score >= 0.82 and not actions:
+        quality_level = "high"
+        message = "Transaction data looks clean enough for reliable analytics and budget guidance."
+    elif score >= 0.62:
+        quality_level = "medium"
+        message = "Transaction data is usable, but a few review items can improve accuracy."
+    else:
+        quality_level = "low"
+        message = "Review transaction quality before trusting analytics, budgets, or simulator output."
+
+    return {
+        "transaction_count": transaction_count,
+        "manual_count": manual_count,
+        "imported_count": imported_count,
+        "uncategorized_count": uncategorized_count,
+        "learning_candidate_count": learning_candidate_count,
+        "suspicious_amount_count": suspicious_amount_count,
+        "likely_duplicate_count": likely_duplicate_count,
+        "quality_level": quality_level,
+        "quality_score": score,
+        "message": message,
+        "actions": actions,
+        "source_summary": source_summary,
+    }
+
+
+def get_transaction_review_queue(
+    db: Session,
+    owner_id: int,
+    account_id: int | None = None,
+    limit: int = 5,
+) -> dict:
+    max_items = max(1, min(int(limit or 5), 25))
+    quality_report = get_transaction_data_quality_report(
+        db,
+        owner_id,
+        account_id=account_id,
+    )
+    amount_repair_candidates = get_suspicious_amount_repair_candidates(
+        db=db,
+        owner_id=owner_id,
+        account_id=account_id,
+    )
+    category_learning_candidates = get_category_learning_candidates(
+        db=db,
+        owner_id=owner_id,
+        account_id=account_id,
+        limit=max_items,
+    )
+    duplicate_groups = get_likely_duplicate_transaction_groups(
+        db=db,
+        owner_id=owner_id,
+        account_id=account_id,
+        limit=max_items,
+    )
+
+    amount_repair_items = [
+        {
+            "transaction_id": item.transaction_id,
+            "date": item.date,
+            "description": item.description,
+            "type": item.type,
+            "category": item.category,
+            "current_amount": item.current_amount,
+            "suggested_amount": item.suggested_amount,
+            "confidence": item.confidence,
+            "reason": item.reason,
+        }
+        for item in amount_repair_candidates[:max_items]
+    ]
+    category_learning_items = [
+        {
+            "merchant_key": item.merchant_key,
+            "display_name": item.display_name,
+            "type": item.type,
+            "transaction_count": item.transaction_count,
+            "current_category": item.current_category,
+            "suggested_category": item.suggested_category,
+            "confidence": item.confidence,
+            "total_amount": item.total_amount,
+            "representative_amount": item.representative_amount,
+            "amount_min": item.amount_min,
+            "amount_max": item.amount_max,
+            "example_descriptions": item.example_descriptions,
+            "reason": item.reason,
+            "review_required": item.review_required,
+        }
+        for item in category_learning_candidates[:max_items]
+    ]
+    duplicate_group_items = [
+        {
+            "transaction_ids": item.transaction_ids,
+            "date": item.date,
+            "description": item.description,
+            "type": item.type,
+            "category": item.category,
+            "amount": item.amount,
+            "account_id": item.account_id,
+            "occurrence_count": item.occurrence_count,
+            "reason": item.reason,
+        }
+        for item in duplicate_groups[:max_items]
+    ]
+
+    return {
+        "quality_report": quality_report,
+        "next_action": quality_report["actions"][0] if quality_report["actions"] else None,
+        "amount_repair_count": len(amount_repair_candidates),
+        "amount_repairs": amount_repair_items,
+        "category_learning_count": len(category_learning_candidates),
+        "category_learning_candidates": category_learning_items,
+        "duplicate_group_count": len(duplicate_groups),
+        "duplicate_groups": duplicate_group_items,
     }
 
 

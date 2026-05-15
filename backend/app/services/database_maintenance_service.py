@@ -37,6 +37,10 @@ RUNTIME_INDEX_STATEMENTS = (
     ON transactions (owner_id, account_id, entry_source, date DESC, id DESC)
     """,
     """
+    CREATE INDEX IF NOT EXISTS ix_transactions_runtime_owner_account_import_file_at
+    ON transactions (owner_id, account_id, import_file_name, imported_at DESC)
+    """,
+    """
     CREATE INDEX IF NOT EXISTS ix_category_learning_events_runtime_owner_merchant_type_bucket
     ON category_learning_events (owner_id, merchant_key, transaction_type, amount_bucket)
     """,

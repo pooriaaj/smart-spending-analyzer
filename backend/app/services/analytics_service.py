@@ -17,6 +17,7 @@ from app.services.budget_metrics import (
     get_default_budget_month,
 )
 from app.services.saved_scenario_service import list_saved_scenarios
+from app.services.transaction_service import get_transaction_data_quality_report
 
 
 CASHFLOW_NEUTRAL_CATEGORIES = {
@@ -683,6 +684,7 @@ def build_future_balance_simulation(
     scope_label: str = "All accounts combined",
 ) -> dict[str, Any]:
     sanitized_months = max(1, min(int(months or 6), 12))
+    data_quality = get_transaction_data_quality_report(db, user_id, account_id=account_id)
     financial_snapshot = build_financial_snapshot(db, user_id, account_id=account_id)
     monthly_summary = get_monthly_summary(db, user_id, account_id=account_id)
     current_month = get_default_budget_month()
@@ -846,6 +848,17 @@ def build_future_balance_simulation(
     elif event_month_offset is not None and abs(planned_event_amount) > 0:
         assumptions.append("The one-time event was outside the simulated window, so it was ignored.")
 
+    if data_quality["quality_level"] in {"empty", "low"}:
+        assumptions.append(
+            "Forecast confidence is low until suspicious amounts, duplicates, and uncategorized rows are reviewed."
+        )
+    elif data_quality["quality_level"] == "medium":
+        assumptions.append(
+            "Forecast confidence is medium because some transaction review work is still available."
+        )
+    else:
+        assumptions.append("Forecast confidence is high because transaction data quality looks clean.")
+
     if goal_balance_value is not None:
         goal_gap_amount = round(goal_balance_value - projected_end_balance, 2)
         monthly_improvement_needed = round(
@@ -889,6 +902,10 @@ def build_future_balance_simulation(
 
     return {
         "scope_label": scope_label,
+        "data_quality_level": data_quality["quality_level"],
+        "data_quality_score": data_quality["quality_score"],
+        "data_quality_message": data_quality["message"],
+        "data_review_action_count": len(data_quality["actions"]),
         "start_month": start_month,
         "months": sanitized_months,
         "starting_balance": round(starting_balance, 2),
@@ -1939,5 +1956,10 @@ def get_dashboard_payload(
             get_account_comparison_snapshot(db, user_id)
             if account_id is None
             else []
+        ),
+        "data_quality": get_transaction_data_quality_report(
+            db,
+            user_id,
+            account_id=account_id,
         ),
     }

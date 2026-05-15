@@ -134,6 +134,13 @@ class Transaction(Base):
         Index("ix_transactions_owner_account_type_date", "owner_id", "account_id", "type", "date"),
         Index("ix_transactions_owner_account_category_date", "owner_id", "account_id", "category", "date"),
         Index("ix_transactions_owner_account_source_date", "owner_id", "account_id", "entry_source", "date"),
+        Index(
+            "ix_transactions_owner_account_import_file_at",
+            "owner_id",
+            "account_id",
+            "import_file_name",
+            "imported_at",
+        ),
     )
 
 

@@ -183,6 +183,9 @@ class AnalyticsRouteTest(unittest.TestCase):
         self.assertEqual(payload["summary"]["balance"], 1050.0)
         self.assertEqual(payload["top_category"]["category"], "entertainment")
         self.assertEqual(payload["account_comparison"], [])
+        self.assertEqual(payload["data_quality"]["transaction_count"], 3)
+        self.assertEqual(payload["data_quality"]["manual_count"], 3)
+        self.assertEqual(payload["data_quality"]["source_summary"]["total_transactions"], 3)
         self.assertTrue(
             all(item["account_id"] == self.savings_account_id for item in payload["recent_transactions"])
         )
@@ -204,6 +207,26 @@ class AnalyticsRouteTest(unittest.TestCase):
 
         self.assertEqual(response.status_code, 404, response.text)
         self.assertEqual(response.json()["detail"], "Account not found")
+
+    def test_analytics_routes_reject_invalid_transaction_type_filter(self) -> None:
+        endpoints = [
+            "/analytics/dashboard",
+            "/analytics/summary",
+            "/analytics/category-breakdown",
+            "/analytics/monthly-summary",
+            "/analytics/recent-transactions",
+            "/analytics/top-expense-category",
+        ]
+
+        for endpoint in endpoints:
+            with self.subTest(endpoint=endpoint):
+                response = self.client.get(endpoint, params={"transaction_type": "transfer"})
+
+                self.assertEqual(response.status_code, 400, response.text)
+                self.assertEqual(
+                    response.json()["detail"],
+                    "Transaction type must be income or expense",
+                )
 
     def test_category_breakdown_merges_accented_category_aliases(self) -> None:
         with self.session_local() as session:
@@ -656,6 +679,9 @@ class AnalyticsRouteTest(unittest.TestCase):
         self.assertEqual(payload["scenario_impact_amount"], 450.0)
         self.assertEqual(payload["projected_end_balance"], 8850.0)
         self.assertEqual(payload["risk_level"], "healthy")
+        self.assertEqual(payload["data_quality_level"], "high")
+        self.assertGreater(payload["data_quality_score"], 0.8)
+        self.assertEqual(payload["data_review_action_count"], 0)
         self.assertEqual(len(payload["timeline"]), 3)
         self.assertEqual(payload["timeline"][0]["month"], "2026-05")
         self.assertEqual(payload["timeline"][0]["baseline_ending_balance"], 5600.0)
@@ -1123,6 +1149,46 @@ class AnalyticsRouteTest(unittest.TestCase):
         self.assertEqual(payload["scope_label"], "Travel Savings (savings)")
         self.assertIn("$1050.00", payload["answer"])
         self.assertIn("Balance: $1050.00", payload["supporting_points"])
+
+    def test_assistant_response_surfaces_low_data_quality_context(self) -> None:
+        with self.session_local() as session:
+            session.add(
+                Transaction(
+                    amount=42.25,
+                    category="other",
+                    description="Unknown merchant",
+                    date=date(2026, 4, 13),
+                    type="expense",
+                    entry_source="pdf_import",
+                    import_file_name="april-statement.pdf",
+                    import_file_type="pdf_statement",
+                    owner_id=self.user_id,
+                    account_id=self.chequing_account_id,
+                )
+            )
+            session.commit()
+
+        with patch("app.services.budget_metrics.date", FixedBudgetDate), patch(
+            "app.services.assistant_service.generate_llm_assistant_response",
+            return_value=None,
+        ):
+            response = self.client.post(
+                "/assistant/response",
+                json={
+                    "question": "Give me a summary",
+                    "history": [],
+                    "mode": "balanced",
+                    "account_id": self.chequing_account_id,
+                },
+            )
+
+        self.assertEqual(response.status_code, 200, response.text)
+        payload = response.json()
+        self.assertTrue(
+            any(point.startswith("Data quality:") for point in payload["supporting_points"])
+        )
+        self.assertEqual(payload["suggested_actions"][0]["label"], "Review data quality")
+        self.assertEqual(payload["suggested_actions"][0]["section"], "review")
 
     def test_assistant_response_focuses_on_explicit_category(self) -> None:
         self.seed_transactions()

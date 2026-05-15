@@ -66,6 +66,11 @@ def resolve_account_scope(
     return f"{account.name} ({account.type})"
 
 
+def validate_transaction_type_filter(transaction_type: str | None) -> None:
+    if transaction_type is not None and transaction_type not in {"income", "expense"}:
+        raise HTTPException(status_code=400, detail="Transaction type must be income or expense")
+
+
 @router.get("/dashboard")
 def get_dashboard(
     month: str | None = Query(default=None),
@@ -77,6 +82,7 @@ def get_dashboard(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    validate_transaction_type_filter(transaction_type)
     resolve_account_scope(db, current_user, account_id)
     return get_dashboard_payload(
         db=db,
@@ -116,6 +122,7 @@ def get_summary_route(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    validate_transaction_type_filter(transaction_type)
     resolve_account_scope(db, current_user, account_id)
     return get_summary(
         db=db,
@@ -140,6 +147,7 @@ def get_category_breakdown_route(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    validate_transaction_type_filter(transaction_type)
     resolve_account_scope(db, current_user, account_id)
     return get_category_breakdown(
         db=db,
@@ -163,6 +171,7 @@ def get_monthly_summary_route(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    validate_transaction_type_filter(transaction_type)
     resolve_account_scope(db, current_user, account_id)
     return get_monthly_summary(
         db=db,
@@ -186,6 +195,7 @@ def get_recent_transactions_route(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    validate_transaction_type_filter(transaction_type)
     resolve_account_scope(db, current_user, account_id)
     return get_recent_transactions(
         db=db,
@@ -244,6 +254,7 @@ def get_top_expense_category_route(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    validate_transaction_type_filter(transaction_type)
     resolve_account_scope(db, current_user, account_id)
     return get_top_expense_category(
         db=db,
@@ -420,4 +431,3 @@ def delete_saved_scenario_route(
 
     delete_saved_scenario(db, scenario)
     return MessageResponse(message="Saved scenario deleted")
-

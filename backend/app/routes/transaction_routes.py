@@ -29,9 +29,12 @@ from app.schemas import (
     SuspiciousAmountRepairItem,
     SuspiciousAmountRepairPreviewResponse,
     TransactionCreate,
+    TransactionDataQualityResponse,
     TransactionEntrySource,
+    TransactionImportHistoryResponse,
     TransactionListResponse,
     TransactionResponse,
+    TransactionReviewQueueResponse,
     TransactionSourceSummaryResponse,
 )
 from app.services.account_service import ensure_default_account, get_account_for_user
@@ -48,6 +51,9 @@ from app.services.transaction_service import (
     get_existing_statement_match_map,
     get_category_learning_candidates,
     get_category_learning_summary,
+    get_transaction_data_quality_report,
+    get_transaction_import_history,
+    get_transaction_review_queue,
     get_transaction_source_summary,
     get_transactions_page_for_user,
     get_transactions_for_user,
@@ -225,6 +231,72 @@ def get_transaction_sources_summary(
 
     return TransactionSourceSummaryResponse(
         **get_transaction_source_summary(db, current_user.id, account_id=account_id)
+    )
+
+
+@router.get("/quality-report", response_model=TransactionDataQualityResponse)
+def get_transaction_quality_report(
+    account_id: int | None = Query(default=None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    ensure_default_account(db, current_user)
+
+    if account_id is not None:
+        account = get_account_for_user(db, current_user.id, account_id)
+        if not account:
+            raise HTTPException(status_code=404, detail="Account not found")
+
+    return TransactionDataQualityResponse(
+        **get_transaction_data_quality_report(db, current_user.id, account_id=account_id)
+    )
+
+
+@router.get("/review-queue", response_model=TransactionReviewQueueResponse)
+def get_transaction_review_queue_route(
+    account_id: int | None = Query(default=None),
+    limit: int = Query(default=5, ge=1, le=25),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    ensure_default_account(db, current_user)
+
+    if account_id is not None:
+        account = get_account_for_user(db, current_user.id, account_id)
+        if not account:
+            raise HTTPException(status_code=404, detail="Account not found")
+
+    return TransactionReviewQueueResponse(
+        **get_transaction_review_queue(
+            db=db,
+            owner_id=current_user.id,
+            account_id=account_id,
+            limit=limit,
+        )
+    )
+
+
+@router.get("/import/history", response_model=TransactionImportHistoryResponse)
+def get_import_history(
+    account_id: int | None = Query(default=None),
+    limit: int = Query(default=25, ge=1, le=100),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    ensure_default_account(db, current_user)
+
+    if account_id is not None:
+        account = get_account_for_user(db, current_user.id, account_id)
+        if not account:
+            raise HTTPException(status_code=404, detail="Account not found")
+
+    return TransactionImportHistoryResponse(
+        **get_transaction_import_history(
+            db,
+            current_user.id,
+            account_id=account_id,
+            limit=limit,
+        )
     )
 
 
