@@ -455,6 +455,7 @@ class TransactionDataQualityResponse(BaseModel):
     manual_count: int = 0
     imported_count: int = 0
     uncategorized_count: int = 0
+    category_review_count: int = 0
     learning_candidate_count: int = 0
     suspicious_amount_count: int = 0
     likely_duplicate_count: int = 0
@@ -619,11 +620,27 @@ class TransactionReviewQueueDuplicateItem(BaseModel):
     reason: str
 
 
+class TransactionCategoryReviewItem(BaseModel):
+    transaction_id: int
+    date: date
+    description: str
+    type: TransactionType
+    category: str
+    amount: float
+    account_id: int | None = None
+    category_confidence: float = 0.0
+    category_source: str | None = None
+    category_reason: str | None = None
+    reason: str
+
+
 class TransactionReviewQueueResponse(BaseModel):
     quality_report: TransactionDataQualityResponse
     next_action: TransactionDataQualityAction | None = None
     amount_repair_count: int = 0
     amount_repairs: list[SuspiciousAmountRepairItem] = Field(default_factory=list)
+    category_review_count: int = 0
+    category_review_candidates: list[TransactionCategoryReviewItem] = Field(default_factory=list)
     category_learning_count: int = 0
     category_learning_candidates: list[CategoryLearningCandidateItem] = Field(default_factory=list)
     duplicate_group_count: int = 0

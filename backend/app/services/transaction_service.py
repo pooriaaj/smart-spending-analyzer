@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
 from typing import Iterable
 
-from sqlalchemy import case, func, or_
+from sqlalchemy import and_, case, func, or_
 from sqlalchemy.orm import Session
 
 from app.models import (
@@ -3328,6 +3328,70 @@ def get_transaction_import_history(
     }
 
 
+def build_category_review_query(
+    db: Session,
+    owner_id: int,
+    account_id: int | None = None,
+):
+    query = build_transaction_scope_query(db, owner_id, account_id=account_id)
+    return query.filter(
+        Transaction.entry_source.in_(tuple(IMPORTED_TRANSACTION_SOURCES)),
+        or_(
+            Transaction.category_confidence.is_(None),
+            and_(
+                Transaction.category_source.isnot(None),
+                Transaction.category_confidence < CATEGORY_REVIEW_CONFIDENCE_THRESHOLD,
+            ),
+            func.lower(Transaction.category_source).in_(tuple(CATEGORY_REVIEW_REQUIRED_SOURCES)),
+            func.lower(Transaction.category).in_(tuple(UNCATEGORIZED_VALUES)),
+        ),
+    )
+
+
+def count_category_review_transactions(
+    db: Session,
+    owner_id: int,
+    account_id: int | None = None,
+) -> int:
+    return build_category_review_query(db, owner_id, account_id=account_id).count()
+
+
+def get_category_review_transactions(
+    db: Session,
+    owner_id: int,
+    account_id: int | None = None,
+    limit: int = 5,
+) -> list[Transaction]:
+    max_items = max(1, min(int(limit or 5), 25))
+    return (
+        build_category_review_query(db, owner_id, account_id=account_id)
+        .order_by(
+            Transaction.category_confidence.asc(),
+            Transaction.date.desc(),
+            Transaction.id.desc(),
+        )
+        .limit(max_items)
+        .all()
+    )
+
+
+def category_review_reason(transaction: Transaction) -> str:
+    normalized_category = normalize_category_name(transaction.category)
+    confidence = float(transaction.category_confidence or 0.0)
+    source = str(transaction.category_source or "").strip()
+
+    if normalized_category in UNCATEGORIZED_VALUES:
+        return "This imported row is still in Other/uncategorized, so analytics will be less precise until it is taught."
+    if not source:
+        return "This imported row was saved before category audit metadata existed, so it should be reviewed once."
+    if confidence < CATEGORY_REVIEW_CONFIDENCE_THRESHOLD:
+        return (
+            f"This category came from {source} with {round(confidence * 100)}% confidence, "
+            "which is below the automatic-trust threshold."
+        )
+    return "This imported category has incomplete review metadata and should be checked once."
+
+
 def get_transaction_data_quality_report(
     db: Session,
     owner_id: int,
@@ -3362,6 +3426,11 @@ def get_transaction_data_quality_report(
         owner_id=owner_id,
         account_id=account_id,
     )
+    category_review_count = count_category_review_transactions(
+        db=db,
+        owner_id=owner_id,
+        account_id=account_id,
+    )
 
     actions: list[dict] = []
     if transaction_count == 0:
@@ -3379,6 +3448,7 @@ def get_transaction_data_quality_report(
             "manual_count": 0,
             "imported_count": 0,
             "uncategorized_count": 0,
+            "category_review_count": 0,
             "learning_candidate_count": 0,
             "suspicious_amount_count": 0,
             "likely_duplicate_count": 0,
@@ -3397,6 +3467,16 @@ def get_transaction_data_quality_report(
                 "detail": "Some amounts look like statement reference digits were merged into the real amount.",
                 "severity": "high",
                 "count": suspicious_amount_count,
+            }
+        )
+    if category_review_count:
+        actions.append(
+            {
+                "key": "review_category_confidence",
+                "label": "Review uncertain categories",
+                "detail": "Some imported rows were saved as Other or with low-confidence category metadata.",
+                "severity": "medium",
+                "count": category_review_count,
             }
         )
     if likely_duplicate_count:
@@ -3443,10 +3523,12 @@ def get_transaction_data_quality_report(
     uncategorized_share = uncategorized_count / transaction_count
     duplicate_share = likely_duplicate_count / transaction_count
     suspicious_share = suspicious_amount_count / transaction_count
+    category_review_share = category_review_count / transaction_count
     learning_penalty = min(0.18, learning_candidate_count * 0.025)
     score = 0.92
     score -= min(0.42, uncategorized_share * 0.55)
     score -= min(0.25, suspicious_share * 1.2)
+    score -= min(0.18, category_review_share * 0.7)
     score -= min(0.18, duplicate_share * 0.9)
     score -= learning_penalty
     score = round(max(0.05, min(0.98, score)), 2)
@@ -3466,6 +3548,7 @@ def get_transaction_data_quality_report(
         "manual_count": manual_count,
         "imported_count": imported_count,
         "uncategorized_count": uncategorized_count,
+        "category_review_count": category_review_count,
         "learning_candidate_count": learning_candidate_count,
         "suspicious_amount_count": suspicious_amount_count,
         "likely_duplicate_count": likely_duplicate_count,
@@ -3500,6 +3583,12 @@ def get_transaction_review_queue(
         account_id=account_id,
         limit=max_items,
     )
+    category_review_candidates = get_category_review_transactions(
+        db=db,
+        owner_id=owner_id,
+        account_id=account_id,
+        limit=max_items,
+    )
     duplicate_groups = get_likely_duplicate_transaction_groups(
         db=db,
         owner_id=owner_id,
@@ -3520,6 +3609,22 @@ def get_transaction_review_queue(
             "reason": item.reason,
         }
         for item in amount_repair_candidates[:max_items]
+    ]
+    category_review_items = [
+        {
+            "transaction_id": transaction.id,
+            "date": transaction.date,
+            "description": transaction.description,
+            "type": transaction.type,
+            "category": transaction.category,
+            "amount": transaction.amount,
+            "account_id": transaction.account_id,
+            "category_confidence": float(transaction.category_confidence or 0.0),
+            "category_source": transaction.category_source,
+            "category_reason": transaction.category_reason,
+            "reason": category_review_reason(transaction),
+        }
+        for transaction in category_review_candidates[:max_items]
     ]
     category_learning_items = [
         {
@@ -3560,6 +3665,8 @@ def get_transaction_review_queue(
         "next_action": quality_report["actions"][0] if quality_report["actions"] else None,
         "amount_repair_count": len(amount_repair_candidates),
         "amount_repairs": amount_repair_items,
+        "category_review_count": len(category_review_candidates),
+        "category_review_candidates": category_review_items,
         "category_learning_count": len(category_learning_candidates),
         "category_learning_candidates": category_learning_items,
         "duplicate_group_count": len(duplicate_groups),

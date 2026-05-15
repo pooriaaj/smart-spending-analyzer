@@ -452,11 +452,13 @@ class SmartImportRouteTest(unittest.TestCase):
         self.assertEqual(payload["manual_count"], 1)
         self.assertEqual(payload["imported_count"], 4)
         self.assertEqual(payload["uncategorized_count"], 2)
+        self.assertEqual(payload["category_review_count"], 2)
         self.assertGreaterEqual(payload["learning_candidate_count"], 1)
         self.assertEqual(payload["suspicious_amount_count"], 1)
         self.assertEqual(payload["likely_duplicate_count"], 1)
         self.assertIn(payload["quality_level"], {"low", "medium"})
         self.assertIn("repair_amounts", action_keys)
+        self.assertIn("review_category_confidence", action_keys)
         self.assertIn("review_duplicates", action_keys)
         self.assertIn("teach_categories", action_keys)
         self.assertIn("review_uncategorized", action_keys)
@@ -552,6 +554,15 @@ class SmartImportRouteTest(unittest.TestCase):
         self.assertEqual(payload["next_action"]["key"], "repair_amounts")
         self.assertEqual(payload["amount_repair_count"], 1)
         self.assertEqual(payload["amount_repairs"][0]["suggested_amount"], 200.0)
+        self.assertEqual(payload["category_review_count"], 2)
+        self.assertEqual(len(payload["category_review_candidates"]), 2)
+        self.assertIn(
+            payload["category_review_candidates"][0]["reason"],
+            {
+                "This imported row is still in Other/uncategorized, so analytics will be less precise until it is taught.",
+                "This imported row was saved before category audit metadata existed, so it should be reviewed once.",
+            },
+        )
         self.assertGreaterEqual(payload["category_learning_count"], 1)
         self.assertEqual(payload["category_learning_candidates"][0]["merchant_key"], "sqdc")
         self.assertEqual(payload["duplicate_group_count"], 1)
@@ -569,9 +580,11 @@ class SmartImportRouteTest(unittest.TestCase):
         self.assertEqual(payload["quality_report"]["quality_level"], "empty")
         self.assertEqual(payload["next_action"]["key"], "start_tracking")
         self.assertEqual(payload["amount_repair_count"], 0)
+        self.assertEqual(payload["category_review_count"], 0)
         self.assertEqual(payload["category_learning_count"], 0)
         self.assertEqual(payload["duplicate_group_count"], 0)
         self.assertEqual(payload["amount_repairs"], [])
+        self.assertEqual(payload["category_review_candidates"], [])
         self.assertEqual(payload["category_learning_candidates"], [])
         self.assertEqual(payload["duplicate_groups"], [])
 
