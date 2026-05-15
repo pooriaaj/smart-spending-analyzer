@@ -48,6 +48,10 @@ class DatabaseMaintenanceServiceTest(unittest.TestCase):
                 transaction_index_names,
             )
             self.assertIn(
+                "ix_transactions_runtime_owner_account_category_confidence",
+                transaction_index_names,
+            )
+            self.assertIn(
                 "ix_transactions_runtime_owner_account_import_file_at",
                 transaction_index_names,
             )

@@ -40,6 +40,10 @@ RUNTIME_INDEX_STATEMENTS = (
     ON transactions (owner_id, account_id, entry_source, date DESC, id DESC)
     """,
     """
+    CREATE INDEX IF NOT EXISTS ix_transactions_runtime_owner_account_category_confidence
+    ON transactions (owner_id, account_id, entry_source, category_confidence, date DESC, id DESC)
+    """,
+    """
     CREATE INDEX IF NOT EXISTS ix_transactions_runtime_owner_account_import_file_at
     ON transactions (owner_id, account_id, import_file_name, imported_at DESC)
     """,
