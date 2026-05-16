@@ -1744,6 +1744,91 @@ def apply_category_to_merchant_learning_group(
     }
 
 
+def apply_category_review_correction(
+    db: Session,
+    owner_id: int,
+    transaction_id: int,
+    category: str,
+    *,
+    apply_to_similar: bool = True,
+) -> dict[str, int | str | bool] | None:
+    transaction = (
+        db.query(Transaction)
+        .filter(Transaction.owner_id == owner_id, Transaction.id == transaction_id)
+        .one_or_none()
+    )
+    if not transaction:
+        return None
+
+    normalized_category = normalize_category_name(category)
+    direct_was_changed = (
+        normalize_category_name(transaction.category) != normalized_category
+        or transaction.category_source != "category_review_apply"
+        or float(transaction.category_confidence or 0.0) < 1.0
+    )
+
+    transaction.category = normalized_category
+    transaction.category_source = "category_review_apply"
+    transaction.category_confidence = 1.0
+    transaction.category_reason = (
+        "User reviewed this transaction category and taught the app this merchant pattern."
+    )
+
+    similar_updated_count = 0
+    if apply_to_similar:
+        similar_updated_count = apply_category_to_similar_transactions(
+            db=db,
+            owner_id=owner_id,
+            description=transaction.description,
+            category=normalized_category,
+            tx_type=transaction.type,
+            amount=transaction.amount,
+            account_id=transaction.account_id,
+            signal_source="category_review_apply",
+            category_source="category_review_apply",
+            category_confidence=1.0,
+            category_reason=(
+                "Applied from a user-reviewed category on a similar merchant transaction."
+            ),
+        )
+
+    memory_stats = save_category_memory(
+        db=db,
+        owner_id=owner_id,
+        description=transaction.description,
+        category=normalized_category,
+        tx_type=transaction.type,
+        amount=transaction.amount,
+    )
+    learning_event_recorded = record_category_learning_event(
+        db=db,
+        owner_id=owner_id,
+        description=transaction.description,
+        category=normalized_category,
+        tx_type=transaction.type,
+        amount=transaction.amount,
+        account_id=transaction.account_id,
+        signal_source="category_review_apply",
+        confidence=1.0,
+        affected_count=similar_updated_count + 1,
+    )
+
+    db.commit()
+    db.refresh(transaction)
+
+    direct_updated_count = 1 if direct_was_changed else 0
+    return {
+        "transaction_id": transaction.id,
+        "category": normalized_category,
+        "matched_count": similar_updated_count + 1,
+        "updated_count": direct_updated_count + similar_updated_count,
+        "similar_updated_count": similar_updated_count,
+        "memory_entries_created": memory_stats["created"],
+        "memory_entries_updated": memory_stats["updated"],
+        "learning_event_recorded": learning_event_recorded,
+    }
+
+
 def suggest_reference_code_amount_repair(transaction: Transaction) -> SuspiciousAmountRepairCandidate | None:
     description = normalize_description(transaction.description)
     normalized_description = normalize_category_signal_text(description)

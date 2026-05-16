@@ -709,6 +709,23 @@ class CategoryLearningApplyResponse(BaseModel):
     memory_entries_updated: int
 
 
+class CategoryReviewApplyRequest(BaseModel):
+    transaction_id: int = Field(gt=0)
+    category: str = Field(min_length=1, max_length=100)
+    apply_to_similar: bool = True
+
+
+class CategoryReviewApplyResponse(BaseModel):
+    transaction_id: int
+    category: str
+    matched_count: int
+    updated_count: int
+    similar_updated_count: int
+    memory_entries_created: int
+    memory_entries_updated: int
+    learning_event_recorded: bool
+
+
 class SpendingInsights(BaseModel):
     current_month: str | None = None
     current_month_expenses: float

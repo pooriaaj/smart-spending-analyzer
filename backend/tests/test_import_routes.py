@@ -2866,6 +2866,173 @@ class SmartImportRouteTest(unittest.TestCase):
         self.assertIsNotNone(profile)
         self.assertEqual(profile.category, "smoking")
 
+    def test_category_review_apply_updates_transaction_similar_rows_and_memory(self) -> None:
+        with self.session_local() as session:
+            transactions = [
+                Transaction(
+                    amount=8.90,
+                    category="other",
+                    category_confidence=0.24,
+                    category_source="fallback",
+                    description="SQDC77068 MTL",
+                    date=date(2026, 3, 16),
+                    type="expense",
+                    owner_id=self.user_id,
+                    account_id=self.account_id,
+                ),
+                Transaction(
+                    amount=12.60,
+                    category="other",
+                    category_confidence=0.24,
+                    category_source="fallback",
+                    description="SQDC77068 MTL",
+                    date=date(2026, 3, 17),
+                    type="expense",
+                    owner_id=self.user_id,
+                    account_id=self.account_id,
+                ),
+                Transaction(
+                    amount=10.25,
+                    category="other",
+                    category_confidence=0.24,
+                    category_source="fallback",
+                    description="SQDC77068 MTL",
+                    date=date(2026, 3, 18),
+                    type="expense",
+                    owner_id=self.user_id,
+                    account_id=self.account_id,
+                ),
+            ]
+            session.add_all(transactions)
+            session.commit()
+            reviewed_transaction_id = transactions[0].id
+
+        response = self.client.post(
+            "/transactions/categorize/review-apply",
+            json={
+                "transaction_id": reviewed_transaction_id,
+                "category": "smoking",
+                "apply_to_similar": True,
+            },
+        )
+
+        self.assertEqual(response.status_code, 200, response.text)
+        payload = response.json()
+        self.assertEqual(payload["transaction_id"], reviewed_transaction_id)
+        self.assertEqual(payload["category"], "smoking")
+        self.assertEqual(payload["matched_count"], 3)
+        self.assertEqual(payload["updated_count"], 3)
+        self.assertEqual(payload["similar_updated_count"], 2)
+        self.assertTrue(payload["learning_event_recorded"])
+
+        with self.session_local() as session:
+            transactions = (
+                session.query(Transaction)
+                .filter(Transaction.owner_id == self.user_id, Transaction.description == "SQDC77068 MTL")
+                .order_by(Transaction.date.asc())
+                .all()
+            )
+            profile = (
+                session.query(MerchantCategoryProfile)
+                .filter(
+                    MerchantCategoryProfile.owner_id == self.user_id,
+                    MerchantCategoryProfile.merchant_key == "sqdc",
+                    MerchantCategoryProfile.transaction_type == "expense",
+                )
+                .one_or_none()
+            )
+            event = (
+                session.query(CategoryLearningEvent)
+                .filter(
+                    CategoryLearningEvent.owner_id == self.user_id,
+                    CategoryLearningEvent.merchant_key == "sqdc",
+                    CategoryLearningEvent.signal_source == "category_review_apply",
+                )
+                .one_or_none()
+            )
+
+        self.assertEqual(len(transactions), 3)
+        self.assertTrue(all(transaction.category == "smoking" for transaction in transactions))
+        self.assertTrue(all(transaction.category_source == "category_review_apply" for transaction in transactions))
+        self.assertIsNotNone(profile)
+        self.assertEqual(profile.category, "smoking")
+        self.assertIsNotNone(event)
+        self.assertEqual(event.affected_count, 3)
+
+    def test_category_review_apply_rejects_other_users_transaction(self) -> None:
+        with self.session_local() as session:
+            other_user = User(email="other-review@example.com", password_hash="hashed")
+            session.add(other_user)
+            session.flush()
+            other_account = Account(
+                name="Other Account",
+                type="chequing",
+                owner_id=other_user.id,
+                is_active=True,
+            )
+            session.add(other_account)
+            session.flush()
+            other_transaction = Transaction(
+                amount=8.90,
+                category="other",
+                category_confidence=0.24,
+                category_source="fallback",
+                description="SQDC77068 MTL",
+                date=date(2026, 3, 16),
+                type="expense",
+                owner_id=other_user.id,
+                account_id=other_account.id,
+            )
+            session.add(other_transaction)
+            session.commit()
+            other_transaction_id = other_transaction.id
+
+        response = self.client.post(
+            "/transactions/categorize/review-apply",
+            json={
+                "transaction_id": other_transaction_id,
+                "category": "smoking",
+                "apply_to_similar": True,
+            },
+        )
+
+        self.assertEqual(response.status_code, 404, response.text)
+        with self.session_local() as session:
+            unchanged = session.get(Transaction, other_transaction_id)
+        self.assertIsNotNone(unchanged)
+        self.assertEqual(unchanged.category, "other")
+
+    def test_category_review_apply_rejects_one_letter_categories(self) -> None:
+        with self.session_local() as session:
+            transaction = Transaction(
+                amount=8.90,
+                category="other",
+                category_confidence=0.24,
+                category_source="fallback",
+                description="SQDC77068 MTL",
+                date=date(2026, 3, 16),
+                type="expense",
+                owner_id=self.user_id,
+                account_id=self.account_id,
+            )
+            session.add(transaction)
+            session.commit()
+            transaction_id = transaction.id
+
+        response = self.client.post(
+            "/transactions/categorize/review-apply",
+            json={
+                "transaction_id": transaction_id,
+                "category": "s",
+                "apply_to_similar": True,
+            },
+        )
+
+        self.assertEqual(response.status_code, 400, response.text)
+        with self.session_local() as session:
+            unchanged = session.get(Transaction, transaction_id)
+        self.assertEqual(unchanged.category, "other")
+
     def test_manual_create_teaches_existing_similar_transactions(self) -> None:
         with self.session_local() as session:
             session.add_all(

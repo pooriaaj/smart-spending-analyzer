@@ -19,6 +19,8 @@ from app.schemas import (
     CategoryLearningCandidateItem,
     CategoryLearningCandidatesResponse,
     CategoryLearningSummaryResponse,
+    CategoryReviewApplyRequest,
+    CategoryReviewApplyResponse,
     CategorySuggestionRequest,
     CategorySuggestionResponse,
     ConfirmPreviewImportRequest,
@@ -63,6 +65,7 @@ from app.services.transaction_service import (
     get_transactions_page_for_user,
     get_transactions_for_user,
     get_uncategorized_candidates,
+    apply_category_review_correction,
     is_usable_category_name,
     merchant_category_amount_matches,
     normalize_category_name,
@@ -943,6 +946,26 @@ def apply_category_learning_candidate_route(
         representative_amount=payload.representative_amount,
     )
     return CategoryLearningApplyResponse(**result)
+
+
+@router.post("/categorize/review-apply", response_model=CategoryReviewApplyResponse)
+def apply_category_review_correction_route(
+    payload: CategoryReviewApplyRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    validate_transaction_category(payload.category)
+    result = apply_category_review_correction(
+        db=db,
+        owner_id=current_user.id,
+        transaction_id=payload.transaction_id,
+        category=payload.category,
+        apply_to_similar=payload.apply_to_similar,
+    )
+    if result is None:
+        raise HTTPException(status_code=404, detail="Transaction not found")
+
+    return CategoryReviewApplyResponse(**result)
 
 
 @router.post("/categorize/suggest", response_model=CategorySuggestionResponse)
