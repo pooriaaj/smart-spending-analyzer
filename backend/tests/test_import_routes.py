@@ -563,6 +563,10 @@ class SmartImportRouteTest(unittest.TestCase):
                 "This imported row was saved before category audit metadata existed, so it should be reviewed once.",
             },
         )
+        self.assertEqual(payload["category_review_candidates"][0]["merchant_key"], "sqdc")
+        self.assertEqual(payload["category_review_candidates"][0]["suggested_category"], "smoking")
+        self.assertGreaterEqual(payload["category_review_candidates"][0]["suggestion_confidence"], 0.9)
+        self.assertTrue(payload["category_review_candidates"][0]["apply_to_similar_recommended"])
         self.assertGreaterEqual(payload["category_learning_count"], 1)
         self.assertEqual(payload["category_learning_candidates"][0]["merchant_key"], "sqdc")
         self.assertEqual(payload["duplicate_group_count"], 1)

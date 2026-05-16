@@ -3854,22 +3854,45 @@ def get_transaction_review_queue(
         }
         for item in amount_repair_candidates[:max_items]
     ]
-    category_review_items = [
-        {
-            "transaction_id": transaction.id,
-            "date": transaction.date,
-            "description": transaction.description,
-            "type": transaction.type,
-            "category": transaction.category,
-            "amount": transaction.amount,
-            "account_id": transaction.account_id,
-            "category_confidence": float(transaction.category_confidence or 0.0),
-            "category_source": transaction.category_source,
-            "category_reason": transaction.category_reason,
-            "reason": category_review_reason(transaction),
-        }
-        for transaction in category_review_candidates[:max_items]
-    ]
+    category_review_items = []
+    for transaction in category_review_candidates[:max_items]:
+        decision = categorize_transaction_details(
+            db=db,
+            owner_id=owner_id,
+            description=transaction.description,
+            tx_type=transaction.type,
+            amount=transaction.amount,
+        )
+        fingerprint = extract_merchant_fingerprint(transaction.description)
+        suggested_category = normalize_category_name(decision.category)
+        current_category = normalize_category_name(transaction.category)
+        category_review_items.append(
+            {
+                "transaction_id": transaction.id,
+                "date": transaction.date,
+                "description": transaction.description,
+                "type": transaction.type,
+                "category": transaction.category,
+                "amount": transaction.amount,
+                "account_id": transaction.account_id,
+                "category_confidence": float(transaction.category_confidence or 0.0),
+                "category_source": transaction.category_source,
+                "category_reason": transaction.category_reason,
+                "reason": category_review_reason(transaction),
+                "merchant_key": fingerprint[0] if fingerprint else None,
+                "suggested_category": suggested_category,
+                "suggestion_confidence": round(float(decision.confidence or 0.0), 2),
+                "suggestion_source": decision.source,
+                "suggestion_reason": decision.reason,
+                "apply_to_similar_recommended": bool(
+                    fingerprint
+                    and (
+                        current_category in UNCATEGORIZED_VALUES
+                        or suggested_category != current_category
+                    )
+                ),
+            }
+        )
     category_learning_items = [
         {
             "merchant_key": item.merchant_key,

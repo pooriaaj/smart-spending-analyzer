@@ -664,6 +664,12 @@ class TransactionCategoryReviewItem(BaseModel):
     category_source: str | None = None
     category_reason: str | None = None
     reason: str
+    merchant_key: str | None = None
+    suggested_category: str | None = None
+    suggestion_confidence: float = 0.0
+    suggestion_source: str | None = None
+    suggestion_reason: str | None = None
+    apply_to_similar_recommended: bool = True
 
 
 class TransactionReviewQueueResponse(BaseModel):
