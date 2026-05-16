@@ -20,6 +20,10 @@
           "value": "camera=(), microphone=(), geolocation=()"
         },
         {
+          "key": "X-Permitted-Cross-Domain-Policies",
+          "value": "none"
+        },
+        {
           "key": "Strict-Transport-Security",
           "value": "max-age=31536000"
         }

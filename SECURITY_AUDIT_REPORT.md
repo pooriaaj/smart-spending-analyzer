@@ -89,7 +89,7 @@ Smart Spending Analyzer defensive audit for the FastAPI backend, React frontend,
 
 - Files: `backend/app/security.py`, `backend/app/main.py`
 - Why it matters: browser security headers reduce MIME sniffing, clickjacking, referrer leakage, and accidental framing.
-- Free fix: add `X-Content-Type-Options`, `Referrer-Policy`, `X-Frame-Options`, a conservative API CSP, and HSTS only in production HTTPS.
+- Free fix: add `X-Content-Type-Options`, `Referrer-Policy`, `X-Frame-Options`, `X-Permitted-Cross-Domain-Policies`, a conservative API CSP, `Cache-Control: no-store` for sensitive auth/user/assistant responses, and HSTS only in production HTTPS.
 - Test to prove the fix: manual `curl -I` or browser network inspection after deploy.
 
 ## Low Issues
@@ -105,7 +105,7 @@ Smart Spending Analyzer defensive audit for the FastAPI backend, React frontend,
 
 - Files: `frontend/vercel.json`
 - Why it matters: static frontend responses also benefit from MIME-sniffing, clickjacking, referrer, permission, and HTTPS downgrade protections.
-- Free fix: add Vercel response headers for `X-Content-Type-Options`, `Referrer-Policy`, `X-Frame-Options`, `Permissions-Policy`, and production HTTPS HSTS.
+- Free fix: add Vercel response headers for `X-Content-Type-Options`, `Referrer-Policy`, `X-Frame-Options`, `X-Permitted-Cross-Domain-Policies`, `Permissions-Policy`, and production HTTPS HSTS.
 - Test to prove the fix: after Vercel deploy, inspect response headers in browser devtools or run `curl -I https://your-domain`.
 
 ### 3. Free dependency/security checks were not automated

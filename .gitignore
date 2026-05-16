@@ -32,6 +32,7 @@ build/
 .coverage
 htmlcov/
 .pytest_cache/
+pytest-cache-files-*/
 .mypy_cache/
 backend/.pip-audit-cache/
 
@@ -43,6 +44,7 @@ frontend/dist/
 backend/.venv/
 backend/venv/
 backend/.pip-audit-tmp/
+backend/pytest-cache-files-*/
 
 # Logs
 *.log

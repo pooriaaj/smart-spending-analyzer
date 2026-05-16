@@ -182,10 +182,13 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         response.headers.setdefault("X-Content-Type-Options", "nosniff")
         response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
         response.headers.setdefault("X-Frame-Options", "DENY")
+        response.headers.setdefault("X-Permitted-Cross-Domain-Policies", "none")
         response.headers.setdefault(
             "Content-Security-Policy",
             "default-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'",
         )
+        if request.url.path.startswith(("/auth", "/users", "/assistant")):
+            response.headers.setdefault("Cache-Control", "no-store")
         if is_production():
             response.headers.setdefault("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
         return response
