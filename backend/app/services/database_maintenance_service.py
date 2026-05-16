@@ -55,6 +55,14 @@ RUNTIME_INDEX_STATEMENTS = (
     CREATE INDEX IF NOT EXISTS ix_merchant_profiles_runtime_owner_key_type
     ON merchant_category_profiles (owner_id, merchant_key, transaction_type)
     """,
+    """
+    CREATE INDEX IF NOT EXISTS ix_merchant_profiles_runtime_key_type_owner
+    ON merchant_category_profiles (merchant_key, transaction_type, owner_id)
+    """,
+    """
+    CREATE INDEX IF NOT EXISTS ix_merchant_profiles_runtime_owner_type_key
+    ON merchant_category_profiles (owner_id, transaction_type, merchant_key)
+    """,
 )
 
 

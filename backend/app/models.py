@@ -202,6 +202,8 @@ class MerchantCategoryProfile(Base):
             name="uq_merchant_profile_owner_key_type",
         ),
         Index("ix_merchant_profiles_owner_key", "owner_id", "merchant_key"),
+        Index("ix_merchant_profiles_key_type_owner", "merchant_key", "transaction_type", "owner_id"),
+        Index("ix_merchant_profiles_owner_type_key", "owner_id", "transaction_type", "merchant_key"),
     )
 
 
