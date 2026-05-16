@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from datetime import date, datetime, timezone
 from typing import get_args
 
@@ -38,6 +39,7 @@ from app.schemas import (
     TransactionSourceSummaryResponse,
 )
 from app.services.account_service import ensure_default_account, get_account_for_user
+from app.security import ensure_batch_file_count, read_validated_import_upload
 from app.services.seed_service import seed_realistic_transactions
 from app.services.transaction_service import (
     apply_category_to_merchant_learning_group,
@@ -75,6 +77,7 @@ from app.services.transaction_service import (
 from app.services.unified_import_service import process_smart_import, process_smart_import_batch
 
 router = APIRouter(prefix="/transactions", tags=["Transactions"])
+logger = logging.getLogger(__name__)
 VALID_ENTRY_SOURCES = set(get_args(TransactionEntrySource))
 
 
@@ -549,21 +552,22 @@ async def smart_import_file(
         raise HTTPException(status_code=404, detail="Account not found")
 
     try:
-        file_bytes = await file.read()
+        file_bytes, safe_filename, safe_content_type = await read_validated_import_upload(file)
         result = process_smart_import(
             db=db,
             owner_id=current_user.id,
             account_id=account_id,
             file_bytes=file_bytes,
-            filename=file.filename,
-            content_type=file.content_type,
+            filename=safe_filename,
+            content_type=safe_content_type,
         )
         commit_pending_side_effects_safely(db)
         return result
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"Smart import failed: {str(exc)}")
+        logger.exception("Smart import failed for user_id=%s account_id=%s", current_user.id, account_id)
+        raise HTTPException(status_code=500, detail="Smart import failed. Please try a different file.")
 
 
 @router.post("/import/files", response_model=SmartImportResponse)
@@ -578,8 +582,9 @@ async def smart_import_files(
         raise HTTPException(status_code=404, detail="Account not found")
 
     try:
+        files = ensure_batch_file_count(files)
         file_payloads = [
-            (await file.read(), file.filename or "statement", file.content_type)
+            await read_validated_import_upload(file)
             for file in files
         ]
         result = process_smart_import_batch(
@@ -593,7 +598,8 @@ async def smart_import_files(
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"Smart batch import failed: {str(exc)}")
+        logger.exception("Smart batch import failed for user_id=%s account_id=%s", current_user.id, account_id)
+        raise HTTPException(status_code=500, detail="Smart batch import failed. Please review the files and try again.")
 
 
 @router.post("/import/confirm-preview")

@@ -32,6 +32,7 @@ from app.services.category_taxonomy import (
 )
 from app.services.merchant_enrichment_service import enrich_merchant_category
 from app.schemas import StatementPreviewRow
+from app.security import max_csv_rows, sanitize_import_text
 
 
 SUPPORTED_ENCODINGS = ["utf-8-sig", "utf-8", "cp1252", "latin-1"]
@@ -1903,8 +1904,10 @@ def read_csv_rows(text: str) -> tuple[list[dict], dict[str, str]]:
     header_mapping = resolve_header_mapping(normalized_headers)
 
     rows = []
-    for row in reader:
-        normalized_row = {normalize_header(k): (v or "").strip() for k, v in row.items()}
+    for index, row in enumerate(reader, start=1):
+        if index > max_csv_rows():
+            raise ValueError(f"CSV row limit exceeded. Maximum is {max_csv_rows()} rows per file.")
+        normalized_row = {normalize_header(k): sanitize_import_text(v) for k, v in row.items()}
         rows.append(normalized_row)
 
     return rows, header_mapping
@@ -1938,13 +1941,13 @@ def infer_type_and_amount(row: dict, header_mapping: dict[str, str]) -> tuple[st
 
 
 def normalize_description(value: str) -> str:
-    text = re.sub(r"\s+", " ", value.strip())
+    text = re.sub(r"\s+", " ", sanitize_import_text(value).strip())
     text = strip_statement_header_noise(text)
     text = strip_statement_transaction_prefixes(text)
     text = strip_payment_processor_prefixes(text)
     text = re.sub(r"\bpos\b|\bpurchase\b|\bpayment\b|\bdebit\b|\bcredit\b", "", text, flags=re.IGNORECASE)
     text = re.sub(r"\s+", " ", text).strip(" -")
-    return text or value.strip()
+    return text or sanitize_import_text(value)
 
 
 def normalize_repeating_description(value: str) -> str:

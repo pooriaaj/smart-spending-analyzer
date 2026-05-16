@@ -4,6 +4,7 @@ import json
 import os
 import re
 import urllib.error
+import urllib.parse
 import urllib.request
 from dataclasses import dataclass
 from typing import Any
@@ -650,6 +651,13 @@ def google_places_lookup_enabled() -> bool:
     return bool(GOOGLE_PLACES_API_KEY)
 
 
+def get_google_places_text_search_url() -> str:
+    parsed_url = urllib.parse.urlparse(GOOGLE_PLACES_TEXT_SEARCH_URL)
+    if parsed_url.scheme != "https" or parsed_url.netloc != "places.googleapis.com":
+        raise ValueError("Google Places lookup URL is not allowed.")
+    return GOOGLE_PLACES_TEXT_SEARCH_URL
+
+
 def build_google_places_query(merchant_key: str) -> str:
     if not MERCHANT_LOOKUP_REGION:
         return merchant_key
@@ -668,7 +676,7 @@ def fetch_google_places_text_search(merchant_key: str) -> dict[str, Any] | None:
         "regionCode": MERCHANT_LOOKUP_REGION_CODE,
     }
     request = urllib.request.Request(
-        GOOGLE_PLACES_TEXT_SEARCH_URL,
+        get_google_places_text_search_url(),
         data=json.dumps(payload).encode("utf-8"),
         method="POST",
         headers={
@@ -679,9 +687,9 @@ def fetch_google_places_text_search(merchant_key: str) -> dict[str, Any] | None:
     )
 
     try:
-        with urllib.request.urlopen(request, timeout=MERCHANT_LOOKUP_TIMEOUT_SECONDS) as response:
+        with urllib.request.urlopen(request, timeout=MERCHANT_LOOKUP_TIMEOUT_SECONDS) as response:  # nosec B310
             return json.loads(response.read().decode("utf-8"))
-    except (OSError, urllib.error.URLError, urllib.error.HTTPError, json.JSONDecodeError):
+    except (OSError, ValueError, urllib.error.URLError, urllib.error.HTTPError, json.JSONDecodeError):
         return None
 
 
