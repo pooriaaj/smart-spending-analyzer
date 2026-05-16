@@ -1,0 +1,11 @@
+skips:
+  # Token type "bearer" is a protocol constant, not a password.
+  - B106
+  # PDF extraction and cleanup intentionally ignore bad pages/close failures.
+  - B110
+  - B112
+  # Seed data randomness is demo data only, not cryptographic randomness.
+  - B311
+  # Local OCR calls a configured Tesseract binary with shell=False and fixed args.
+  - B404
+  - B603
