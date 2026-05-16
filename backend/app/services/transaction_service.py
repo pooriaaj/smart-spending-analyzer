@@ -45,6 +45,7 @@ EXPENSE_INCOMPATIBLE_CATEGORIES = {"income", "salary", "refund"}
 COMMUNITY_PROFILE_MIN_OWNER_COUNT = 2
 COMMUNITY_PROFILE_MIN_OWNER_CONFIRMATIONS = 2
 COMMUNITY_PROFILE_MIN_CATEGORY_SHARE = 0.67
+COMMUNITY_PROFILE_AUTO_TRUST_CATEGORY_SHARE = 0.8
 COMMUNITY_PROFILE_EXCLUDED_CATEGORIES = {
     "bank fees",
     "debt payments",
@@ -1001,15 +1002,26 @@ def build_community_profile_decision(
         0.9,
         0.72 + (best_owner_count * 0.05) + (min(confirmation_count, 8) * 0.01),
     )
+    has_category_conflict = len(category_owners) > 1
+    if has_category_conflict and category_share < COMMUNITY_PROFILE_AUTO_TRUST_CATEGORY_SHARE:
+        confidence = min(confidence, 0.74)
+
+    if has_category_conflict:
+        reason = (
+            "Matched anonymized community merchant learning, but users do not fully "
+            "agree on this merchant yet. Review this category before saving."
+        )
+    else:
+        reason = (
+            "Matched anonymized community merchant learning from multiple users who "
+            "confirmed this merchant category. Personal memory still overrides this."
+        )
 
     return CategoryDecision(
         category=best_category,
         confidence=round(confidence, 2),
         matched_keyword=merchant_key,
-        reason=(
-            "Matched anonymized community merchant learning from multiple users who "
-            "confirmed this merchant category. Personal memory still overrides this."
-        ),
+        reason=reason,
         source="community_profile",
     )
 

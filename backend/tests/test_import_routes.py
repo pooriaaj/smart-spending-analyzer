@@ -1134,6 +1134,85 @@ class SmartImportRouteTest(unittest.TestCase):
         self.assertEqual(preview_row["category"], "subscriptions")
         self.assertEqual(preview_row["category_source"], "rule")
 
+    def test_import_file_requires_review_for_conflicting_community_learning(self) -> None:
+        with self.session_local() as session:
+            first_user = User(email="community-conflict-one@example.com", password_hash="hashed")
+            second_user = User(email="community-conflict-two@example.com", password_hash="hashed")
+            third_user = User(email="community-conflict-three@example.com", password_hash="hashed")
+            fourth_user = User(email="community-conflict-four@example.com", password_hash="hashed")
+            session.add_all([first_user, second_user, third_user, fourth_user])
+            session.flush()
+            session.add_all(
+                [
+                    MerchantCategoryProfile(
+                        merchant_key="glimmerbox",
+                        display_name="Glimmerbox",
+                        category="entertainment",
+                        transaction_type="expense",
+                        confidence=0.97,
+                        confirmation_count=3,
+                        last_amount=18.0,
+                        owner_id=first_user.id,
+                    ),
+                    MerchantCategoryProfile(
+                        merchant_key="glimmerbox",
+                        display_name="Glimmerbox",
+                        category="entertainment",
+                        transaction_type="expense",
+                        confidence=0.94,
+                        confirmation_count=2,
+                        last_amount=19.0,
+                        owner_id=second_user.id,
+                    ),
+                    MerchantCategoryProfile(
+                        merchant_key="glimmerbox",
+                        display_name="Glimmerbox",
+                        category="entertainment",
+                        transaction_type="expense",
+                        confidence=0.94,
+                        confirmation_count=2,
+                        last_amount=18.0,
+                        owner_id=third_user.id,
+                    ),
+                    MerchantCategoryProfile(
+                        merchant_key="glimmerbox",
+                        display_name="Glimmerbox",
+                        category="subscriptions",
+                        transaction_type="expense",
+                        confidence=0.94,
+                        confirmation_count=2,
+                        last_amount=18.0,
+                        owner_id=fourth_user.id,
+                    ),
+                ]
+            )
+            session.commit()
+
+        pdf_bytes = build_text_pdf(
+            [
+                "Royal Bank of Canada",
+                "Details of your account activity",
+                "From March 2, 2026 to April 2, 2026",
+                "Date Description Withdrawals ($) Deposits ($) Balance ($)",
+                "3 Mar Contactless Interac purchase - 3001",
+                "GLIMMERBOX 18.00 56.00",
+            ]
+        )
+
+        response = self.client.post(
+            "/transactions/import/file",
+            data={"account_id": str(self.account_id)},
+            files={"file": ("community-conflict.pdf", pdf_bytes, "application/pdf")},
+        )
+
+        self.assertEqual(response.status_code, 200, response.text)
+        preview_row = response.json()["preview_rows"][0]
+        self.assertEqual(preview_row["category"], "entertainment")
+        self.assertEqual(preview_row["category_source"], "community_profile")
+        self.assertLess(preview_row["category_confidence"], 0.75)
+        self.assertTrue(preview_row["category_review_required"])
+        self.assertIn("Review this category", preview_row["category_reason"])
+
     def test_import_file_excludes_users_who_disabled_community_learning(self) -> None:
         with self.session_local() as session:
             disabled_user = User(email="community-disabled@example.com", password_hash="hashed")
