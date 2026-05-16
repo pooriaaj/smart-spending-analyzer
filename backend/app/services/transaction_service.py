@@ -799,6 +799,20 @@ def derive_category_memory_keywords(description: str) -> list[str]:
     return deduped_keywords
 
 
+def is_valid_category_memory_keyword(keyword: str | None) -> bool:
+    cleaned = re.sub(r"[^a-z0-9& ]+", " ", str(keyword or "").lower())
+    cleaned = re.sub(r"\s+", " ", cleaned).strip()
+    if not cleaned or cleaned in CATEGORY_MEMORY_STOPWORDS:
+        return False
+
+    tokens = cleaned.split()
+    if not tokens:
+        return False
+    if all(token.isdigit() or token in CATEGORY_MEMORY_STOPWORDS for token in tokens):
+        return False
+    return any(len(token) >= 3 and not token.isdigit() for token in tokens)
+
+
 def title_case_merchant_key(value: str) -> str:
     return " ".join(word.capitalize() for word in value.split())
 
@@ -857,6 +871,22 @@ def merchant_profile_base_key(merchant_key: str | None) -> str:
 def merchant_key_requires_amount_guard(merchant_key: str | None) -> bool:
     base_key = merchant_profile_base_key(merchant_key).strip().lower()
     return base_key in AMOUNT_SENSITIVE_MERCHANT_KEYS
+
+
+def is_valid_merchant_learning_key(merchant_key: str | None) -> bool:
+    base_key = merchant_profile_base_key(merchant_key).strip().lower()
+    if not base_key or base_key in MERCHANT_PROFILE_STOPWORDS:
+        return False
+
+    cleaned = re.sub(r"[^a-z0-9& ]+", " ", base_key)
+    cleaned = re.sub(r"\s+", " ", cleaned).strip()
+    if not cleaned:
+        return False
+
+    tokens = cleaned.split()
+    if all(token.isdigit() or token in MERCHANT_PROFILE_STOPWORDS for token in tokens):
+        return False
+    return any(len(token) >= 3 and not token.isdigit() for token in tokens)
 
 
 def normalize_amount_for_learning(amount: float | None) -> float | None:
@@ -1160,6 +1190,9 @@ def save_merchant_category_profile(
         return {"created": 0, "updated": 0}
 
     merchant_key, display_name = fingerprint
+    if not is_valid_merchant_learning_key(merchant_key):
+        return {"created": 0, "updated": 0}
+
     profile_key = learned_profile_key_for_amount(merchant_key, amount)
     existing = (
         db.query(MerchantCategoryProfile)
@@ -1229,6 +1262,9 @@ def save_category_memory(
     updated = profile_stats["updated"]
 
     for keyword in keywords:
+        if not is_valid_category_memory_keyword(keyword):
+            continue
+
         existing = (
             db.query(CategoryMemory)
             .filter(
@@ -1280,6 +1316,9 @@ def record_category_learning_event(
         return False
 
     merchant_key, display_name = fingerprint
+    if not is_valid_merchant_learning_key(merchant_key):
+        return False
+
     amount_bucket = learned_amount_bucket(amount) if merchant_key_requires_amount_guard(merchant_key) else None
     db.add(
         CategoryLearningEvent(
@@ -1320,6 +1359,9 @@ def apply_category_to_similar_transactions(
         return 0
 
     merchant_key, _ = fingerprint
+    if not is_valid_merchant_learning_key(merchant_key):
+        return 0
+
     query = db.query(Transaction).filter(
         Transaction.owner_id == owner_id,
         Transaction.type == tx_type,
@@ -2215,6 +2257,9 @@ def learnable_category_from_merchant_profile(
         return None
 
     merchant_key, _ = fingerprint
+    if not is_valid_merchant_learning_key(merchant_key):
+        return None
+
     candidate_query = (
         db.query(MerchantCategoryProfile)
         .filter(
@@ -3939,7 +3984,10 @@ def repair_category_learning_artifacts(db: Session, owner_id: int) -> dict[str, 
     memories = db.query(CategoryMemory).filter(CategoryMemory.owner_id == owner_id).all()
     for memory in memories:
         normalized_category = normalize_category_name(memory.category)
-        if not should_store_category_memory(normalized_category):
+        if (
+            not should_store_category_memory(normalized_category)
+            or not is_valid_category_memory_keyword(memory.keyword)
+        ):
             db.delete(memory)
             deleted_memories += 1
             continue
@@ -3954,13 +4002,13 @@ def repair_category_learning_artifacts(db: Session, owner_id: int) -> dict[str, 
     )
     for profile in profiles:
         normalized_category = normalize_category_name(profile.category)
-        profile_keys_to_refresh.add(
-            (
-                merchant_profile_base_key(profile.merchant_key),
-                profile.transaction_type,
-            )
-        )
-        if not should_store_category_memory(normalized_category):
+        base_merchant_key = merchant_profile_base_key(profile.merchant_key)
+        if base_merchant_key:
+            profile_keys_to_refresh.add((base_merchant_key, profile.transaction_type))
+        if (
+            not should_store_category_memory(normalized_category)
+            or not is_valid_merchant_learning_key(profile.merchant_key)
+        ):
             db.delete(profile)
             deleted_profiles += 1
             continue
@@ -3975,7 +4023,10 @@ def repair_category_learning_artifacts(db: Session, owner_id: int) -> dict[str, 
     )
     for event in learning_events:
         normalized_category = normalize_category_name(event.category)
-        if not should_store_category_memory(normalized_category):
+        if (
+            not should_store_category_memory(normalized_category)
+            or not is_valid_merchant_learning_key(event.merchant_key)
+        ):
             db.delete(event)
             deleted_events += 1
             continue
@@ -4073,6 +4124,11 @@ def normalize_existing_categories_for_user(
         memory_created += memory_stats["created"]
         memory_updated += memory_stats["updated"]
 
+    final_artifact_stats = repair_category_learning_artifacts(db, owner_id)
+    artifact_stats = {
+        key: artifact_stats.get(key, 0) + final_artifact_stats.get(key, 0)
+        for key in set(artifact_stats) | set(final_artifact_stats)
+    }
     artifact_change_count = sum(artifact_stats.values())
     if updated_count > 0 or memory_created > 0 or memory_updated > 0 or artifact_change_count > 0:
         db.commit()

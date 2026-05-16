@@ -3540,6 +3540,87 @@ class SmartImportRouteTest(unittest.TestCase):
         self.assertEqual(len(time_profiles), 1)
         self.assertEqual(len(time_memories), 1)
 
+    def test_normalize_categories_route_removes_statement_noise_learning_artifacts(self) -> None:
+        with self.session_local() as session:
+            session.add_all(
+                [
+                    CategoryMemory(
+                        keyword="time",
+                        category="rent",
+                        transaction_type="expense",
+                        owner_id=self.user_id,
+                    ),
+                    MerchantCategoryProfile(
+                        merchant_key="time",
+                        display_name="Time",
+                        category="rent",
+                        transaction_type="expense",
+                        confidence=0.97,
+                        confirmation_count=3,
+                        last_amount=20.99,
+                        owner_id=self.user_id,
+                    ),
+                    CategoryLearningEvent(
+                        merchant_key="time",
+                        display_name="Time",
+                        category="rent",
+                        transaction_type="expense",
+                        signal_source="legacy_import",
+                        confidence=0.97,
+                        affected_count=3,
+                        owner_id=self.user_id,
+                        account_id=self.account_id,
+                    ),
+                    Transaction(
+                        amount=20.99,
+                        category="other",
+                        description="Time",
+                        date=date(2026, 4, 25),
+                        type="expense",
+                        owner_id=self.user_id,
+                        account_id=self.account_id,
+                    ),
+                ]
+            )
+            session.commit()
+
+        normalize_response = self.client.post(
+            "/transactions/normalize-categories",
+            params={"account_id": self.account_id},
+        )
+
+        self.assertEqual(normalize_response.status_code, 200, normalize_response.text)
+        payload = normalize_response.json()
+        self.assertEqual(payload["learning_memories_deleted"], 1)
+        self.assertEqual(payload["merchant_profiles_deleted"], 1)
+        self.assertEqual(payload["learning_events_deleted"], 1)
+
+        with self.session_local() as session:
+            self.assertEqual(
+                session.query(CategoryMemory)
+                .filter(CategoryMemory.owner_id == self.user_id, CategoryMemory.keyword == "time")
+                .count(),
+                0,
+            )
+            self.assertEqual(
+                session.query(MerchantCategoryProfile)
+                .filter(
+                    MerchantCategoryProfile.owner_id == self.user_id,
+                    MerchantCategoryProfile.merchant_key == "time",
+                )
+                .count(),
+                0,
+            )
+            self.assertEqual(
+                session.query(CategoryLearningEvent)
+                .filter(
+                    CategoryLearningEvent.owner_id == self.user_id,
+                    CategoryLearningEvent.merchant_key == "time",
+                )
+                .count(),
+                0,
+            )
+
     def test_normalize_categories_route_backfills_category_memory(self) -> None:
         with self.session_local() as session:
             session.add_all(

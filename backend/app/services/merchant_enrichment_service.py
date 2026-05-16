@@ -9,7 +9,6 @@ import urllib.request
 from dataclasses import dataclass
 from typing import Any
 
-from sqlalchemy import inspect
 from sqlalchemy.orm import Session
 
 from app.models import MerchantLookupCache
@@ -458,10 +457,10 @@ class MerchantEnrichmentResult:
 
 
 def merchant_lookup_cache_table_available(db: Session) -> bool:
-    try:
-        return inspect(db.get_bind()).has_table(MerchantLookupCache.__tablename__)
-    except Exception:
-        return False
+    # The app creates this table at startup through Base.metadata.create_all.
+    # Avoid runtime SQLAlchemy inspection here: on SQLite it can rollback the
+    # current transaction and undo pending category-learning cleanup.
+    return True
 
 
 def title_case_merchant(value: str) -> str:
