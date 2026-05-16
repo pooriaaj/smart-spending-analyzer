@@ -39,7 +39,7 @@ from app.schemas import (
     TransactionSourceSummaryResponse,
 )
 from app.services.account_service import ensure_default_account, get_account_for_user
-from app.security import ensure_batch_file_count, read_validated_import_upload
+from app.security import ensure_batch_file_count, ensure_batch_payload_size, read_validated_import_upload
 from app.services.seed_service import seed_realistic_transactions
 from app.services.transaction_service import (
     apply_category_to_merchant_learning_group,
@@ -587,6 +587,7 @@ async def smart_import_files(
             await read_validated_import_upload(file)
             for file in files
         ]
+        ensure_batch_payload_size(file_payloads)
         result = process_smart_import_batch(
             db=db,
             owner_id=current_user.id,

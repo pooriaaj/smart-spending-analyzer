@@ -367,6 +367,7 @@ DEFAULT_NO_TRANSACTIONS_ERROR = (
 )
 PDF_OCR_MAX_PAGES = 8
 PDF_OCR_RENDER_DPI_DEFAULT = 200
+PDF_TEXT_MAX_PAGES_DEFAULT = 40
 
 
 @dataclass(frozen=True)
@@ -383,6 +384,10 @@ class PdfOcrFallbackResult:
     notes: tuple[str, ...] = ()
     candidate_pages: int = 0
     processed_pages: int = 0
+
+
+def get_pdf_text_max_pages() -> int:
+    return int(os.getenv("PDF_TEXT_MAX_PAGES", str(PDF_TEXT_MAX_PAGES_DEFAULT)))
 
 
 def strip_accents(value: str) -> str:
@@ -443,6 +448,10 @@ def extract_pdf_text_result(file_bytes: bytes) -> PdfTextExtractionResult:
     reader = PdfReader(io.BytesIO(file_bytes))
     text_parts: list[str] = []
     total_pages = len(reader.pages)
+    max_pages = get_pdf_text_max_pages()
+    if total_pages > max_pages:
+        raise ValueError(f"PDF has too many pages. Maximum supported statement length is {max_pages} pages.")
+
     readable_text_pages = 0
     page_texts: list[str] = []
 

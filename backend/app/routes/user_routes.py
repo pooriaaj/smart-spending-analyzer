@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.auth import hash_password, verify_password
@@ -20,6 +21,10 @@ from app.services.transaction_service import (
 )
 
 router = APIRouter(prefix="/users", tags=["Users"])
+
+
+def normalize_email_address(email: str) -> str:
+    return str(email or "").strip().lower()
 
 
 def get_community_learning_preference(db: Session, owner_id: int) -> UserLearningPreference | None:
@@ -85,9 +90,10 @@ def update_my_profile(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> UserProfileResponse:
+    normalized_email = normalize_email_address(payload.email)
     existing_user = (
         db.query(User)
-        .filter(User.email == payload.email, User.id != current_user.id)
+        .filter(func.lower(User.email) == normalized_email, User.id != current_user.id)
         .first()
     )
 
@@ -97,7 +103,7 @@ def update_my_profile(
             detail="Email already in use",
         )
 
-    current_user.email = payload.email
+    current_user.email = normalized_email
     db.commit()
     db.refresh(current_user)
     return build_profile_response(db, current_user)

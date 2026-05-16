@@ -42,6 +42,7 @@ frontend/dist/
 # Backend local
 backend/.venv/
 backend/venv/
+backend/.pip-audit-tmp/
 
 # Logs
 *.log

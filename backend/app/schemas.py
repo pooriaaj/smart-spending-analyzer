@@ -158,7 +158,7 @@ class BudgetBuildRequest(BaseModel):
 class BudgetBulkUpsertRequest(BaseModel):
     month: str = Field(pattern=r"^\d{4}-\d{2}$")
     account_id: int | None = None
-    items: list[BudgetPlanTarget] = Field(default_factory=list)
+    items: list[BudgetPlanTarget] = Field(default_factory=list, max_length=100)
 
 
 class BudgetPlanResponse(ORMBaseModel):
@@ -504,7 +504,7 @@ class SuspiciousAmountRepairPreviewResponse(BaseModel):
 
 
 class SuspiciousAmountRepairApplyRequest(BaseModel):
-    transaction_ids: list[int] = Field(default_factory=list)
+    transaction_ids: list[int] = Field(default_factory=list, max_length=1000)
     account_id: int | None = None
 
 
@@ -561,7 +561,7 @@ class TopExpenseCategory(BaseModel):
 class CategorySuggestionRequest(BaseModel):
     description: str = Field(min_length=1, max_length=500)
     type: TransactionType
-    amount: float | None = None
+    amount: float | None = Field(default=None, gt=0, le=1_000_000)
 
 
 class CategorySuggestionResponse(BaseModel):
@@ -588,7 +588,7 @@ class BulkCategorySuggestionResponse(BaseModel):
 
 
 class BulkCategoryApplyRequest(BaseModel):
-    transaction_ids: list[int] = Field(default_factory=list)
+    transaction_ids: list[int] = Field(default_factory=list, max_length=1000)
 
 
 class BulkCategoryApplyResponse(BaseModel):
@@ -687,7 +687,7 @@ class CategoryLearningApplyRequest(BaseModel):
     type: TransactionType
     category: str = Field(min_length=1, max_length=100)
     account_id: int | None = None
-    representative_amount: float | None = None
+    representative_amount: float | None = Field(default=None, gt=0, le=1_000_000)
 
 
 class CategoryLearningApplyResponse(BaseModel):

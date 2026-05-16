@@ -618,7 +618,17 @@ def month_date_bounds(month: str | None) -> tuple[date | None, date | None]:
 
 
 def parse_amount(value: str) -> float:
-    cleaned = value.replace(",", "").replace("$", "").strip()
+    cleaned = (
+        str(value)
+        .strip()
+        .lstrip("'")
+        .replace("\u2212", "-")
+        .replace("\u2013", "-")
+        .replace("\u2014", "-")
+        .replace(",", "")
+        .replace("$", "")
+        .strip()
+    )
     if cleaned.startswith("(") and cleaned.endswith(")"):
         cleaned = f"-{cleaned[1:-1]}"
     return float(cleaned)

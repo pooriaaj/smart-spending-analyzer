@@ -8,6 +8,7 @@ from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.auth import create_access_token, hash_password, verify_password
@@ -44,9 +45,19 @@ def expose_reset_url_in_response() -> bool:
     return not is_production()
 
 
+def normalize_email_address(email: str) -> str:
+    return str(email or "").strip().lower()
+
+
+def find_user_by_email(db: Session, email: str) -> User | None:
+    normalized_email = normalize_email_address(email)
+    return db.query(User).filter(func.lower(User.email) == normalized_email).first()
+
+
 @router.post("/register", response_model=Token)
 def register(user: UserCreate, db: Session = Depends(get_db)) -> Token:
-    existing_user = db.query(User).filter(User.email == user.email).first()
+    normalized_email = normalize_email_address(user.email)
+    existing_user = find_user_by_email(db, normalized_email)
     if existing_user:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -54,7 +65,7 @@ def register(user: UserCreate, db: Session = Depends(get_db)) -> Token:
         )
 
     new_user = User(
-        email=user.email,
+        email=normalized_email,
         password_hash=hash_password(user.password),
     )
     db.add(new_user)
@@ -71,7 +82,7 @@ def login(
     form_data: OAuth2PasswordRequestForm = Depends(),
     db: Session = Depends(get_db),
 ) -> Token:
-    user = db.query(User).filter(User.email == form_data.username).first()
+    user = find_user_by_email(db, form_data.username)
 
     if not user or not verify_password(form_data.password, user.password_hash):
         raise HTTPException(
@@ -89,7 +100,7 @@ def forgot_password(
     payload: ForgotPasswordRequest,
     db: Session = Depends(get_db),
 ) -> ForgotPasswordResponse:
-    user = db.query(User).filter(User.email == payload.email).first()
+    user = find_user_by_email(db, payload.email)
 
     generic_message = "If an account with that email exists, a reset link has been generated."
 

@@ -18,9 +18,11 @@ from app import dependencies
 from app.auth import ALGORITHM, SECRET_KEY, create_access_token, hash_password
 from app.database import Base
 from app.dependencies import get_current_user
-from app.models import Account, BudgetPlan, User
+from app.models import Account, BudgetPlan, SavedScenario, User
 from app.routes import auth_routes
 from app.routes.account_routes import router as account_router
+from app.routes.analytics_routes import router as analytics_router
+from app.routes.assistant_routes import router as assistant_router
 from app.routes.budget_routes import router as budget_router
 from app.routes.transaction_routes import router as transaction_router
 from app.security import SimpleRateLimitMiddleware, get_allowed_origins
@@ -72,6 +74,15 @@ class SecurityRouteTest(unittest.TestCase):
                 account_id=self.account_b.id,
             )
             session.add(self.budget_b)
+            self.scenario_b = SavedScenario(
+                name="User B Scenario",
+                months=6,
+                income_adjustment=0,
+                expense_adjustment=0,
+                owner_id=self.user_b.id,
+                account_id=self.account_b.id,
+            )
+            session.add(self.scenario_b)
             session.commit()
 
             self.user_a_id = self.user_a.id
@@ -79,6 +90,7 @@ class SecurityRouteTest(unittest.TestCase):
             self.account_a_id = self.account_a.id
             self.account_b_id = self.account_b.id
             self.budget_b_id = self.budget_b.id
+            self.scenario_b_id = self.scenario_b.id
 
     def tearDown(self) -> None:
         Base.metadata.drop_all(bind=self.engine)
@@ -107,6 +119,8 @@ class SecurityRouteTest(unittest.TestCase):
     def build_owned_resource_client(self) -> TestClient:
         app = FastAPI()
         app.include_router(account_router)
+        app.include_router(analytics_router)
+        app.include_router(assistant_router)
         app.include_router(budget_router)
         app.include_router(transaction_router)
         app.dependency_overrides[dependencies.get_db] = self.override_get_db
@@ -164,6 +178,38 @@ class SecurityRouteTest(unittest.TestCase):
         response = client.delete(f"/budgets/{self.budget_b_id}")
         self.assertEqual(response.status_code, 404)
 
+    def test_user_a_cannot_update_user_b_saved_scenario(self) -> None:
+        client = self.build_owned_resource_client()
+        response = client.put(
+            f"/analytics/saved-scenarios/{self.scenario_b_id}",
+            json={
+                "name": "Taken Scenario",
+                "months": 6,
+                "income_adjustment": 0,
+                "expense_adjustment": 0,
+                "account_id": self.account_a_id,
+            },
+        )
+        self.assertEqual(response.status_code, 404)
+
+    def test_user_a_cannot_delete_user_b_saved_scenario(self) -> None:
+        client = self.build_owned_resource_client()
+        response = client.delete(f"/analytics/saved-scenarios/{self.scenario_b_id}")
+        self.assertEqual(response.status_code, 404)
+
+    def test_assistant_rejects_user_b_account_scope(self) -> None:
+        client = self.build_owned_resource_client()
+        response = client.post(
+            "/assistant/response",
+            json={
+                "question": "Summarize this account.",
+                "history": [],
+                "mode": "balanced",
+                "account_id": self.account_b_id,
+            },
+        )
+        self.assertEqual(response.status_code, 404)
+
     def test_upload_rejects_wrong_extension(self) -> None:
         client = self.build_owned_resource_client()
         token = create_access_token({"sub": str(self.user_a_id)})
@@ -172,6 +218,15 @@ class SecurityRouteTest(unittest.TestCase):
             data={"account_id": str(self.account_a_id)},
             files={"file": ("malware.exe", b"not really a bank statement", "application/octet-stream")},
             headers={"Authorization": f"Bearer {token}"},
+        )
+        self.assertEqual(response.status_code, 400)
+
+    def test_upload_rejects_spoofed_pdf_signature(self) -> None:
+        client = self.build_owned_resource_client()
+        response = client.post(
+            "/transactions/import/file",
+            data={"account_id": str(self.account_a_id)},
+            files={"file": ("statement.pdf", b"not really a pdf", "application/pdf")},
         )
         self.assertEqual(response.status_code, 400)
 
@@ -184,6 +239,30 @@ class SecurityRouteTest(unittest.TestCase):
                 files={"file": ("statement.csv", b"date,amount\n2026-05-15,12.34\n", "text/csv")},
             )
         self.assertEqual(response.status_code, 400)
+
+    def test_transaction_rejects_single_letter_category(self) -> None:
+        client = self.build_owned_resource_client()
+        response = client.post(
+            "/transactions/",
+            json={
+                "amount": 12.0,
+                "category": "S",
+                "description": "Single key typo",
+                "date": "2026-05-15",
+                "type": "expense",
+                "account_id": self.account_a_id,
+            },
+        )
+        self.assertEqual(response.status_code, 400)
+
+    def test_sql_like_description_search_is_safe(self) -> None:
+        client = self.build_owned_resource_client()
+        response = client.get(
+            "/transactions/page",
+            params={"description": "' OR 1=1 --", "account_id": self.account_a_id},
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["total"], 0)
 
 
 class AuthSecurityTest(unittest.TestCase):
@@ -235,6 +314,20 @@ class AuthSecurityTest(unittest.TestCase):
             json={"email": "weak@example.com", "password": "password"},
         )
         self.assertEqual(response.status_code, 422)
+
+    def test_register_normalizes_email_and_blocks_case_duplicate(self) -> None:
+        client = self.build_auth_client()
+        response = client.post(
+            "/auth/register",
+            json={"email": "CaseUser@Example.com", "password": "StrongPass1"},
+        )
+        self.assertEqual(response.status_code, 200)
+
+        duplicate = client.post(
+            "/auth/register",
+            json={"email": "caseuser@example.com", "password": "StrongPass2"},
+        )
+        self.assertEqual(duplicate.status_code, 400)
 
     def test_login_rate_limit_blocks_repeated_attempts(self) -> None:
         self.create_user()

@@ -16,7 +16,7 @@ pyasn1==0.6.3
 pydantic==2.12.5
 pydantic_core==2.41.5
 pypdf==6.10.2
-PyMuPDF>=1.26.0
+PyMuPDF==1.27.2.3
 python-dotenv==1.2.2
 python-jose==3.5.0
 python-multipart==0.0.27
@@ -28,4 +28,4 @@ typing-inspection==0.4.2
 typing_extensions==4.15.0
 uvicorn==0.42.0
 openai==2.30.0
-cryptography>=43.0.0
+cryptography==47.0.0

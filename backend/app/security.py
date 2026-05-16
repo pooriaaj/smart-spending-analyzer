@@ -13,6 +13,7 @@ from starlette.responses import JSONResponse, Response
 
 DEFAULT_MAX_UPLOAD_BYTES = 10 * 1024 * 1024
 DEFAULT_MAX_BATCH_FILES = 24
+DEFAULT_MAX_BATCH_UPLOAD_BYTES = 50 * 1024 * 1024
 DEFAULT_MAX_CSV_ROWS = 5000
 
 ALLOWED_IMPORT_EXTENSIONS = {".csv", ".pdf", ".jpg", ".jpeg", ".png", ".webp"}
@@ -110,6 +111,10 @@ def max_batch_files() -> int:
     return int(os.getenv("MAX_IMPORT_BATCH_FILES", str(DEFAULT_MAX_BATCH_FILES)))
 
 
+def max_batch_upload_bytes() -> int:
+    return int(os.getenv("MAX_IMPORT_BATCH_BYTES", str(DEFAULT_MAX_BATCH_UPLOAD_BYTES)))
+
+
 def max_csv_rows() -> int:
     return int(os.getenv("MAX_IMPORT_CSV_ROWS", str(DEFAULT_MAX_CSV_ROWS)))
 
@@ -136,6 +141,9 @@ def validate_import_file_signature(file_bytes: bytes, extension: str) -> None:
 
     signatures = FILE_SIGNATURES.get(extension)
     if signatures and not any(file_bytes.startswith(signature) for signature in signatures):
+        raise ValueError("Uploaded file content does not match its extension.")
+
+    if extension == ".webp" and file_bytes[8:12] != b"WEBP":
         raise ValueError("Uploaded file content does not match its extension.")
 
     if extension == ".csv":
@@ -241,3 +249,12 @@ def ensure_batch_file_count(files: Iterable[UploadFile]) -> list[UploadFile]:
     if len(file_list) > max_batch_files():
         raise ValueError(f"Too many files in one import batch. Maximum is {max_batch_files()}.")
     return file_list
+
+
+def ensure_batch_payload_size(file_payloads: Iterable[tuple[bytes, str, str | None]]) -> None:
+    total_bytes = sum(len(payload[0]) for payload in file_payloads)
+    limit = max_batch_upload_bytes()
+    if total_bytes > limit:
+        raise ValueError(
+            f"Import batch is too large. Maximum combined upload size is {limit // (1024 * 1024)} MB."
+        )
