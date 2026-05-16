@@ -3,7 +3,9 @@ from __future__ import annotations
 from datetime import date, datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
+
+from app.security import validate_password_strength
 
 
 TransactionType = Literal["income", "expense"]
@@ -28,7 +30,13 @@ class ORMBaseModel(BaseModel):
 
 class UserCreate(BaseModel):
     email: EmailStr
-    password: str = Field(min_length=6, max_length=128)
+    password: str = Field(min_length=8, max_length=128)
+
+    @field_validator("password")
+    @classmethod
+    def password_is_strong(cls, value: str) -> str:
+        validate_password_strength(value)
+        return value
 
 
 class UserLogin(BaseModel):
@@ -57,7 +65,13 @@ class UserLearningPreferenceUpdate(BaseModel):
 
 class ChangePasswordRequest(BaseModel):
     current_password: str = Field(min_length=6, max_length=128)
-    new_password: str = Field(min_length=6, max_length=128)
+    new_password: str = Field(min_length=8, max_length=128)
+
+    @field_validator("new_password")
+    @classmethod
+    def new_password_is_strong(cls, value: str) -> str:
+        validate_password_strength(value)
+        return value
 
 
 class DeleteAccountRequest(BaseModel):
@@ -74,8 +88,14 @@ class ForgotPasswordResponse(BaseModel):
 
 
 class ResetPasswordRequest(BaseModel):
-    token: str = Field(min_length=1)
-    new_password: str = Field(min_length=6, max_length=128)
+    token: str = Field(min_length=16, max_length=256)
+    new_password: str = Field(min_length=8, max_length=128)
+
+    @field_validator("new_password")
+    @classmethod
+    def reset_password_is_strong(cls, value: str) -> str:
+        validate_password_strength(value)
+        return value
 
 
 class MessageResponse(BaseModel):
@@ -346,7 +366,7 @@ class FutureSimulationRecommendationsResponse(BaseModel):
 
 
 class TransactionBase(BaseModel):
-    amount: float
+    amount: float = Field(gt=0, le=1_000_000)
     category: str = Field(min_length=1, max_length=100)
     description: str = Field(min_length=1, max_length=500)
     date: date
@@ -798,8 +818,8 @@ class MoneyMapResponse(BaseModel):
 
 
 class AssistantMessage(BaseModel):
-    role: str
-    content: str
+    role: Literal["user", "assistant"]
+    content: str = Field(min_length=1, max_length=1200)
 
 
 class AssistantAction(BaseModel):
@@ -825,8 +845,8 @@ class AssistantAction(BaseModel):
 
 
 class AssistantQueryRequest(BaseModel):
-    question: str = Field(min_length=1)
-    history: list[AssistantMessage] = Field(default_factory=list)
+    question: str = Field(min_length=1, max_length=1200)
+    history: list[AssistantMessage] = Field(default_factory=list, max_length=12)
     mode: AssistantMode = "balanced"
     account_id: int | None = None
 
@@ -844,13 +864,13 @@ class AssistantSuggestionsResponse(BaseModel):
 
 
 class ReceiptScanResponse(BaseModel):
-    merchant: str | None = None
+    merchant: str | None = Field(default=None, max_length=160)
     date: str | None = None
     amount: float | None = None
     category: str = "other"
     type: TransactionType = "expense"
     confidence: float = 0.0
-    raw_text_preview: str | None = None
+    raw_text_preview: str | None = Field(default=None, max_length=1200)
     notes: list[str] = Field(default_factory=list)
 
 
@@ -863,7 +883,7 @@ class ImportSummary(BaseModel):
 class DraftTransaction(BaseModel):
     amount: float | None = None
     category: str = "other"
-    description: str = ""
+    description: str = Field(default="", max_length=500)
     date: str | None = None
     type: TransactionType = "expense"
     account_id: int
@@ -873,20 +893,20 @@ class DraftTransaction(BaseModel):
 
 class StatementPreviewRow(BaseModel):
     date: str
-    description: str
+    description: str = Field(min_length=1, max_length=500)
     amount: float
     type: TransactionType
-    category: str
-    source_line: str | None = None
-    source_file_name: str | None = None
+    category: str = Field(min_length=1, max_length=100)
+    source_line: str | None = Field(default=None, max_length=1200)
+    source_file_name: str | None = Field(default=None, max_length=255)
     source_file_type: ImportDetectedType | None = None
     confidence: float = 0.0
     review_reason: str | None = None
     category_confidence: float = 0.0
     category_source: str | None = None
-    category_reason: str | None = None
+    category_reason: str | None = Field(default=None, max_length=500)
     category_review_required: bool = False
-    category_review_reason: str | None = None
+    category_review_reason: str | None = Field(default=None, max_length=500)
     is_duplicate: bool = False
     duplicate_reason: str | None = None
     matched_transaction_id: int | None = None
@@ -913,4 +933,4 @@ class SmartImportResponse(BaseModel):
 
 class ConfirmPreviewImportRequest(BaseModel):
     account_id: int
-    rows: list[StatementPreviewRow] = Field(default_factory=list)
+    rows: list[StatementPreviewRow] = Field(default_factory=list, max_length=5000)

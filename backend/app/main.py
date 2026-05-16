@@ -4,7 +4,8 @@ import logging
 import os
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, Response
+from fastapi import FastAPI, Request, Response
+from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.database import Base, engine
@@ -15,6 +16,7 @@ from app.routes.auth_routes import router as auth_router
 from app.routes.budget_routes import router as budget_router
 from app.routes.transaction_routes import router as transaction_router
 from app.routes.user_routes import router as user_router
+from app.security import SecurityHeadersMiddleware, SimpleRateLimitMiddleware, get_allowed_origins
 from app.services.database_maintenance_service import ensure_runtime_database_shape
 
 load_dotenv()
@@ -34,20 +36,17 @@ app = FastAPI(
 
 Base.metadata.create_all(bind=engine)
 
-frontend_url = os.getenv("FRONTEND_URL", "http://localhost:5173")
-
-allowed_origins = [
-    "http://localhost:5173",
-    frontend_url,
-]
+allowed_origins = get_allowed_origins()
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=list(dict.fromkeys(allowed_origins)),
+    allow_origins=allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+app.add_middleware(SecurityHeadersMiddleware)
+app.add_middleware(SimpleRateLimitMiddleware)
 
 app.include_router(auth_router)
 app.include_router(user_router)
@@ -62,6 +61,15 @@ app.include_router(assistant_router)
 def on_startup() -> None:
     ensure_runtime_database_shape(engine)
     logger.info("Smart Spending Analyzer API started")
+
+
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+    logger.exception("Unhandled API error at %s", request.url.path)
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "Internal server error"},
+    )
 
 
 @app.get("/")

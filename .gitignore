@@ -33,6 +33,7 @@ build/
 htmlcov/
 .pytest_cache/
 .mypy_cache/
+backend/.pip-audit-cache/
 
 # Frontend local
 frontend/node_modules/

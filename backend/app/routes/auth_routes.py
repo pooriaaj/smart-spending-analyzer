@@ -20,6 +20,7 @@ from app.schemas import (
     Token,
     UserCreate,
 )
+from app.security import is_production
 
 router = APIRouter(prefix="/auth", tags=["Auth"])
 
@@ -34,6 +35,13 @@ def get_db():
 
 def hash_reset_token(token: str) -> str:
     return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+
+def expose_reset_url_in_response() -> bool:
+    configured = os.getenv("EXPOSE_RESET_LINK_IN_RESPONSE")
+    if configured is not None:
+        return configured.lower() == "true"
+    return not is_production()
 
 
 @router.post("/register", response_model=Token)
@@ -98,7 +106,7 @@ def forgot_password(
 
     return ForgotPasswordResponse(
         message=generic_message,
-        reset_url=reset_url,
+        reset_url=(reset_url if expose_reset_url_in_response() else None),
     )
 
 
