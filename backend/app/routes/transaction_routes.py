@@ -330,6 +330,19 @@ def create_transaction(
     )
 
     db.add(new_transaction)
+    similar_updated_count = apply_category_to_similar_transactions(
+        db=db,
+        owner_id=current_user.id,
+        description=transaction.description,
+        category=transaction.category,
+        tx_type=transaction.type,
+        amount=transaction.amount,
+        account_id=transaction.account_id,
+        signal_source="manual_create",
+        category_source="manual_create",
+        category_confidence=1.0,
+        category_reason="User entered a category for a matching merchant.",
+    )
     db.commit()
     db.refresh(new_transaction)
 
@@ -342,6 +355,7 @@ def create_transaction(
         amount=transaction.amount,
         account_id=transaction.account_id,
         signal_source="manual_create",
+        affected_count=similar_updated_count + 1,
     )
     return new_transaction
 

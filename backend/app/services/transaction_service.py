@@ -2615,16 +2615,6 @@ def categorize_transaction_details(
             source="merchant_override",
         )
 
-    community_profile = learnable_category_from_community_profiles(
-        db,
-        owner_id,
-        description,
-        tx_type,
-        amount,
-    )
-    if community_profile:
-        return community_profile
-
     for category, keywords in CATEGORY_RULES.items():
         if category == "salary":
             continue
@@ -2637,6 +2627,16 @@ def categorize_transaction_details(
                     reason="Matched a normalized merchant/category rule in the transaction description.",
                     source="rule",
                 )
+
+    community_profile = learnable_category_from_community_profiles(
+        db,
+        owner_id,
+        description,
+        tx_type,
+        amount,
+    )
+    if community_profile:
+        return community_profile
 
     merchant_enrichment = enrich_merchant_category(db, description, tx_type)
     if merchant_enrichment:

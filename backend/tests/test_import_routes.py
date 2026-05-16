@@ -1080,6 +1080,60 @@ class SmartImportRouteTest(unittest.TestCase):
         self.assertEqual(personal_row["category"], "entertainment")
         self.assertEqual(personal_row["category_source"], "merchant_profile")
 
+    def test_import_file_keeps_trusted_rules_above_community_learning(self) -> None:
+        with self.session_local() as session:
+            first_user = User(email="community-rule-one@example.com", password_hash="hashed")
+            second_user = User(email="community-rule-two@example.com", password_hash="hashed")
+            session.add_all([first_user, second_user])
+            session.flush()
+            session.add_all(
+                [
+                    MerchantCategoryProfile(
+                        merchant_key="openai",
+                        display_name="Openai",
+                        category="education",
+                        transaction_type="expense",
+                        confidence=0.97,
+                        confirmation_count=3,
+                        last_amount=20.0,
+                        owner_id=first_user.id,
+                    ),
+                    MerchantCategoryProfile(
+                        merchant_key="openai",
+                        display_name="Openai",
+                        category="education",
+                        transaction_type="expense",
+                        confidence=0.97,
+                        confirmation_count=3,
+                        last_amount=20.0,
+                        owner_id=second_user.id,
+                    ),
+                ]
+            )
+            session.commit()
+
+        pdf_bytes = build_text_pdf(
+            [
+                "Royal Bank of Canada",
+                "Details of your account activity",
+                "From March 2, 2026 to April 2, 2026",
+                "Date Description Withdrawals ($) Deposits ($) Balance ($)",
+                "3 Mar Contactless Interac purchase - 3001",
+                "OPENAI 20.00 80.00",
+            ]
+        )
+
+        response = self.client.post(
+            "/transactions/import/file",
+            data={"account_id": str(self.account_id)},
+            files={"file": ("rule-before-community.pdf", pdf_bytes, "application/pdf")},
+        )
+
+        self.assertEqual(response.status_code, 200, response.text)
+        preview_row = response.json()["preview_rows"][0]
+        self.assertEqual(preview_row["category"], "subscriptions")
+        self.assertEqual(preview_row["category_source"], "rule")
+
     def test_import_file_excludes_users_who_disabled_community_learning(self) -> None:
         with self.session_local() as session:
             disabled_user = User(email="community-disabled@example.com", password_hash="hashed")
@@ -2587,6 +2641,71 @@ class SmartImportRouteTest(unittest.TestCase):
         self.assertTrue(all(transaction.category == "smoking" for transaction in transactions))
         self.assertIsNotNone(profile)
         self.assertEqual(profile.category, "smoking")
+
+    def test_manual_create_teaches_existing_similar_transactions(self) -> None:
+        with self.session_local() as session:
+            session.add_all(
+                [
+                    Transaction(
+                        amount=8.90,
+                        category="other",
+                        category_confidence=0.24,
+                        category_source="fallback",
+                        description="SQDC77068 MTL",
+                        date=date(2026, 3, 16),
+                        type="expense",
+                        owner_id=self.user_id,
+                        account_id=self.account_id,
+                    ),
+                    Transaction(
+                        amount=12.60,
+                        category="other",
+                        category_confidence=0.24,
+                        category_source="fallback",
+                        description="SQDC77068 MTL",
+                        date=date(2026, 3, 17),
+                        type="expense",
+                        owner_id=self.user_id,
+                        account_id=self.account_id,
+                    ),
+                ]
+            )
+            session.commit()
+
+        response = self.client.post(
+            "/transactions/",
+            json={
+                "amount": 10.25,
+                "category": "smoking",
+                "description": "SQDC77068 MTL",
+                "date": "2026-03-18",
+                "type": "expense",
+                "account_id": self.account_id,
+            },
+        )
+        self.assertEqual(response.status_code, 200, response.text)
+
+        with self.session_local() as session:
+            transactions = (
+                session.query(Transaction)
+                .filter(Transaction.owner_id == self.user_id, Transaction.description == "SQDC77068 MTL")
+                .order_by(Transaction.amount.asc())
+                .all()
+            )
+            event = (
+                session.query(CategoryLearningEvent)
+                .filter(
+                    CategoryLearningEvent.owner_id == self.user_id,
+                    CategoryLearningEvent.merchant_key == "sqdc",
+                    CategoryLearningEvent.signal_source == "manual_create",
+                )
+                .one_or_none()
+            )
+
+        self.assertEqual(len(transactions), 3)
+        self.assertTrue(all(transaction.category == "smoking" for transaction in transactions))
+        self.assertIsNotNone(event)
+        self.assertEqual(event.affected_count, 3)
 
     def test_learning_apply_respects_amount_sensitive_merchant_groups(self) -> None:
         with self.session_local() as session:
