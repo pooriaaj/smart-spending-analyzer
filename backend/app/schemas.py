@@ -513,6 +513,18 @@ class SuspiciousAmountRepairApplyResponse(BaseModel):
     repairs: list[dict] = Field(default_factory=list)
 
 
+class DuplicateCleanupApplyRequest(BaseModel):
+    transaction_ids: list[int] = Field(default_factory=list, max_length=1000)
+    account_id: int | None = None
+
+
+class DuplicateCleanupApplyResponse(BaseModel):
+    deleted_count: int
+    kept_transaction_ids: list[int] = Field(default_factory=list)
+    deleted_transaction_ids: list[int] = Field(default_factory=list)
+    skipped_transaction_ids: list[int] = Field(default_factory=list)
+
+
 class FreshStartRequest(BaseModel):
     keep_from: date | None = None
     account_id: int | None = None

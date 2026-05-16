@@ -1841,6 +1841,95 @@ def get_likely_duplicate_transaction_groups(
     return duplicate_groups[:max_groups]
 
 
+def duplicate_keep_priority(transaction: Transaction) -> tuple:
+    source = str(transaction.entry_source or "").strip().lower()
+    source_priority = 0 if source == "manual" else 1
+    confidence_priority = -float(transaction.category_confidence or 0.0)
+    import_priority = 1 if transaction.imported_at else 0
+    return (
+        source_priority,
+        confidence_priority,
+        import_priority,
+        int(transaction.id or 0),
+    )
+
+
+def apply_likely_duplicate_cleanup(
+    db: Session,
+    owner_id: int,
+    transaction_ids: Iterable[int],
+    account_id: int | None = None,
+) -> dict:
+    requested_ids = {int(transaction_id) for transaction_id in transaction_ids}
+    if not requested_ids:
+        return {
+            "deleted_count": 0,
+            "kept_transaction_ids": [],
+            "deleted_transaction_ids": [],
+            "skipped_transaction_ids": [],
+        }
+
+    query = db.query(Transaction).filter(Transaction.owner_id == owner_id)
+    if account_id is not None:
+        query = query.filter(Transaction.account_id == account_id)
+
+    grouped: dict[tuple, list[Transaction]] = {}
+    scoped_transaction_ids: set[int] = set()
+    for transaction in query.order_by(Transaction.id.asc()).all():
+        scoped_transaction_ids.add(int(transaction.id))
+        duplicate_key = (
+            transaction.account_id or 0,
+            transaction.date.isoformat(),
+            normalize_description(transaction.description).lower(),
+            round(abs(float(transaction.amount or 0.0)), 2),
+            str(transaction.type or "").strip().lower(),
+        )
+        grouped.setdefault(duplicate_key, []).append(transaction)
+
+    deleted_transaction_ids: list[int] = []
+    kept_transaction_ids: set[int] = set()
+    duplicate_member_ids: set[int] = set()
+
+    for items in grouped.values():
+        if len(items) < 2:
+            continue
+
+        duplicate_member_ids.update(int(item.id) for item in items)
+        keep_transaction = sorted(items, key=duplicate_keep_priority)[0]
+        kept_transaction_ids.add(int(keep_transaction.id))
+
+        for transaction in items:
+            transaction_id = int(transaction.id)
+            if transaction_id == int(keep_transaction.id):
+                continue
+            if transaction_id not in requested_ids:
+                continue
+
+            db.delete(transaction)
+            deleted_transaction_ids.append(transaction_id)
+
+    skipped_transaction_ids = sorted(
+        transaction_id
+        for transaction_id in requested_ids
+        if transaction_id not in deleted_transaction_ids
+        and (
+            transaction_id not in scoped_transaction_ids
+            or transaction_id not in duplicate_member_ids
+            or transaction_id in kept_transaction_ids
+        )
+    )
+
+    if deleted_transaction_ids:
+        db.commit()
+
+    return {
+        "deleted_count": len(deleted_transaction_ids),
+        "kept_transaction_ids": sorted(kept_transaction_ids),
+        "deleted_transaction_ids": sorted(deleted_transaction_ids),
+        "skipped_transaction_ids": skipped_transaction_ids,
+    }
+
+
 def apply_suspicious_amount_repairs(
     db: Session,
     owner_id: int,

@@ -22,6 +22,8 @@ from app.schemas import (
     CategorySuggestionRequest,
     CategorySuggestionResponse,
     ConfirmPreviewImportRequest,
+    DuplicateCleanupApplyRequest,
+    DuplicateCleanupApplyResponse,
     FreshStartRequest,
     FreshStartResponse,
     SmartImportResponse,
@@ -44,6 +46,7 @@ from app.services.seed_service import seed_realistic_transactions
 from app.services.transaction_service import (
     apply_category_to_merchant_learning_group,
     apply_bulk_categories,
+    apply_likely_duplicate_cleanup,
     build_duplicate_key,
     build_statement_match_key,
     categorize_transaction,
@@ -552,6 +555,26 @@ def apply_suspicious_amount_repairs_route(
         account_id=payload.account_id,
     )
     return SuspiciousAmountRepairApplyResponse(**result)
+
+
+@router.post("/duplicates/apply", response_model=DuplicateCleanupApplyResponse)
+def apply_duplicate_cleanup_route(
+    payload: DuplicateCleanupApplyRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    if payload.account_id is not None:
+        account = get_account_for_user(db, current_user.id, payload.account_id)
+        if not account:
+            raise HTTPException(status_code=404, detail="Account not found")
+
+    result = apply_likely_duplicate_cleanup(
+        db=db,
+        owner_id=current_user.id,
+        transaction_ids=payload.transaction_ids,
+        account_id=payload.account_id,
+    )
+    return DuplicateCleanupApplyResponse(**result)
 
 
 @router.post("/import/file", response_model=SmartImportResponse)

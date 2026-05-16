@@ -588,6 +588,151 @@ class SmartImportRouteTest(unittest.TestCase):
         self.assertEqual(payload["category_learning_candidates"], [])
         self.assertEqual(payload["duplicate_groups"], [])
 
+    def test_duplicate_cleanup_keeps_manual_transaction_and_deletes_submitted_copy(self) -> None:
+        with self.session_local() as session:
+            manual = Transaction(
+                amount=5.25,
+                category="cafe",
+                category_confidence=1.0,
+                category_source="manual",
+                description="Morning Coffee",
+                date=date(2026, 4, 10),
+                type="expense",
+                entry_source="manual",
+                owner_id=self.user_id,
+                account_id=self.account_id,
+            )
+            imported = Transaction(
+                amount=-5.25,
+                category="cafe",
+                category_confidence=0.88,
+                category_source="rule",
+                description="Morning Coffee",
+                date=date(2026, 4, 10),
+                type="expense",
+                entry_source="pdf_import",
+                import_file_name="april-statement.pdf",
+                import_file_type="pdf_statement",
+                imported_at=datetime(2026, 4, 12, 9, 30, tzinfo=timezone.utc),
+                owner_id=self.user_id,
+                account_id=self.account_id,
+            )
+            session.add_all([manual, imported])
+            session.flush()
+            manual_id = manual.id
+            imported_id = imported.id
+            session.commit()
+
+        response = self.client.post(
+            "/transactions/duplicates/apply",
+            json={
+                "transaction_ids": [manual_id, imported_id],
+                "account_id": self.account_id,
+            },
+        )
+
+        self.assertEqual(response.status_code, 200, response.text)
+        payload = response.json()
+        self.assertEqual(payload["deleted_count"], 1)
+        self.assertIn(manual_id, payload["kept_transaction_ids"])
+        self.assertIn(imported_id, payload["deleted_transaction_ids"])
+        self.assertIn(manual_id, payload["skipped_transaction_ids"])
+
+        with self.session_local() as session:
+            remaining_ids = {
+                transaction.id
+                for transaction in session.query(Transaction)
+                .filter(Transaction.owner_id == self.user_id)
+                .all()
+            }
+
+        self.assertIn(manual_id, remaining_ids)
+        self.assertNotIn(imported_id, remaining_ids)
+
+        quality_response = self.client.get(
+            "/transactions/quality-report",
+            params={"account_id": self.account_id},
+        )
+        self.assertEqual(quality_response.status_code, 200, quality_response.text)
+        self.assertEqual(quality_response.json()["likely_duplicate_count"], 0)
+
+    def test_duplicate_cleanup_ignores_other_users_transactions(self) -> None:
+        with self.session_local() as session:
+            other_user = User(email="duplicate-other@example.com", password_hash="hashed")
+            session.add(other_user)
+            session.flush()
+            other_account = Account(
+                name="Other Account",
+                type="chequing",
+                owner_id=other_user.id,
+                is_active=True,
+            )
+            session.add(other_account)
+            session.flush()
+            current_manual = Transaction(
+                amount=9.50,
+                category="restaurant",
+                description="Lunch Spot",
+                date=date(2026, 4, 14),
+                type="expense",
+                entry_source="manual",
+                owner_id=self.user_id,
+                account_id=self.account_id,
+            )
+            current_imported = Transaction(
+                amount=9.50,
+                category="restaurant",
+                description="Lunch Spot",
+                date=date(2026, 4, 14),
+                type="expense",
+                entry_source="pdf_import",
+                owner_id=self.user_id,
+                account_id=self.account_id,
+            )
+            other_manual = Transaction(
+                amount=9.50,
+                category="restaurant",
+                description="Lunch Spot",
+                date=date(2026, 4, 14),
+                type="expense",
+                entry_source="manual",
+                owner_id=other_user.id,
+                account_id=other_account.id,
+            )
+            other_imported = Transaction(
+                amount=9.50,
+                category="restaurant",
+                description="Lunch Spot",
+                date=date(2026, 4, 14),
+                type="expense",
+                entry_source="pdf_import",
+                owner_id=other_user.id,
+                account_id=other_account.id,
+            )
+            session.add_all([current_manual, current_imported, other_manual, other_imported])
+            session.flush()
+            current_imported_id = current_imported.id
+            other_imported_id = other_imported.id
+            session.commit()
+
+        response = self.client.post(
+            "/transactions/duplicates/apply",
+            json={
+                "transaction_ids": [current_imported_id, other_imported_id],
+                "account_id": self.account_id,
+            },
+        )
+
+        self.assertEqual(response.status_code, 200, response.text)
+        payload = response.json()
+        self.assertEqual(payload["deleted_count"], 1)
+        self.assertIn(current_imported_id, payload["deleted_transaction_ids"])
+        self.assertIn(other_imported_id, payload["skipped_transaction_ids"])
+
+        with self.session_local() as session:
+            self.assertIsNone(session.get(Transaction, current_imported_id))
+            self.assertIsNotNone(session.get(Transaction, other_imported_id))
+
     def test_import_history_groups_saved_import_metadata(self) -> None:
         with self.session_local() as session:
             session.add_all(
