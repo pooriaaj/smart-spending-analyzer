@@ -3819,6 +3819,85 @@ def apply_bulk_categories(
     return updated_count
 
 
+def repair_category_learning_artifacts(db: Session, owner_id: int) -> dict[str, int]:
+    """Normalize stored learning data and remove corrupted category signals.
+
+    Older UI bugs could accidentally save one-letter categories such as "S".
+    Transactions can be repaired separately, but learned memories also need
+    cleanup so bad labels do not keep influencing future imports.
+    """
+
+    deleted_memories = 0
+    updated_memories = 0
+    deleted_profiles = 0
+    updated_profiles = 0
+    deleted_events = 0
+    updated_events = 0
+    profile_keys_to_refresh: set[tuple[str, str]] = set()
+
+    memories = db.query(CategoryMemory).filter(CategoryMemory.owner_id == owner_id).all()
+    for memory in memories:
+        normalized_category = normalize_category_name(memory.category)
+        if not should_store_category_memory(normalized_category):
+            db.delete(memory)
+            deleted_memories += 1
+            continue
+        if memory.category != normalized_category:
+            memory.category = normalized_category
+            updated_memories += 1
+
+    profiles = (
+        db.query(MerchantCategoryProfile)
+        .filter(MerchantCategoryProfile.owner_id == owner_id)
+        .all()
+    )
+    for profile in profiles:
+        normalized_category = normalize_category_name(profile.category)
+        profile_keys_to_refresh.add(
+            (
+                merchant_profile_base_key(profile.merchant_key),
+                profile.transaction_type,
+            )
+        )
+        if not should_store_category_memory(normalized_category):
+            db.delete(profile)
+            deleted_profiles += 1
+            continue
+        if profile.category != normalized_category:
+            profile.category = normalized_category
+            updated_profiles += 1
+
+    learning_events = (
+        db.query(CategoryLearningEvent)
+        .filter(CategoryLearningEvent.owner_id == owner_id)
+        .all()
+    )
+    for event in learning_events:
+        normalized_category = normalize_category_name(event.category)
+        if not should_store_category_memory(normalized_category):
+            db.delete(event)
+            deleted_events += 1
+            continue
+        if event.category != normalized_category:
+            event.category = normalized_category
+            updated_events += 1
+
+    if profile_keys_to_refresh:
+        db.flush()
+        for merchant_key, tx_type in profile_keys_to_refresh:
+            if merchant_key and tx_type:
+                refresh_community_merchant_profile_cache(db, merchant_key, tx_type)
+
+    return {
+        "learning_memories_deleted": deleted_memories,
+        "learning_memories_updated": updated_memories,
+        "merchant_profiles_deleted": deleted_profiles,
+        "merchant_profiles_updated": updated_profiles,
+        "learning_events_deleted": deleted_events,
+        "learning_events_updated": updated_events,
+    }
+
+
 def normalize_existing_categories_for_user(
     db: Session,
     owner_id: int,
@@ -3835,6 +3914,7 @@ def normalize_existing_categories_for_user(
     changes: dict[str, str] = {}
     memory_created = 0
     memory_updated = 0
+    artifact_stats = repair_category_learning_artifacts(db, owner_id)
 
     for transaction in transactions:
         old_category = transaction.category or "other"
@@ -3892,7 +3972,8 @@ def normalize_existing_categories_for_user(
         memory_created += memory_stats["created"]
         memory_updated += memory_stats["updated"]
 
-    if updated_count > 0 or memory_created > 0 or memory_updated > 0:
+    artifact_change_count = sum(artifact_stats.values())
+    if updated_count > 0 or memory_created > 0 or memory_updated > 0 or artifact_change_count > 0:
         db.commit()
 
     return {
@@ -3900,4 +3981,5 @@ def normalize_existing_categories_for_user(
         "changes": changes,
         "memory_entries_created": memory_created,
         "memory_entries_updated": memory_updated,
+        **artifact_stats,
     }

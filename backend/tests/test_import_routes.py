@@ -3384,6 +3384,33 @@ class SmartImportRouteTest(unittest.TestCase):
                         owner_id=self.user_id,
                         account_id=self.account_id,
                     ),
+                    CategoryMemory(
+                        keyword="openai",
+                        category="S",
+                        transaction_type="expense",
+                        owner_id=self.user_id,
+                    ),
+                    MerchantCategoryProfile(
+                        merchant_key="openai",
+                        display_name="Openai",
+                        category="S",
+                        transaction_type="expense",
+                        confidence=0.9,
+                        confirmation_count=1,
+                        last_amount=20.00,
+                        owner_id=self.user_id,
+                    ),
+                    CategoryLearningEvent(
+                        merchant_key="openai",
+                        display_name="Openai",
+                        category="S",
+                        transaction_type="expense",
+                        signal_source="manual_create",
+                        confidence=1.0,
+                        affected_count=1,
+                        owner_id=self.user_id,
+                        account_id=self.account_id,
+                    ),
                 ]
             )
             session.commit()
@@ -3395,6 +3422,9 @@ class SmartImportRouteTest(unittest.TestCase):
         self.assertEqual(normalize_response.status_code, 200, normalize_response.text)
         payload = normalize_response.json()
         self.assertEqual(payload["updated_count"], 2)
+        self.assertEqual(payload["learning_memories_deleted"], 1)
+        self.assertEqual(payload["merchant_profiles_deleted"], 1)
+        self.assertEqual(payload["learning_events_deleted"], 1)
 
         with self.session_local() as session:
             categories = {
@@ -3408,10 +3438,28 @@ class SmartImportRouteTest(unittest.TestCase):
                 .filter(CategoryMemory.owner_id == self.user_id, CategoryMemory.category.in_(["s", "e"]))
                 .count()
             )
+            short_category_profiles = (
+                session.query(MerchantCategoryProfile)
+                .filter(
+                    MerchantCategoryProfile.owner_id == self.user_id,
+                    MerchantCategoryProfile.category.in_(["s", "e"]),
+                )
+                .count()
+            )
+            short_category_events = (
+                session.query(CategoryLearningEvent)
+                .filter(
+                    CategoryLearningEvent.owner_id == self.user_id,
+                    CategoryLearningEvent.category.in_(["s", "e"]),
+                )
+                .count()
+            )
 
         self.assertEqual(categories["OPENAI"], "subscriptions")
         self.assertEqual(categories["IDP EDUCATION LIMITED TORONTO ON"], "education")
         self.assertEqual(short_category_memories, 0)
+        self.assertEqual(short_category_profiles, 0)
+        self.assertEqual(short_category_events, 0)
 
     def test_bulk_category_preview_returns_rule_based_explanation(self) -> None:
         with self.session_local() as session:
