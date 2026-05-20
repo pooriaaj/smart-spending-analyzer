@@ -27,6 +27,7 @@ from app.routes.budget_routes import router as budget_router
 from app.routes.transaction_routes import router as transaction_router
 from app.security import SimpleRateLimitMiddleware, get_allowed_origins
 from app.services.assistant_service import generate_assistant_response
+from app.services.llm_service import build_finance_prompt
 
 
 class SecurityRouteTest(unittest.TestCase):
@@ -393,6 +394,24 @@ class AssistantSecurityTest(unittest.TestCase):
         self.assertIn("cannot help", answer)
         self.assertNotIn("postgresql://", answer)
         self.assertNotIn("database_url", answer)
+
+    def test_llm_prompt_redacts_sensitive_user_text(self) -> None:
+        prompt = build_finance_prompt(
+            question="My OPENAI_API_KEY=sk-proj-super-secret and DATABASE_URL=postgresql://user:pass@host/db",
+            conversation_context="User: Authorization: Bearer eyJhbGciOiFakeToken",
+            account_context={
+                "scope_label": "Main Account",
+                "total_income": 0,
+                "total_expenses": 0,
+                "balance": 0,
+            },
+            mode="balanced",
+        ).lower()
+
+        self.assertIn("sensitive value redacted", prompt)
+        self.assertNotIn("sk-proj-super-secret", prompt)
+        self.assertNotIn("postgresql://", prompt)
+        self.assertNotIn("bearer eyjhbgcioifaketoken", prompt)
 
 
 class CorsSecurityTest(unittest.TestCase):

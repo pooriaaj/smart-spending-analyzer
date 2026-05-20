@@ -191,10 +191,10 @@ Answer quality rules:
 - keep the answer focused and useful
 
 User question:
-{question}
+{_safe_text(question)}
 
 Recent conversation context:
-{conversation_context or "None"}
+{_safe_text(conversation_context) if conversation_context else "None"}
 
 ACCOUNT CONTEXT
 -------------

@@ -36,11 +36,23 @@ FILE_SIGNATURES = {
 }
 
 SENSITIVE_RESPONSE_MARKERS = (
+    "api key",
+    "apikey",
+    "authorization:",
+    "bearer ",
+    "client_secret",
     "secret_key",
+    "secret key",
     "database_url",
+    "database url",
     "openai_api_key",
     "postgresql://",
-    "bearer ",
+    "private_key",
+    "refresh_token",
+    "reset token",
+    "reset_token",
+    "sk-",
+    "token=",
 )
 
 
