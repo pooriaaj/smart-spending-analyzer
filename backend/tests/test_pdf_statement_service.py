@@ -362,6 +362,38 @@ From December 28, 2024 to January 10, 2025
         self.assertEqual(preview_rows[1].date, "2025-01-02")
         self.assertEqual(preview_rows[1].type, "income")
 
+    def test_parse_pdf_statement_preview_flags_suspicious_reference_amounts(self) -> None:
+        text = """
+Royal Bank of Canada
+Details of your account activity
+From February 2, 2026 to March 2, 2026
+Date Description Withdrawals ($) Deposits ($) Balance ($)
+6 Feb e-Transfer received MAHTAALIJANI 5200.00 5211.78
+        """.strip()
+
+        with (
+            patch.object(
+                service,
+                "extract_pdf_text_result",
+                return_value=self.extraction_result(text),
+            ),
+            patch.object(service, "categorize_transaction_details", side_effect=self.categorize),
+        ):
+            result = service.parse_pdf_statement_preview(
+                db=self.db,
+                owner_id=123,
+                file_bytes=b"fake-pdf",
+            )
+
+        preview_rows = result["preview_rows"]
+        self.assertEqual(len(preview_rows), 1)
+        self.assertEqual(preview_rows[0].description, "e-Transfer received MAHTAALIJANI")
+        self.assertEqual(preview_rows[0].amount, 5200.00)
+        self.assertTrue(preview_rows[0].amount_review_required)
+        self.assertEqual(preview_rows[0].suggested_amount, 200.00)
+        self.assertLess(preview_rows[0].amount_confidence, 0.9)
+        self.assertIn("reference-code digit", preview_rows[0].amount_review_reason or "")
+
     def test_parse_pdf_statement_preview_supports_month_first_and_numeric_dates(self) -> None:
         text = """
 Account Statement

@@ -930,6 +930,11 @@ class StatementPreviewRow(BaseModel):
     date: str
     description: str = Field(min_length=1, max_length=500)
     amount: float
+    amount_confidence: float = 1.0
+    amount_review_required: bool = False
+    amount_review_reason: str | None = Field(default=None, max_length=500)
+    suggested_amount: float | None = Field(default=None, gt=0, le=1_000_000)
+    amount_review_approved: bool = False
     type: TransactionType
     category: str = Field(min_length=1, max_length=100)
     source_line: str | None = Field(default=None, max_length=1200)

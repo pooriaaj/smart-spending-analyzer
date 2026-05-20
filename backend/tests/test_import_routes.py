@@ -1794,6 +1794,82 @@ class SmartImportRouteTest(unittest.TestCase):
             self.assertEqual(session.query(Transaction).filter(Transaction.description == "OPENAI").count(), 0)
             self.assertEqual(session.query(CategoryMemory).filter(CategoryMemory.category == "s").count(), 0)
 
+    def test_confirm_preview_import_skips_unapproved_suspicious_amounts(self) -> None:
+        confirm_response = self.client.post(
+            "/transactions/import/confirm-preview",
+            json={
+                "account_id": self.account_id,
+                "rows": [
+                    {
+                        "date": "2026-02-06",
+                        "description": "e-Transfer received MAHTAALIJANI",
+                        "amount": 5200.00,
+                        "amount_confidence": 0.86,
+                        "amount_review_required": True,
+                        "amount_review_reason": "Reference-code digit may be merged with the amount.",
+                        "suggested_amount": 200.00,
+                        "type": "income",
+                        "category": "income",
+                        "confidence": 0.86,
+                        "category_confidence": 0.90,
+                        "category_review_required": False,
+                    }
+                ],
+            },
+        )
+
+        self.assertEqual(confirm_response.status_code, 200, confirm_response.text)
+        payload = confirm_response.json()
+        self.assertEqual(payload["imported"], 0)
+        self.assertEqual(payload["invalid_rows_skipped"], 1)
+
+        with self.session_local() as session:
+            self.assertEqual(
+                session.query(Transaction)
+                .filter(Transaction.description == "e-Transfer received MAHTAALIJANI")
+                .count(),
+                0,
+            )
+
+    def test_confirm_preview_import_allows_corrected_suspicious_amounts(self) -> None:
+        confirm_response = self.client.post(
+            "/transactions/import/confirm-preview",
+            json={
+                "account_id": self.account_id,
+                "rows": [
+                    {
+                        "date": "2026-02-06",
+                        "description": "e-Transfer received MAHTAALIJANI",
+                        "amount": 200.00,
+                        "amount_confidence": 0.86,
+                        "amount_review_required": True,
+                        "amount_review_reason": "Reference-code digit may be merged with the amount.",
+                        "suggested_amount": 200.00,
+                        "type": "income",
+                        "category": "income",
+                        "confidence": 0.86,
+                        "category_confidence": 0.90,
+                        "category_review_required": False,
+                    }
+                ],
+            },
+        )
+
+        self.assertEqual(confirm_response.status_code, 200, confirm_response.text)
+        payload = confirm_response.json()
+        self.assertEqual(payload["imported"], 1)
+        self.assertEqual(payload["invalid_rows_skipped"], 0)
+
+        with self.session_local() as session:
+            saved = (
+                session.query(Transaction)
+                .filter(Transaction.description == "e-Transfer received MAHTAALIJANI")
+                .one()
+            )
+
+        self.assertEqual(saved.amount, 200.00)
+        self.assertEqual(saved.type, "income")
+
     def test_confirm_preview_import_only_trains_memory_after_user_review(self) -> None:
         confirm_response = self.client.post(
             "/transactions/import/confirm-preview",

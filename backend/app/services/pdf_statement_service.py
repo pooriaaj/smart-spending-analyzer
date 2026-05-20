@@ -17,6 +17,7 @@ from app.services.local_ocr_service import is_local_ocr_enabled, run_local_ocr_i
 from app.services.transaction_service import (
     build_category_review_metadata,
     categorize_transaction_details,
+    suggest_reference_code_amount_values,
 )
 from app.services.vision_ocr_service import (
     build_input_image_part,
@@ -1623,6 +1624,24 @@ def finalize_pending_transaction(
     )
     category = category_decision.category
     category_review_required, category_review_reason = build_category_review_metadata(category_decision)
+    amount_review = suggest_reference_code_amount_values(
+        description=description,
+        amount=abs(amount),
+    )
+    amount_confidence = 1.0
+    amount_review_required = False
+    amount_review_reason = None
+    suggested_amount = None
+    if amount_review:
+        amount_confidence = float(amount_review["confidence"])
+        amount_review_required = True
+        amount_review_reason = str(amount_review["reason"])
+        suggested_amount = float(amount_review["suggested_amount"])
+        review_reason = (
+            f"{review_reason} {amount_review_reason}".strip()
+            if review_reason
+            else amount_review_reason
+        )
 
     source_line = raw_description
     if amount_text_2:
@@ -1635,6 +1654,10 @@ def finalize_pending_transaction(
             date=current_date.isoformat(),
             description=description,
             amount=abs(amount),
+            amount_confidence=amount_confidence,
+            amount_review_required=amount_review_required,
+            amount_review_reason=amount_review_reason,
+            suggested_amount=suggested_amount,
             type=tx_type,
             category=category,
             source_line=source_line[:300],

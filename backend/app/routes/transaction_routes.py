@@ -79,6 +79,7 @@ from app.services.transaction_service import (
     get_suspicious_amount_repair_candidates,
     save_category_memory,
     should_store_category_memory,
+    suggest_reference_code_amount_values,
 )
 from app.services.unified_import_service import process_smart_import, process_smart_import_batch
 
@@ -686,6 +687,16 @@ def confirm_preview_import(
         try:
             tx_date = date.fromisoformat(row.date)
             description = normalize_description(row.description)
+            row_amount = float(row.amount)
+            if row.amount_review_required and not row.amount_review_approved:
+                still_suspicious = suggest_reference_code_amount_values(
+                    description=description,
+                    amount=row_amount,
+                )
+                if still_suspicious:
+                    invalid_rows_skipped += 1
+                    continue
+
             row_category = row.category
             row_needs_category_review = row.category_review_required
             if not is_usable_category_name(row_category):
@@ -697,7 +708,7 @@ def confirm_preview_import(
                 learned_category = None
                 reviewed_categories = reviewed_categories_by_merchant.get((fingerprint[0], row.type), [])
                 for reviewed_category, reviewed_amount in reviewed_categories:
-                    if merchant_category_amount_matches(fingerprint[0], reviewed_amount, row.amount):
+                    if merchant_category_amount_matches(fingerprint[0], reviewed_amount, row_amount):
                         learned_category = reviewed_category
                         break
                 if learned_category and (
@@ -713,7 +724,7 @@ def confirm_preview_import(
                 description=description,
                 tx_type=row.type,
                 category=row_category,
-                amount=row.amount,
+                amount=row_amount,
             )
 
             if row_needs_category_review:
@@ -725,7 +736,7 @@ def confirm_preview_import(
                 account_id=payload.account_id,
                 tx_date=tx_date,
                 description=description,
-                amount=row.amount,
+                amount=row_amount,
                 tx_type=row.type,
                 category=normalized_category,
             )
@@ -733,7 +744,7 @@ def confirm_preview_import(
                 owner_id=current_user.id,
                 account_id=payload.account_id,
                 tx_date=tx_date,
-                amount=row.amount,
+                amount=row_amount,
                 tx_type=row.type,
             )
 
@@ -749,7 +760,7 @@ def confirm_preview_import(
                 owner_id=current_user.id,
                 account_id=payload.account_id,
                 tx_date=tx_date,
-                amount=row.amount,
+                amount=row_amount,
                 tx_type=row.type,
             )
             if likely_match and likely_match.id not in seen_matched_transaction_ids:
@@ -761,7 +772,7 @@ def confirm_preview_import(
                 continue
 
             transaction = Transaction(
-                amount=row.amount,
+                amount=row_amount,
                 category=normalized_category,
                 category_confidence=row.category_confidence or 0.0,
                 category_source=row.category_source or "import_review",
@@ -786,7 +797,7 @@ def confirm_preview_import(
                     "description": description,
                     "category": normalized_category,
                     "tx_type": row.type,
-                    "amount": row.amount,
+                    "amount": row_amount,
                     "account_id": payload.account_id,
                     "source": row.category_source or "import",
                     "confidence": row.category_confidence,

@@ -1891,13 +1891,17 @@ def apply_category_review_correction(
     }
 
 
-def suggest_reference_code_amount_repair(transaction: Transaction) -> SuspiciousAmountRepairCandidate | None:
-    description = normalize_description(transaction.description)
+def suggest_reference_code_amount_values(
+    *,
+    description: str,
+    amount: float | None,
+) -> dict[str, float | str] | None:
+    description = normalize_description(description)
     normalized_description = normalize_category_signal_text(description)
     if not any(marker in normalized_description for marker in REFERENCE_CODE_AMOUNT_DESCRIPTORS):
         return None
 
-    current_amount = abs(float(transaction.amount or 0))
+    current_amount = abs(float(amount or 0))
     if current_amount < SUSPICIOUS_REFERENCE_AMOUNT_MINIMUM:
         return None
 
@@ -1916,19 +1920,35 @@ def suggest_reference_code_amount_repair(transaction: Transaction) -> Suspicious
     if not (0 < suggested_amount <= SUSPICIOUS_REFERENCE_REPAIRED_MAXIMUM):
         return None
 
+    return {
+        "suggested_amount": suggested_amount,
+        "confidence": 0.86,
+        "reason": (
+            "This looks like a statement-parser issue where one reference-code digit "
+            "may have been merged with the real transfer amount. Review before saving."
+        ),
+    }
+
+
+def suggest_reference_code_amount_repair(transaction: Transaction) -> SuspiciousAmountRepairCandidate | None:
+    description = normalize_description(transaction.description)
+    suggestion = suggest_reference_code_amount_values(
+        description=description,
+        amount=transaction.amount,
+    )
+    if not suggestion:
+        return None
+
     return SuspiciousAmountRepairCandidate(
         transaction_id=transaction.id,
         date=transaction.date,
         description=description,
         type=transaction.type,
         category=transaction.category,
-        current_amount=current_amount,
-        suggested_amount=suggested_amount,
-        confidence=0.86,
-        reason=(
-            "This looks like a legacy statement-parser issue where one reference-code digit "
-            "was merged with the real transfer amount. Review before applying."
-        ),
+        current_amount=abs(float(transaction.amount or 0)),
+        suggested_amount=float(suggestion["suggested_amount"]),
+        confidence=float(suggestion["confidence"]),
+        reason=str(suggestion["reason"]),
     )
 
 
