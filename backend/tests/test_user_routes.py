@@ -11,7 +11,7 @@ from sqlalchemy.pool import StaticPool
 
 from app.database import Base
 from app.dependencies import get_current_user, get_db
-from app.models import User, UserLearningPreference
+from app.models import MerchantCategoryProfile, MerchantLookupCache, User, UserLearningPreference
 from app.routes.user_routes import router as user_router
 
 
@@ -58,7 +58,10 @@ class UserRouteTest(unittest.TestCase):
 
     def tearDown(self) -> None:
         with self.session_local() as session:
+            session.query(MerchantLookupCache).delete()
+            session.query(MerchantCategoryProfile).delete()
             session.query(UserLearningPreference).delete()
+            session.query(User).filter(User.id != self.user_id).delete()
             session.commit()
 
     def test_profile_returns_community_learning_enabled_by_default(self) -> None:
@@ -86,6 +89,122 @@ class UserRouteTest(unittest.TestCase):
             )
 
         self.assertFalse(preference.community_learning_enabled)
+
+    def test_disabling_community_learning_removes_user_from_global_consensus(self) -> None:
+        with self.session_local() as session:
+            other_user = User(email="learning-peer@example.com", password_hash="hashed")
+            session.add(other_user)
+            session.flush()
+            session.add_all(
+                [
+                    MerchantCategoryProfile(
+                        merchant_key="glimmerbox",
+                        display_name="Glimmerbox",
+                        category="entertainment",
+                        transaction_type="expense",
+                        confidence=0.97,
+                        confirmation_count=3,
+                        last_amount=18.0,
+                        owner_id=self.user_id,
+                    ),
+                    MerchantCategoryProfile(
+                        merchant_key="glimmerbox",
+                        display_name="Glimmerbox",
+                        category="entertainment",
+                        transaction_type="expense",
+                        confidence=0.97,
+                        confirmation_count=3,
+                        last_amount=19.0,
+                        owner_id=other_user.id,
+                    ),
+                    MerchantLookupCache(
+                        merchant_key="glimmerbox",
+                        display_name="Glimmerbox",
+                        category="entertainment",
+                        transaction_type="expense",
+                        confidence=0.9,
+                        matched_signal="glimmerbox",
+                        provider="community",
+                    ),
+                ]
+            )
+            session.commit()
+
+        response = self.client.put(
+            "/users/me/learning",
+            json={"community_learning_enabled": False},
+        )
+
+        self.assertEqual(response.status_code, 200, response.text)
+        with self.session_local() as session:
+            cached = (
+                session.query(MerchantLookupCache)
+                .filter(
+                    MerchantLookupCache.merchant_key == "glimmerbox",
+                    MerchantLookupCache.transaction_type == "expense",
+                    MerchantLookupCache.provider == "community",
+                )
+                .one_or_none()
+            )
+
+        self.assertIsNone(cached)
+
+    def test_enabling_community_learning_rebuilds_allowed_consensus(self) -> None:
+        with self.session_local() as session:
+            other_user = User(email="learning-peer-rebuild@example.com", password_hash="hashed")
+            session.add(other_user)
+            session.flush()
+            session.add(
+                UserLearningPreference(
+                    owner_id=self.user_id,
+                    community_learning_enabled=False,
+                )
+            )
+            session.add_all(
+                [
+                    MerchantCategoryProfile(
+                        merchant_key="glimmerbox",
+                        display_name="Glimmerbox",
+                        category="entertainment",
+                        transaction_type="expense",
+                        confidence=0.97,
+                        confirmation_count=3,
+                        last_amount=18.0,
+                        owner_id=self.user_id,
+                    ),
+                    MerchantCategoryProfile(
+                        merchant_key="glimmerbox",
+                        display_name="Glimmerbox",
+                        category="entertainment",
+                        transaction_type="expense",
+                        confidence=0.97,
+                        confirmation_count=3,
+                        last_amount=19.0,
+                        owner_id=other_user.id,
+                    ),
+                ]
+            )
+            session.commit()
+
+        response = self.client.put(
+            "/users/me/learning",
+            json={"community_learning_enabled": True},
+        )
+
+        self.assertEqual(response.status_code, 200, response.text)
+        with self.session_local() as session:
+            cached = (
+                session.query(MerchantLookupCache)
+                .filter(
+                    MerchantLookupCache.merchant_key == "glimmerbox",
+                    MerchantLookupCache.transaction_type == "expense",
+                    MerchantLookupCache.provider == "community",
+                )
+                .one_or_none()
+            )
+
+        self.assertIsNotNone(cached)
+        self.assertEqual(cached.category, "entertainment")
 
 
 if __name__ == "__main__":
