@@ -27,7 +27,7 @@ from app.routes.budget_routes import router as budget_router
 from app.routes.transaction_routes import router as transaction_router
 from app.security import SimpleRateLimitMiddleware, get_allowed_origins
 from app.services.assistant_service import generate_assistant_response
-from app.services.llm_service import build_finance_prompt
+from app.services.llm_service import ANSWER_MAX_CHARS, build_finance_prompt, parse_llm_response
 
 
 class SecurityRouteTest(unittest.TestCase):
@@ -412,6 +412,34 @@ class AssistantSecurityTest(unittest.TestCase):
         self.assertNotIn("sk-proj-super-secret", prompt)
         self.assertNotIn("postgresql://", prompt)
         self.assertNotIn("bearer eyjhbgcioifaketoken", prompt)
+
+    def test_llm_response_is_bounded_and_action_type_is_sanitized(self) -> None:
+        long_answer = "A" * (ANSWER_MAX_CHARS + 250)
+        result = parse_llm_response(
+            f"""
+ANSWER:
+{long_answer}
+
+SUPPORTING_POINTS:
+- {"B" * 500}
+
+FOLLOWUPS:
+- {"C" * 300}
+
+ACTION_TYPE:
+database
+
+ACTION_LABEL:
+{"D" * 250}
+            """.strip()
+        )
+
+        self.assertLessEqual(len(result["answer"]), ANSWER_MAX_CHARS + 3)
+        self.assertTrue(result["answer"].endswith("..."))
+        self.assertLessEqual(len(result["supporting_points"][0]), 303)
+        self.assertLessEqual(len(result["suggested_followups"][0]), 163)
+        self.assertEqual(result["action_type"], "none")
+        self.assertLessEqual(len(result["action_label"]), 123)
 
 
 class CorsSecurityTest(unittest.TestCase):

@@ -22,9 +22,43 @@ LOCAL_LLM_BASE_URL = os.getenv("LOCAL_LLM_BASE_URL", "http://localhost:11434/v1"
 LOCAL_LLM_MODEL = os.getenv("LOCAL_LLM_MODEL", "qwen2.5:7b")
 LOCAL_LLM_API_KEY = os.getenv("LOCAL_LLM_API_KEY", "ollama")
 
-_openai_client: OpenAI | None = OpenAI(api_key=OPENAI_API_KEY) if OPENAI_API_KEY else None
+ANSWER_MAX_CHARS = 1800
+SUPPORTING_POINT_MAX_CHARS = 300
+FOLLOWUP_MAX_CHARS = 160
+ACTION_FIELD_MAX_CHARS = 120
+
+
+def _bounded_float_env(name: str, default: float, minimum: float, maximum: float) -> float:
+    try:
+        value = float(os.getenv(name, str(default)))
+    except (TypeError, ValueError):
+        return default
+    return max(minimum, min(value, maximum))
+
+
+def _bounded_int_env(name: str, default: int, minimum: int, maximum: int) -> int:
+    try:
+        value = int(os.getenv(name, str(default)))
+    except (TypeError, ValueError):
+        return default
+    return max(minimum, min(value, maximum))
+
+
+LLM_TIMEOUT_SECONDS = _bounded_float_env("LLM_TIMEOUT_SECONDS", 20.0, 3.0, 120.0)
+LLM_MAX_RETRIES = _bounded_int_env("LLM_MAX_RETRIES", 1, 0, 5)
+
+_openai_client: OpenAI | None = (
+    OpenAI(api_key=OPENAI_API_KEY, timeout=LLM_TIMEOUT_SECONDS, max_retries=LLM_MAX_RETRIES)
+    if OPENAI_API_KEY
+    else None
+)
 _local_client: OpenAI | None = (
-    OpenAI(base_url=LOCAL_LLM_BASE_URL, api_key=LOCAL_LLM_API_KEY)
+    OpenAI(
+        base_url=LOCAL_LLM_BASE_URL,
+        api_key=LOCAL_LLM_API_KEY,
+        timeout=LLM_TIMEOUT_SECONDS,
+        max_retries=LLM_MAX_RETRIES,
+    )
     if USE_LOCAL_LLM and LOCAL_LLM_PROVIDER == "ollama"
     else None
 )
@@ -95,6 +129,12 @@ def _safe_output_text(value: Any) -> str | None:
         return None
     text = redact_sensitive_text(str(value)).strip()
     return text or None
+
+
+def _trim_output_text(value: str | None, limit: int) -> str | None:
+    if value is None:
+        return None
+    return value if len(value) <= limit else f"{value[:limit].rstrip()}..."
 
 
 def get_mode_instructions(mode: str) -> str:
@@ -340,18 +380,28 @@ def parse_llm_response(text: str) -> dict[str, Any]:
     if not result["answer"]:
         result["answer"] = "I could not generate a useful answer from the language model."
 
-    result["answer"] = _safe_output_text(result["answer"]) or (
+    result["answer"] = _trim_output_text(_safe_output_text(result["answer"]), ANSWER_MAX_CHARS) or (
         "I cannot help with secrets or hidden system information, but I can help analyze your visible financial data."
     )
     result["supporting_points"] = [
-        item for item in (_safe_output_text(point) for point in result["supporting_points"]) if item
+        item
+        for item in (
+            _trim_output_text(_safe_output_text(point), SUPPORTING_POINT_MAX_CHARS)
+            for point in result["supporting_points"]
+        )
+        if item
     ]
     result["suggested_followups"] = [
-        item for item in (_safe_output_text(followup) for followup in result["suggested_followups"]) if item
+        item
+        for item in (
+            _trim_output_text(_safe_output_text(followup), FOLLOWUP_MAX_CHARS)
+            for followup in result["suggested_followups"]
+        )
+        if item
     ]
-    result["action_label"] = _safe_output_text(result["action_label"])
-    result["action_reason"] = _safe_output_text(result["action_reason"])
-    result["action_target"] = _safe_output_text(result["action_target"])
+    result["action_label"] = _trim_output_text(_safe_output_text(result["action_label"]), ACTION_FIELD_MAX_CHARS)
+    result["action_reason"] = _trim_output_text(_safe_output_text(result["action_reason"]), ACTION_FIELD_MAX_CHARS)
+    result["action_target"] = _trim_output_text(_safe_output_text(result["action_target"]), ACTION_FIELD_MAX_CHARS)
 
     result["supporting_points"] = result["supporting_points"][:5]
     result["suggested_followups"] = result["suggested_followups"][:5]
