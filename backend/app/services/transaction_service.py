@@ -30,6 +30,7 @@ from app.services.category_taxonomy import (
     strip_location_and_bank_noise_tokens,
     strip_payment_processor_prefixes,
 )
+from app.services.import_quality_service import suggest_reference_code_amount_values
 from app.services.merchant_enrichment_service import enrich_merchant_category
 from app.schemas import StatementPreviewRow
 from app.security import max_csv_rows, sanitize_import_text
@@ -527,16 +528,6 @@ class CategoryLearningCandidate:
     example_descriptions: list[str]
     reason: str
     review_required: bool
-
-
-REFERENCE_CODE_AMOUNT_DESCRIPTORS = (
-    "e transfer",
-    "interac received",
-    "interac sent",
-    "virement interac",
-)
-SUSPICIOUS_REFERENCE_AMOUNT_MINIMUM = 5000.0
-SUSPICIOUS_REFERENCE_REPAIRED_MAXIMUM = 1000.0
 
 
 def build_category_review_metadata(decision: CategoryDecision) -> tuple[bool, str | None]:
@@ -1891,45 +1882,6 @@ def apply_category_review_correction(
     }
 
 
-def suggest_reference_code_amount_values(
-    *,
-    description: str,
-    amount: float | None,
-) -> dict[str, float | str] | None:
-    description = normalize_description(description)
-    normalized_description = normalize_category_signal_text(description)
-    if not any(marker in normalized_description for marker in REFERENCE_CODE_AMOUNT_DESCRIPTORS):
-        return None
-
-    current_amount = abs(float(amount or 0))
-    if current_amount < SUSPICIOUS_REFERENCE_AMOUNT_MINIMUM:
-        return None
-
-    if abs(current_amount - round(current_amount)) > 0.005:
-        return None
-
-    amount_digits = str(int(round(current_amount)))
-    if len(amount_digits) < 4:
-        return None
-
-    repaired_digits = amount_digits[1:]
-    if not repaired_digits or set(repaired_digits) == {"0"}:
-        return None
-
-    suggested_amount = float(int(repaired_digits))
-    if not (0 < suggested_amount <= SUSPICIOUS_REFERENCE_REPAIRED_MAXIMUM):
-        return None
-
-    return {
-        "suggested_amount": suggested_amount,
-        "confidence": 0.86,
-        "reason": (
-            "This looks like a statement-parser issue where one reference-code digit "
-            "may have been merged with the real transfer amount. Review before saving."
-        ),
-    }
-
-
 def suggest_reference_code_amount_repair(transaction: Transaction) -> SuspiciousAmountRepairCandidate | None:
     description = normalize_description(transaction.description)
     suggestion = suggest_reference_code_amount_values(
@@ -1946,9 +1898,9 @@ def suggest_reference_code_amount_repair(transaction: Transaction) -> Suspicious
         type=transaction.type,
         category=transaction.category,
         current_amount=abs(float(transaction.amount or 0)),
-        suggested_amount=float(suggestion["suggested_amount"]),
-        confidence=float(suggestion["confidence"]),
-        reason=str(suggestion["reason"]),
+        suggested_amount=suggestion.suggested_amount,
+        confidence=suggestion.confidence,
+        reason=suggestion.reason,
     )
 
 

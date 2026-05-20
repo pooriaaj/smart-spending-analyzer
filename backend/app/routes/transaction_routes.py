@@ -44,6 +44,7 @@ from app.schemas import (
 )
 from app.services.account_service import ensure_default_account, get_account_for_user
 from app.security import ensure_batch_file_count, ensure_batch_payload_size, read_validated_import_upload
+from app.services.import_quality_service import suggest_reference_code_amount_values
 from app.services.seed_service import seed_realistic_transactions
 from app.services.transaction_service import (
     apply_category_to_merchant_learning_group,
@@ -79,7 +80,6 @@ from app.services.transaction_service import (
     get_suspicious_amount_repair_candidates,
     save_category_memory,
     should_store_category_memory,
-    suggest_reference_code_amount_values,
 )
 from app.services.unified_import_service import process_smart_import, process_smart_import_batch
 

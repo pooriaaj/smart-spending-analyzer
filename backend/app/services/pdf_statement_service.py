@@ -13,11 +13,11 @@ from sqlalchemy.orm import Session
 
 from app.schemas import StatementPreviewRow
 from app.services.category_taxonomy import strip_payment_processor_prefixes
+from app.services.import_quality_service import suggest_reference_code_amount_values
 from app.services.local_ocr_service import is_local_ocr_enabled, run_local_ocr_image
 from app.services.transaction_service import (
     build_category_review_metadata,
     categorize_transaction_details,
-    suggest_reference_code_amount_values,
 )
 from app.services.vision_ocr_service import (
     build_input_image_part,
@@ -1633,10 +1633,10 @@ def finalize_pending_transaction(
     amount_review_reason = None
     suggested_amount = None
     if amount_review:
-        amount_confidence = float(amount_review["confidence"])
+        amount_confidence = amount_review.confidence
         amount_review_required = True
-        amount_review_reason = str(amount_review["reason"])
-        suggested_amount = float(amount_review["suggested_amount"])
+        amount_review_reason = amount_review.reason
+        suggested_amount = amount_review.suggested_amount
         review_reason = (
             f"{review_reason} {amount_review_reason}".strip()
             if review_reason
