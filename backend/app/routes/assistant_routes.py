@@ -8,6 +8,7 @@ from app.models import User
 from app.schemas import (
     AssistantQueryRequest,
     AssistantQueryResponse,
+    AssistantStatusResponse,
     AssistantSuggestionsResponse,
 )
 from app.services.account_service import get_account_for_user
@@ -15,6 +16,7 @@ from app.services.assistant_service import (
     generate_assistant_response,
     generate_assistant_suggestions,
 )
+from app.services.llm_service import get_llm_provider_status
 
 router = APIRouter(prefix="/assistant", tags=["Assistant"])
 
@@ -32,6 +34,14 @@ def resolve_assistant_account_scope(
         raise HTTPException(status_code=404, detail="Account not found")
 
     return f"{account.name} ({account.type})"
+
+
+@router.get("/status", response_model=AssistantStatusResponse)
+def get_assistant_status_route(
+    current_user: User = Depends(get_current_user),
+) -> AssistantStatusResponse:
+    _ = current_user
+    return get_llm_provider_status()
 
 
 @router.post("/response", response_model=AssistantQueryResponse)

@@ -894,6 +894,22 @@ class AssistantQueryResponse(BaseModel):
     scope_label: str = "All accounts combined"
 
 
+class AssistantProviderStatus(BaseModel):
+    provider: Literal["openai", "local", "rule_based"]
+    configured: bool
+    active: bool
+    model: str | None = None
+    label: str
+
+
+class AssistantStatusResponse(BaseModel):
+    llm_enabled: bool
+    active_provider: Literal["openai", "local", "rule_based"]
+    fallback_provider: Literal["rule_based"] = "rule_based"
+    providers: list[AssistantProviderStatus]
+    message: str
+
+
 class AssistantSuggestionsResponse(BaseModel):
     suggestions: list[str]
 

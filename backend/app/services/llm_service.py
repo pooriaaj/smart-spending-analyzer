@@ -34,6 +34,53 @@ def llm_assistant_enabled() -> bool:
     return USE_LLM_ASSISTANT and (_local_client is not None or _openai_client is not None)
 
 
+def get_llm_provider_status() -> dict[str, Any]:
+    local_configured = USE_LOCAL_LLM and _local_client is not None
+    openai_configured = bool(OPENAI_API_KEY and _openai_client is not None)
+    local_active = USE_LLM_ASSISTANT and local_configured
+    openai_active = USE_LLM_ASSISTANT and not local_active and openai_configured
+
+    if local_active:
+        active_provider = "local"
+        message = "Assistant is using the configured local LLM provider."
+    elif openai_active:
+        active_provider = "openai"
+        message = "Assistant is using the configured OpenAI provider."
+    else:
+        active_provider = "rule_based"
+        message = "Assistant is using the safe rule-based fallback until an LLM provider is enabled."
+
+    return {
+        "llm_enabled": llm_assistant_enabled(),
+        "active_provider": active_provider,
+        "fallback_provider": "rule_based",
+        "providers": [
+            {
+                "provider": "local",
+                "configured": local_configured,
+                "active": local_active,
+                "model": LOCAL_LLM_MODEL if local_configured else None,
+                "label": "Local LLM",
+            },
+            {
+                "provider": "openai",
+                "configured": openai_configured,
+                "active": openai_active,
+                "model": OPENAI_MODEL if openai_configured else None,
+                "label": "OpenAI",
+            },
+            {
+                "provider": "rule_based",
+                "configured": True,
+                "active": active_provider == "rule_based",
+                "model": None,
+                "label": "Rule-based fallback",
+            },
+        ],
+        "message": message,
+    }
+
+
 def _safe_text(value: Any) -> str:
     if value is None:
         return "None"

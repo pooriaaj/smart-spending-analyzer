@@ -210,6 +210,21 @@ class SecurityRouteTest(unittest.TestCase):
         )
         self.assertEqual(response.status_code, 404)
 
+    def test_assistant_status_is_safe_and_secret_free(self) -> None:
+        client = self.build_owned_resource_client()
+        response = client.get("/assistant/status")
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertIn(payload["active_provider"], {"openai", "local", "rule_based"})
+        self.assertEqual(payload["fallback_provider"], "rule_based")
+        self.assertTrue(any(item["provider"] == "rule_based" for item in payload["providers"]))
+
+        response_text = response.text.lower()
+        self.assertNotIn("api_key", response_text)
+        self.assertNotIn("database_url", response_text)
+        self.assertNotIn("postgresql://", response_text)
+        self.assertNotIn("bearer ", response_text)
+
     def test_upload_rejects_wrong_extension(self) -> None:
         client = self.build_owned_resource_client()
         token = create_access_token({"sub": str(self.user_a_id)})
