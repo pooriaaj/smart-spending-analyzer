@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import api, { handleApiAuthError } from "../services/api";
 import PasswordField from "../components/PasswordField";
 import { useLanguage } from "../i18n/LanguageContext";
+import { getApiErrorMessage, getApiSuccessMessage } from "../utils/errorUtils";
 
 function ProfilePage() {
   const navigate = useNavigate();
@@ -57,7 +58,7 @@ function ProfilePage() {
     } catch (error) {
       if (!handleApiAuthError(error, navigate)) {
         setProfileError(
-          error?.response?.data?.detail || t("profile.profileUpdateFailed")
+          getApiErrorMessage(error, t("profile.profileUpdateFailed"))
         );
       }
     }
@@ -78,7 +79,7 @@ function ProfilePage() {
     } catch (error) {
       if (!handleApiAuthError(error, navigate)) {
         setLearningError(
-          error?.response?.data?.detail || t("profile.learningUpdateFailed")
+          getApiErrorMessage(error, t("profile.learningUpdateFailed"))
         );
       }
     } finally {
@@ -97,13 +98,13 @@ function ProfilePage() {
         new_password: newPassword,
       });
 
-      setPasswordMessage(response.data.message || t("profile.passwordChanged"));
+      setPasswordMessage(getApiSuccessMessage(response.data, t("profile.passwordChanged")));
       setCurrentPassword("");
       setNewPassword("");
     } catch (error) {
       if (!handleApiAuthError(error, navigate)) {
         setPasswordError(
-          error?.response?.data?.detail || t("profile.passwordChangeFailed")
+          getApiErrorMessage(error, t("profile.passwordChangeFailed"))
         );
       }
     }
@@ -132,7 +133,7 @@ function ProfilePage() {
     } catch (error) {
       if (!handleApiAuthError(error, navigate)) {
         setDeleteError(
-          error?.response?.data?.detail || t("profile.deleteFailed")
+          getApiErrorMessage(error, t("profile.deleteFailed"))
         );
       }
     } finally {

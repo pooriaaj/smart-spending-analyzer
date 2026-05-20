@@ -3,6 +3,7 @@ import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import api from "../services/api";
 import PasswordField from "../components/PasswordField";
 import { useLanguage } from "../i18n/LanguageContext";
+import { getApiErrorMessage, getApiSuccessMessage } from "../utils/errorUtils";
 
 function ResetPasswordPage() {
   const [searchParams] = useSearchParams();
@@ -40,14 +41,12 @@ function ResetPasswordPage() {
         new_password: newPassword,
       });
 
-      setMessage(response.data.message || t("auth.passwordResetSuccess"));
+      setMessage(getApiSuccessMessage(response.data, t("auth.passwordResetSuccess")));
       setTimeout(() => {
         navigate("/", { replace: true });
       }, 1500);
     } catch (err) {
-      setError(
-        err?.response?.data?.detail || t("auth.resetFailed")
-      );
+      setError(getApiErrorMessage(err, t("auth.resetFailed")));
     } finally {
       setSubmitting(false);
     }

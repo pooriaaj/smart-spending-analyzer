@@ -10,6 +10,7 @@ import {
 } from "../services/accountStorage";
 import { useLanguage } from "../i18n/LanguageContext";
 import { formatCategoryLabel } from "../utils/displayLabels";
+import { getApiErrorMessage, getApiSuccessMessage } from "../utils/errorUtils";
 
 const getCurrentMonthStart = () => {
   const now = new Date();
@@ -601,12 +602,12 @@ function TransactionsPage() {
         delete_all: false,
       });
 
-      setFreshStartMessage(response.data?.message || t("transactions.freshStartComplete"));
+      setFreshStartMessage(getApiSuccessMessage(response.data, t("transactions.freshStartComplete")));
       setFreshStartConfirm("");
       await fetchTransactions();
     } catch (error) {
       if (!handleApiAuthError(error, navigate)) {
-        setFreshStartError(error?.response?.data?.detail || t("transactions.freshStartFailed"));
+        setFreshStartError(getApiErrorMessage(error, t("transactions.freshStartFailed")));
       }
     } finally {
       setFreshStartLoading(false);

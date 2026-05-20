@@ -55,6 +55,8 @@ SENSITIVE_RESPONSE_MARKERS = (
     "token=",
 )
 
+VALIDATION_ERROR_MESSAGE = "Please check the highlighted fields and try again."
+
 
 def is_production() -> bool:
     return os.getenv("ENVIRONMENT", os.getenv("APP_ENV", "development")).lower() == "production"
@@ -105,6 +107,37 @@ def validate_password_strength(password: str) -> None:
         raise ValueError("Password must include at least one number.")
     if password.lower() in {"password", "password1", "password123", "qwerty123"}:
         raise ValueError("Password is too common.")
+
+
+def normalize_validation_errors(errors: Iterable[dict]) -> list[dict[str, str]]:
+    safe_errors: list[dict[str, str]] = []
+
+    for item in errors:
+        if not isinstance(item, dict):
+            continue
+
+        loc_parts = [
+            str(part)
+            for part in item.get("loc", [])
+            if str(part) not in {"body", "query", "path"}
+        ]
+        safe_errors.append(
+            {
+                "loc": ".".join(loc_parts) or "request",
+                "msg": str(item.get("msg") or "Invalid value."),
+                "type": str(item.get("type") or "validation_error"),
+            }
+        )
+
+    return safe_errors
+
+
+def build_validation_error_response(errors: Iterable[dict]) -> dict[str, object]:
+    return {
+        "detail": VALIDATION_ERROR_MESSAGE,
+        "message": VALIDATION_ERROR_MESSAGE,
+        "errors": normalize_validation_errors(errors),
+    }
 
 
 def sanitize_import_text(value: str) -> str:

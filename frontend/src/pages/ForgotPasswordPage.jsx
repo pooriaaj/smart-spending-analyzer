@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 import api from "../services/api";
 import { useLanguage } from "../i18n/LanguageContext";
+import { getApiErrorMessage, getApiSuccessMessage } from "../utils/errorUtils";
 
 function ForgotPasswordPage() {
   const [email, setEmail] = useState("");
@@ -22,10 +23,10 @@ function ForgotPasswordPage() {
 
       const response = await api.post("/auth/forgot-password", { email });
 
-      setMessage(response.data.message);
+      setMessage(getApiSuccessMessage(response.data, t("auth.resetLinkSent")));
       setResetUrl(response.data.reset_url || "");
     } catch (err) {
-      setError(err?.response?.data?.detail || t("auth.forgotFailed"));
+      setError(getApiErrorMessage(err, t("auth.forgotFailed")));
     } finally {
       setSubmitting(false);
     }

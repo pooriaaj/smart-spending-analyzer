@@ -10,6 +10,7 @@ import {
   buildBudgetProjectionLabel,
 } from "../utils/budgetDisplay";
 import { formatCategoryLabel } from "../utils/displayLabels";
+import { getApiErrorMessage, getApiSuccessMessage } from "../utils/errorUtils";
 
 function formatBudgetCategory(value) {
   if (!value || typeof value !== "string") return "";
@@ -222,7 +223,7 @@ function BudgetsPage() {
       await fetchBudgets();
     } catch (saveError) {
       if (!handleApiAuthError(saveError, navigate)) {
-        setError(saveError?.response?.data?.detail || t("budgets.saveFailed"));
+        setError(getApiErrorMessage(saveError, t("budgets.saveFailed")));
       }
     } finally {
       setSaving(false);
@@ -239,7 +240,7 @@ function BudgetsPage() {
       await fetchBudgets();
     } catch (deleteError) {
       if (!handleApiAuthError(deleteError, navigate)) {
-        setError(deleteError?.response?.data?.detail || t("budgets.deleteFailed"));
+        setError(getApiErrorMessage(deleteError, t("budgets.deleteFailed")));
       }
     }
   };
@@ -334,7 +335,7 @@ function BudgetsPage() {
       window.scrollTo({ top: 0, behavior: "smooth" });
     } catch (saveError) {
       if (!handleApiAuthError(saveError, navigate)) {
-        setError(saveError?.response?.data?.detail || t("budgets.targetSaveFailed"));
+        setError(getApiErrorMessage(saveError, t("budgets.targetSaveFailed")));
       }
     } finally {
       setQuickSavingKey("");
@@ -375,18 +376,20 @@ function BudgetsPage() {
       setCategory(lastTarget.category);
       setAmount(String(lastTarget.amount));
       setMessage(
-        response.data?.message ||
+        getApiSuccessMessage(
+          response.data,
           t("budgets.targetsSaved", {
             source: sourceLabel,
             count: uniqueTargets.length,
             plural: uniqueTargets.length === 1 ? "" : "s",
           })
+        )
       );
       await fetchBudgets();
       window.scrollTo({ top: 0, behavior: "smooth" });
     } catch (saveError) {
       if (!handleApiAuthError(saveError, navigate)) {
-        setError(saveError?.response?.data?.detail || t("budgets.targetsApplyFailed"));
+        setError(getApiErrorMessage(saveError, t("budgets.targetsApplyFailed")));
       }
     } finally {
       setBulkApplyingKey("");
@@ -460,11 +463,13 @@ function BudgetsPage() {
         month,
         account_id: normalizedAccountId,
       });
-      setMessage(response.data.message || t("budgets.copiedBudgets", { month: previousMonth }));
+      setMessage(
+        getApiSuccessMessage(response.data, t("budgets.copiedBudgets", { month: previousMonth }))
+      );
       await fetchBudgets();
     } catch (copyError) {
       if (!handleApiAuthError(copyError, navigate)) {
-        setError(copyError?.response?.data?.detail || t("budgets.copyFailed"));
+        setError(getApiErrorMessage(copyError, t("budgets.copyFailed")));
       }
     } finally {
       setCopying(false);
@@ -483,11 +488,13 @@ function BudgetsPage() {
       });
       setCategory("");
       setAmount("");
-      setMessage(response.data.message || t("budgets.builtBudgets", { month: nextMonth }));
+      setMessage(
+        getApiSuccessMessage(response.data, t("budgets.builtBudgets", { month: nextMonth }))
+      );
       setMonth(response.data.target_month || nextMonth);
     } catch (buildError) {
       if (!handleApiAuthError(buildError, navigate)) {
-        setError(buildError?.response?.data?.detail || t("budgets.buildFailed"));
+        setError(getApiErrorMessage(buildError, t("budgets.buildFailed")));
       }
     } finally {
       setBuildingNextMonth(false);

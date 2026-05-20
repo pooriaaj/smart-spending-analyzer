@@ -22,6 +22,7 @@ import {
   formatRecurringReviewReason,
   formatScopeLabel,
 } from "../utils/displayLabels";
+import { getApiErrorMessage, getApiSuccessMessage } from "../utils/errorUtils";
 
 const SCENARIO_PRESETS = [
   {
@@ -1462,7 +1463,7 @@ function SimulatorPage() {
     } catch (saveError) {
       if (!handleApiAuthError(saveError, navigate)) {
         setSavedScenarioError(
-          saveError?.response?.data?.detail || t("simulator.saveRecommendedFailed")
+          getApiErrorMessage(saveError, t("simulator.saveRecommendedFailed"))
         );
       }
     } finally {
@@ -1557,17 +1558,19 @@ function SimulatorPage() {
         items: targets,
       });
       setReductionPlanMessage(
-        response.data?.message ||
+        getApiSuccessMessage(
+          response.data,
           t("simulator.reductionApplied", {
             count: targets.length,
             plural: targets.length === 1 ? "" : "s",
             month: simulatorData.start_month,
           })
+        )
       );
     } catch (applyError) {
       if (!handleApiAuthError(applyError, navigate)) {
         setReductionPlanError(
-          applyError?.response?.data?.detail || t("simulator.reductionFailed")
+          getApiErrorMessage(applyError, t("simulator.reductionFailed"))
         );
       }
     } finally {
@@ -1633,8 +1636,10 @@ function SimulatorPage() {
     } catch (saveError) {
       if (!handleApiAuthError(saveError, navigate)) {
         setSavedScenarioError(
-          saveError?.response?.data?.detail ||
-            (isUpdatingExisting ? t("simulator.updateScenarioFailed") : t("simulator.saveScenarioFailed"))
+          getApiErrorMessage(
+            saveError,
+            isUpdatingExisting ? t("simulator.updateScenarioFailed") : t("simulator.saveScenarioFailed")
+          )
         );
       }
     } finally {
@@ -1733,7 +1738,7 @@ function SimulatorPage() {
     } catch (deleteError) {
       if (!handleApiAuthError(deleteError, navigate)) {
         setSavedScenarioError(
-          deleteError?.response?.data?.detail || t("simulator.deleteScenarioFailed")
+          getApiErrorMessage(deleteError, t("simulator.deleteScenarioFailed"))
         );
       }
     } finally {

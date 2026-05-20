@@ -7,6 +7,7 @@ import { ALL_ACCOUNTS_VALUE, getSelectedAccountId, setSelectedAccountId as persi
 import { buildBudgetForecastSummary } from "../utils/budgetDisplay";
 import { useLanguage } from "../i18n/LanguageContext";
 import { formatAccountLabel, formatCategoryLabel } from "../utils/displayLabels";
+import { getApiErrorMessage } from "../utils/errorUtils";
 
 const normalizeRepeatDescription = (value = "") => {
   let normalized = value.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
@@ -367,7 +368,7 @@ function DashboardPage() {
       await fetchData();
     } catch (error) {
       if (!handleApiAuthError(error, navigate)) {
-        setFormError(error?.response?.data?.detail || t("dashboard.addTransactionFailed"));
+        setFormError(getApiErrorMessage(error, t("dashboard.addTransactionFailed")));
       }
     } finally {
       setSubmitting(false);

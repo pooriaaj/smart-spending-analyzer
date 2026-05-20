@@ -5,6 +5,7 @@ import os
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, Request, Response
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -16,7 +17,12 @@ from app.routes.auth_routes import router as auth_router
 from app.routes.budget_routes import router as budget_router
 from app.routes.transaction_routes import router as transaction_router
 from app.routes.user_routes import router as user_router
-from app.security import SecurityHeadersMiddleware, SimpleRateLimitMiddleware, get_allowed_origins
+from app.security import (
+    SecurityHeadersMiddleware,
+    SimpleRateLimitMiddleware,
+    build_validation_error_response,
+    get_allowed_origins,
+)
 from app.services.database_maintenance_service import ensure_runtime_database_shape
 from app.services.transaction_service import rebuild_community_merchant_profile_cache
 
@@ -77,6 +83,18 @@ async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONR
     return JSONResponse(
         status_code=500,
         content={"detail": "Internal server error"},
+    )
+
+
+@app.exception_handler(RequestValidationError)
+async def request_validation_exception_handler(
+    request: Request,
+    exc: RequestValidationError,
+) -> JSONResponse:
+    logger.info("Validation error at %s", request.url.path)
+    return JSONResponse(
+        status_code=422,
+        content=build_validation_error_response(exc.errors()),
     )
 
 

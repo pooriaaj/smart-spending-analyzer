@@ -4,6 +4,7 @@ import api, { handleApiAuthError } from "../services/api";
 import AccountSelector from "../components/AccountSelector";
 import { ALL_ACCOUNTS_VALUE } from "../services/accountStorage";
 import { useLanguage } from "../i18n/LanguageContext";
+import { getApiErrorMessage, getApiSuccessMessage } from "../utils/errorUtils";
 
 const ALLOWED_TRANSACTION_TYPES = new Set(["expense", "income"]);
 const RECEIPT_IMAGE_EXTENSIONS = new Set(["jpg", "jpeg", "png", "webp"]);
@@ -477,7 +478,7 @@ function ImportPage() {
     confirmingPreview || importReadyPreviewRowCount === 0 || invalidPreviewRowCount > 0;
   const receiptDraftValidation = validateReceiptDraft(receiptDraft, t);
   const filteredPreviewRows = previewRowItems.filter(
-    ({ duplicateReason, validation, confidenceReason, row, categoryReviewRequired }) => {
+    ({ duplicateReason, validation, confidenceReason, categoryReviewRequired }) => {
       if (previewFilter === "missing") {
         return !duplicateReason && validation.messages.length === 0 && !categoryReviewRequired;
       }
@@ -569,7 +570,7 @@ function ImportPage() {
       }
     } catch (uploadError) {
       if (!handleApiAuthError(uploadError, navigate)) {
-        setError(uploadError?.response?.data?.detail || t("import.importFallbackFailed"));
+        setError(getApiErrorMessage(uploadError, t("import.importFallbackFailed")));
       }
     } finally {
       setLoading(false);
@@ -736,7 +737,7 @@ function ImportPage() {
       setImportResult({
         detected_type: importResult?.detected_type || "pdf_statement",
         status: "completed",
-        message: response.data.message,
+        message: getApiSuccessMessage(response.data, t("import.completed")),
         import_summary: {
           imported: response.data.imported || 0,
           duplicates_skipped:
@@ -748,7 +749,7 @@ function ImportPage() {
       setPreviewRows([]);
     } catch (confirmError) {
       if (!handleApiAuthError(confirmError, navigate)) {
-        setError(confirmError?.response?.data?.detail || t("import.confirmPreviewFailed"));
+        setError(getApiErrorMessage(confirmError, t("import.confirmPreviewFailed")));
       }
     } finally {
       setConfirmingPreview(false);
@@ -783,7 +784,7 @@ function ImportPage() {
       setReceiptDraft(null);
     } catch (saveError) {
       if (!handleApiAuthError(saveError, navigate)) {
-        setError(saveError?.response?.data?.detail || t("import.saveReceiptFailed"));
+        setError(getApiErrorMessage(saveError, t("import.saveReceiptFailed")));
       }
     } finally {
       setSavingDraft(false);

@@ -7,6 +7,8 @@ from datetime import datetime, timedelta, timezone
 from unittest.mock import patch
 
 from fastapi import Depends, FastAPI
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.testclient import TestClient
 from jose import jwt
@@ -25,9 +27,15 @@ from app.routes.analytics_routes import router as analytics_router
 from app.routes.assistant_routes import router as assistant_router
 from app.routes.budget_routes import router as budget_router
 from app.routes.transaction_routes import router as transaction_router
-from app.security import SimpleRateLimitMiddleware, get_allowed_origins
+from app.schemas import ResetPasswordRequest
+from app.security import (
+    SimpleRateLimitMiddleware,
+    build_validation_error_response,
+    get_allowed_origins,
+)
 from app.services.assistant_service import generate_assistant_response
 from app.services.llm_service import ANSWER_MAX_CHARS, build_finance_prompt, parse_llm_response
+from app.services import vision_ocr_service
 
 
 class SecurityRouteTest(unittest.TestCase):
@@ -381,6 +389,61 @@ class AuthSecurityTest(unittest.TestCase):
         self.assertEqual(client.post("/auth/reset-password", json=payload).status_code, 400)
 
 
+class ValidationErrorSafetyTest(unittest.TestCase):
+    def test_validation_error_response_removes_raw_input_and_context(self) -> None:
+        payload = build_validation_error_response(
+            [
+                {
+                    "type": "string_too_short",
+                    "loc": ("body", "new_password"),
+                    "msg": "String should have at least 8 characters",
+                    "input": "short",
+                    "ctx": {"min_length": 8},
+                }
+            ]
+        )
+
+        self.assertEqual(payload["detail"], "Please check the highlighted fields and try again.")
+        self.assertEqual(payload["message"], "Please check the highlighted fields and try again.")
+        self.assertEqual(
+            payload["errors"],
+            [
+                {
+                    "loc": "new_password",
+                    "msg": "String should have at least 8 characters",
+                    "type": "string_too_short",
+                }
+            ],
+        )
+        self.assertNotIn("input", str(payload).lower())
+        self.assertNotIn("ctx", str(payload).lower())
+
+    def test_request_validation_handler_returns_frontend_safe_shape(self) -> None:
+        app = FastAPI()
+
+        @app.exception_handler(RequestValidationError)
+        async def validation_handler(request, exc):  # noqa: ANN001
+            return JSONResponse(
+                status_code=422,
+                content=build_validation_error_response(exc.errors()),
+            )
+
+        @app.post("/demo")
+        def demo(payload: ResetPasswordRequest) -> dict[str, str]:
+            return {"message": "ok"}
+
+        client = TestClient(app)
+        response = client.post("/demo", json={"token": "too-short", "new_password": "short"})
+
+        self.assertEqual(response.status_code, 422)
+        payload = response.json()
+        self.assertIsInstance(payload.get("detail"), str)
+        self.assertIsInstance(payload.get("message"), str)
+        self.assertIsInstance(payload.get("errors"), list)
+        self.assertNotIn("input", response.text.lower())
+        self.assertNotIn("ctx", response.text.lower())
+
+
 class AssistantSecurityTest(unittest.TestCase):
     def test_assistant_refuses_prompt_injection_and_secret_requests(self) -> None:
         response = generate_assistant_response(
@@ -440,6 +503,37 @@ ACTION_LABEL:
         self.assertLessEqual(len(result["suggested_followups"][0]), 163)
         self.assertEqual(result["action_type"], "none")
         self.assertLessEqual(len(result["action_label"]), 123)
+
+
+class VisionOcrSafetyTest(unittest.TestCase):
+    def test_vision_prompt_requires_configured_client(self) -> None:
+        with patch.object(vision_ocr_service, "_openai_client", None):
+            with self.assertRaises(ValueError):
+                vision_ocr_service.run_vision_prompt("Read this.", [])
+
+    def test_vision_prompt_bounds_model_output(self) -> None:
+        class FakeResponses:
+            def create(self, **kwargs):
+                self.last_kwargs = kwargs
+                return type(
+                    "FakeVisionResponse",
+                    (),
+                    {"output_text": "X" * (vision_ocr_service.OCR_RESPONSE_MAX_CHARS + 500)},
+                )()
+
+        class FakeClient:
+            def __init__(self) -> None:
+                self.responses = FakeResponses()
+
+        fake_client = FakeClient()
+        with patch.object(vision_ocr_service, "_openai_client", fake_client):
+            result = vision_ocr_service.run_vision_prompt(
+                "Read this.",
+                [{"type": "input_image", "image_url": "data:image/png;base64,abc"}],
+            )
+
+        self.assertLessEqual(len(result), vision_ocr_service.OCR_RESPONSE_MAX_CHARS + 3)
+        self.assertTrue(result.endswith("..."))
 
 
 class CorsSecurityTest(unittest.TestCase):

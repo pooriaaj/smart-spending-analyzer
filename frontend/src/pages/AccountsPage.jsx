@@ -4,6 +4,7 @@ import api, { handleApiAuthError } from "../services/api";
 import { setSelectedAccountId } from "../services/accountStorage";
 import { useLanguage } from "../i18n/LanguageContext";
 import { formatAccountName, formatAccountType, formatCategoryLabel } from "../utils/displayLabels";
+import { getApiErrorMessage } from "../utils/errorUtils";
 
 function AccountsPage() {
   const navigate = useNavigate();
@@ -46,7 +47,7 @@ function AccountsPage() {
       await fetchAccounts();
     } catch (error) {
       if (!handleApiAuthError(error, navigate)) {
-        setError(error?.response?.data?.detail || t("accounts.createFailed"));
+        setError(getApiErrorMessage(error, t("accounts.createFailed")));
       }
     }
   };
@@ -57,7 +58,7 @@ function AccountsPage() {
       await fetchAccounts();
     } catch (error) {
       if (!handleApiAuthError(error, navigate)) {
-        setError(error?.response?.data?.detail || t("accounts.deleteFailed"));
+        setError(getApiErrorMessage(error, t("accounts.deleteFailed")));
       }
     }
   };
