@@ -8,7 +8,7 @@ from fastapi import FastAPI, Request, Response
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.database import Base, engine
+from app.database import Base, SessionLocal, engine
 from app.routes.account_routes import router as account_router
 from app.routes.analytics_routes import router as analytics_router
 from app.routes.assistant_routes import router as assistant_router
@@ -18,6 +18,7 @@ from app.routes.transaction_routes import router as transaction_router
 from app.routes.user_routes import router as user_router
 from app.security import SecurityHeadersMiddleware, SimpleRateLimitMiddleware, get_allowed_origins
 from app.services.database_maintenance_service import ensure_runtime_database_shape
+from app.services.transaction_service import rebuild_community_merchant_profile_cache
 
 load_dotenv()
 
@@ -60,6 +61,13 @@ app.include_router(assistant_router)
 @app.on_event("startup")
 def on_startup() -> None:
     ensure_runtime_database_shape(engine)
+    try:
+        with SessionLocal() as db:
+            stats = rebuild_community_merchant_profile_cache(db)
+            db.commit()
+            logger.info("Community category learning cache refreshed: %s", stats)
+    except Exception:
+        logger.exception("Community category learning cache refresh skipped")
     logger.info("Smart Spending Analyzer API started")
 
 

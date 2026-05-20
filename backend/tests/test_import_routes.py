@@ -25,6 +25,7 @@ from app.models import (
 )
 from app.routes.transaction_routes import router as transaction_router
 from app.services import pdf_statement_service
+from app.services.transaction_service import rebuild_community_merchant_profile_cache
 
 
 def build_text_pdf(lines: list[str]) -> bytes:
@@ -1476,6 +1477,133 @@ class SmartImportRouteTest(unittest.TestCase):
         preview_row = response.json()["preview_rows"][0]
         self.assertNotEqual(preview_row["category_source"], "community_profile")
         self.assertNotEqual(preview_row["category"], "entertainment")
+
+    def test_rebuild_community_learning_cache_refreshes_only_safe_consensus(self) -> None:
+        with self.session_local() as session:
+            first_user = User(email="rebuild-one@example.com", password_hash="hashed")
+            second_user = User(email="rebuild-two@example.com", password_hash="hashed")
+            disabled_user = User(email="rebuild-disabled@example.com", password_hash="hashed")
+            session.add_all([first_user, second_user, disabled_user])
+            session.flush()
+            session.add(
+                UserLearningPreference(
+                    owner_id=disabled_user.id,
+                    community_learning_enabled=False,
+                )
+            )
+            session.add_all(
+                [
+                    MerchantCategoryProfile(
+                        merchant_key="glimmerbox",
+                        display_name="Glimmerbox",
+                        category="entertainment",
+                        transaction_type="expense",
+                        confidence=0.97,
+                        confirmation_count=3,
+                        last_amount=18.0,
+                        owner_id=first_user.id,
+                    ),
+                    MerchantCategoryProfile(
+                        merchant_key="glimmerbox",
+                        display_name="Glimmerbox",
+                        category="entertainment",
+                        transaction_type="expense",
+                        confidence=0.97,
+                        confirmation_count=3,
+                        last_amount=19.0,
+                        owner_id=second_user.id,
+                    ),
+                    MerchantCategoryProfile(
+                        merchant_key="glimmerbox",
+                        display_name="Glimmerbox",
+                        category="shopping",
+                        transaction_type="expense",
+                        confidence=0.97,
+                        confirmation_count=3,
+                        last_amount=20.0,
+                        owner_id=disabled_user.id,
+                    ),
+                    MerchantCategoryProfile(
+                        merchant_key="orange mart|amount:10",
+                        display_name="Orange Mart",
+                        category="smoking",
+                        transaction_type="expense",
+                        confidence=0.97,
+                        confirmation_count=3,
+                        last_amount=10.99,
+                        owner_id=first_user.id,
+                    ),
+                    MerchantCategoryProfile(
+                        merchant_key="orange mart|amount:40",
+                        display_name="Orange Mart",
+                        category="groceries",
+                        transaction_type="expense",
+                        confidence=0.97,
+                        confirmation_count=3,
+                        last_amount=38.0,
+                        owner_id=second_user.id,
+                    ),
+                    MerchantCategoryProfile(
+                        merchant_key="payroll",
+                        display_name="Payroll",
+                        category="income",
+                        transaction_type="income",
+                        confidence=0.97,
+                        confirmation_count=3,
+                        last_amount=900.0,
+                        owner_id=first_user.id,
+                    ),
+                    MerchantLookupCache(
+                        merchant_key="glimmerbox",
+                        display_name="Glimmerbox",
+                        category="shopping",
+                        transaction_type="expense",
+                        confidence=0.9,
+                        matched_signal="glimmerbox",
+                        provider="community",
+                    ),
+                ]
+            )
+            session.commit()
+
+            stats = rebuild_community_merchant_profile_cache(session)
+            session.commit()
+
+            glimmerbox_cache = (
+                session.query(MerchantLookupCache)
+                .filter(
+                    MerchantLookupCache.merchant_key == "glimmerbox",
+                    MerchantLookupCache.transaction_type == "expense",
+                    MerchantLookupCache.provider == "community",
+                )
+                .one_or_none()
+            )
+            orange_cache = (
+                session.query(MerchantLookupCache)
+                .filter(
+                    MerchantLookupCache.merchant_key == "orange mart",
+                    MerchantLookupCache.transaction_type == "expense",
+                    MerchantLookupCache.provider == "community",
+                )
+                .one_or_none()
+            )
+            payroll_cache = (
+                session.query(MerchantLookupCache)
+                .filter(
+                    MerchantLookupCache.merchant_key == "payroll",
+                    MerchantLookupCache.transaction_type == "income",
+                    MerchantLookupCache.provider == "community",
+                )
+                .one_or_none()
+            )
+
+        self.assertEqual(stats["deleted_cache_count"], 1)
+        self.assertGreaterEqual(stats["refreshed_key_count"], 1)
+        self.assertEqual(stats["rebuilt_cache_count"], 1)
+        self.assertIsNotNone(glimmerbox_cache)
+        self.assertEqual(glimmerbox_cache.category, "entertainment")
+        self.assertIsNone(orange_cache)
+        self.assertIsNone(payroll_cache)
 
     def test_import_file_uses_expanded_lifestyle_categories(self) -> None:
         pdf_bytes = build_text_pdf(

@@ -1170,6 +1170,68 @@ def refresh_community_merchant_profile_cache(
         clear_stale_community_profile_decision(db, merchant_key, tx_type)
 
 
+def rebuild_community_merchant_profile_cache(db: Session) -> dict[str, int]:
+    """Rebuild anonymized community merchant consensus from allowed profiles.
+
+    The app never stores raw bank statements in this cache. It only stores
+    merchant keys and categories confirmed by enough opted-in users.
+    """
+
+    deleted_cache_count = (
+        db.query(MerchantLookupCache)
+        .filter(MerchantLookupCache.provider == "community")
+        .delete(synchronize_session=False)
+    )
+    db.flush()
+
+    profile_keys = (
+        db.query(
+            MerchantCategoryProfile.merchant_key,
+            MerchantCategoryProfile.transaction_type,
+        )
+        .distinct()
+        .all()
+    )
+
+    refresh_keys: set[tuple[str, str]] = set()
+    skipped_non_expense = 0
+    skipped_amount_sensitive = 0
+    skipped_invalid = 0
+
+    for merchant_key, tx_type in profile_keys:
+        base_key = merchant_profile_base_key(merchant_key)
+        if not is_valid_merchant_learning_key(base_key):
+            skipped_invalid += 1
+            continue
+        if tx_type != "expense":
+            skipped_non_expense += 1
+            continue
+        if merchant_key_requires_amount_guard(base_key):
+            skipped_amount_sensitive += 1
+            continue
+        refresh_keys.add((base_key, tx_type))
+
+    for merchant_key, tx_type in sorted(refresh_keys):
+        refresh_community_merchant_profile_cache(db, merchant_key, tx_type)
+
+    db.flush()
+    rebuilt_cache_count = (
+        db.query(MerchantLookupCache)
+        .filter(MerchantLookupCache.provider == "community")
+        .count()
+    )
+
+    return {
+        "deleted_cache_count": int(deleted_cache_count or 0),
+        "candidate_key_count": len(profile_keys),
+        "refreshed_key_count": len(refresh_keys),
+        "rebuilt_cache_count": int(rebuilt_cache_count or 0),
+        "skipped_non_expense_count": skipped_non_expense,
+        "skipped_amount_sensitive_count": skipped_amount_sensitive,
+        "skipped_invalid_count": skipped_invalid,
+    }
+
+
 def save_merchant_category_profile(
     db: Session,
     owner_id: int,
