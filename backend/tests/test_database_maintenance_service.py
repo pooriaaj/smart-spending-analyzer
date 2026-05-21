@@ -43,6 +43,22 @@ class DatabaseMaintenanceServiceTest(unittest.TestCase):
             self.assertIn("import_file_type", transaction_columns)
             self.assertIn("imported_at", transaction_columns)
             self.assertIn(
+                "ix_transactions_runtime_owner_date_id",
+                transaction_index_names,
+            )
+            self.assertIn(
+                "ix_transactions_runtime_owner_type_date_id",
+                transaction_index_names,
+            )
+            self.assertIn(
+                "ix_transactions_runtime_owner_category_date_id",
+                transaction_index_names,
+            )
+            self.assertIn(
+                "ix_transactions_runtime_owner_source_date_id",
+                transaction_index_names,
+            )
+            self.assertIn(
                 "ix_transactions_runtime_owner_account_date_id",
                 transaction_index_names,
             )

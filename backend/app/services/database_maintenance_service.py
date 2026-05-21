@@ -24,6 +24,22 @@ POSTGRES_COMPATIBILITY_STATEMENTS = (
 
 RUNTIME_INDEX_STATEMENTS = (
     """
+    CREATE INDEX IF NOT EXISTS ix_transactions_runtime_owner_date_id
+    ON transactions (owner_id, date DESC, id DESC)
+    """,
+    """
+    CREATE INDEX IF NOT EXISTS ix_transactions_runtime_owner_type_date_id
+    ON transactions (owner_id, type, date DESC, id DESC)
+    """,
+    """
+    CREATE INDEX IF NOT EXISTS ix_transactions_runtime_owner_category_date_id
+    ON transactions (owner_id, category, date DESC, id DESC)
+    """,
+    """
+    CREATE INDEX IF NOT EXISTS ix_transactions_runtime_owner_source_date_id
+    ON transactions (owner_id, entry_source, date DESC, id DESC)
+    """,
+    """
     CREATE INDEX IF NOT EXISTS ix_transactions_runtime_owner_account_date_id
     ON transactions (owner_id, account_id, date DESC, id DESC)
     """,

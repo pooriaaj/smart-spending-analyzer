@@ -137,6 +137,12 @@ def save_category_memory_safely(
         db.commit()
     except Exception:
         db.rollback()
+        logger.warning(
+            "Category learning side effect skipped for owner_id=%s signal_source=%s",
+            owner_id,
+            signal_source,
+            exc_info=True,
+        )
 
 
 def commit_pending_side_effects_safely(db: Session) -> None:
