@@ -9,6 +9,7 @@ import {
   setSelectedAccountId as persistSelectedAccountId,
 } from "../services/accountStorage";
 import { formatScopeLabel } from "../utils/displayLabels";
+import { getApiErrorMessage } from "../utils/errorUtils";
 
 function buildInitialAssistantMessage(t) {
   return {
@@ -30,6 +31,8 @@ function AssistantPage() {
   const [selectedAccountId, setSelectedAccountId] = useState(getSelectedAccountId());
   const [messages, setMessages] = useState(() => [buildInitialAssistantMessage(t)]);
   const [smartSuggestions, setSmartSuggestions] = useState([]);
+  const [providerStatus, setProviderStatus] = useState(null);
+  const [statusLoading, setStatusLoading] = useState(true);
   const [loading, setLoading] = useState(false);
   const [suggestionsLoading, setSuggestionsLoading] = useState(true);
   const [error, setError] = useState("");
@@ -60,6 +63,26 @@ function AssistantPage() {
     setQuestion("");
     setError("");
   }, [language, selectedAccountId, t]);
+
+  useEffect(() => {
+    const loadAssistantStatus = async () => {
+      try {
+        setStatusLoading(true);
+        const response = await api.get("/assistant/status");
+        setProviderStatus(response.data);
+      } catch (error) {
+        console.error("Failed to load assistant status:", error);
+
+        if (!handleApiAuthError(error, navigate)) {
+          setProviderStatus(null);
+        }
+      } finally {
+        setStatusLoading(false);
+      }
+    };
+
+    loadAssistantStatus();
+  }, [navigate]);
 
   useEffect(() => {
     const loadSuggestions = async () => {
@@ -232,7 +255,7 @@ function AssistantPage() {
 
       const assistantMessage = {
         role: "assistant",
-        content: response.data.answer,
+        content: response.data.answer || t("assistant.responseFailed"),
         data: response.data,
       };
 
@@ -241,7 +264,7 @@ function AssistantPage() {
       console.error("Failed to get assistant response:", error);
 
       if (!handleApiAuthError(error, navigate)) {
-        setError(t("assistant.responseFailed"));
+        setError(getApiErrorMessage(error, t("assistant.responseFailed")));
       }
     } finally {
       setLoading(false);
@@ -261,6 +284,17 @@ function AssistantPage() {
     selectedAccountId === ALL_ACCOUNTS_VALUE
       ? t("assistant.scopeAll")
       : t("assistant.scopeOne");
+  const activeProvider = providerStatus?.providers?.find((provider) => provider.active);
+  const providerLabel =
+    activeProvider?.label ||
+    (providerStatus?.active_provider === "openai"
+      ? t("assistant.providerOpenAI")
+      : providerStatus?.active_provider === "local"
+      ? t("assistant.providerLocal")
+      : t("assistant.providerRuleBased"));
+  const providerMessage = statusLoading
+    ? t("assistant.engineChecking")
+    : providerStatus?.message || t("assistant.engineUnavailable");
 
   return (
     <div className="page-container dashboard-page">
@@ -335,6 +369,19 @@ function AssistantPage() {
             <div className="assistant-mode-note">
               <strong>{t("assistant.currentMode")}</strong> {modeDescription}
             </div>
+
+            <div className="assistant-mode-note assistant-provider-note">
+              <span>
+                <strong>{t("assistant.engineTitle")}</strong> {providerMessage}
+              </span>
+              <span
+                className={`assistant-provider-pill assistant-provider-${
+                  providerStatus?.active_provider || "unknown"
+                }`}
+              >
+                {providerLabel}
+              </span>
+            </div>
           </div>
         </div>
 
@@ -382,14 +429,18 @@ function AssistantPage() {
           </div>
 
           <div className="assistant-input-row">
-            <input
-              type="text"
+            <textarea
+              rows={3}
+              maxLength={1200}
               placeholder={t("assistant.questionPlaceholder")}
               value={question}
               onChange={(e) => setQuestion(e.target.value)}
-              className="assistant-input"
+              className="assistant-input assistant-textarea"
               onKeyDown={(e) => {
-                if (e.key === "Enter") handleAsk();
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  handleAsk();
+                }
               }}
             />
             <button
@@ -401,6 +452,7 @@ function AssistantPage() {
               {loading ? t("assistant.thinking") : t("assistant.ask")}
             </button>
           </div>
+          <p className="assistant-compose-hint">{t("assistant.composeHint")}</p>
 
           {error && <p className="error-text">{error}</p>}
         </div>

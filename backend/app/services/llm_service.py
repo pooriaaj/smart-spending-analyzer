@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 import os
+import logging
 from typing import Any
 
 from dotenv import load_dotenv
 from openai import OpenAI
 
 from app.security import redact_sensitive_text
+
+logger = logging.getLogger(__name__)
 
 BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 ENV_PATH = os.path.join(BASE_DIR, ".env")
@@ -15,6 +18,9 @@ load_dotenv(dotenv_path=ENV_PATH)
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
 OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-5.4")
 USE_LLM_ASSISTANT = os.getenv("USE_LLM_ASSISTANT", "false").lower() == "true"
+LLM_PROVIDER = os.getenv("LLM_PROVIDER", "auto").strip().lower()
+if LLM_PROVIDER not in {"auto", "openai", "local"}:
+    LLM_PROVIDER = "auto"
 
 USE_LOCAL_LLM = os.getenv("USE_LOCAL_LLM", "false").lower() == "true"
 LOCAL_LLM_PROVIDER = os.getenv("LOCAL_LLM_PROVIDER", "ollama").lower()
@@ -64,15 +70,46 @@ _local_client: OpenAI | None = (
 )
 
 
+def _openai_configured() -> bool:
+    return bool(OPENAI_API_KEY and _openai_client is not None)
+
+
+def _local_configured() -> bool:
+    return bool(USE_LOCAL_LLM and _local_client is not None)
+
+
+def get_active_llm_provider() -> str | None:
+    if not USE_LLM_ASSISTANT:
+        return None
+
+    openai_configured = _openai_configured()
+    local_configured = _local_configured()
+
+    if LLM_PROVIDER == "openai":
+        return "openai" if openai_configured else ("local" if local_configured else None)
+
+    if LLM_PROVIDER == "local":
+        return "local" if local_configured else ("openai" if openai_configured else None)
+
+    if openai_configured:
+        return "openai"
+
+    if local_configured:
+        return "local"
+
+    return None
+
+
 def llm_assistant_enabled() -> bool:
-    return USE_LLM_ASSISTANT and (_local_client is not None or _openai_client is not None)
+    return get_active_llm_provider() is not None
 
 
 def get_llm_provider_status() -> dict[str, Any]:
-    local_configured = USE_LOCAL_LLM and _local_client is not None
-    openai_configured = bool(OPENAI_API_KEY and _openai_client is not None)
-    local_active = USE_LLM_ASSISTANT and local_configured
-    openai_active = USE_LLM_ASSISTANT and not local_active and openai_configured
+    local_configured = _local_configured()
+    openai_configured = _openai_configured()
+    active_llm_provider = get_active_llm_provider()
+    local_active = active_llm_provider == "local"
+    openai_active = active_llm_provider == "openai"
 
     if local_active:
         active_provider = "local"
@@ -80,6 +117,9 @@ def get_llm_provider_status() -> dict[str, Any]:
     elif openai_active:
         active_provider = "openai"
         message = "Assistant is using the configured OpenAI provider."
+    elif USE_LLM_ASSISTANT:
+        active_provider = "rule_based"
+        message = "Assistant LLM mode is enabled, but no configured LLM provider is available yet."
     else:
         active_provider = "rule_based"
         message = "Assistant is using the safe rule-based fallback until an LLM provider is enabled."
@@ -507,13 +547,20 @@ def generate_llm_assistant_response(
     )
 
     try:
-        if _local_client is not None:
+        active_provider = get_active_llm_provider()
+
+        if active_provider == "local" and _local_client is not None:
             return _call_model(_local_client, LOCAL_LLM_MODEL, prompt)
 
-        if _openai_client is not None:
+        if active_provider == "openai" and _openai_client is not None:
             return _call_model(_openai_client, OPENAI_MODEL, prompt)
 
-    except Exception:
+    except Exception as exc:
+        logger.warning(
+            "LLM assistant provider %s failed with %s; using rule-based fallback.",
+            active_provider,
+            exc.__class__.__name__,
+        )
         return None
 
     return None

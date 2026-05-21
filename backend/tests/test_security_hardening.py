@@ -33,6 +33,7 @@ from app.security import (
     build_validation_error_response,
     get_allowed_origins,
 )
+from app.services import llm_service
 from app.services.assistant_service import generate_assistant_response
 from app.services.llm_service import ANSWER_MAX_CHARS, build_finance_prompt, parse_llm_response
 from app.services import vision_ocr_service
@@ -503,6 +504,39 @@ ACTION_LABEL:
         self.assertLessEqual(len(result["suggested_followups"][0]), 163)
         self.assertEqual(result["action_type"], "none")
         self.assertLessEqual(len(result["action_label"]), 123)
+
+    def test_llm_status_prefers_openai_when_both_providers_are_configured(self) -> None:
+        with patch.object(llm_service, "USE_LLM_ASSISTANT", True), patch.object(
+            llm_service, "USE_LOCAL_LLM", True
+        ), patch.object(llm_service, "OPENAI_API_KEY", "configured"), patch.object(
+            llm_service, "LLM_PROVIDER", "auto"
+        ), patch.object(
+            llm_service, "_openai_client", object()
+        ), patch.object(
+            llm_service, "_local_client", object()
+        ):
+            status = llm_service.get_llm_provider_status()
+
+        self.assertTrue(status["llm_enabled"])
+        self.assertEqual(status["active_provider"], "openai")
+        self.assertTrue(
+            next(item for item in status["providers"] if item["provider"] == "openai")["active"]
+        )
+
+    def test_llm_status_allows_explicit_local_provider_preference(self) -> None:
+        with patch.object(llm_service, "USE_LLM_ASSISTANT", True), patch.object(
+            llm_service, "USE_LOCAL_LLM", True
+        ), patch.object(llm_service, "OPENAI_API_KEY", "configured"), patch.object(
+            llm_service, "LLM_PROVIDER", "local"
+        ), patch.object(
+            llm_service, "_openai_client", object()
+        ), patch.object(
+            llm_service, "_local_client", object()
+        ):
+            status = llm_service.get_llm_provider_status()
+
+        self.assertTrue(status["llm_enabled"])
+        self.assertEqual(status["active_provider"], "local")
 
 
 class VisionOcrSafetyTest(unittest.TestCase):

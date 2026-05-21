@@ -3745,6 +3745,20 @@ textarea:focus,
   flex-wrap: wrap;
 }
 
+.assistant-textarea {
+  flex: 1 1 420px;
+  min-height: 96px;
+  line-height: 1.5;
+  resize: vertical;
+}
+
+.assistant-compose-hint {
+  margin: 10px 0 0;
+  color: var(--text-soft);
+  font-size: 13px;
+  font-weight: 700;
+}
+
 .assistant-ask-button {
   background: linear-gradient(135deg, var(--blue) 0%, #3b82f6 100%);
   color: white;
@@ -5558,6 +5572,40 @@ textarea {
   background: rgba(255, 255, 255, 0.74);
   border: 1px solid rgba(15, 23, 42, 0.08);
   color: var(--text-soft);
+}
+
+.assistant-provider-note {
+  grid-column: 1 / -1;
+  align-items: flex-start;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.assistant-provider-pill {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  border-radius: 999px;
+  padding: 6px 11px;
+  color: #0f172a;
+  background: rgba(226, 232, 240, 0.92);
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.assistant-provider-openai {
+  background: linear-gradient(135deg, #8bffd2 0%, #93c5fd 100%);
+}
+
+.assistant-provider-local {
+  background: linear-gradient(135deg, #fde68a 0%, #fdba74 100%);
+}
+
+.assistant-provider-rule_based,
+.assistant-provider-unknown {
+  background: rgba(226, 232, 240, 0.92);
 }
 
 .assistant-followup-list {
