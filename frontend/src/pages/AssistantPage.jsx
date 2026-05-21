@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import api, { handleApiAuthError } from "../services/api";
 import AccountSelector from "../components/AccountSelector";
@@ -19,6 +19,23 @@ function buildInitialAssistantMessage(t) {
   };
 }
 
+function buildMessagesFromHistory(history, t) {
+  if (!Array.isArray(history) || history.length === 0) {
+    return [buildInitialAssistantMessage(t)];
+  }
+
+  const messages = history
+    .filter((message) => message?.role === "user" || message?.role === "assistant")
+    .map((message) => ({
+      role: message.role,
+      content: String(message.content || ""),
+      data: null,
+    }))
+    .filter((message) => message.content.trim().length > 0);
+
+  return messages.length > 0 ? messages : [buildInitialAssistantMessage(t)];
+}
+
 function getFallbackQuestions(t) {
   const questions = t("assistant.fallbackQuestions");
   return Array.isArray(questions) ? questions : [];
@@ -33,12 +50,13 @@ function AssistantPage() {
   const [smartSuggestions, setSmartSuggestions] = useState([]);
   const [providerStatus, setProviderStatus] = useState(null);
   const [statusLoading, setStatusLoading] = useState(true);
+  const [historyLoading, setHistoryLoading] = useState(true);
+  const [clearingHistory, setClearingHistory] = useState(false);
   const [loading, setLoading] = useState(false);
   const [suggestionsLoading, setSuggestionsLoading] = useState(true);
   const [error, setError] = useState("");
 
   const navigate = useNavigate();
-  const didMountScopeRef = useRef(false);
   const normalizedAccountId =
     selectedAccountId === ALL_ACCOUNTS_VALUE ? undefined : Number(selectedAccountId);
 
@@ -52,17 +70,6 @@ function AssistantPage() {
   useEffect(() => {
     localStorage.setItem("assistantMode", assistantMode);
   }, [assistantMode]);
-
-  useEffect(() => {
-    if (!didMountScopeRef.current) {
-      didMountScopeRef.current = true;
-      return;
-    }
-
-    setMessages([buildInitialAssistantMessage(t)]);
-    setQuestion("");
-    setError("");
-  }, [language, selectedAccountId, t]);
 
   useEffect(() => {
     const loadAssistantStatus = async () => {
@@ -83,6 +90,32 @@ function AssistantPage() {
 
     loadAssistantStatus();
   }, [navigate]);
+
+  useEffect(() => {
+    const loadAssistantHistory = async () => {
+      try {
+        setHistoryLoading(true);
+        const response = await api.get("/assistant/history", {
+          params: {
+            account_id: normalizedAccountId,
+          },
+        });
+        setMessages(buildMessagesFromHistory(response.data.messages, t));
+      } catch (error) {
+        console.error("Failed to load assistant history:", error);
+
+        if (!handleApiAuthError(error, navigate)) {
+          setMessages([buildInitialAssistantMessage(t)]);
+        }
+      } finally {
+        setQuestion("");
+        setError("");
+        setHistoryLoading(false);
+      }
+    };
+
+    loadAssistantHistory();
+  }, [language, navigate, normalizedAccountId, t]);
 
   useEffect(() => {
     const loadSuggestions = async () => {
@@ -271,6 +304,28 @@ function AssistantPage() {
     }
   };
 
+  const handleClearConversation = async () => {
+    try {
+      setClearingHistory(true);
+      setError("");
+      await api.delete("/assistant/history", {
+        params: {
+          account_id: normalizedAccountId,
+        },
+      });
+      setMessages([buildInitialAssistantMessage(t)]);
+      setQuestion("");
+    } catch (error) {
+      console.error("Failed to clear assistant history:", error);
+
+      if (!handleApiAuthError(error, navigate)) {
+        setError(getApiErrorMessage(error, t("assistant.clearConversationFailed")));
+      }
+    } finally {
+      setClearingHistory(false);
+    }
+  };
+
   const displayedSuggestions =
     smartSuggestions.length > 0 ? smartSuggestions : getFallbackQuestions(t);
 
@@ -295,6 +350,15 @@ function AssistantPage() {
   const providerMessage = statusLoading
     ? t("assistant.engineChecking")
     : providerStatus?.message || t("assistant.engineUnavailable");
+  const providerUsageMessage =
+    !statusLoading &&
+    providerStatus?.active_provider !== "rule_based" &&
+    providerStatus?.daily_limit != null
+      ? t("assistant.engineUsage", {
+          remaining: providerStatus.daily_remaining,
+          limit: providerStatus.daily_limit,
+        })
+      : "";
 
   return (
     <div className="page-container dashboard-page">
@@ -373,6 +437,7 @@ function AssistantPage() {
             <div className="assistant-mode-note assistant-provider-note">
               <span>
                 <strong>{t("assistant.engineTitle")}</strong> {providerMessage}
+                {providerUsageMessage ? ` ${providerUsageMessage}` : ""}
               </span>
               <span
                 className={`assistant-provider-pill assistant-provider-${
@@ -459,8 +524,24 @@ function AssistantPage() {
 
         <div className="dashboard-card assistant-chat-card">
           <div className="section-header">
-            <h2>{t("assistant.conversation")}</h2>
-            <p>{t("assistant.conversationDetail")}</p>
+            <div>
+              <h2>{t("assistant.conversation")}</h2>
+              <p>
+                {historyLoading
+                  ? t("assistant.historyLoading")
+                  : t("assistant.conversationDetail")}
+              </p>
+            </div>
+            <button
+              type="button"
+              className="secondary-button"
+              onClick={handleClearConversation}
+              disabled={clearingHistory || historyLoading || messages.length <= 1}
+            >
+              {clearingHistory
+                ? t("assistant.clearingConversation")
+                : t("assistant.clearConversation")}
+            </button>
           </div>
 
           <div className="assistant-chat-list">

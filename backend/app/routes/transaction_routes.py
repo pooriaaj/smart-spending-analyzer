@@ -776,6 +776,23 @@ def confirm_preview_import(
     try:
         for event in category_memory_events:
             user_reviewed_category = str(event["source"]).startswith("user_")
+            similar_updated_count = 0
+            if user_reviewed_category:
+                similar_updated_count = apply_category_to_similar_transactions(
+                    db=db,
+                    owner_id=current_user.id,
+                    description=event["description"],
+                    category=event["category"],
+                    tx_type=event["tx_type"],
+                    amount=event["amount"],
+                    account_id=event["account_id"],
+                    signal_source="import_review",
+                    category_source="import_review",
+                    category_confidence=1.0,
+                    category_reason=(
+                        "Applied from a user-reviewed category during statement import."
+                    ),
+                )
             save_category_memory_safely(
                 db=db,
                 owner_id=current_user.id,
@@ -790,6 +807,7 @@ def confirm_preview_import(
                     else "import_confirm"
                 ),
                 confidence=float(event.get("confidence") or 0.0),
+                affected_count=similar_updated_count + 1,
                 record_event=user_reviewed_category,
                 store_memory=user_reviewed_category,
             )

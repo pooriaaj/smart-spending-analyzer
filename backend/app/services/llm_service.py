@@ -52,6 +52,7 @@ def _bounded_int_env(name: str, default: int, minimum: int, maximum: int) -> int
 
 LLM_TIMEOUT_SECONDS = _bounded_float_env("LLM_TIMEOUT_SECONDS", 20.0, 3.0, 120.0)
 LLM_MAX_RETRIES = _bounded_int_env("LLM_MAX_RETRIES", 1, 0, 5)
+LLM_MAX_OUTPUT_TOKENS = _bounded_int_env("LLM_MAX_OUTPUT_TOKENS", 700, 150, 2000)
 
 _openai_client: OpenAI | None = (
     OpenAI(api_key=OPENAI_API_KEY, timeout=LLM_TIMEOUT_SECONDS, max_retries=LLM_MAX_RETRIES)
@@ -514,6 +515,7 @@ def _call_model(client: OpenAI, model_name: str, prompt: str) -> dict[str, Any] 
     response = client.responses.create(
         model=model_name,
         input=prompt,
+        max_output_tokens=LLM_MAX_OUTPUT_TOKENS,
     )
     return parse_llm_response(response.output_text)
 

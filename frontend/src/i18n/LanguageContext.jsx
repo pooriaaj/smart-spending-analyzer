@@ -948,6 +948,7 @@ const translations = {
       engineChecking: "Checking the assistant engine...",
       engineUnavailable:
         "Assistant status is temporarily unavailable, so the safe fallback will answer if needed.",
+      engineUsage: "{remaining} of {limit} AI replies left in the last 24 hours.",
       providerOpenAI: "OpenAI",
       providerLocal: "Local LLM",
       providerRuleBased: "Rule-based fallback",
@@ -962,7 +963,11 @@ const translations = {
         "These prompts are generated from your current financial data in the selected scope.",
       conversation: "Conversation",
       conversationDetail:
-        "Your assistant keeps short conversation context and uses your analytics data to answer better.",
+        "Your assistant saves this conversation for the selected account scope and uses your analytics data to answer better.",
+      historyLoading: "Loading your saved assistant conversation...",
+      clearConversation: "Clear conversation",
+      clearingConversation: "Clearing...",
+      clearConversationFailed: "Failed to clear assistant conversation.",
       answerScope: "Answer Scope",
       supportingPoints: "Supporting Points",
       suggestedFollowups: "Suggested Follow-ups",
@@ -2326,6 +2331,7 @@ const translations = {
       engineChecking: "Vérification du moteur de l'assistant...",
       engineUnavailable:
         "Le statut de l'assistant est temporairement indisponible; le mode de secours répondra au besoin.",
+      engineUsage: "{remaining} réponse(s) IA restante(s) sur {limit} dans les dernières 24 heures.",
       providerOpenAI: "OpenAI",
       providerLocal: "LLM local",
       providerRuleBased: "Secours par règles",
@@ -2340,7 +2346,11 @@ const translations = {
         "Ces questions sont générées à partir de vos données financières dans la portée sélectionnée.",
       conversation: "Conversation",
       conversationDetail:
-        "Votre assistant garde un court contexte de conversation et utilise vos analyses pour mieux répondre.",
+        "Votre assistant enregistre cette conversation pour la portée sélectionnée et utilise vos analyses pour mieux répondre.",
+      historyLoading: "Chargement de votre conversation enregistrée...",
+      clearConversation: "Effacer la conversation",
+      clearingConversation: "Effacement...",
+      clearConversationFailed: "Impossible d'effacer la conversation de l'assistant.",
       answerScope: "Portée de la réponse",
       supportingPoints: "Points d'appui",
       suggestedFollowups: "Suivis suggérés",

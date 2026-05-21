@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from sqlalchemy import Boolean, Column, Date, DateTime, Float, ForeignKey, Index, Integer, String, UniqueConstraint, func
+from sqlalchemy import Boolean, Column, Date, DateTime, Float, ForeignKey, Index, Integer, String, Text, UniqueConstraint, func
 from sqlalchemy.orm import relationship
 
 from app.database import Base
@@ -57,6 +57,18 @@ class User(Base):
         passive_deletes=True,
         uselist=False,
     )
+    assistant_chat_messages = relationship(
+        "AssistantChatMessage",
+        back_populates="owner",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
+    assistant_usage_events = relationship(
+        "AssistantUsageEvent",
+        back_populates="owner",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
 
     budgets = relationship(
         "BudgetPlan",
@@ -96,6 +108,12 @@ class Account(Base):
     )
     saved_scenarios = relationship(
         "SavedScenario",
+        back_populates="account",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
+    assistant_chat_messages = relationship(
+        "AssistantChatMessage",
         back_populates="account",
         cascade="all, delete-orphan",
         passive_deletes=True,
@@ -220,6 +238,45 @@ class UserLearningPreference(Base):
     updated_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now())
 
     owner = relationship("User", back_populates="learning_preference")
+
+
+class AssistantChatMessage(Base):
+    __tablename__ = "assistant_chat_messages"
+
+    id = Column(Integer, primary_key=True, index=True)
+    role = Column(String(20), nullable=False)
+    content = Column(Text, nullable=False)
+    mode = Column(String(20), nullable=False, default="balanced")
+    scope_label = Column(String(160), nullable=False, default="All accounts combined")
+    owner_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    account_id = Column(Integer, ForeignKey("accounts.id", ondelete="CASCADE"), nullable=True, index=True)
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now(), index=True)
+
+    owner = relationship("User", back_populates="assistant_chat_messages")
+    account = relationship("Account", back_populates="assistant_chat_messages")
+
+    __table_args__ = (
+        Index("ix_assistant_chat_owner_created", "owner_id", "created_at"),
+        Index("ix_assistant_chat_owner_account_created", "owner_id", "account_id", "created_at"),
+    )
+
+
+class AssistantUsageEvent(Base):
+    __tablename__ = "assistant_usage_events"
+
+    id = Column(Integer, primary_key=True, index=True)
+    provider = Column(String(40), nullable=False, default="openai")
+    request_chars = Column(Integer, nullable=False, default=0)
+    response_chars = Column(Integer, nullable=False, default=0)
+    owner_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now(), index=True)
+
+    owner = relationship("User", back_populates="assistant_usage_events")
+
+    __table_args__ = (
+        Index("ix_assistant_usage_owner_created", "owner_id", "created_at"),
+        Index("ix_assistant_usage_owner_provider_created", "owner_id", "provider", "created_at"),
+    )
 
 
 class CategoryLearningEvent(Base):

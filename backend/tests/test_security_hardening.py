@@ -20,7 +20,7 @@ from app import dependencies
 from app.auth import ALGORITHM, SECRET_KEY, create_access_token, hash_password
 from app.database import Base
 from app.dependencies import get_current_user
-from app.models import Account, BudgetPlan, SavedScenario, User
+from app.models import Account, BudgetPlan, SavedScenario, Transaction, User
 from app.routes import auth_routes
 from app.routes.account_routes import router as account_router
 from app.routes.analytics_routes import router as analytics_router
@@ -227,6 +227,8 @@ class SecurityRouteTest(unittest.TestCase):
         payload = response.json()
         self.assertIn(payload["active_provider"], {"openai", "local", "rule_based"})
         self.assertEqual(payload["fallback_provider"], "rule_based")
+        self.assertIn("daily_limit", payload)
+        self.assertIn("daily_remaining", payload)
         self.assertTrue(any(item["provider"] == "rule_based" for item in payload["providers"]))
 
         response_text = response.text.lower()
@@ -234,6 +236,69 @@ class SecurityRouteTest(unittest.TestCase):
         self.assertNotIn("database_url", response_text)
         self.assertNotIn("postgresql://", response_text)
         self.assertNotIn("bearer ", response_text)
+
+    def test_assistant_response_saves_redacted_history(self) -> None:
+        client = self.build_owned_resource_client()
+        with patch("app.services.assistant_service.generate_llm_assistant_response", return_value=None):
+            response = client.post(
+                "/assistant/response",
+                json={
+                    "question": "Can you summarize this? OPENAI_API_KEY=sk-proj-secret-value",
+                    "history": [],
+                    "mode": "balanced",
+                    "account_id": self.account_a_id,
+                },
+            )
+
+        self.assertEqual(response.status_code, 200, response.text)
+        history_response = client.get(
+            "/assistant/history",
+            params={"account_id": self.account_a_id},
+        )
+        self.assertEqual(history_response.status_code, 200, history_response.text)
+        history_text = history_response.text.lower()
+        self.assertIn("sensitive value redacted", history_text)
+        self.assertNotIn("sk-proj-secret-value", history_text)
+        self.assertGreaterEqual(len(history_response.json()["messages"]), 2)
+
+    def test_assistant_can_clear_saved_history_for_scope(self) -> None:
+        client = self.build_owned_resource_client()
+        with patch("app.services.assistant_service.generate_llm_assistant_response", return_value=None):
+            client.post(
+                "/assistant/response",
+                json={
+                    "question": "Save this short chat.",
+                    "history": [],
+                    "mode": "balanced",
+                    "account_id": self.account_a_id,
+                },
+            )
+
+        response = client.delete("/assistant/history", params={"account_id": self.account_a_id})
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertGreaterEqual(response.json()["deleted_count"], 2)
+
+    def test_assistant_uses_rule_based_fallback_when_daily_llm_limit_is_reached(self) -> None:
+        client = self.build_owned_resource_client()
+        with patch("app.routes.assistant_routes.get_active_llm_provider", return_value="openai"), patch(
+            "app.routes.assistant_routes.assistant_llm_usage_allowed",
+            return_value=False,
+        ), patch("app.services.assistant_service.generate_llm_assistant_response") as mocked_llm:
+            response = client.post(
+                "/assistant/response",
+                json={
+                    "question": "What is my balance?",
+                    "history": [],
+                    "mode": "balanced",
+                    "account_id": self.account_a_id,
+                },
+            )
+
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertFalse(mocked_llm.called)
+        self.assertTrue(
+            any("daily safety limit" in point for point in response.json()["supporting_points"])
+        )
 
     def test_upload_rejects_wrong_extension(self) -> None:
         client = self.build_owned_resource_client()
@@ -245,6 +310,52 @@ class SecurityRouteTest(unittest.TestCase):
             headers={"Authorization": f"Bearer {token}"},
         )
         self.assertEqual(response.status_code, 400)
+
+    def test_import_reviewed_category_updates_existing_similar_transactions(self) -> None:
+        with self.session_local() as session:
+            existing = Transaction(
+                amount=8.9,
+                category="other",
+                description="SQDC77068 MTL",
+                date=datetime(2026, 3, 16).date(),
+                type="expense",
+                entry_source="pdf_import",
+                owner_id=self.user_a_id,
+                account_id=self.account_a_id,
+            )
+            session.add(existing)
+            session.commit()
+            existing_id = existing.id
+
+        client = self.build_owned_resource_client()
+        response = client.post(
+            "/transactions/import/confirm-preview",
+            json={
+                "account_id": self.account_a_id,
+                "rows": [
+                    {
+                        "date": "2026-03-20",
+                        "description": "SQDC77068 MTL",
+                        "amount": 12.6,
+                        "type": "expense",
+                        "category": "Smoking",
+                        "source_line": "Reviewed import row",
+                        "source_file_name": "statement.pdf",
+                        "source_file_type": "pdf_statement",
+                        "category_confidence": 1.0,
+                        "category_source": "user_review",
+                        "category_review_required": False,
+                    }
+                ],
+            },
+        )
+
+        self.assertEqual(response.status_code, 200, response.text)
+        with self.session_local() as session:
+            updated = session.get(Transaction, existing_id)
+            self.assertIsNotNone(updated)
+            self.assertEqual(updated.category, "smoking")
+            self.assertEqual(updated.category_source, "import_review")
 
     def test_upload_rejects_spoofed_pdf_signature(self) -> None:
         client = self.build_owned_resource_client()

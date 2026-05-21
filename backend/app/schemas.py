@@ -857,6 +857,24 @@ class AssistantMessage(BaseModel):
     content: str = Field(min_length=1, max_length=1200)
 
 
+class AssistantHistoryItem(BaseModel):
+    role: Literal["user", "assistant"]
+    content: str
+    mode: AssistantMode = "balanced"
+    scope_label: str = "All accounts combined"
+    account_id: int | None = None
+    created_at: datetime
+
+
+class AssistantHistoryResponse(BaseModel):
+    messages: list[AssistantHistoryItem] = Field(default_factory=list)
+
+
+class AssistantHistoryClearResponse(BaseModel):
+    message: str
+    deleted_count: int
+
+
 class AssistantAction(BaseModel):
     label: str
     page: str
@@ -908,6 +926,9 @@ class AssistantStatusResponse(BaseModel):
     fallback_provider: Literal["rule_based"] = "rule_based"
     providers: list[AssistantProviderStatus]
     message: str
+    daily_limit: int | None = None
+    daily_used: int = 0
+    daily_remaining: int | None = None
 
 
 class AssistantSuggestionsResponse(BaseModel):

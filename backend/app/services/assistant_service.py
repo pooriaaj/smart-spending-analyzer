@@ -1321,6 +1321,7 @@ def generate_assistant_response(
     mode: str = "balanced",
     account_id: int | None = None,
     scope_label: str = "All accounts combined",
+    llm_allowed: bool = True,
 ) -> dict[str, Any]:
     history = history or []
     context_text = extract_recent_context(history)
@@ -2515,16 +2516,18 @@ def generate_assistant_response(
             "scope_label": scope_label,
         }
 
-    llm_result = generate_llm_assistant_response(
-        question=question,
-        conversation_context=context_text,
-        snapshot=snapshot,
-        category_trends=category_trends,
-        overspending_alerts=overspending_alerts,
-        recent_transactions=recent_transactions,
-        focus_category_context=focus_snapshot,
-        mode=mode,
-    )
+    llm_result = None
+    if llm_allowed:
+        llm_result = generate_llm_assistant_response(
+            question=question,
+            conversation_context=context_text,
+            snapshot=snapshot,
+            category_trends=category_trends,
+            overspending_alerts=overspending_alerts,
+            recent_transactions=recent_transactions,
+            focus_category_context=focus_snapshot,
+            mode=mode,
+        )
 
     if llm_result:
         suggested_actions = []
