@@ -196,7 +196,7 @@ function DashboardPage() {
     } finally {
       setLoading(false);
     }
-  }, [currentBudgetMonth, navigate, selectedAccountId]);
+  }, [currentBudgetMonth, navigate, selectedAccountId, t]);
 
   useEffect(() => {
     fetchData();

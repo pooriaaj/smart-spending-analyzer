@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components */
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
 
 const LANGUAGE_STORAGE_KEY = "smart-spending-language";
@@ -98,7 +99,6 @@ const translations = {
       importing: "Importing...",
       addManualRow: "Add Manual Row",
       restoreDetectedRows: "Restore Detected Rows",
-      clearFilters: "Clear Filters",
       notScored: "Not scored",
     },
     language: {
@@ -1426,7 +1426,6 @@ const translations = {
       month: "Mois",
       from: "De",
       to: "À",
-      clearFilters: "Effacer les filtres",
       loadingPage: "Chargement de la page...",
       loadingPageDetail: "Préparation du prochain écran.",
       premium: "Avancé",

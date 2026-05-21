@@ -128,7 +128,7 @@ function MoneyMapPage() {
     } finally {
       setLoading(false);
     }
-  }, [navigate, normalizedAccountId]);
+  }, [navigate, normalizedAccountId, t]);
 
   useEffect(() => {
     persistSelectedAccountId(String(selectedAccountId || ALL_ACCOUNTS_VALUE));
