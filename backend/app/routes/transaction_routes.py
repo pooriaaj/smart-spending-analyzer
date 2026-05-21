@@ -475,10 +475,7 @@ def normalize_categories_route(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    if account_id is not None:
-        account = get_account_for_user(db, current_user.id, account_id)
-        if not account:
-            raise HTTPException(status_code=404, detail="Account not found")
+    require_owned_account(db, current_user, account_id, allow_all=True)
 
     return normalize_existing_categories_for_user(
         db=db,
@@ -892,10 +889,7 @@ def get_category_learning_summary_route(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    if account_id is not None:
-        account = get_account_for_user(db, current_user.id, account_id)
-        if not account:
-            raise HTTPException(status_code=404, detail="Account not found")
+    require_owned_account(db, current_user, account_id, allow_all=True)
 
     summary = get_category_learning_summary(
         db=db,
@@ -912,10 +906,7 @@ def apply_category_learning_candidate_route(
     current_user: User = Depends(get_current_user),
 ):
     validate_transaction_category(payload.category)
-    if payload.account_id is not None:
-        account = get_account_for_user(db, current_user.id, payload.account_id)
-        if not account:
-            raise HTTPException(status_code=404, detail="Account not found")
+    require_owned_account(db, current_user, payload.account_id, allow_all=True)
 
     result = apply_category_to_merchant_learning_group(
         db=db,
@@ -976,10 +967,7 @@ def get_bulk_category_preview(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    if account_id is not None:
-        account = get_account_for_user(db, current_user.id, account_id)
-        if not account:
-            raise HTTPException(status_code=404, detail="Account not found")
+    require_owned_account(db, current_user, account_id, allow_all=True)
 
     candidates = get_uncategorized_candidates(db, current_user.id, account_id=account_id)
     suggestions: list[BulkCategorySuggestionItem] = []
