@@ -1,17 +1,17 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
 from app.dependencies import get_current_user, get_db
 from app.models import User
+from app.routes.route_guards import resolve_account_scope_label
 from app.schemas import (
     AssistantQueryRequest,
     AssistantQueryResponse,
     AssistantStatusResponse,
     AssistantSuggestionsResponse,
 )
-from app.services.account_service import get_account_for_user
 from app.services.assistant_service import (
     generate_assistant_response,
     generate_assistant_suggestions,
@@ -26,14 +26,7 @@ def resolve_assistant_account_scope(
     current_user: User,
     account_id: int | None,
 ) -> str:
-    if account_id is None:
-        return "All accounts combined"
-
-    account = get_account_for_user(db, current_user.id, account_id)
-    if account is None:
-        raise HTTPException(status_code=404, detail="Account not found")
-
-    return f"{account.name} ({account.type})"
+    return resolve_account_scope_label(db, current_user, account_id)
 
 
 @router.get("/status", response_model=AssistantStatusResponse)

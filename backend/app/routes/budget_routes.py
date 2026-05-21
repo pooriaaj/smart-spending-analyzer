@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 
 from app.dependencies import get_current_user, get_db
 from app.models import User
+from app.routes.route_guards import require_owned_account
 from app.schemas import (
     BudgetBuildRequest,
     BudgetBuildResponse,
@@ -17,7 +18,6 @@ from app.schemas import (
     BudgetPlanResponse,
     MessageResponse,
 )
-from app.services.account_service import get_account_for_user
 from app.services.budget_service import (
     build_next_month_budgets_from_pace,
     copy_previous_month_budgets,
@@ -40,10 +40,7 @@ def list_budgets_route(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    if account_id is not None:
-        account = get_account_for_user(db, current_user.id, account_id)
-        if account is None:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Account not found")
+    require_owned_account(db, current_user, account_id, allow_all=True)
 
     return list_budget_plans(
         db=db,
@@ -59,10 +56,7 @@ def copy_previous_month_budgets_route(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    if payload.account_id is not None:
-        account = get_account_for_user(db, current_user.id, payload.account_id)
-        if account is None:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Account not found")
+    require_owned_account(db, current_user, payload.account_id, allow_all=True)
 
     return copy_previous_month_budgets(
         db=db,
@@ -78,10 +72,7 @@ def build_next_month_budgets_route(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    if payload.account_id is not None:
-        account = get_account_for_user(db, current_user.id, payload.account_id)
-        if account is None:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Account not found")
+    require_owned_account(db, current_user, payload.account_id, allow_all=True)
 
     return build_next_month_budgets_from_pace(
         db=db,
@@ -97,10 +88,7 @@ def bulk_upsert_budgets_route(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    if payload.account_id is not None:
-        account = get_account_for_user(db, current_user.id, payload.account_id)
-        if account is None:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Account not found")
+    require_owned_account(db, current_user, payload.account_id, allow_all=True)
 
     return upsert_budget_targets(
         db=db,
@@ -117,10 +105,7 @@ def upsert_budget_route(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    if payload.account_id is not None:
-        account = get_account_for_user(db, current_user.id, payload.account_id)
-        if account is None:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Account not found")
+    require_owned_account(db, current_user, payload.account_id, allow_all=True)
 
     budget = upsert_budget_plan(
         db=db,

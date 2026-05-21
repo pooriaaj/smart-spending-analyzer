@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 
 from app.dependencies import get_current_user, get_db
 from app.models import User
+from app.routes.route_guards import require_owned_account, resolve_account_scope_label
 from app.schemas import (
     AnalyticsSummary,
     CategoryBreakdownItem,
@@ -38,7 +39,6 @@ from app.services.analytics_service import (
     get_summary,
     get_top_expense_category,
 )
-from app.services.account_service import get_account_for_user
 from app.services.money_map_service import get_money_map_payload
 from app.services.saved_scenario_service import (
     create_saved_scenario,
@@ -56,14 +56,7 @@ def resolve_account_scope(
     current_user: User,
     account_id: int | None,
 ) -> str:
-    if account_id is None:
-        return "All accounts combined"
-
-    account = get_account_for_user(db, current_user.id, account_id)
-    if account is None:
-        raise HTTPException(status_code=404, detail="Account not found")
-
-    return f"{account.name} ({account.type})"
+    return resolve_account_scope_label(db, current_user, account_id)
 
 
 def validate_transaction_type_filter(transaction_type: str | None) -> None:
@@ -384,10 +377,7 @@ def create_saved_scenario_route(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    if payload.account_id is not None:
-        account = get_account_for_user(db, current_user.id, payload.account_id)
-        if account is None:
-            raise HTTPException(status_code=404, detail="Account not found")
+    require_owned_account(db, current_user, payload.account_id, allow_all=True)
 
     return create_saved_scenario(
         db=db,
@@ -403,10 +393,7 @@ def update_saved_scenario_route(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    if payload.account_id is not None:
-        account = get_account_for_user(db, current_user.id, payload.account_id)
-        if account is None:
-            raise HTTPException(status_code=404, detail="Account not found")
+    require_owned_account(db, current_user, payload.account_id, allow_all=True)
 
     scenario = get_saved_scenario_for_user(db, current_user.id, scenario_id)
     if scenario is None:

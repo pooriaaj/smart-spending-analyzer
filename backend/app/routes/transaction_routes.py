@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.dependencies import get_current_user, get_db
 from app.models import Transaction, User
+from app.routes.route_guards import require_owned_account
 from app.schemas import (
     BulkCategoryApplyRequest,
     BulkCategoryApplyResponse,
@@ -42,7 +43,7 @@ from app.schemas import (
     TransactionReviewQueueResponse,
     TransactionSourceSummaryResponse,
 )
-from app.services.account_service import ensure_default_account, get_account_for_user
+from app.services.account_service import ensure_default_account
 from app.security import ensure_batch_file_count, ensure_batch_payload_size, read_validated_import_upload
 from app.services.import_quality_service import suggest_reference_code_amount_values
 from app.services.seed_service import seed_realistic_transactions
@@ -172,11 +173,7 @@ def get_transactions(
     current_user: User = Depends(get_current_user),
 ):
     ensure_default_account(db, current_user)
-
-    if account_id is not None:
-        account = get_account_for_user(db, current_user.id, account_id)
-        if not account:
-            raise HTTPException(status_code=404, detail="Account not found")
+    require_owned_account(db, current_user, account_id, allow_all=True)
 
     return get_transactions_for_user(db, current_user.id, account_id=account_id)
 
@@ -199,10 +196,7 @@ def get_transactions_page(
 ):
     ensure_default_account(db, current_user)
 
-    if account_id is not None:
-        account = get_account_for_user(db, current_user.id, account_id)
-        if not account:
-            raise HTTPException(status_code=404, detail="Account not found")
+    require_owned_account(db, current_user, account_id, allow_all=True)
 
     if transaction_type is not None and transaction_type not in {"income", "expense"}:
         raise HTTPException(status_code=400, detail="Transaction type must be income or expense")
@@ -241,10 +235,7 @@ def get_transaction_sources_summary(
 ):
     ensure_default_account(db, current_user)
 
-    if account_id is not None:
-        account = get_account_for_user(db, current_user.id, account_id)
-        if not account:
-            raise HTTPException(status_code=404, detail="Account not found")
+    require_owned_account(db, current_user, account_id, allow_all=True)
 
     return TransactionSourceSummaryResponse(
         **get_transaction_source_summary(db, current_user.id, account_id=account_id)
@@ -259,10 +250,7 @@ def get_transaction_quality_report(
 ):
     ensure_default_account(db, current_user)
 
-    if account_id is not None:
-        account = get_account_for_user(db, current_user.id, account_id)
-        if not account:
-            raise HTTPException(status_code=404, detail="Account not found")
+    require_owned_account(db, current_user, account_id, allow_all=True)
 
     return TransactionDataQualityResponse(
         **get_transaction_data_quality_report(db, current_user.id, account_id=account_id)
@@ -278,10 +266,7 @@ def get_transaction_review_queue_route(
 ):
     ensure_default_account(db, current_user)
 
-    if account_id is not None:
-        account = get_account_for_user(db, current_user.id, account_id)
-        if not account:
-            raise HTTPException(status_code=404, detail="Account not found")
+    require_owned_account(db, current_user, account_id, allow_all=True)
 
     return TransactionReviewQueueResponse(
         **get_transaction_review_queue(
@@ -302,10 +287,7 @@ def get_import_history(
 ):
     ensure_default_account(db, current_user)
 
-    if account_id is not None:
-        account = get_account_for_user(db, current_user.id, account_id)
-        if not account:
-            raise HTTPException(status_code=404, detail="Account not found")
+    require_owned_account(db, current_user, account_id, allow_all=True)
 
     return TransactionImportHistoryResponse(
         **get_transaction_import_history(
@@ -325,9 +307,7 @@ def create_transaction(
 ):
     ensure_default_account(db, current_user)
     validate_transaction_category(transaction.category)
-    account = get_account_for_user(db, current_user.id, transaction.account_id)
-    if not account:
-        raise HTTPException(status_code=404, detail="Account not found")
+    require_owned_account(db, current_user, transaction.account_id)
 
     new_transaction = Transaction(
         amount=transaction.amount,
@@ -391,9 +371,7 @@ def update_transaction(
         raise HTTPException(status_code=404, detail="Transaction not found")
 
     validate_transaction_category(updated_data.category)
-    account = get_account_for_user(db, current_user.id, updated_data.account_id)
-    if not account:
-        raise HTTPException(status_code=404, detail="Account not found")
+    require_owned_account(db, current_user, updated_data.account_id)
 
     transaction.amount = updated_data.amount
     transaction.category = normalize_category_name(updated_data.category)
@@ -461,10 +439,7 @@ def fresh_start_transactions(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    if payload.account_id is not None:
-        account = get_account_for_user(db, current_user.id, payload.account_id)
-        if not account:
-            raise HTTPException(status_code=404, detail="Account not found")
+    require_owned_account(db, current_user, payload.account_id, allow_all=True)
 
     query = db.query(Transaction).filter(Transaction.owner_id == current_user.id)
     if payload.account_id is not None:
@@ -518,10 +493,7 @@ def preview_suspicious_amount_repairs(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    if account_id is not None:
-        account = get_account_for_user(db, current_user.id, account_id)
-        if not account:
-            raise HTTPException(status_code=404, detail="Account not found")
+    require_owned_account(db, current_user, account_id, allow_all=True)
 
     candidates = get_suspicious_amount_repair_candidates(
         db=db,
@@ -554,10 +526,7 @@ def apply_suspicious_amount_repairs_route(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    if payload.account_id is not None:
-        account = get_account_for_user(db, current_user.id, payload.account_id)
-        if not account:
-            raise HTTPException(status_code=404, detail="Account not found")
+    require_owned_account(db, current_user, payload.account_id, allow_all=True)
 
     result = apply_suspicious_amount_repairs(
         db=db,
@@ -574,10 +543,7 @@ def apply_duplicate_cleanup_route(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    if payload.account_id is not None:
-        account = get_account_for_user(db, current_user.id, payload.account_id)
-        if not account:
-            raise HTTPException(status_code=404, detail="Account not found")
+    require_owned_account(db, current_user, payload.account_id, allow_all=True)
 
     result = apply_likely_duplicate_cleanup(
         db=db,
@@ -595,9 +561,7 @@ async def smart_import_file(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    account = get_account_for_user(db, current_user.id, account_id)
-    if not account:
-        raise HTTPException(status_code=404, detail="Account not found")
+    require_owned_account(db, current_user, account_id)
 
     try:
         file_bytes, safe_filename, safe_content_type = await read_validated_import_upload(file)
@@ -625,9 +589,7 @@ async def smart_import_files(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    account = get_account_for_user(db, current_user.id, account_id)
-    if not account:
-        raise HTTPException(status_code=404, detail="Account not found")
+    require_owned_account(db, current_user, account_id)
 
     try:
         files = ensure_batch_file_count(files)
@@ -657,9 +619,7 @@ def confirm_preview_import(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    account = get_account_for_user(db, current_user.id, payload.account_id)
-    if not account:
-        raise HTTPException(status_code=404, detail="Account not found")
+    require_owned_account(db, current_user, payload.account_id)
 
     existing_keys = get_existing_duplicate_keys(
         db=db,
@@ -893,10 +853,7 @@ def get_category_learning_candidates_route(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    if account_id is not None:
-        account = get_account_for_user(db, current_user.id, account_id)
-        if not account:
-            raise HTTPException(status_code=404, detail="Account not found")
+    require_owned_account(db, current_user, account_id, allow_all=True)
 
     candidates = get_category_learning_candidates(
         db=db,
