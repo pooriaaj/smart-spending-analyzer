@@ -150,6 +150,7 @@ def commit_pending_side_effects_safely(db: Session) -> None:
         db.commit()
     except Exception:
         db.rollback()
+        logger.warning("Import side effects commit skipped", exc_info=True)
 
 
 def entry_source_for_preview_row(row) -> str:
@@ -838,6 +839,12 @@ def confirm_preview_import(
         db.commit()
     except Exception:
         db.rollback()
+        logger.warning(
+            "Preview import category learning side effects skipped for user_id=%s account_id=%s",
+            current_user.id,
+            payload.account_id,
+            exc_info=True,
+        )
 
     return {
         "message": "Preview import completed",
