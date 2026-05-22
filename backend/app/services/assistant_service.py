@@ -1313,6 +1313,94 @@ def parse_simulation_adjustments(question: str) -> tuple[float, float]:
     return income_adjustment, expense_adjustment
 
 
+def build_llm_response_payload(
+    llm_result: dict[str, Any],
+    *,
+    focus_snapshot: dict[str, Any] | None,
+    focus_category: str | None,
+    primary_driver: str | None,
+    top_category: str | None,
+    current_month: str | None,
+    account_id: int | None,
+    scope_label: str,
+) -> dict[str, Any]:
+    suggested_actions: list[dict[str, Any]] = []
+
+    action_type = llm_result.get("action_type", "none")
+    action_label = llm_result.get("action_label")
+    action_target = llm_result.get("action_target")
+
+    if action_type == "transactions":
+        suggested_actions.append(
+            {
+                "label": action_label or "Review transactions",
+                "page": "transactions",
+                "category": (
+                    action_target
+                    if action_target and action_target.lower() != "none"
+                    else focus_category or primary_driver or top_category
+                ),
+                "transaction_type": (
+                    focus_snapshot["transaction_type"]
+                    if focus_snapshot
+                    else "expense"
+                ),
+                "month": current_month,
+                "account_id": account_id,
+            }
+        )
+
+    elif action_type == "dashboard":
+        suggested_actions.append(
+            {
+                "label": action_label or "Open dashboard",
+                "page": "dashboard",
+                "account_id": account_id,
+            }
+        )
+
+    elif action_type == "analytics":
+        target_section = "insights"
+        if action_target:
+            lower_target = action_target.lower()
+            if "alert" in lower_target:
+                target_section = "alerts"
+            elif "trend" in lower_target:
+                target_section = "trends"
+            elif "month" in lower_target or "summary" in lower_target:
+                target_section = "monthly"
+            elif "categor" in lower_target:
+                target_section = "categories"
+
+        suggested_actions.append(
+            {
+                "label": action_label or "Open analytics",
+                "page": "analytics",
+                "section": target_section,
+                "month": current_month,
+                "account_id": account_id,
+            }
+        )
+
+    elif action_type == "external_resource":
+        suggested_actions.append(
+            {
+                "label": action_label or "Explore learning resources",
+                "page": "external_resource",
+                "section": action_target or "budgeting basics",
+                "account_id": account_id,
+            }
+        )
+
+    return {
+        "answer": llm_result["answer"],
+        "supporting_points": llm_result.get("supporting_points", []),
+        "suggested_followups": llm_result.get("suggested_followups", []),
+        "suggested_actions": suggested_actions,
+        "scope_label": scope_label,
+    }
+
+
 def generate_assistant_response(
     db: Session,
     user_id: int,
@@ -1485,6 +1573,40 @@ def generate_assistant_response(
         and is_saved_scenario_plan_comparison_question(question, context_text)
     ):
         intent = "saved_scenario_compare"
+
+    if llm_allowed and intent not in {
+        "saved_scenario_list",
+        "saved_scenario_compare",
+        "savings_scenario",
+        "future_balance",
+        "recurring_expenses",
+        "budget_status",
+    }:
+        llm_result = generate_llm_assistant_response(
+            question=question,
+            conversation_context=context_text,
+            snapshot=snapshot,
+            category_trends=category_trends,
+            overspending_alerts=overspending_alerts,
+            recent_transactions=recent_transactions,
+            focus_category_context=focus_snapshot,
+            mode=mode,
+        )
+        if llm_result:
+            return build_llm_response_payload(
+                llm_result,
+                focus_snapshot=focus_snapshot,
+                focus_category=focus_category,
+                primary_driver=primary_driver,
+                top_category=top_category,
+                current_month=current_month,
+                account_id=account_id,
+                scope_label=scope_label,
+            )
+
+        # The LLM was already attempted. Keep the rest of this request on the
+        # deterministic path instead of retrying the same provider later.
+        llm_allowed = False
 
     if intent == "saved_scenario_list":
         if not saved_scenario_snapshots:

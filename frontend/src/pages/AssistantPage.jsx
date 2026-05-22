@@ -6,16 +6,13 @@ import { useLanguage } from "../i18n/LanguageContext";
 import {
   ALL_ACCOUNTS_VALUE,
   getSelectedAccountId,
-  setSelectedAccountId as persistSelectedAccountId,
 } from "../services/accountStorage";
-import { formatScopeLabel } from "../utils/displayLabels";
 import { getApiErrorMessage } from "../utils/errorUtils";
 
 function buildInitialAssistantMessage(t) {
   return {
     role: "assistant",
     content: t("assistant.welcomeMessage"),
-    data: null,
   };
 }
 
@@ -29,16 +26,64 @@ function buildMessagesFromHistory(history, t) {
     .map((message) => ({
       role: message.role,
       content: String(message.content || ""),
-      data: null,
     }))
     .filter((message) => message.content.trim().length > 0);
 
   return messages.length > 0 ? messages : [buildInitialAssistantMessage(t)];
 }
 
-function getFallbackQuestions(t) {
-  const questions = t("assistant.fallbackQuestions");
-  return Array.isArray(questions) ? questions : [];
+function AssistantMessageContent({ text }) {
+  const urlPattern = /(https?:\/\/[^\s]+)/g;
+  const lines = String(text || "").split("\n");
+
+  return (
+    <>
+      {lines.map((line, lineIndex) => {
+        const parts = line.split(urlPattern);
+
+        return (
+          <span key={`line-${lineIndex}`}>
+            {parts.map((part, partIndex) => {
+              if (urlPattern.test(part)) {
+                urlPattern.lastIndex = 0;
+                return (
+                  <a
+                    key={`link-${lineIndex}-${partIndex}`}
+                    href={part}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="assistant-message-link"
+                  >
+                    {part}
+                  </a>
+                );
+              }
+              urlPattern.lastIndex = 0;
+              return part;
+            })}
+            {lineIndex < lines.length - 1 && <br />}
+          </span>
+        );
+      })}
+    </>
+  );
+}
+
+function formatAssistantChatContent(data, t) {
+  const answer = String(data?.answer || t("assistant.responseFailed")).trim();
+  const supportingPoints = Array.isArray(data?.supporting_points)
+    ? data.supporting_points
+        .map((point) => String(point || "").trim())
+        .filter(Boolean)
+    : [];
+
+  if (supportingPoints.length === 0) {
+    return answer;
+  }
+
+  return `${answer}\n\n${t("assistant.detailsUsed")}\n${supportingPoints
+    .map((point) => `- ${point}`)
+    .join("\n")}`;
 }
 
 function AssistantPage() {
@@ -47,13 +92,11 @@ function AssistantPage() {
   const [assistantMode, setAssistantMode] = useState("balanced");
   const [selectedAccountId, setSelectedAccountId] = useState(getSelectedAccountId());
   const [messages, setMessages] = useState(() => [buildInitialAssistantMessage(t)]);
-  const [smartSuggestions, setSmartSuggestions] = useState([]);
   const [providerStatus, setProviderStatus] = useState(null);
   const [statusLoading, setStatusLoading] = useState(true);
   const [historyLoading, setHistoryLoading] = useState(true);
   const [clearingHistory, setClearingHistory] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [suggestionsLoading, setSuggestionsLoading] = useState(true);
   const [error, setError] = useState("");
 
   const navigate = useNavigate();
@@ -117,33 +160,6 @@ function AssistantPage() {
     loadAssistantHistory();
   }, [language, navigate, normalizedAccountId, t]);
 
-  useEffect(() => {
-    const loadSuggestions = async () => {
-      const fallbackQuestions = getFallbackQuestions(t);
-
-      try {
-        setSuggestionsLoading(true);
-        const response = await api.get("/assistant/suggestions", {
-          params: {
-            account_id: normalizedAccountId,
-          },
-        });
-        const suggestions = response.data.suggestions || [];
-        setSmartSuggestions(language === "fr" ? fallbackQuestions : suggestions.length ? suggestions : fallbackQuestions);
-      } catch (error) {
-        console.error("Failed to load assistant suggestions:", error);
-
-        if (!handleApiAuthError(error, navigate)) {
-          setSmartSuggestions(fallbackQuestions);
-        }
-      } finally {
-        setSuggestionsLoading(false);
-      }
-    };
-
-    loadSuggestions();
-  }, [language, navigate, normalizedAccountId, t]);
-
   const buildHistoryPayload = (existingMessages, newQuestion) => {
     return [
       ...existingMessages
@@ -161,104 +177,8 @@ function AssistantPage() {
     ].slice(-8);
   };
 
-  const handleActionNavigation = (action) => {
-    if (!action) return;
-    const actionAccountValue =
-      action.account_id == null ? ALL_ACCOUNTS_VALUE : String(action.account_id);
-    persistSelectedAccountId(actionAccountValue);
-
-    if (action.page === "analytics") {
-      const params = new URLSearchParams();
-
-      if (action.section) params.set("section", action.section);
-      if (action.category) params.set("category", action.category);
-      if (action.month) params.set("month", action.month);
-
-      navigate(`/analytics${params.toString() ? `?${params.toString()}` : ""}`);
-      return;
-    }
-
-    if (action.page === "budgets") {
-      const params = new URLSearchParams();
-
-      if (action.month) params.set("month", action.month);
-      if (action.category) params.set("category", action.category);
-      if (action.amount != null) params.set("amount", String(action.amount));
-
-      navigate(`/budgets${params.toString() ? `?${params.toString()}` : ""}`);
-      return;
-    }
-
-    if (action.page === "simulator") {
-      const params = new URLSearchParams();
-
-      if (action.saved_scenario_id != null) {
-        params.set("saved_scenario_id", String(action.saved_scenario_id));
-      }
-      if (action.compare_saved_scenario_id != null) {
-        params.set("compare_saved_scenario_id", String(action.compare_saved_scenario_id));
-      }
-      if (action.scenario_name) {
-        params.set("scenario_name", action.scenario_name);
-      }
-      if (action.months_ahead != null) params.set("months", String(action.months_ahead));
-      if (action.target_balance != null) params.set("target_balance", String(action.target_balance));
-      if (action.income_adjustment != null) {
-        params.set("income_adjustment", String(action.income_adjustment));
-      }
-      if (action.expense_adjustment != null) {
-        params.set("expense_adjustment", String(action.expense_adjustment));
-      }
-      if (action.event_month_offset != null) {
-        params.set("event_month_offset", String(action.event_month_offset));
-      }
-      if (action.event_amount != null) {
-        params.set("event_amount", String(action.event_amount));
-      }
-      if (action.event_label) {
-        params.set("event_label", action.event_label);
-      }
-
-      navigate(`/simulator${params.toString() ? `?${params.toString()}` : ""}`);
-      return;
-    }
-
-    if (action.page === "transactions") {
-      const params = new URLSearchParams();
-
-      if (action.section) params.set("section", action.section);
-      if (action.category) params.set("category", action.category);
-      if (action.description) params.set("description", action.description);
-      if (action.transaction_type) params.set("type", action.transaction_type);
-      if (action.month) params.set("month", action.month);
-
-      navigate(`/transactions${params.toString() ? `?${params.toString()}` : ""}`);
-      return;
-    }
-
-    if (action.page === "dashboard") {
-      navigate("/dashboard");
-      return;
-    }
-
-    if (action.page === "money_map") {
-      navigate("/money-map");
-      return;
-    }
-
-    if (action.page === "accounts") {
-      navigate("/accounts");
-      return;
-    }
-
-    if (action.page === "external_resource") {
-      const topic = encodeURIComponent(action.section || "budgeting basics");
-      window.open(`https://www.google.com/search?q=${topic}`, "_blank");
-    }
-  };
-
-  const handleAsk = async (customQuestion) => {
-    const finalQuestion = (customQuestion ?? question).trim();
+  const handleAsk = async () => {
+    const finalQuestion = question.trim();
 
     if (!finalQuestion) {
       setError(t("assistant.questionRequired"));
@@ -268,7 +188,6 @@ function AssistantPage() {
     const userMessage = {
       role: "user",
       content: finalQuestion,
-      data: null,
     };
 
     const updatedMessages = [...messages, userMessage];
@@ -288,8 +207,7 @@ function AssistantPage() {
 
       const assistantMessage = {
         role: "assistant",
-        content: response.data.answer || t("assistant.responseFailed"),
-        data: response.data,
+        content: formatAssistantChatContent(response.data, t),
       };
 
       setMessages([...updatedMessages, assistantMessage]);
@@ -298,6 +216,7 @@ function AssistantPage() {
 
       if (!handleApiAuthError(error, navigate)) {
         setError(getApiErrorMessage(error, t("assistant.responseFailed")));
+        setMessages(updatedMessages);
       }
     } finally {
       setLoading(false);
@@ -326,19 +245,6 @@ function AssistantPage() {
     }
   };
 
-  const displayedSuggestions =
-    smartSuggestions.length > 0 ? smartSuggestions : getFallbackQuestions(t);
-
-  const modeDescription =
-    assistantMode === "strict"
-      ? t("assistant.strictDescription")
-      : assistantMode === "coach"
-      ? t("assistant.coachDescription")
-      : t("assistant.balancedDescription");
-  const scopeDescription =
-    selectedAccountId === ALL_ACCOUNTS_VALUE
-      ? t("assistant.scopeAll")
-      : t("assistant.scopeOne");
   const activeProvider = providerStatus?.providers?.find((provider) => provider.active);
   const providerLabel =
     activeProvider?.label ||
@@ -363,7 +269,7 @@ function AssistantPage() {
   return (
     <div className="page-container dashboard-page">
       <div className="dashboard-wrapper">
-        <div className="dashboard-hero">
+        <div className="dashboard-hero assistant-hero">
           <div>
             <p className="eyebrow-text">{t("common.appName")}</p>
             <h1>{t("assistant.title")}</h1>
@@ -386,59 +292,33 @@ function AssistantPage() {
             >
               {t("common.viewAnalytics")}
             </button>
-
-            <button
-              className="secondary-button"
-              onClick={() => navigate("/money-map")}
-            >
-              {t("common.moneyMap")}
-            </button>
-
-            <button
-              className="secondary-button"
-              onClick={() => navigate("/budgets")}
-            >
-              {t("common.budgets")}
-            </button>
-
-            <button
-              className="secondary-button"
-              onClick={() => navigate("/simulator")}
-            >
-              {t("common.simulator")}
-            </button>
           </div>
         </div>
 
-        <div className="dashboard-card assistant-card">
-          <div className="section-header">
-            <h2>{t("assistant.modeTitle")}</h2>
-            <p>{t("assistant.modeDetail")}</p>
-          </div>
+        <div className="dashboard-card assistant-chat-shell">
+          <div className="assistant-chat-topbar">
+            <div className="assistant-control-grid">
+              <div className="assistant-mode-field">
+                <label htmlFor="assistant-mode">{t("assistant.modeLabel")}</label>
+                <select
+                  id="assistant-mode"
+                  value={assistantMode}
+                  onChange={(event) => setAssistantMode(event.target.value)}
+                >
+                  <option value="balanced">{t("assistant.balanced")}</option>
+                  <option value="strict">{t("assistant.strict")}</option>
+                  <option value="coach">{t("assistant.coach")}</option>
+                </select>
+              </div>
 
-          <div className="assistant-mode-row">
-            <div className="assistant-mode-field">
-              <label htmlFor="assistant-mode">{t("assistant.modeLabel")}</label>
-              <select
-                id="assistant-mode"
-                value={assistantMode}
-                onChange={(e) => setAssistantMode(e.target.value)}
-              >
-                <option value="balanced">{t("assistant.balanced")}</option>
-                <option value="strict">{t("assistant.strict")}</option>
-                <option value="coach">{t("assistant.coach")}</option>
-              </select>
+              <AccountSelector
+                value={selectedAccountId}
+                label={t("assistant.scopeLabel")}
+                onChange={setSelectedAccountId}
+              />
             </div>
 
-            <div className="assistant-mode-note">
-              <strong>{t("assistant.currentMode")}</strong> {modeDescription}
-            </div>
-
-            <div className="assistant-mode-note assistant-provider-note">
-              <span>
-                <strong>{t("assistant.engineTitle")}</strong> {providerMessage}
-                {providerUsageMessage ? ` ${providerUsageMessage}` : ""}
-              </span>
+            <div className="assistant-status-row">
               <span
                 className={`assistant-provider-pill assistant-provider-${
                   providerStatus?.active_provider || "unknown"
@@ -446,95 +326,79 @@ function AssistantPage() {
               >
                 {providerLabel}
               </span>
+              <span>{providerMessage}</span>
+              {providerUsageMessage && <span>{providerUsageMessage}</span>}
             </div>
           </div>
-        </div>
 
-        <div className="dashboard-card assistant-card">
-          <div className="section-header">
-            <h2>{t("assistant.scopeTitle")}</h2>
-            <p>{t("assistant.scopeDetail")}</p>
+          <div className="assistant-thread" aria-live="polite">
+            {historyLoading ? (
+              <div className="assistant-loading-message">
+                {t("assistant.historyLoading")}
+              </div>
+            ) : (
+              messages.map((message, index) => (
+                <div
+                  key={`message-${index}`}
+                  className={`assistant-message-row assistant-message-row-${message.role}`}
+                >
+                  <div className={`assistant-message-bubble assistant-message-${message.role}`}>
+                    <div className="assistant-message-role">
+                      {message.role === "assistant" ? t("common.assistant") : t("assistant.you")}
+                    </div>
+                    <p className="assistant-message-text">
+                      <AssistantMessageContent text={message.content} />
+                    </p>
+                  </div>
+                </div>
+              ))
+            )}
+
+            {loading && (
+              <div className="assistant-message-row assistant-message-row-assistant">
+                <div className="assistant-message-bubble assistant-message-assistant assistant-thinking-bubble">
+                  <div className="assistant-message-role">{t("common.assistant")}</div>
+                  <p className="assistant-message-text">{t("assistant.thinking")}</p>
+                </div>
+              </div>
+            )}
           </div>
 
-          <div className="assistant-mode-row">
-            <AccountSelector
-              value={selectedAccountId}
-              label={t("assistant.scopeLabel")}
-              onChange={setSelectedAccountId}
-            />
-
-            <div className="assistant-mode-note">
-              <strong>{t("assistant.currentScope")}</strong> {scopeDescription}
-            </div>
-          </div>
-        </div>
-
-        <div className="dashboard-card assistant-card">
-          <div className="section-header">
-            <h2>{t("assistant.smartPrompts")}</h2>
-            <p>
-              {suggestionsLoading
-                ? t("assistant.promptsLoading")
-                : t("assistant.promptsReady")}
-            </p>
-          </div>
-
-          <div className="assistant-preset-grid">
-            {displayedSuggestions.map((preset) => (
-              <button
-                key={preset}
-                type="button"
-                className="assistant-preset-button"
-                onClick={() => handleAsk(preset)}
-                disabled={loading}
-              >
-                {preset}
-              </button>
-            ))}
-          </div>
-
-          <div className="assistant-input-row">
+          <form
+            className="assistant-composer"
+            onSubmit={(event) => {
+              event.preventDefault();
+              handleAsk();
+            }}
+          >
             <textarea
               rows={3}
               maxLength={1200}
               placeholder={t("assistant.questionPlaceholder")}
               value={question}
-              onChange={(e) => setQuestion(e.target.value)}
-              className="assistant-input assistant-textarea"
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && !e.shiftKey) {
-                  e.preventDefault();
+              onChange={(event) => setQuestion(event.target.value)}
+              className="assistant-input assistant-textarea assistant-chat-input"
+              onKeyDown={(event) => {
+                if (event.key === "Enter" && !event.shiftKey) {
+                  event.preventDefault();
                   handleAsk();
                 }
               }}
             />
             <button
-              type="button"
-              className="assistant-ask-button"
-              onClick={() => handleAsk()}
+              type="submit"
+              className="assistant-ask-button assistant-send-button"
               disabled={loading}
             >
               {loading ? t("assistant.thinking") : t("assistant.ask")}
             </button>
-          </div>
-          <p className="assistant-compose-hint">{t("assistant.composeHint")}</p>
+          </form>
 
-          {error && <p className="error-text">{error}</p>}
-        </div>
-
-        <div className="dashboard-card assistant-chat-card">
-          <div className="section-header">
-            <div>
-              <h2>{t("assistant.conversation")}</h2>
-              <p>
-                {historyLoading
-                  ? t("assistant.historyLoading")
-                  : t("assistant.conversationDetail")}
-              </p>
-            </div>
+          <div className="assistant-chat-footer">
+            <p className="assistant-compose-hint">{t("assistant.composeHint")}</p>
             <button
               type="button"
-              className="secondary-button"
+              className="secondary-button assistant-clear-button"
               onClick={handleClearConversation}
               disabled={clearingHistory || historyLoading || messages.length <= 1}
             >
@@ -544,83 +408,7 @@ function AssistantPage() {
             </button>
           </div>
 
-          <div className="assistant-chat-list">
-            {messages.map((message, index) => (
-              <div
-                key={`message-${index}`}
-                className={`assistant-chat-bubble assistant-chat-${message.role}`}
-              >
-                <div className="assistant-chat-role">
-                  {message.role === "assistant" ? t("common.assistant") : t("assistant.you")}
-                </div>
-
-                <p className="assistant-chat-text">{message.content}</p>
-
-                {message.role === "assistant" && message.data && (
-                  <div className="assistant-chat-details">
-                    {message.data.scope_label && (
-                      <div className="assistant-chat-detail-block">
-                        <h4>{t("assistant.answerScope")}</h4>
-                        <p className="assistant-scope-summary">{formatScopeLabel(message.data.scope_label, t)}</p>
-                      </div>
-                    )}
-
-                    {message.data.supporting_points?.length > 0 && (
-                      <div className="assistant-chat-detail-block">
-                        <h4>{t("assistant.supportingPoints")}</h4>
-                        <ul className="assistant-list">
-                          {message.data.supporting_points.map((item, idx) => (
-                            <li key={`support-${index}-${idx}`}>{item}</li>
-                          ))}
-                        </ul>
-                      </div>
-                    )}
-
-                    <div className="assistant-chat-detail-block">
-                      <h4>{t("assistant.suggestedFollowups")}</h4>
-                      {message.data.suggested_followups?.length > 0 ? (
-                        <div className="assistant-followup-list">
-                          {message.data.suggested_followups.map((item, idx) => (
-                            <button
-                              key={`followup-${index}-${idx}`}
-                              type="button"
-                              className="assistant-followup-button"
-                              onClick={() => handleAsk(item)}
-                              disabled={loading}
-                            >
-                              {item}
-                            </button>
-                          ))}
-                        </div>
-                      ) : (
-                        <p className="assistant-empty-text">
-                          {t("assistant.noFollowups")}
-                        </p>
-                      )}
-                    </div>
-
-                    {message.data.suggested_actions?.length > 0 && (
-                      <div className="assistant-chat-detail-block assistant-actions-block">
-                        <h4>{t("assistant.suggestedActions")}</h4>
-                        <div className="assistant-followup-list">
-                          {message.data.suggested_actions.map((action, idx) => (
-                            <button
-                              key={`action-${index}-${idx}`}
-                              type="button"
-                              className="assistant-action-button"
-                              onClick={() => handleActionNavigation(action)}
-                            >
-                              {action.label}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
+          {error && <p className="error-text">{error}</p>}
         </div>
       </div>
     </div>
