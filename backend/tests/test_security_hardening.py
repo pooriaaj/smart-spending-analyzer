@@ -536,13 +536,45 @@ class AuthSecurityTest(unittest.TestCase):
     def test_forgot_password_does_not_expose_reset_url_in_production(self) -> None:
         self.create_user()
         client = self.build_auth_client()
-        with patch.dict("os.environ", {"ENVIRONMENT": "production"}, clear=False):
+        with patch.dict("os.environ", {"ENVIRONMENT": "production"}, clear=False), patch(
+            "app.routes.auth_routes.send_password_reset_email",
+            return_value=True,
+        ) as send_reset_email:
             response = client.post(
                 "/auth/forgot-password",
                 json={"email": "auth-security@example.com"},
             )
         self.assertEqual(response.status_code, 200)
         self.assertIsNone(response.json().get("reset_url"))
+        send_reset_email.assert_called_once()
+
+    def test_forgot_password_sends_reset_email_for_existing_user(self) -> None:
+        self.create_user()
+        client = self.build_auth_client()
+
+        with patch("app.routes.auth_routes.send_password_reset_email", return_value=True) as send_reset_email:
+            response = client.post(
+                "/auth/forgot-password",
+                json={"email": "auth-security@example.com"},
+            )
+
+        self.assertEqual(response.status_code, 200)
+        send_reset_email.assert_called_once()
+        to_email, reset_url = send_reset_email.call_args.args
+        self.assertEqual(to_email, "auth-security@example.com")
+        self.assertIn("/reset-password?token=", reset_url)
+
+    def test_forgot_password_does_not_send_email_for_unknown_user(self) -> None:
+        client = self.build_auth_client()
+
+        with patch("app.routes.auth_routes.send_password_reset_email", return_value=True) as send_reset_email:
+            response = client.post(
+                "/auth/forgot-password",
+                json={"email": "missing@example.com"},
+            )
+
+        self.assertEqual(response.status_code, 200)
+        send_reset_email.assert_not_called()
 
     def test_reset_token_is_one_time_use(self) -> None:
         user_id = self.create_user()

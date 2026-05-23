@@ -22,6 +22,7 @@ from app.schemas import (
     UserCreate,
 )
 from app.security import is_production
+from app.services.email_service import send_password_reset_email
 
 router = APIRouter(prefix="/auth", tags=["Auth"])
 
@@ -102,7 +103,7 @@ def forgot_password(
 ) -> ForgotPasswordResponse:
     user = find_user_by_email(db, payload.email)
 
-    generic_message = "If an account with that email exists, a reset link has been generated."
+    generic_message = "If an account with that email exists, reset instructions have been sent."
 
     if not user:
         return ForgotPasswordResponse(message=generic_message)
@@ -114,6 +115,7 @@ def forgot_password(
 
     frontend_url = os.getenv("FRONTEND_URL", "http://localhost:5173").rstrip("/")
     reset_url = f"{frontend_url}/reset-password?token={quote(raw_token)}"
+    send_password_reset_email(user.email, reset_url)
 
     return ForgotPasswordResponse(
         message=generic_message,
