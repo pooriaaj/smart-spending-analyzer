@@ -726,6 +726,21 @@ def is_merchant_followup_question(question: str) -> bool:
     )
 
 
+def is_merchant_category_question(question: str) -> bool:
+    normalized_question = normalize_text_for_matching(question)
+    return any(
+        phrase in normalized_question
+        for phrase in [
+            "what category is",
+            "which category is",
+            "what category was",
+            "which category was",
+            "category for",
+            "categorized as",
+        ]
+    )
+
+
 def extract_previous_merchant_reference(context_text: str) -> str | None:
     context = str(context_text or "")
     patterns = [
@@ -766,12 +781,13 @@ def build_merchant_spend_snapshot(
 ) -> dict[str, Any] | None:
     lookup_text = question
     if not is_merchant_spend_question(question):
-        if not is_merchant_followup_question(question):
+        if not is_merchant_followup_question(question) and not is_merchant_category_question(question):
             return None
         previous_reference = extract_previous_merchant_reference(context_text)
-        if not previous_reference:
+        if previous_reference:
+            lookup_text = previous_reference
+        elif is_merchant_followup_question(question):
             return None
-        lookup_text = previous_reference
 
     if not lookup_text:
         return None
@@ -835,6 +851,64 @@ def build_merchant_spend_no_match_response(
                 "page": "transactions",
                 "account_id": account_id,
             }
+        ],
+        "scope_label": scope_label,
+    }
+
+
+def build_merchant_category_response(
+    merchant_snapshot: dict[str, Any],
+    *,
+    account_id: int | None,
+    scope_label: str,
+) -> dict[str, Any]:
+    display_name = str(merchant_snapshot["display_name"] or "that merchant")
+    category = format_category_label(merchant_snapshot.get("category") or "uncategorized")
+    total_amount = float(merchant_snapshot["total_amount"] or 0.0)
+    transaction_count = int(merchant_snapshot["transaction_count"] or 0)
+    fingerprint = extract_merchant_fingerprint(display_name)
+    merchant_key = fingerprint[0] if fingerprint else None
+
+    return {
+        "answer": (
+            f"{display_name} is currently categorized as {category} in {scope_label}. "
+            f"I found {transaction_count} matching expense transaction(s), totaling {format_currency(total_amount)}."
+        ),
+        "supporting_points": [
+            f"Matched merchant text: {display_name}",
+            f"Current category: {category}",
+            f"Matching transactions: {transaction_count}",
+            f"Total matched spending: {format_currency(total_amount)}",
+            f"Current scope: {scope_label}",
+        ],
+        "suggested_followups": [
+            f"Show matching {display_name} transactions",
+            f"Remember {display_name} as a different category",
+            "Which categories need cleanup?",
+        ],
+        "suggested_actions": [
+            {
+                "label": f"Show matching {display_name} transactions",
+                "page": "transactions",
+                "section": "merchant",
+                "action_type": "show_matching_transactions",
+                "description": display_name,
+                "merchant_key": merchant_key,
+                "category": merchant_snapshot.get("category"),
+                "transaction_type": "expense",
+                "account_id": account_id,
+            },
+            {
+                "label": f"Teach category for {display_name}",
+                "page": "transactions",
+                "section": "learning",
+                "action_type": "learn_merchant_category",
+                "description": display_name,
+                "merchant_key": merchant_key,
+                "category": merchant_snapshot.get("category"),
+                "transaction_type": "expense",
+                "account_id": account_id,
+            },
         ],
         "scope_label": scope_label,
     }
@@ -2440,6 +2514,12 @@ def generate_assistant_response(
         account_id=account_id,
     )
     if merchant_spend_snapshot:
+        if is_merchant_category_question(question):
+            return build_merchant_category_response(
+                merchant_spend_snapshot,
+                account_id=account_id,
+                scope_label=scope_label,
+            )
         return build_merchant_spend_response(
             merchant_spend_snapshot,
             account_id=account_id,

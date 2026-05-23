@@ -1645,6 +1645,87 @@ class AnalyticsRouteTest(unittest.TestCase):
         self.assertIn("YouTube Premium", payload["answer"])
         self.assertEqual(payload["suggested_actions"][0]["action_type"], "show_matching_transactions")
 
+    def test_assistant_merchant_category_question_answers_from_transactions(self) -> None:
+        with self.session_local() as session:
+            session.add(
+                Transaction(
+                    amount=12.99,
+                    category="subscriptions",
+                    description="YouTube Premium",
+                    date=date(2026, 4, 7),
+                    type="expense",
+                    owner_id=self.user_id,
+                    account_id=self.chequing_account_id,
+                )
+            )
+            session.commit()
+
+        with patch("app.services.budget_metrics.date", FixedBudgetDate), patch(
+            "app.services.assistant_service.generate_llm_assistant_response",
+            return_value=None,
+        ) as mocked_llm:
+            response = self.client.post(
+                "/assistant/response",
+                json={
+                    "question": "What category is YouTube in?",
+                    "history": [],
+                    "mode": "balanced",
+                    "account_id": self.chequing_account_id,
+                },
+            )
+
+        self.assertEqual(response.status_code, 200, response.text)
+        payload = response.json()
+
+        mocked_llm.assert_not_called()
+        self.assertIn("categorized as Subscriptions", payload["answer"])
+        self.assertEqual(payload["suggested_actions"][0]["action_type"], "show_matching_transactions")
+        self.assertEqual(payload["suggested_actions"][1]["action_type"], "learn_merchant_category")
+
+    def test_assistant_merchant_category_followup_uses_previous_merchant(self) -> None:
+        with self.session_local() as session:
+            session.add(
+                Transaction(
+                    amount=12.99,
+                    category="subscriptions",
+                    description="YouTube Premium",
+                    date=date(2026, 4, 7),
+                    type="expense",
+                    owner_id=self.user_id,
+                    account_id=self.chequing_account_id,
+                )
+            )
+            session.commit()
+
+        with patch("app.services.budget_metrics.date", FixedBudgetDate), patch(
+            "app.services.assistant_service.generate_llm_assistant_response",
+            return_value=None,
+        ) as mocked_llm:
+            response = self.client.post(
+                "/assistant/response",
+                json={
+                    "question": "What category is that?",
+                    "history": [
+                        {
+                            "role": "assistant",
+                            "content": (
+                                "You spent $12.99 on transactions matching YouTube Premium "
+                                "in Daily Spending (chequing), across 1 transaction(s)."
+                            ),
+                        }
+                    ],
+                    "mode": "balanced",
+                    "account_id": self.chequing_account_id,
+                },
+            )
+
+        self.assertEqual(response.status_code, 200, response.text)
+        payload = response.json()
+
+        mocked_llm.assert_not_called()
+        self.assertIn("YouTube Premium is currently categorized as Subscriptions", payload["answer"])
+        self.assertEqual(payload["suggested_actions"][1]["action_type"], "learn_merchant_category")
+
     def test_assistant_response_surfaces_low_data_quality_context(self) -> None:
         with self.session_local() as session:
             session.add(
