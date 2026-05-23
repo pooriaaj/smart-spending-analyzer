@@ -54,10 +54,14 @@ It is designed as a foundation for an intelligent financial assistant that:
 - Natural-language financial queries
 - Context-aware responses
 - Spending insights and recommendations
+- Finance questions use the user's filtered transaction, budget, account, recurring-charge, and simulator data
+- Non-finance learning/link questions can use the AI provider when enabled, otherwise they fall back to safe public-resource links
+- Off-topic questions are answered by the AI provider when available or politely redirected when the app is in rule-based mode
 - Actionable suggestions:
   - navigate to analytics
   - filter transactions
   - review categories
+  - open relevant external learning resources
 
 ### Smart Categorization
 - Rule-based transaction classification
@@ -137,13 +141,18 @@ This structure improves:
 - Reusable query builder
 
 ### Smart Assistant Logic
-- Intent classification (balance, trends, alerts, etc.)
-- Context-aware responses
+- Intent classification for finance, merchant, budget, simulator, education, and off-topic prompts
+- Context-aware responses with saved assistant history per account scope
 - Multi-source reasoning:
   - summary
   - trends
   - alerts
   - recent data
+  - budgets
+  - recurring charges
+  - merchant/category learning
+- Guardrails for prompt injection, secret redaction, daily AI usage limits, and safe rule-based fallback
+- Optional model-backed answers through OpenAI or an OpenAI-compatible local provider
 
 ---
 
@@ -164,6 +173,12 @@ python -m venv .venv
 .venv\Scripts\activate
 pip install -r requirements.txt
 uvicorn app.main:app --reload
+
+To enable the model-backed assistant locally, copy `.env.example` to `backend/.env`, set `USE_LLM_ASSISTANT=true`, and add either:
+- `OPENAI_API_KEY` for OpenAI, or
+- `USE_LOCAL_LLM=true` with a local OpenAI-compatible endpoint such as Ollama.
+
+Without those settings, the assistant still works through the safe rule-based backend paths.
 
 
 ### Frontend
