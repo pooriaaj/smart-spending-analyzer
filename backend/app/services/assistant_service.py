@@ -1278,6 +1278,9 @@ def classify_question(question: str, context_text: str) -> str:
     if any(word in text for word in ["recent", "latest transactions", "last transactions"]):
         return "recent"
 
+    if is_obvious_non_finance_request(text):
+        return "off_topic"
+
     return "general"
 
 
@@ -1329,6 +1332,54 @@ def build_external_learning_url(question: str) -> str:
     if not query:
         query = "personal finance basics"
     return f"https://www.youtube.com/results?search_query={quote_plus(query)}"
+
+
+def is_obvious_non_finance_request(text: str) -> bool:
+    if not text:
+        return False
+
+    finance_terms = [
+        "account",
+        "balance",
+        "budget",
+        "category",
+        "charge",
+        "cost",
+        "expense",
+        "income",
+        "merchant",
+        "money",
+        "pay",
+        "paid",
+        "save",
+        "saving",
+        "spend",
+        "spent",
+        "subscription",
+        "transaction",
+    ]
+    if any(term in text for term in finance_terms):
+        return False
+
+    return any(
+        phrase in text
+        for phrase in [
+            "cook",
+            "recipe",
+            "recipes",
+            "weather",
+            "sports",
+            "movie",
+            "movies",
+            "song",
+            "lyrics",
+            "homework",
+            "coding",
+            "programming",
+            "python",
+            "javascript",
+        ]
+    )
 
 
 def build_assistant_actions(
@@ -3427,6 +3478,27 @@ def generate_assistant_response(
                     "account_id": account_id,
                 }
             ],
+            "scope_label": scope_label,
+        }
+
+    if intent == "off_topic":
+        return {
+            "answer": (
+                "I am mainly built to help with your money, budgets, transactions, and planning. "
+                "I do not have a live general assistant available right now, but I can still help with your "
+                "spending, budgets, accounts, transactions, and financial plans."
+            ),
+            "supporting_points": [
+                "This question does not look related to your financial data.",
+                "No transaction, budget, or account data was used for this answer.",
+                "When an AI provider is enabled, the assistant can handle broader questions more naturally.",
+            ],
+            "suggested_followups": [
+                "What changed in my spending recently?",
+                "How much did I spend on groceries?",
+                "What should I review first?",
+            ],
+            "suggested_actions": [],
             "scope_label": scope_label,
         }
 
