@@ -13,6 +13,10 @@ function buildInitialAssistantMessage(t) {
   return {
     role: "assistant",
     content: t("assistant.welcomeMessage"),
+    supportingPoints: [],
+    suggestedFollowups: [],
+    suggestedActions: [],
+    scopeLabel: "",
   };
 }
 
@@ -26,6 +30,10 @@ function buildMessagesFromHistory(history, t) {
     .map((message) => ({
       role: message.role,
       content: String(message.content || ""),
+      supportingPoints: [],
+      suggestedFollowups: [],
+      suggestedActions: [],
+      scopeLabel: message.scope_label || "",
     }))
     .filter((message) => message.content.trim().length > 0);
 
@@ -74,6 +82,17 @@ function formatAssistantChatContent(data, t) {
   return answer;
 }
 
+function buildAssistantMessageFromResponse(data, t) {
+  return {
+    role: "assistant",
+    content: formatAssistantChatContent(data, t),
+    supportingPoints: Array.isArray(data?.supporting_points) ? data.supporting_points : [],
+    suggestedFollowups: Array.isArray(data?.suggested_followups) ? data.suggested_followups : [],
+    suggestedActions: Array.isArray(data?.suggested_actions) ? data.suggested_actions : [],
+    scopeLabel: data?.scope_label || "",
+  };
+}
+
 function compactHistoryContent(content) {
   const text = String(content || "")
     .replace(/\nDetails I used:[\s\S]*$/i, "")
@@ -81,6 +100,106 @@ function compactHistoryContent(content) {
     .trim();
 
   return text.length > 700 ? `${text.slice(0, 700).trim()}...` : text;
+}
+
+function buildAssistantActionUrl(action) {
+  const params = new URLSearchParams();
+
+  if (action?.account_id != null) params.set("account_id", action.account_id);
+  if (action?.category) params.set("category", action.category);
+  if (action?.transaction_type) params.set("type", action.transaction_type);
+  if (action?.month) params.set("month", action.month);
+  if (action?.section) params.set("section", action.section);
+  if (action?.scenario_name) params.set("scenario", action.scenario_name);
+  if (action?.saved_scenario_id != null) params.set("saved_scenario_id", action.saved_scenario_id);
+  if (action?.compare_saved_scenario_id != null) {
+    params.set("compare_saved_scenario_id", action.compare_saved_scenario_id);
+  }
+  if (action?.amount != null) params.set("amount", action.amount);
+  if (action?.target_balance != null) params.set("target_balance", action.target_balance);
+  if (action?.months_ahead != null) params.set("months_ahead", action.months_ahead);
+
+  const routeMap = {
+    analytics: "/analytics",
+    assistant: "/assistant",
+    budgets: "/budgets",
+    dashboard: "/dashboard",
+    simulator: "/simulator",
+    transactions: "/transactions",
+  };
+  const query = params.toString();
+
+  return `${routeMap[action?.page] || "/dashboard"}${query ? `?${query}` : ""}`;
+}
+
+function AssistantMessageDetails({ message, onFollowup, onAction, t }) {
+  const supportingPoints = message.supportingPoints || [];
+  const suggestedFollowups = message.suggestedFollowups || [];
+  const suggestedActions = message.suggestedActions || [];
+  const hasDetails =
+    supportingPoints.length > 0 ||
+    suggestedFollowups.length > 0 ||
+    suggestedActions.length > 0 ||
+    message.scopeLabel;
+
+  if (message.role !== "assistant" || !hasDetails) {
+    return null;
+  }
+
+  return (
+    <div className="assistant-message-details">
+      {message.scopeLabel && (
+        <div className="assistant-message-scope">{message.scopeLabel}</div>
+      )}
+
+      {supportingPoints.length > 0 && (
+        <div className="assistant-message-section">
+          <div className="assistant-message-section-title">{t("assistant.supportingPoints")}</div>
+          <ul className="assistant-message-list">
+            {supportingPoints.map((point, index) => (
+              <li key={`point-${index}`}>{point}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {suggestedActions.length > 0 && (
+        <div className="assistant-message-section">
+          <div className="assistant-message-section-title">{t("assistant.suggestedActions")}</div>
+          <div className="assistant-message-chip-row">
+            {suggestedActions.map((action, index) => (
+              <button
+                key={`action-${index}-${action.label}`}
+                type="button"
+                className="assistant-action-chip"
+                onClick={() => onAction(action)}
+              >
+                {action.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {suggestedFollowups.length > 0 && (
+        <div className="assistant-message-section">
+          <div className="assistant-message-section-title">{t("assistant.suggestedFollowups")}</div>
+          <div className="assistant-message-chip-row">
+            {suggestedFollowups.map((followup, index) => (
+              <button
+                key={`followup-${index}-${followup}`}
+                type="button"
+                className="assistant-followup-chip"
+                onClick={() => onFollowup(followup)}
+              >
+                {followup}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
 }
 
 function AssistantPage() {
@@ -209,10 +328,7 @@ function AssistantPage() {
         account_id: normalizedAccountId,
       });
 
-      const assistantMessage = {
-        role: "assistant",
-        content: formatAssistantChatContent(response.data, t),
-      };
+      const assistantMessage = buildAssistantMessageFromResponse(response.data, t);
 
       setMessages([...updatedMessages, assistantMessage]);
     } catch (error) {
@@ -251,6 +367,27 @@ function AssistantPage() {
     }
   };
 
+  const handleAssistantAction = (action) => {
+    const externalUrl =
+      action?.page === "external_resource" &&
+      (String(action?.description || "").startsWith("http")
+        ? action.description
+        : String(action?.section || "").startsWith("http")
+        ? action.section
+        : "");
+
+    if (externalUrl) {
+      window.open(externalUrl, "_blank", "noopener,noreferrer");
+      return;
+    }
+
+    navigate(buildAssistantActionUrl(action));
+  };
+
+  const handleFollowup = (followup) => {
+    setQuestion(String(followup || ""));
+  };
+
   const activeProvider = providerStatus?.providers?.find((provider) => provider.active);
   const providerLabel =
     activeProvider?.label ||
@@ -269,6 +406,15 @@ function AssistantPage() {
       ? t("assistant.engineUsage", {
           remaining: providerStatus.daily_remaining,
           limit: providerStatus.daily_limit,
+        })
+      : "";
+  const providerCharUsageMessage =
+    !statusLoading &&
+    providerStatus?.active_provider !== "rule_based" &&
+    providerStatus?.daily_char_limit != null
+      ? t("assistant.engineCharUsage", {
+          remaining: providerStatus.daily_chars_remaining,
+          limit: providerStatus.daily_char_limit,
         })
       : "";
 
@@ -334,6 +480,7 @@ function AssistantPage() {
               </span>
               <span>{providerMessage}</span>
               {providerUsageMessage && <span>{providerUsageMessage}</span>}
+              {providerCharUsageMessage && <span>{providerCharUsageMessage}</span>}
             </div>
           </div>
 
@@ -355,6 +502,12 @@ function AssistantPage() {
                     <p className="assistant-message-text">
                       <AssistantMessageContent text={message.content} />
                     </p>
+                    <AssistantMessageDetails
+                      message={message}
+                      onAction={handleAssistantAction}
+                      onFollowup={handleFollowup}
+                      t={t}
+                    />
                   </div>
                 </div>
               ))

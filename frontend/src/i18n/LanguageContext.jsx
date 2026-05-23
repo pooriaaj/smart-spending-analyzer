@@ -949,6 +949,7 @@ const translations = {
       engineUnavailable:
         "Assistant status is temporarily unavailable, so the safe fallback will answer if needed.",
       engineUsage: "{remaining} of {limit} AI replies left in the last 24 hours.",
+      engineCharUsage: "{remaining} of {limit} AI characters left.",
       providerOpenAI: "OpenAI",
       providerLocal: "Local LLM",
       providerRuleBased: "Rule-based fallback",
@@ -2333,6 +2334,7 @@ const translations = {
       engineUnavailable:
         "Le statut de l'assistant est temporairement indisponible; le mode de secours répondra au besoin.",
       engineUsage: "{remaining} réponse(s) IA restante(s) sur {limit} dans les dernières 24 heures.",
+      engineCharUsage: "{remaining} caractères IA restants sur {limit}.",
       providerOpenAI: "OpenAI",
       providerLocal: "LLM local",
       providerRuleBased: "Secours par règles",
