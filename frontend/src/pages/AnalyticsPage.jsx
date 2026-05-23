@@ -501,42 +501,23 @@ function AnalyticsPage() {
     <div className="page-container dashboard-page">
       <div className="dashboard-wrapper">
         <PageHeader
-          icon="AN"
-          titleKey="common.analyticsInsights"
+          icon="$"
+          titleKey="common.analytics"
           subtitleKey="headers.analyticsSubtitle"
           actions={(
-            <button className="secondary-button" onClick={() => navigate("/transactions")}>
-              {t("common.viewLedger")}
-            </button>
+            <>
+              <button className="secondary-button" onClick={() => navigate("/import")}>
+                {t("common.uploadStatement")}
+              </button>
+              <button className="secondary-button" onClick={() => navigate("/transactions")}>
+                {t("common.addManualRow")}
+              </button>
+              <button className="secondary-button" onClick={() => navigate("/assistant")}>
+                {t("common.assistant")}
+              </button>
+            </>
           )}
         />
-
-        <div className="dashboard-card product-guide-card">
-          <div className="section-header">
-            <h2>{t("analytics.howTitle")}</h2>
-            <p>{t("analytics.howDetail")}</p>
-          </div>
-
-          <div className="feature-guide-grid">
-            <div className="feature-guide-item">
-              <span className="feature-step">{t("analytics.daily")}</span>
-              <h3>{t("analytics.shortTermPace")}</h3>
-              <p>{t("analytics.shortTermDetail")}</p>
-            </div>
-
-            <div className="feature-guide-item">
-              <span className="feature-step">{t("analytics.monthly")}</span>
-              <h3>{t("analytics.rolling30DayControl")}</h3>
-              <p>{t("analytics.rolling30DayDetail")}</p>
-            </div>
-
-            <div className="feature-guide-item">
-              <span className="feature-step">3 / 6</span>
-              <h3>{t("analytics.longerDirection")}</h3>
-              <p>{t("analytics.longerDirectionDetail")}</p>
-            </div>
-          </div>
-        </div>
 
         <div className="filter-card">
           <div className="section-header">

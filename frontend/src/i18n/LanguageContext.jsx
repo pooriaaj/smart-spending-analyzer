@@ -244,20 +244,20 @@ const translations = {
       transactionsSubtitle:
         "Your ledger is the source of truth. Write daily transactions here, then reconcile the bank statement at month-end to catch what you forgot.",
       analyticsSubtitle:
-        "Learn what changed, what is driving your spending, and whether your recent pace is getting better or worse.",
+        "See your financial standing, spot what changed, then ask the assistant what to do next.",
       importSubtitle:
-        "Use daily transactions as your source of truth, then upload the month-end statement to find what you missed.",
+        "Upload bank statements so the app can build your financial picture automatically.",
       accountsSubtitle:
         "Create separate accounts and switch between combined and account-specific views.",
       budgetsSubtitle:
-        "Plan category limits by month and see how your real spending is tracking against them.",
+        "Set your own monthly category targets, or ask the assistant to help build a budget from your real spending.",
       moneyMapEyebrow: "Smart Money Twin",
       moneyMapSubtitle:
         "Upload real statements and this page becomes your learned spending model: categories, recurring bills, confidence, and next best actions.",
       simulatorSubtitle:
         "Test future balances, monthly changes, and saved scenarios before the month surprises you.",
       assistantSubtitle:
-        "Ask questions about your accounts, categories, budget pace, and future outlook.",
+        "Ask for help understanding your money, building a budget, or deciding what to review next.",
       profileSubtitle:
         "Manage account settings, premium plans, and your personal app preferences.",
     },
