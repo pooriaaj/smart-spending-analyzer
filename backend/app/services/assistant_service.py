@@ -25,6 +25,7 @@ from app.services.analytics_service import (
     get_top_categories_with_transactions,
     get_top_expense_categories,
     get_transactions_for_category,
+    is_essential_recurring_item,
     normalize_text_for_matching,
 )
 from app.services.assistant_guard_service import (
@@ -313,6 +314,74 @@ def detect_focus_category(
             return category
 
     return None
+
+
+RECURRING_MERCHANT_STOPWORDS = {
+    "and",
+    "can",
+    "charge",
+    "charges",
+    "com",
+    "inc",
+    "limited",
+    "ltd",
+    "member",
+    "monthly",
+    "payment",
+    "store",
+    "subscription",
+    "the",
+}
+
+
+def get_recurring_match_score(question: str, item: dict[str, Any]) -> int:
+    normalized_question = normalize_text_for_matching(question)
+    normalized_description = normalize_text_for_matching(str(item.get("description") or ""))
+
+    if not normalized_question or not normalized_description:
+        return 0
+
+    if normalized_description in normalized_question:
+        return 100
+
+    tokens = [
+        token
+        for token in re.findall(r"[a-z0-9]+", normalized_description)
+        if len(token) >= 3 and token not in RECURRING_MERCHANT_STOPWORDS
+    ]
+    return sum(1 for token in set(tokens) if token in normalized_question)
+
+
+def find_recurring_item_from_question(
+    question: str,
+    recurring_expenses: list[dict[str, Any]],
+) -> dict[str, Any] | None:
+    scored_items = [
+        (get_recurring_match_score(question, item), item)
+        for item in recurring_expenses
+    ]
+    scored_items = [(score, item) for score, item in scored_items if score > 0]
+
+    if not scored_items:
+        return None
+
+    scored_items.sort(
+        key=lambda pair: (
+            pair[0],
+            float(pair[1].get("average_amount") or 0.0),
+        ),
+        reverse=True,
+    )
+    return scored_items[0][1]
+
+
+def build_recurring_review_phrase(item: dict[str, Any]) -> str:
+    if is_essential_recurring_item(item):
+        return (
+            "This looks like an essential bill or service, so I would not treat it as a simple "
+            "cancel target. Review the plan, usage, contract, or provider instead."
+        )
+    return "This looks discretionary enough to review, reduce, or cancel if you no longer use it."
 
 
 def detect_named_saved_scenarios(
@@ -2009,7 +2078,12 @@ def generate_assistant_response(
         recurring_total = round(sum(item["average_amount"] for item in recurring_expenses), 2)
         annualized_total = round(sum(item["annualized_amount"] for item in recurring_expenses), 2)
         savings_opportunities = build_recurring_savings_opportunities(recurring_expenses)
-        review_candidate = savings_opportunities[0]
+        named_candidate = find_recurring_item_from_question(question, recurring_expenses)
+        review_candidate = (
+            named_candidate
+            or (savings_opportunities[0] if savings_opportunities else recurring_expenses[0])
+        )
+        candidate_is_essential = is_essential_recurring_item(review_candidate)
         increased_items = [
             item
             for item in recurring_expenses
@@ -2051,6 +2125,14 @@ def generate_assistant_response(
                 f"{leading_item['description']} is the clearest recurring charge increase in {scope_label}. "
                 f"Its latest charge landed about {leading_item['latest_change_percent']:.0f}% above its usual amount."
             )
+        elif wants_savings_model and candidate_is_essential:
+            answer = (
+                f"I would not treat {review_candidate['description']} as a simple cancellation target. "
+                "It looks like an essential phone, utility, rent, debt, insurance, or similar bill. "
+                f"The smarter move is to review the plan or provider: it averages "
+                f"{format_currency(review_candidate['average_amount'])} per month in {scope_label}, "
+                "so even lowering it a little could help without breaking an important service."
+            )
         elif wants_savings_model:
             answer = (
                 f"If you cancel {review_candidate['description']}, you would free up about "
@@ -2061,19 +2143,29 @@ def generate_assistant_response(
         elif wants_review:
             answer = (
                 f"{review_candidate['description']} is the first recurring charge I would review in {scope_label}. "
-                f"{review_candidate['review_reason']}"
+                f"{build_recurring_review_phrase(review_candidate)}"
             )
         elif mode == "strict":
+            review_hint = (
+                f"{review_candidate['description']} is the first one to review."
+                if savings_opportunities
+                else "I do not see an obvious cancellable subscription yet, so review bill plans instead of cancelling essentials."
+            )
             answer = (
                 f"I found {len(recurring_expenses)} likely recurring expense pattern"
                 f"{'' if len(recurring_expenses) == 1 else 's'} in {scope_label}, worth about "
-                f"{format_currency(recurring_total)} per month. {review_candidate['description']} is the first one to review."
+                f"{format_currency(recurring_total)} per month. {review_hint}"
             )
         elif mode == "coach":
+            review_hint = (
+                f"{review_candidate['description']} looks like the first one to review."
+                if savings_opportunities
+                else "Most of what I see looks like bills, so we should focus on lowering plans rather than cancelling essentials."
+            )
             answer = (
                 f"You have {len(recurring_expenses)} likely recurring charge"
                 f"{'' if len(recurring_expenses) == 1 else 's'} in {scope_label}, adding up to about "
-                f"{format_currency(recurring_total)} a month. {review_candidate['description']} looks like the first one to review."
+                f"{format_currency(recurring_total)} a month. {review_hint}"
             )
         else:
             answer = (
@@ -2088,11 +2180,68 @@ def generate_assistant_response(
                 f"{item['description']}: {item['cadence']}, avg {format_currency(item['average_amount'])}, "
                 f"latest {format_currency(item['latest_amount'])} on {item['latest_date'].isoformat()}, "
                 f"about {format_currency(item['annualized_amount'])}/year. "
-                f"{item['review_reason']}"
+                f"{build_recurring_review_phrase(item) if is_essential_recurring_item(item) else item['review_reason']}"
                 f"{' Next expected around ' + item['next_expected_date'].isoformat() + '.' if item.get('next_expected_date') else ''}"
             )
             for item in recurring_expenses
         ]
+
+        suggested_actions = [
+            {
+                "label": f"Review {review_candidate['description']}",
+                "page": "transactions",
+                "section": "recurring",
+                "description": review_candidate["description"],
+                "category": review_candidate["category"],
+                "transaction_type": "expense",
+                "account_id": account_id,
+            },
+        ]
+
+        if candidate_is_essential:
+            suggested_actions.append(
+                {
+                    "label": f"Model lowering {review_candidate['description']}",
+                    "page": "simulator",
+                    "account_id": account_id,
+                    "scenario_name": f"Lower {review_candidate['description']}",
+                    "expense_adjustment": -round(float(review_candidate["average_amount"]) * 0.1, 2),
+                }
+            )
+        else:
+            suggested_actions.append(
+                {
+                    "label": f"Model cancelling {review_candidate['description']}",
+                    "page": "simulator",
+                    "account_id": account_id,
+                    "scenario_name": f"Cancel {review_candidate['description']}",
+                    "expense_adjustment": -float(review_candidate["average_amount"]),
+                }
+            )
+
+        if (
+            not candidate_is_essential
+            and combined_review_cut > float(review_candidate["average_amount"])
+        ):
+            suggested_actions.append(
+                {
+                    "label": "Model review-first recurring cuts",
+                    "page": "simulator",
+                    "account_id": account_id,
+                    "scenario_name": "Review-first recurring cuts",
+                    "expense_adjustment": -combined_review_cut,
+                }
+            )
+
+        suggested_actions.append(
+            {
+                "label": "Open all recurring charges",
+                "page": "transactions",
+                "section": "recurring",
+                "transaction_type": "expense",
+                "account_id": account_id,
+            }
+        )
 
         return {
             "answer": answer,
@@ -2104,44 +2253,7 @@ def generate_assistant_response(
                 driver_category=primary_driver,
                 focus_category=focus_category,
             ),
-            "suggested_actions": [
-                {
-                    "label": f"Review {review_candidate['description']}",
-                    "page": "transactions",
-                    "section": "recurring",
-                    "description": review_candidate["description"],
-                    "category": review_candidate["category"],
-                    "transaction_type": "expense",
-                    "account_id": account_id,
-                },
-                {
-                    "label": f"Model cancelling {review_candidate['description']}",
-                    "page": "simulator",
-                    "account_id": account_id,
-                    "scenario_name": f"Cancel {review_candidate['description']}",
-                    "expense_adjustment": -float(review_candidate["average_amount"]),
-                },
-                *(
-                    [
-                        {
-                            "label": "Model review-first recurring cuts",
-                            "page": "simulator",
-                            "account_id": account_id,
-                            "scenario_name": "Review-first recurring cuts",
-                            "expense_adjustment": -combined_review_cut,
-                        }
-                    ]
-                    if combined_review_cut > float(review_candidate["average_amount"])
-                    else []
-                ),
-                {
-                    "label": "Open all recurring charges",
-                    "page": "transactions",
-                    "section": "recurring",
-                    "transaction_type": "expense",
-                    "account_id": account_id,
-                }
-            ],
+            "suggested_actions": suggested_actions,
             "scope_label": scope_label,
         }
 
@@ -3242,12 +3354,15 @@ def generate_assistant_suggestions(
             suggestions.append("Compare my saved scenarios")
 
     if recurring_expenses:
+        recurring_savings_opportunities = build_recurring_savings_opportunities(recurring_expenses)
         suggestions.append("What subscriptions or recurring charges do I have?")
-        if any(item.get("review_priority") == "high" for item in recurring_expenses):
+        if recurring_savings_opportunities:
             suggestions.append("Which subscriptions should I review first?")
             suggestions.append("What happens if I cancel my biggest subscription?")
             if simulation_recommendations.get("items"):
                 suggestions.append("Which savings scenario should I try first?")
+        elif any(item.get("review_priority") == "high" for item in recurring_expenses):
+            suggestions.append("Which recurring bills should I review first?")
         suggestions.append("Which recurring charge costs me the most each year?")
 
     if simulation_recommendations.get("items"):

@@ -61,6 +61,55 @@ ANALYTICS_CATEGORY_ALIASES = {
     "utilities": {"utility", "utilities"},
 }
 
+ESSENTIAL_RECURRING_CATEGORY_KEYWORDS = {
+    "debt",
+    "education",
+    "housing",
+    "insurance",
+    "internet",
+    "mortgage",
+    "phone",
+    "rent",
+    "tax",
+    "taxes",
+    "tuition",
+    "utilities",
+    "utility",
+}
+
+ESSENTIAL_RECURRING_DESCRIPTION_KEYWORDS = {
+    "bell",
+    "car insurance",
+    "cell",
+    "cellular",
+    "credit card payment",
+    "debt",
+    "electric",
+    "enbridge",
+    "fido",
+    "freedom mobile",
+    "gas bill",
+    "hazelview",
+    "hydro",
+    "insurance",
+    "internet",
+    "koodo",
+    "loan",
+    "minimum payment",
+    "mobile",
+    "mortgage",
+    "phone",
+    "public mobile",
+    "rent",
+    "rogers",
+    "telus",
+    "tuition",
+    "virgin plus",
+    "virgin mobile",
+    "water bill",
+    "wireless",
+}
+
 
 def parse_iso_date(value: str | None) -> date | None:
     if not value:
@@ -1662,6 +1711,32 @@ def get_recurring_expense_patterns(
     )
 
 
+def normalized_text_contains_phrase(text: str, phrase: str) -> bool:
+    normalized_text = f" {normalize_analytics_category(text)} "
+    normalized_phrase = normalize_analytics_category(phrase)
+
+    if not normalized_phrase:
+        return False
+
+    return f" {normalized_phrase} " in normalized_text
+
+
+def is_essential_recurring_item(item: dict[str, Any]) -> bool:
+    category = canonical_analytics_category(item.get("category"))
+    description = str(item.get("description") or "")
+
+    if any(
+        normalized_text_contains_phrase(category, keyword)
+        for keyword in ESSENTIAL_RECURRING_CATEGORY_KEYWORDS
+    ):
+        return True
+
+    return any(
+        normalized_text_contains_phrase(description, keyword)
+        for keyword in ESSENTIAL_RECURRING_DESCRIPTION_KEYWORDS
+    )
+
+
 def build_recurring_savings_opportunities(
     recurring_expenses: list[dict[str, Any]],
     *,
@@ -1671,6 +1746,7 @@ def build_recurring_savings_opportunities(
         item
         for item in recurring_expenses
         if (item.get("average_amount") or 0.0) > 0
+        and not is_essential_recurring_item(item)
     ]
     priority_rank = {"high": 2, "medium": 1, "low": 0}
     opportunities.sort(

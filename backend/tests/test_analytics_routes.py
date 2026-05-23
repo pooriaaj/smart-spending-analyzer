@@ -2491,6 +2491,66 @@ class AnalyticsRouteTest(unittest.TestCase):
             any(action["page"] == "simulator" and action["expense_adjustment"] == -50.0 for action in payload["suggested_actions"])
         )
 
+    def test_assistant_does_not_recommend_canceling_essential_phone_bill(self) -> None:
+        with self.session_local() as session:
+            session.add_all(
+                [
+                    Transaction(
+                        amount=79.78,
+                        category="Phone",
+                        description="VIRGIN PLUS VERDUN QC",
+                        date=date(2026, 1, 24),
+                        type="expense",
+                        owner_id=self.user_id,
+                        account_id=self.chequing_account_id,
+                    ),
+                    Transaction(
+                        amount=79.78,
+                        category="Phone",
+                        description="VIRGIN PLUS VERDUN QC",
+                        date=date(2026, 2, 24),
+                        type="expense",
+                        owner_id=self.user_id,
+                        account_id=self.chequing_account_id,
+                    ),
+                    Transaction(
+                        amount=82.49,
+                        category="Phone",
+                        description="VIRGIN PLUS VERDUN QC",
+                        date=date(2026, 3, 24),
+                        type="expense",
+                        owner_id=self.user_id,
+                        account_id=self.chequing_account_id,
+                    ),
+                ]
+            )
+            session.commit()
+
+        response = self.client.post(
+            "/assistant/response",
+            json={
+                "question": "What happens if I cancel my biggest subscription?",
+                "history": [],
+                "mode": "balanced",
+                "account_id": self.chequing_account_id,
+            },
+        )
+
+        self.assertEqual(response.status_code, 200, response.text)
+        payload = response.json()
+        answer = payload["answer"].lower()
+
+        self.assertIn("virgin plus", answer)
+        self.assertIn("not treat", answer)
+        self.assertIn("review", answer)
+        self.assertNotIn("if you cancel virgin plus", answer)
+        self.assertFalse(
+            any(
+                action["label"].lower().startswith("model cancelling virgin plus")
+                for action in payload["suggested_actions"]
+            )
+        )
+
     def test_assistant_can_recommend_a_savings_scenario(self) -> None:
         with self.session_local() as session:
             session.add_all(

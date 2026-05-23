@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import api, { handleApiAuthError } from "../services/api";
 import AccountSelector from "../components/AccountSelector";
@@ -86,6 +86,15 @@ function formatAssistantChatContent(data, t) {
     .join("\n")}`;
 }
 
+function compactHistoryContent(content) {
+  const text = String(content || "")
+    .replace(/\nDetails I used:[\s\S]*$/i, "")
+    .replace(/\nDétails utilisés :[\s\S]*$/i, "")
+    .trim();
+
+  return text.length > 700 ? `${text.slice(0, 700).trim()}...` : text;
+}
+
 function AssistantPage() {
   const { language, t } = useLanguage();
   const [question, setQuestion] = useState("");
@@ -98,6 +107,7 @@ function AssistantPage() {
   const [clearingHistory, setClearingHistory] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const submittingRef = useRef(false);
 
   const navigate = useNavigate();
   const normalizedAccountId =
@@ -168,16 +178,21 @@ function AssistantPage() {
         )
         .map((message) => ({
           role: message.role,
-          content: message.content,
-        })),
+          content: compactHistoryContent(message.content),
+        }))
+        .filter((message) => message.content.length > 0),
       {
         role: "user",
         content: newQuestion,
       },
-    ].slice(-8);
+    ].slice(-6);
   };
 
   const handleAsk = async () => {
+    if (loading || submittingRef.current) {
+      return;
+    }
+
     const finalQuestion = question.trim();
 
     if (!finalQuestion) {
@@ -190,6 +205,7 @@ function AssistantPage() {
       content: finalQuestion,
     };
 
+    submittingRef.current = true;
     const updatedMessages = [...messages, userMessage];
     setMessages(updatedMessages);
 
@@ -216,9 +232,11 @@ function AssistantPage() {
 
       if (!handleApiAuthError(error, navigate)) {
         setError(getApiErrorMessage(error, t("assistant.responseFailed")));
-        setMessages(updatedMessages);
+        setQuestion(finalQuestion);
+        setMessages(messages);
       }
     } finally {
+      submittingRef.current = false;
       setLoading(false);
     }
   };
