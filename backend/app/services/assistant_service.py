@@ -1368,6 +1368,9 @@ def classify_question(question: str, context_text: str) -> str:
     if is_external_learning_request(text):
         return "education"
 
+    if is_obvious_non_finance_request(text):
+        return "off_topic"
+
     if any(
         phrase in text
         for phrase in [
@@ -1590,9 +1593,6 @@ def classify_question(question: str, context_text: str) -> str:
     if any(word in text for word in ["recent", "latest transactions", "last transactions"]):
         return "recent"
 
-    if is_obvious_non_finance_request(text):
-        return "off_topic"
-
     return "general"
 
 
@@ -1648,37 +1648,71 @@ def is_external_learning_request(text: str) -> bool:
 
 
 def build_external_learning_url(question: str) -> str:
-    query = re.sub(r"\s+", " ", str(question or "").strip())
-    if not query:
-        query = "personal finance basics"
+    query = extract_external_learning_topic(question)
     return f"https://www.youtube.com/results?search_query={quote_plus(query)}"
+
+
+def extract_external_learning_topic(question: str) -> str:
+    text = re.sub(r"\s+", " ", str(question or "").strip())
+    lower_text = text.lower()
+
+    if any(term in lower_text for term in ["cook", "recipe", "recipes", "meal"]):
+        return "beginner cooking recipes"
+
+    topic = lower_text
+    topic = re.sub(r"\b(can you|could you|please|for me|so i can)\b", " ", topic)
+    topic = re.sub(r"\b(send|share|find|give me|some|a few)\b", " ", topic)
+    topic = re.sub(r"\b(youtube|links?|videos?|resources?|articles?|tutorials?)\b", " ", topic)
+    topic = re.sub(r"\b(watch and learn|learn how to|learn to|learn about)\b", " ", topic)
+    topic = re.sub(r"[^a-z0-9\s-]", " ", topic)
+    topic = re.sub(r"\s+", " ", topic).strip()
+
+    return topic or "personal finance basics"
+
+
+def build_external_learning_urls(question: str) -> list[str]:
+    topic = extract_external_learning_topic(question)
+    lower_topic = topic.lower()
+    if "cooking" in lower_topic or "recipe" in lower_topic:
+        queries = [
+            "beginner cooking recipes",
+            "easy healthy weeknight recipes",
+            "basic cooking techniques for beginners",
+        ]
+    else:
+        queries = [
+            topic,
+            f"{topic} beginner guide",
+            f"{topic} tutorial",
+        ]
+
+    return [
+        f"https://www.youtube.com/results?search_query={quote_plus(query)}"
+        for query in queries
+    ]
 
 
 def is_obvious_non_finance_request(text: str) -> bool:
     if not text:
         return False
 
-    finance_terms = [
+    strong_finance_terms = [
         "account",
         "balance",
         "budget",
         "category",
         "charge",
-        "cost",
         "expense",
         "income",
         "merchant",
         "money",
-        "pay",
         "paid",
-        "save",
-        "saving",
         "spend",
         "spent",
         "subscription",
         "transaction",
     ]
-    if any(term in text for term in finance_terms):
+    if any(term in text for term in strong_finance_terms):
         return False
 
     return any(
@@ -3800,12 +3834,13 @@ def generate_assistant_response(
         }
 
     if intent == "education":
-        learning_url = build_external_learning_url(question)
+        learning_urls = build_external_learning_urls(question)
+        learning_links_text = "\n".join(f"- {url}" for url in learning_urls)
         return {
             "answer": (
                 "I am mainly built to help with your money, budgets, transactions, and planning. "
-                "For this kind of broader learning request, start with this YouTube search: "
-                f"{learning_url}"
+                "For this kind of broader learning request, start with these YouTube searches:\n"
+                f"{learning_links_text}"
             ),
             "supporting_points": [
                 "This question is not about your financial data, so I did not use your transactions or budgets.",
@@ -3821,7 +3856,9 @@ def generate_assistant_response(
                 {
                     "label": "Open YouTube search",
                     "page": "external_resource",
-                    "section": learning_url,
+                    "section": extract_external_learning_topic(question),
+                    "action_type": "open_external_resource",
+                    "description": learning_urls[0],
                     "account_id": account_id,
                 }
             ],

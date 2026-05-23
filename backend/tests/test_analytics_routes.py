@@ -1188,9 +1188,12 @@ class AnalyticsRouteTest(unittest.TestCase):
 
         mocked_llm.assert_called_once()
         self.assertNotIn("You do not have any budgets set", payload["answer"])
-        self.assertIn("youtube.com/results?search_query=Can+you+send", payload["answer"])
+        self.assertIn("youtube.com/results?search_query=beginner+cooking+recipes", payload["answer"])
+        self.assertIn("youtube.com/results?search_query=basic+cooking+techniques+for+beginners", payload["answer"])
         self.assertIn("not about your financial data", payload["supporting_points"][0])
         self.assertEqual(payload["suggested_actions"][0]["page"], "external_resource")
+        self.assertEqual(payload["suggested_actions"][0]["action_type"], "open_external_resource")
+        self.assertIn("youtube.com/results?search_query=beginner+cooking+recipes", payload["suggested_actions"][0]["description"])
 
     def test_assistant_resource_question_uses_llm_answer_when_available(self) -> None:
         llm_answer = {
@@ -1256,8 +1259,32 @@ class AnalyticsRouteTest(unittest.TestCase):
         payload = response.json()
 
         mocked_llm.assert_called_once()
-        self.assertIn("youtube.com/results?search_query=Can+you+send+links", payload["answer"])
+        self.assertIn("youtube.com/results?search_query=beginner+cooking+recipes", payload["answer"])
+        self.assertIn("youtube.com/results?search_query=easy+healthy+weeknight+recipes", payload["answer"])
         self.assertEqual(payload["suggested_actions"][0]["page"], "external_resource")
+
+    def test_assistant_recipe_save_question_is_not_treated_as_finance(self) -> None:
+        with patch("app.services.budget_metrics.date", FixedBudgetDate), patch(
+            "app.services.assistant_service.generate_llm_assistant_response",
+            return_value=None,
+        ) as mocked_llm:
+            response = self.client.post(
+                "/assistant/response",
+                json={
+                    "question": "How can I save this pasta recipe?",
+                    "history": [],
+                    "mode": "balanced",
+                    "account_id": None,
+                },
+            )
+
+        self.assertEqual(response.status_code, 200, response.text)
+        payload = response.json()
+
+        mocked_llm.assert_called_once()
+        self.assertIn("mainly built to help with your money", payload["answer"])
+        self.assertIn("does not look related to your financial data", payload["supporting_points"][0])
+        self.assertNotIn("spending", payload["supporting_points"][0].lower())
 
     def test_assistant_off_topic_question_has_safe_rule_based_redirect(self) -> None:
         self.seed_transactions()
