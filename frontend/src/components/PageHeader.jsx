@@ -73,10 +73,6 @@ function PageHeader({
           ))}
         </select>
 
-        <button className="premium-header-button" type="button" onClick={() => navigate("/profile#plans")}>
-          {t("common.viewPremium")}
-        </button>
-
         {actions}
       </div>
     </div>

@@ -2,6 +2,7 @@ import { useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import api, { handleApiAuthError } from "../services/api";
 import AccountSelector from "../components/AccountSelector";
+import PageHeader from "../components/PageHeader";
 import { ALL_ACCOUNTS_VALUE } from "../services/accountStorage";
 import { useLanguage } from "../i18n/LanguageContext";
 import { getApiErrorMessage, getApiSuccessMessage } from "../utils/errorUtils";
@@ -794,27 +795,11 @@ function ImportPage() {
   return (
     <div className="page-container dashboard-page">
       <div className="dashboard-wrapper">
-        <div className="dashboard-hero">
-          <div>
-            <p className="eyebrow-text">{t("common.appName")}</p>
-            <h1>{t("common.smartImport")}</h1>
-            <p className="hero-subtitle">
-              {t("headers.importSubtitle")}
-            </p>
-          </div>
-
-          <div className="header-actions">
-            <button className="secondary-button" onClick={() => navigate("/transactions")}>
-              {t("common.backToTransactions")}
-            </button>
-            <button className="secondary-button" onClick={() => navigate("/dashboard")}>
-              {t("common.dashboard")}
-            </button>
-            <button className="secondary-button" onClick={() => navigate("/money-map")}>
-              {t("common.moneyMap")}
-            </button>
-          </div>
-        </div>
+        <PageHeader
+          icon="UP"
+          titleKey="common.smartImport"
+          subtitleKey="headers.importSubtitle"
+        />
 
         <div className="filter-card">
           <div className="section-header">
@@ -951,9 +936,9 @@ function ImportPage() {
                   <button
                     type="button"
                     className="secondary-button"
-                    onClick={() => navigate("/money-map")}
+                    onClick={() => navigate("/analytics")}
                   >
-                    {t("dashboard.openMoneyMap")}
+                    {t("common.viewAnalytics")}
                   </button>
                   <button
                     type="button"

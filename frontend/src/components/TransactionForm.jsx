@@ -1,8 +1,11 @@
 import { useEffect, useState } from "react";
 import api from "../services/api";
+import AccountSelector from "./AccountSelector";
+import { getSelectedAccountId } from "../services/accountStorage";
 import { useLanguage } from "../i18n/LanguageContext";
 
 function TransactionForm({ onTransactionCreated, editingTransaction, onCancelEdit }) {
+  const [accountId, setAccountId] = useState(getSelectedAccountId());
   const [amount, setAmount] = useState("");
   const [category, setCategory] = useState("");
   const [description, setDescription] = useState("");
@@ -15,6 +18,7 @@ function TransactionForm({ onTransactionCreated, editingTransaction, onCancelEdi
 
   useEffect(() => {
     if (editingTransaction) {
+      setAccountId(editingTransaction.account_id || getSelectedAccountId());
       setAmount(editingTransaction.amount);
       setCategory(editingTransaction.category);
       setDescription(editingTransaction.description);
@@ -73,12 +77,18 @@ function TransactionForm({ onTransactionCreated, editingTransaction, onCancelEdi
     setError("");
 
     try {
+      if (!accountId) {
+        setError(t("transactionForm.accountRequired"));
+        return;
+      }
+
       const payload = {
         amount: parseFloat(amount),
         category,
         description,
         date,
         type,
+        account_id: Number(accountId),
       };
 
       if (editingTransaction) {
@@ -110,6 +120,13 @@ function TransactionForm({ onTransactionCreated, editingTransaction, onCancelEdi
       <h2>{editingTransaction ? t("transactionForm.editTitle") : t("transactionForm.addTitle")}</h2>
 
       <form onSubmit={handleSubmit} className="transaction-form">
+        <AccountSelector
+          value={accountId}
+          onChange={setAccountId}
+          allowAll={false}
+          label={t("common.targetAccount")}
+        />
+
         <input
           type="number"
           step="0.01"

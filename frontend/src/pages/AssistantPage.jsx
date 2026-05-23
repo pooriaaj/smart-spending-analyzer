@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import api, { handleApiAuthError } from "../services/api";
 import AccountSelector from "../components/AccountSelector";
+import PageHeader from "../components/PageHeader";
 import { useLanguage } from "../i18n/LanguageContext";
 import {
   ALL_ACCOUNTS_VALUE,
@@ -423,31 +424,11 @@ function AssistantPage() {
   return (
     <div className="page-container dashboard-page">
       <div className="dashboard-wrapper">
-        <div className="dashboard-hero assistant-hero">
-          <div>
-            <p className="eyebrow-text">{t("common.appName")}</p>
-            <h1>{t("assistant.title")}</h1>
-            <p className="hero-subtitle">
-              {t("headers.assistantSubtitle")}
-            </p>
-          </div>
-
-          <div className="header-actions">
-            <button
-              className="secondary-button"
-              onClick={() => navigate("/analytics")}
-            >
-              {t("common.backToDashboard")}
-            </button>
-
-            <button
-              className="secondary-button"
-              onClick={() => navigate("/analytics")}
-            >
-              {t("common.viewAnalytics")}
-            </button>
-          </div>
-        </div>
+        <PageHeader
+          icon="AI"
+          titleKey="assistant.title"
+          subtitleKey="headers.assistantSubtitle"
+        />
 
         <div className="dashboard-card assistant-chat-shell">
           <div className="assistant-chat-topbar">

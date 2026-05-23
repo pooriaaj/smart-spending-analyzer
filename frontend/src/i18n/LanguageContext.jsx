@@ -1387,7 +1387,7 @@ const translations = {
     },
     transactionForm: {
       editTitle: "Edit Transaction",
-      addTitle: "Add Transaction",
+      addTitle: "Add a transaction manually",
       suggestCategory: "Suggest Category",
       suggesting: "Suggesting...",
       update: "Update Transaction",
@@ -1396,6 +1396,7 @@ const translations = {
       suggestedCategory: "Suggested Category",
       confidence: "Confidence",
       matchedKeyword: "Matched keyword",
+      accountRequired: "Please choose the account this transaction belongs to.",
       descriptionRequired: "Please enter a description before requesting a category suggestion.",
       suggestFailed: "Failed to suggest a category.",
       updateFailed: "Failed to update transaction.",

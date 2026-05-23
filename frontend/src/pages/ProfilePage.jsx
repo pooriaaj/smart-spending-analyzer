@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import api, { handleApiAuthError } from "../services/api";
 import PasswordField from "../components/PasswordField";
+import PageHeader from "../components/PageHeader";
 import { useLanguage } from "../i18n/LanguageContext";
 import { getApiErrorMessage, getApiSuccessMessage } from "../utils/errorUtils";
 
@@ -162,28 +163,17 @@ function ProfilePage() {
   return (
     <div className="page-container dashboard-page">
       <div className="dashboard-wrapper">
-        <div className="dashboard-hero">
-          <div>
-            <p className="eyebrow-text">{t("profile.eyebrow")}</p>
-            <h1>{t("profile.title")}</h1>
-            <p className="hero-subtitle">
-              {t("profile.subtitle")}
-            </p>
-          </div>
-
-          <div className="header-actions">
-            <button
-              className="secondary-button"
-              onClick={() => navigate("/dashboard")}
-            >
-              {t("common.dashboard")}
-            </button>
-
+        <PageHeader
+          icon="PR"
+          eyebrowKey="profile.eyebrow"
+          titleKey="profile.title"
+          subtitleKey="profile.subtitle"
+          actions={(
             <button className="logout-button" onClick={handleLogout}>
               {t("common.logout")}
             </button>
-          </div>
-        </div>
+          )}
+        />
 
         <div className="dashboard-card large-card">
           <div className="section-header">

@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import api, { handleApiAuthError } from "../services/api";
 import AccountSelector from "../components/AccountSelector";
 import PageHeader from "../components/PageHeader";
+import TransactionForm from "../components/TransactionForm";
 import {
   ALL_ACCOUNTS_VALUE,
   getSelectedAccountId,
@@ -682,10 +683,14 @@ function TransactionsPage() {
           subtitleKey="headers.transactionsSubtitle"
           actions={(
             <button className="secondary-button" onClick={() => navigate("/import")}>
-              {t("transactions.reconcileStatement")}
+              {t("common.uploadStatement")}
             </button>
           )}
         />
+
+        <div id="add-transaction">
+          <TransactionForm onTransactionCreated={fetchTransactions} />
+        </div>
 
         <div className="dashboard-card product-guide-card">
           <div className="section-header">
@@ -1206,7 +1211,7 @@ function TransactionsPage() {
                   : t("transactions.filtersHidingTransactions")}
               </p>
               {scopeTransactionTotal === 0 ? (
-                <button className="secondary-button" onClick={() => navigate("/dashboard")}>
+                <button className="secondary-button" onClick={() => document.getElementById("add-transaction")?.scrollIntoView({ behavior: "smooth" })}>
                   {t("transactions.addToday")}
                 </button>
               ) : (
