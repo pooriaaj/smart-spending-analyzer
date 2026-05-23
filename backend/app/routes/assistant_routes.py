@@ -109,7 +109,15 @@ def get_assistant_response_route(
     active_llm_provider = get_active_llm_provider()
     llm_allowed = True
     if active_llm_provider is not None:
-        llm_allowed = assistant_llm_usage_allowed(db, current_user.id)
+        estimated_request_chars = len(payload.question or "") + sum(
+            len(str(item.content or ""))
+            for item in (payload.history or [])
+        )
+        llm_allowed = assistant_llm_usage_allowed(
+            db,
+            current_user.id,
+            estimated_request_chars=estimated_request_chars,
+        )
 
     history = payload.history or get_recent_assistant_history_payload(
         db,
@@ -129,7 +137,7 @@ def get_assistant_response_route(
     )
     if active_llm_provider is not None and not llm_allowed:
         response["supporting_points"] = [
-            "OpenAI daily safety limit reached, so this answer used the safe rule-based fallback.",
+            "Assistant daily safety limit reached, so this answer used the safe rule-based fallback.",
             *response.get("supporting_points", []),
         ][:5]
 

@@ -5,6 +5,7 @@ import re
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.models import AssistantChatMessage, AssistantUsageEvent
@@ -25,6 +26,10 @@ def _bounded_int_env(name: str, default: int, minimum: int, maximum: int) -> int
 
 def assistant_daily_llm_limit() -> int:
     return _bounded_int_env("ASSISTANT_DAILY_LLM_LIMIT", 100, 1, 5000)
+
+
+def assistant_daily_llm_char_limit() -> int:
+    return _bounded_int_env("ASSISTANT_DAILY_LLM_CHAR_LIMIT", 150_000, 1_000, 5_000_000)
 
 
 def _scope_filter(query, account_id: int | None):
@@ -166,24 +171,49 @@ def assistant_usage_window_start() -> datetime:
 
 def get_assistant_usage_status(db: Session, owner_id: int) -> dict[str, int]:
     limit = assistant_daily_llm_limit()
-    used = (
-        db.query(AssistantUsageEvent)
+    char_limit = assistant_daily_llm_char_limit()
+    base_query = db.query(AssistantUsageEvent).filter(
+        AssistantUsageEvent.owner_id == owner_id,
+        AssistantUsageEvent.created_at >= assistant_usage_window_start(),
+    )
+    used = base_query.count()
+    used_chars = (
+        db.query(
+            func.coalesce(
+                func.sum(AssistantUsageEvent.request_chars + AssistantUsageEvent.response_chars),
+                0,
+            )
+        )
         .filter(
             AssistantUsageEvent.owner_id == owner_id,
             AssistantUsageEvent.created_at >= assistant_usage_window_start(),
         )
-        .count()
+        .scalar()
     )
     remaining = max(0, limit - int(used or 0))
+    chars_remaining = max(0, char_limit - int(used_chars or 0))
     return {
         "daily_limit": limit,
         "daily_used": int(used or 0),
         "daily_remaining": remaining,
+        "daily_char_limit": char_limit,
+        "daily_chars_used": int(used_chars or 0),
+        "daily_chars_remaining": chars_remaining,
     }
 
 
-def assistant_llm_usage_allowed(db: Session, owner_id: int) -> bool:
-    return get_assistant_usage_status(db, owner_id)["daily_remaining"] > 0
+def assistant_llm_usage_allowed(
+    db: Session,
+    owner_id: int,
+    *,
+    estimated_request_chars: int = 0,
+) -> bool:
+    status = get_assistant_usage_status(db, owner_id)
+    if status["daily_remaining"] <= 0:
+        return False
+
+    estimated_chars = max(0, int(estimated_request_chars or 0))
+    return status["daily_chars_remaining"] > estimated_chars
 
 
 def record_assistant_usage_event(

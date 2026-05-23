@@ -934,6 +934,9 @@ class AssistantStatusResponse(BaseModel):
     daily_limit: int | None = None
     daily_used: int = 0
     daily_remaining: int | None = None
+    daily_char_limit: int | None = None
+    daily_chars_used: int = 0
+    daily_chars_remaining: int | None = None
 
 
 class AssistantSuggestionsResponse(BaseModel):

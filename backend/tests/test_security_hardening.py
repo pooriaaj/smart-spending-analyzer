@@ -20,7 +20,7 @@ from app import dependencies
 from app.auth import ALGORITHM, SECRET_KEY, create_access_token, hash_password
 from app.database import Base
 from app.dependencies import get_current_user
-from app.models import Account, BudgetPlan, SavedScenario, Transaction, User
+from app.models import Account, AssistantUsageEvent, BudgetPlan, SavedScenario, Transaction, User
 from app.routes import auth_routes
 from app.routes.account_routes import router as account_router
 from app.routes.analytics_routes import router as analytics_router
@@ -229,6 +229,8 @@ class SecurityRouteTest(unittest.TestCase):
         self.assertEqual(payload["fallback_provider"], "rule_based")
         self.assertIn("daily_limit", payload)
         self.assertIn("daily_remaining", payload)
+        self.assertIn("daily_char_limit", payload)
+        self.assertIn("daily_chars_remaining", payload)
         self.assertTrue(any(item["provider"] == "rule_based" for item in payload["providers"]))
 
         response_text = response.text.lower()
@@ -236,6 +238,29 @@ class SecurityRouteTest(unittest.TestCase):
         self.assertNotIn("database_url", response_text)
         self.assertNotIn("postgresql://", response_text)
         self.assertNotIn("bearer ", response_text)
+
+    def test_assistant_status_reports_daily_character_budget(self) -> None:
+        client = self.build_owned_resource_client()
+        with self.session_local() as session:
+            session.add(
+                AssistantUsageEvent(
+                    provider="openai",
+                    request_chars=35,
+                    response_chars=65,
+                    owner_id=self.user_a_id,
+                    created_at=datetime.now(timezone.utc),
+                )
+            )
+            session.commit()
+
+        with patch.dict("os.environ", {"ASSISTANT_DAILY_LLM_CHAR_LIMIT": "1000"}):
+            response = client.get("/assistant/status")
+
+        self.assertEqual(response.status_code, 200, response.text)
+        payload = response.json()
+        self.assertEqual(payload["daily_char_limit"], 1000)
+        self.assertEqual(payload["daily_chars_used"], 100)
+        self.assertEqual(payload["daily_chars_remaining"], 900)
 
     def test_assistant_response_saves_redacted_history(self) -> None:
         client = self.build_owned_resource_client()
@@ -288,6 +313,40 @@ class SecurityRouteTest(unittest.TestCase):
                 "/assistant/response",
                 json={
                     "question": "What is my balance?",
+                    "history": [],
+                    "mode": "balanced",
+                    "account_id": self.account_a_id,
+                },
+            )
+
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertFalse(mocked_llm.called)
+        self.assertTrue(
+            any("daily safety limit" in point for point in response.json()["supporting_points"])
+        )
+
+    def test_assistant_uses_rule_based_fallback_when_daily_char_budget_is_reached(self) -> None:
+        client = self.build_owned_resource_client()
+        with self.session_local() as session:
+            session.add(
+                AssistantUsageEvent(
+                    provider="openai",
+                    request_chars=700,
+                    response_chars=400,
+                    owner_id=self.user_a_id,
+                    created_at=datetime.now(timezone.utc),
+                )
+            )
+            session.commit()
+
+        with patch.dict("os.environ", {"ASSISTANT_DAILY_LLM_CHAR_LIMIT": "1000"}), patch(
+            "app.routes.assistant_routes.get_active_llm_provider",
+            return_value="openai",
+        ), patch("app.services.assistant_service.generate_llm_assistant_response") as mocked_llm:
+            response = client.post(
+                "/assistant/response",
+                json={
+                    "question": "Can you explain my spending?",
                     "history": [],
                     "mode": "balanced",
                     "account_id": self.account_a_id,
