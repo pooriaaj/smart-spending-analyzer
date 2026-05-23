@@ -1528,6 +1528,123 @@ class AnalyticsRouteTest(unittest.TestCase):
         self.assertIn("Google One", payload["answer"])
         self.assertEqual(payload["suggested_actions"][0]["page"], "transactions")
 
+    def test_assistant_merchant_spend_matches_punctuated_descriptions(self) -> None:
+        with self.session_local() as session:
+            session.add_all(
+                [
+                    Transaction(
+                        amount=31.50,
+                        category="groceries",
+                        description="WAL-MART SUPERCENTER",
+                        date=date(2026, 4, 2),
+                        type="expense",
+                        owner_id=self.user_id,
+                        account_id=self.chequing_account_id,
+                    ),
+                    Transaction(
+                        amount=18.75,
+                        category="groceries",
+                        description="Wal Mart Grocery",
+                        date=date(2026, 4, 5),
+                        type="expense",
+                        owner_id=self.user_id,
+                        account_id=self.chequing_account_id,
+                    ),
+                ]
+            )
+            session.commit()
+
+        with patch("app.services.budget_metrics.date", FixedBudgetDate), patch(
+            "app.services.assistant_service.generate_llm_assistant_response",
+            return_value=None,
+        ) as mocked_llm:
+            response = self.client.post(
+                "/assistant/response",
+                json={
+                    "question": "How much did I spend on Walmart?",
+                    "history": [],
+                    "mode": "balanced",
+                    "account_id": self.chequing_account_id,
+                },
+            )
+
+        self.assertEqual(response.status_code, 200, response.text)
+        payload = response.json()
+
+        mocked_llm.assert_not_called()
+        self.assertIn("$50.25", payload["answer"])
+        self.assertIn("2 transaction(s)", payload["answer"])
+        self.assertEqual(payload["suggested_actions"][0]["action_type"], "show_matching_transactions")
+
+    def test_assistant_merchant_spend_no_match_is_explicit(self) -> None:
+        self.seed_transactions()
+
+        with patch("app.services.budget_metrics.date", FixedBudgetDate), patch(
+            "app.services.assistant_service.generate_llm_assistant_response",
+            return_value=None,
+        ) as mocked_llm:
+            response = self.client.post(
+                "/assistant/response",
+                json={
+                    "question": "How much did I spend on Atlantis Market?",
+                    "history": [],
+                    "mode": "balanced",
+                    "account_id": self.chequing_account_id,
+                },
+            )
+
+        self.assertEqual(response.status_code, 200, response.text)
+        payload = response.json()
+
+        mocked_llm.assert_not_called()
+        self.assertIn("could not find any expense transactions", payload["answer"])
+        self.assertIn("No matching expense transaction descriptions were found.", payload["supporting_points"])
+        self.assertEqual(payload["suggested_actions"][0]["page"], "transactions")
+
+    def test_assistant_merchant_spend_followup_uses_previous_merchant(self) -> None:
+        with self.session_local() as session:
+            session.add(
+                Transaction(
+                    amount=12.99,
+                    category="subscriptions",
+                    description="YouTube Premium",
+                    date=date(2026, 4, 7),
+                    type="expense",
+                    owner_id=self.user_id,
+                    account_id=self.chequing_account_id,
+                )
+            )
+            session.commit()
+
+        with patch("app.services.budget_metrics.date", FixedBudgetDate), patch(
+            "app.services.assistant_service.generate_llm_assistant_response",
+            return_value=None,
+        ) as mocked_llm:
+            response = self.client.post(
+                "/assistant/response",
+                json={
+                    "question": "Show me those",
+                    "history": [
+                        {
+                            "role": "assistant",
+                            "content": (
+                                "You spent $12.99 on transactions matching YouTube Premium "
+                                "in Daily Spending (chequing), across 1 transaction(s)."
+                            ),
+                        }
+                    ],
+                    "mode": "balanced",
+                    "account_id": self.chequing_account_id,
+                },
+            )
+
+        self.assertEqual(response.status_code, 200, response.text)
+        payload = response.json()
+
+        mocked_llm.assert_not_called()
+        self.assertIn("YouTube Premium", payload["answer"])
+        self.assertEqual(payload["suggested_actions"][0]["action_type"], "show_matching_transactions")
+
     def test_assistant_response_surfaces_low_data_quality_context(self) -> None:
         with self.session_local() as session:
             session.add(

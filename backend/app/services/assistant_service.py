@@ -707,14 +707,73 @@ def is_merchant_spend_question(question: str) -> bool:
     )
 
 
+def is_merchant_followup_question(question: str) -> bool:
+    normalized_question = normalize_text_for_matching(question)
+    return any(
+        phrase in normalized_question
+        for phrase in [
+            "show me those",
+            "show those",
+            "show them",
+            "show matching transactions",
+            "show those transactions",
+            "open those transactions",
+            "what category is that",
+            "which category is that",
+            "what category was that",
+            "which category was that",
+        ]
+    )
+
+
+def extract_previous_merchant_reference(context_text: str) -> str | None:
+    context = str(context_text or "")
+    patterns = [
+        r"transactions matching\s+(.+?)\s+in\s+",
+        r"Show matching\s+(.+?)\s+transactions",
+    ]
+    for pattern in patterns:
+        matches = re.findall(pattern, context, flags=re.IGNORECASE)
+        if matches:
+            merchant = clean_assistant_learning_piece(matches[-1])
+            return merchant or None
+    return None
+
+
+def get_merchant_text_match_score(question: str, description: str) -> int:
+    normalized_question = normalize_text_for_matching(question)
+    normalized_description = normalize_text_for_matching(description)
+    if not normalized_question or not normalized_description:
+        return 0
+
+    compact_question = normalized_question.replace(" ", "")
+    compact_description = normalized_description.replace(" ", "")
+    if compact_description and compact_description in compact_question:
+        return 120
+    if compact_question and compact_question in compact_description:
+        return 90
+
+    return get_recurring_match_score(question, {"description": description})
+
+
 def build_merchant_spend_snapshot(
     db: Session,
     user_id: int,
     *,
     question: str,
+    context_text: str = "",
     account_id: int | None,
 ) -> dict[str, Any] | None:
+    lookup_text = question
     if not is_merchant_spend_question(question):
+        if not is_merchant_followup_question(question):
+            return None
+        previous_reference = extract_previous_merchant_reference(context_text)
+        if not previous_reference:
+            return None
+        lookup_text = previous_reference
+
+    if not lookup_text:
         return None
 
     query = db.query(Transaction).filter(
@@ -726,7 +785,7 @@ def build_merchant_spend_snapshot(
 
     transactions = query.order_by(Transaction.date.desc(), Transaction.id.desc()).limit(500).all()
     scored_transactions = [
-        (get_recurring_match_score(question, {"description": tx.description}), tx)
+        (get_merchant_text_match_score(lookup_text, str(tx.description or "")), tx)
         for tx in transactions
     ]
     matching_transactions = [tx for score, tx in scored_transactions if score > 0]
@@ -746,6 +805,38 @@ def build_merchant_spend_snapshot(
         "total_amount": sum(float(tx.amount or 0.0) for tx in matching_transactions),
         "transaction_count": len(matching_transactions),
         "recent_transactions": matching_transactions[:3],
+    }
+
+
+def build_merchant_spend_no_match_response(
+    *,
+    question: str,
+    account_id: int | None,
+    scope_label: str,
+) -> dict[str, Any]:
+    return {
+        "answer": (
+            f"I could not find any expense transactions matching that merchant or item in {scope_label}. "
+            "Try checking the spelling, using the exact statement description, or opening transactions to search manually."
+        ),
+        "supporting_points": [
+            f"Search request: {clean_assistant_learning_piece(question)}",
+            f"Current scope: {scope_label}",
+            "No matching expense transaction descriptions were found.",
+        ],
+        "suggested_followups": [
+            "Show my recent transactions",
+            "Which categories need cleanup?",
+            "What did I spend the most on?",
+        ],
+        "suggested_actions": [
+            {
+                "label": "Open transactions",
+                "page": "transactions",
+                "account_id": account_id,
+            }
+        ],
+        "scope_label": scope_label,
     }
 
 
@@ -2345,11 +2436,18 @@ def generate_assistant_response(
         db=db,
         user_id=user_id,
         question=question,
+        context_text=context_text,
         account_id=account_id,
     )
     if merchant_spend_snapshot:
         return build_merchant_spend_response(
             merchant_spend_snapshot,
+            account_id=account_id,
+            scope_label=scope_label,
+        )
+    if is_merchant_spend_question(question):
+        return build_merchant_spend_no_match_response(
+            question=question,
             account_id=account_id,
             scope_label=scope_label,
         )
