@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import secrets
-import json
 import unittest
 from collections.abc import Generator
 from datetime import datetime, timedelta, timezone
@@ -606,21 +605,6 @@ class EmailDeliveryTest(unittest.TestCase):
             )
 
     def test_resend_provider_sends_password_reset_email(self) -> None:
-        captured_requests = []
-
-        class FakeResponse:
-            status = 200
-
-            def __enter__(self):
-                return self
-
-            def __exit__(self, exc_type, exc, traceback):
-                return False
-
-        def fake_urlopen(request, timeout):
-            captured_requests.append((request, timeout))
-            return FakeResponse()
-
         with patch.dict(
             "os.environ",
             {
@@ -630,21 +614,22 @@ class EmailDeliveryTest(unittest.TestCase):
                 "EMAIL_TIMEOUT_SECONDS": "7",
             },
             clear=True,
-        ), patch("app.services.email_service.urllib.request.urlopen", side_effect=fake_urlopen):
+        ), patch("app.services.email_service.httpx.post") as post:
+            post.return_value.status_code = 200
+            post.return_value.text = "{}"
             sent = email_service.send_password_reset_email(
                 "user@example.com",
                 "https://example.com/reset-password?token=abc",
             )
 
         self.assertTrue(sent)
-        request, timeout = captured_requests[0]
-        self.assertEqual(timeout, 7)
-        self.assertEqual(request.full_url, "https://api.resend.com/emails")
-        self.assertEqual(request.headers["Authorization"], "Bearer re_test_key")
-        payload = json.loads(request.data.decode("utf-8"))
-        self.assertEqual(payload["to"], ["user@example.com"])
-        self.assertEqual(payload["from"], "Smart Spending Analyzer <onboarding@resend.dev>")
-        self.assertIn("Reset your Smart Spending Analyzer password", payload["subject"])
+        post.assert_called_once()
+        _, kwargs = post.call_args
+        self.assertEqual(kwargs["timeout"], 7)
+        self.assertEqual(kwargs["headers"]["Authorization"], "Bearer re_test_key")
+        self.assertEqual(kwargs["json"]["to"], ["user@example.com"])
+        self.assertEqual(kwargs["json"]["from"], "Smart Spending Analyzer <onboarding@resend.dev>")
+        self.assertIn("Reset your Smart Spending Analyzer password", kwargs["json"]["subject"])
 
     def test_resend_provider_returns_false_on_delivery_error(self) -> None:
         with patch.dict(
@@ -654,10 +639,7 @@ class EmailDeliveryTest(unittest.TestCase):
                 "RESEND_FROM_EMAIL": "onboarding@resend.dev",
             },
             clear=True,
-        ), patch(
-            "app.services.email_service.urllib.request.urlopen",
-            side_effect=email_service.urllib.error.URLError("offline"),
-        ):
+        ), patch("app.services.email_service.httpx.post", side_effect=email_service.httpx.ConnectError("offline")):
             sent = email_service.send_password_reset_email(
                 "user@example.com",
                 "https://example.com/reset-password?token=abc",

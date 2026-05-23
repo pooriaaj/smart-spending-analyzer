@@ -3,13 +3,11 @@ from __future__ import annotations
 import logging
 import os
 import smtplib
-import urllib.error
-import urllib.request
 from email.message import EmailMessage
 from html import escape
-import json
 from pathlib import Path
 
+import httpx
 from dotenv import load_dotenv
 
 
@@ -132,19 +130,25 @@ def _send_password_reset_email_with_resend(to_email: str, reset_url: str) -> boo
         "text": _password_reset_text(reset_url),
         "html": _password_reset_html(reset_url),
     }
-    request = urllib.request.Request(
-        "https://api.resend.com/emails",
-        data=json.dumps(payload).encode("utf-8"),
-        headers={
-            "Authorization": f"Bearer {api_key}",
-            "Content-Type": "application/json",
-        },
-        method="POST",
-    )
 
     try:
-        with urllib.request.urlopen(request, timeout=timeout_seconds) as response:
-            return 200 <= response.status < 300
-    except (urllib.error.HTTPError, urllib.error.URLError, TimeoutError):
+        response = httpx.post(
+            "https://api.resend.com/emails",
+            json=payload,
+            headers={
+                "Authorization": f"Bearer {api_key}",
+                "Accept": "application/json",
+            },
+            timeout=timeout_seconds,
+        )
+        if 200 <= response.status_code < 300:
+            return True
+        logger.error(
+            "Password reset email could not be sent with Resend. status=%s response=%s",
+            response.status_code,
+            response.text[:500],
+        )
+        return False
+    except httpx.HTTPError:
         logger.exception("Password reset email could not be sent with Resend.")
         return False
