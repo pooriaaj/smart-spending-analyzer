@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import logging
 import secrets
 from datetime import datetime, timedelta, timezone
 import os
@@ -25,6 +26,7 @@ from app.security import is_production
 from app.services.email_service import send_password_reset_email
 
 router = APIRouter(prefix="/auth", tags=["Auth"])
+logger = logging.getLogger(__name__)
 
 
 def get_db():
@@ -106,6 +108,7 @@ def forgot_password(
     generic_message = "If an account with that email exists, reset instructions have been sent."
 
     if not user:
+        logger.info("Password reset requested for an email without an account.")
         return ForgotPasswordResponse(message=generic_message)
 
     raw_token = secrets.token_urlsafe(32)
@@ -115,7 +118,11 @@ def forgot_password(
 
     frontend_url = os.getenv("FRONTEND_URL", "http://localhost:5173").rstrip("/")
     reset_url = f"{frontend_url}/reset-password?token={quote(raw_token)}"
-    send_password_reset_email(user.email, reset_url)
+    email_sent = send_password_reset_email(user.email, reset_url)
+    if email_sent:
+        logger.info("Password reset email sent.")
+    else:
+        logger.warning("Password reset token was created, but the email was not delivered.")
 
     return ForgotPasswordResponse(
         message=generic_message,
