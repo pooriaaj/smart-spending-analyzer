@@ -500,7 +500,11 @@ def resolve_learning_merchant_phrase(
         f"{question}\n{context_text}",
         recurring_expenses,
     )
-    return str(matched_item.get("description") or merchant_phrase) if matched_item else merchant_phrase
+    if matched_item:
+        return str(matched_item.get("description") or merchant_phrase)
+
+    previous_reference = extract_previous_merchant_reference(context_text)
+    return previous_reference or merchant_phrase
 
 
 def build_assistant_merchant_learning_response(
@@ -821,6 +825,10 @@ def build_merchant_spend_snapshot(
         "total_amount": sum(float(tx.amount or 0.0) for tx in matching_transactions),
         "transaction_count": len(matching_transactions),
         "recent_transactions": matching_transactions[:3],
+        "category_totals": {
+            category: sum(float(tx.amount or 0.0) for tx in matching_transactions if tx.category == category)
+            for category in sorted({tx.category for tx in matching_transactions})
+        },
     }
 
 
@@ -829,10 +837,12 @@ def build_merchant_spend_no_match_response(
     question: str,
     account_id: int | None,
     scope_label: str,
+    category_question: bool = False,
 ) -> dict[str, Any]:
+    target = "category" if category_question else "merchant or item"
     return {
         "answer": (
-            f"I could not find any expense transactions matching that merchant or item in {scope_label}. "
+            f"I could not find any expense transactions matching that {target} in {scope_label}. "
             "Try checking the spelling, using the exact statement description, or opening transactions to search manually."
         ),
         "supporting_points": [
@@ -866,6 +876,21 @@ def build_merchant_category_response(
     category = format_category_label(merchant_snapshot.get("category") or "uncategorized")
     total_amount = float(merchant_snapshot["total_amount"] or 0.0)
     transaction_count = int(merchant_snapshot["transaction_count"] or 0)
+    category_totals = merchant_snapshot.get("category_totals") or {}
+    category_lines = sorted(
+        (
+            format_category_label(category_name or "uncategorized"),
+            float(amount or 0.0),
+        )
+        for category_name, amount in category_totals.items()
+    )
+    mixed_category_text = ""
+    if len(category_lines) > 1:
+        breakdown = ", ".join(
+            f"{label}: {format_currency(amount)}"
+            for label, amount in category_lines
+        )
+        mixed_category_text = f" I found more than one category among the matches: {breakdown}."
     fingerprint = extract_merchant_fingerprint(display_name)
     merchant_key = fingerprint[0] if fingerprint else None
 
@@ -873,6 +898,7 @@ def build_merchant_category_response(
         "answer": (
             f"{display_name} is currently categorized as {category} in {scope_label}. "
             f"I found {transaction_count} matching expense transaction(s), totaling {format_currency(total_amount)}."
+            f"{mixed_category_text}"
         ),
         "supporting_points": [
             f"Matched merchant text: {display_name}",
@@ -880,7 +906,14 @@ def build_merchant_category_response(
             f"Matching transactions: {transaction_count}",
             f"Total matched spending: {format_currency(total_amount)}",
             f"Current scope: {scope_label}",
-        ],
+        ][:4] + (
+            [
+                "Category breakdown: "
+                + ", ".join(f"{label} {format_currency(amount)}" for label, amount in category_lines)
+            ]
+            if len(category_lines) > 1
+            else [f"Current scope: {scope_label}"]
+        ),
         "suggested_followups": [
             f"Show matching {display_name} transactions",
             f"Remember {display_name} as a different category",
@@ -2525,11 +2558,12 @@ def generate_assistant_response(
             account_id=account_id,
             scope_label=scope_label,
         )
-    if is_merchant_spend_question(question):
+    if is_merchant_spend_question(question) or is_merchant_category_question(question):
         return build_merchant_spend_no_match_response(
             question=question,
             account_id=account_id,
             scope_label=scope_label,
+            category_question=is_merchant_category_question(question),
         )
 
     if intent == "category_learning_quality":
