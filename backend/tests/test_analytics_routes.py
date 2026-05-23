@@ -2601,6 +2601,56 @@ class AnalyticsRouteTest(unittest.TestCase):
         self.assertIsNotNone(learning_event)
         self.assertEqual(learning_event.category, "shipping")
 
+    def test_assistant_reports_category_learning_cleanup_candidates(self) -> None:
+        with self.session_local() as session:
+            session.add_all(
+                [
+                    Transaction(
+                        amount=8.90,
+                        category="Other",
+                        description="SQDC77068 MTL",
+                        date=date(2026, 3, 16),
+                        type="expense",
+                        owner_id=self.user_id,
+                        account_id=self.chequing_account_id,
+                    ),
+                    Transaction(
+                        amount=12.60,
+                        category="Other",
+                        description="SQDC77068 MTL",
+                        date=date(2026, 3, 20),
+                        type="expense",
+                        owner_id=self.user_id,
+                        account_id=self.chequing_account_id,
+                    ),
+                ]
+            )
+            session.commit()
+
+        response = self.client.post(
+            "/assistant/response",
+            json={
+                "question": "Which categories still need cleanup?",
+                "history": [],
+                "mode": "balanced",
+                "account_id": self.chequing_account_id,
+            },
+        )
+
+        self.assertEqual(response.status_code, 200, response.text)
+        payload = response.json()
+
+        self.assertIn("merchant group", payload["answer"].lower())
+        self.assertIn("Sqdc", payload["answer"])
+        self.assertTrue(any("smoking" in point.lower() for point in payload["supporting_points"]))
+        learning_actions = [
+            item for item in payload["suggested_actions"]
+            if item.get("action_type") == "learn_merchant_category"
+        ]
+        self.assertTrue(learning_actions)
+        self.assertEqual(learning_actions[0]["merchant_key"], "sqdc")
+        self.assertEqual(learning_actions[0]["category"], "smoking")
+
     def test_assistant_can_model_cancelling_biggest_subscription(self) -> None:
         with self.session_local() as session:
             session.add_all(

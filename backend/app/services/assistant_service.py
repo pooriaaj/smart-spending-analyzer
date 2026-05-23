@@ -39,6 +39,8 @@ from app.services.saved_scenario_service import list_saved_scenarios
 from app.services.transaction_service import (
     apply_category_to_merchant_learning_group,
     extract_merchant_fingerprint,
+    get_category_learning_candidates,
+    get_category_learning_summary,
     get_transaction_data_quality_report,
     is_usable_category_name,
     normalize_category_name,
@@ -686,6 +688,134 @@ def build_merchant_context_actions(
     ]
 
 
+def build_category_learning_quality_response(
+    db: Session,
+    user_id: int,
+    *,
+    account_id: int | None,
+    scope_label: str,
+) -> dict[str, Any]:
+    summary = get_category_learning_summary(db, user_id, account_id=account_id)
+    candidates = get_category_learning_candidates(
+        db=db,
+        owner_id=user_id,
+        account_id=account_id,
+        limit=5,
+    )
+
+    candidate_count = int(summary.get("learning_candidate_count") or 0)
+    confidence_level = str(summary.get("confidence_level") or "empty")
+    confidence_score = float(summary.get("confidence_score") or 0.0)
+
+    if summary.get("transaction_count", 0) == 0:
+        return {
+            "answer": (
+                "There is nothing to clean up yet because this scope has no transactions. "
+                "Add daily transactions or import a statement first, then I can find merchant groups to review."
+            ),
+            "supporting_points": [
+                f"Current scope: {scope_label}",
+                "Transactions found: 0",
+            ],
+            "suggested_followups": [
+                "How should I start tracking from today?",
+                "What should I import first?",
+            ],
+            "suggested_actions": [
+                {
+                    "label": "Open smart import",
+                    "page": "import",
+                    "account_id": account_id,
+                }
+            ],
+            "scope_label": scope_label,
+        }
+
+    if not candidates:
+        return {
+            "answer": (
+                f"Category learning looks {confidence_level} in {scope_label}. "
+                "I do not see any merchant groups that urgently need cleanup right now."
+            ),
+            "supporting_points": [
+                f"Learning confidence: {confidence_level} ({confidence_score * 100:.0f}%).",
+                f"Uncategorized transactions: {summary.get('uncategorized_count', 0)}.",
+                f"Confirmed learning events: {summary.get('learning_event_count', 0)}.",
+            ],
+            "suggested_followups": [
+                "Show my top spending categories",
+                "What category changed the most?",
+            ],
+            "suggested_actions": [
+                {
+                    "label": "Open transactions",
+                    "page": "transactions",
+                    "section": "review",
+                    "account_id": account_id,
+                }
+            ],
+            "scope_label": scope_label,
+        }
+
+    lead = candidates[0]
+    answer = (
+        f"I found {candidate_count} merchant group(s) that can improve category accuracy. "
+        f"Start with {lead.display_name}: it appears {lead.transaction_count} time(s), "
+        f"currently shows as {format_category_label(lead.current_category)}, and the app suggests "
+        f"{format_category_label(lead.suggested_category)}."
+    )
+
+    supporting_points = [
+        (
+            f"{item.display_name}: {item.transaction_count} transaction(s), "
+            f"{format_currency(item.total_amount)} total, suggested "
+            f"{format_category_label(item.suggested_category)} ({item.confidence * 100:.0f}% confidence)."
+        )
+        for item in candidates[:5]
+    ]
+    supporting_points.append(
+        f"Learning confidence: {confidence_level} ({confidence_score * 100:.0f}%)."
+    )
+
+    suggested_actions = [
+        {
+            "label": f"Apply {format_category_label(item.suggested_category)} to {item.display_name}",
+            "page": "transactions",
+            "section": "learning",
+            "action_type": "learn_merchant_category",
+            "description": item.display_name,
+            "merchant_key": item.merchant_key,
+            "category": item.suggested_category,
+            "transaction_type": item.type,
+            "account_id": account_id,
+            "representative_amount": item.representative_amount,
+            "confidence": float(item.confidence or 0.0),
+            "reason": item.reason,
+        }
+        for item in candidates[:3]
+    ]
+    suggested_actions.append(
+        {
+            "label": "Open category review",
+            "page": "transactions",
+            "section": "learning",
+            "account_id": account_id,
+        }
+    )
+
+    return {
+        "answer": answer,
+        "supporting_points": supporting_points[:5],
+        "suggested_followups": [
+            f"Teach {lead.display_name} as {format_category_label(lead.suggested_category)}",
+            "Which categories still look weak?",
+            "Show my uncategorized transactions",
+        ],
+        "suggested_actions": suggested_actions[:4],
+        "scope_label": scope_label,
+    }
+
+
 def detect_named_saved_scenarios(
     question: str,
     context_text: str,
@@ -919,6 +1049,25 @@ def classify_question(question: str, context_text: str) -> str:
         parse_one_time_event_amount(text) is not None
         and parse_one_time_event_offset(text) is not None
     )
+
+    if any(
+        phrase in text
+        for phrase in [
+            "category cleanup",
+            "category clean up",
+            "categories still need cleanup",
+            "categories need cleanup",
+            "category needs the most cleanup",
+            "which categories are weak",
+            "which categories still look weak",
+            "uncategorized transactions",
+            "teach merchant categories",
+            "merchant groups need review",
+            "category learning",
+            "learning confidence",
+        ]
+    ):
+        return "category_learning_quality"
 
     if any(
         phrase in text
@@ -1965,6 +2114,15 @@ def generate_assistant_response(
     )
     if learning_response:
         return learning_response
+
+    if intent == "category_learning_quality":
+        return build_category_learning_quality_response(
+            db=db,
+            user_id=user_id,
+            account_id=account_id,
+            scope_label=scope_label,
+        )
+
     simulation_recommendations = (
         build_future_simulation_recommendations(
             db=db,
