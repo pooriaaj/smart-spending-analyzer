@@ -5,18 +5,14 @@ import { LanguageProvider, useLanguage } from "./i18n/LanguageContext";
 
 const LoginPage = lazy(() => import("./pages/LoginPage"));
 const RegisterPage = lazy(() => import("./pages/RegisterPage"));
-const DashboardPage = lazy(() => import("./pages/DashboardPage"));
 const TransactionsPage = lazy(() => import("./pages/TransactionsPage"));
 const AnalyticsPage = lazy(() => import("./pages/AnalyticsPage"));
 const AssistantPage = lazy(() => import("./pages/AssistantPage"));
 const ProfilePage = lazy(() => import("./pages/ProfilePage"));
 const ForgotPasswordPage = lazy(() => import("./pages/ForgotPasswordPage"));
 const ResetPasswordPage = lazy(() => import("./pages/ResetPasswordPage"));
-const AccountsPage = lazy(() => import("./pages/AccountsPage"));
 const ImportPage = lazy(() => import("./pages/ImportPage"));
 const BudgetsPage = lazy(() => import("./pages/BudgetsPage"));
-const SimulatorPage = lazy(() => import("./pages/SimulatorPage"));
-const MoneyMapPage = lazy(() => import("./pages/MoneyMapPage"));
 
 function ProtectedRoute({ children }) {
   const token = localStorage.getItem("token");
@@ -40,7 +36,7 @@ function RouteLoader() {
 
 function PublicHomeRoute() {
   const token = localStorage.getItem("token");
-  return token ? <Navigate to="/dashboard" replace /> : <LoginPage />;
+  return token ? <Navigate to="/analytics" replace /> : <LoginPage />;
 }
 
 function AppRoutes() {
@@ -67,16 +63,16 @@ function AppRoutes() {
           <Route path="/forgot-password" element={<ForgotPasswordPage />} />
           <Route path="/reset-password" element={<ResetPasswordPage />} />
 
-          <Route path="/dashboard" element={<ProtectedRoute><DashboardPage /></ProtectedRoute>} />
+          <Route path="/dashboard" element={<ProtectedRoute><Navigate to="/analytics" replace /></ProtectedRoute>} />
           <Route path="/transactions" element={<ProtectedRoute><TransactionsPage /></ProtectedRoute>} />
           <Route path="/analytics" element={<ProtectedRoute><AnalyticsPage /></ProtectedRoute>} />
           <Route path="/assistant" element={<ProtectedRoute><AssistantPage /></ProtectedRoute>} />
           <Route path="/profile" element={<ProtectedRoute><ProfilePage /></ProtectedRoute>} />
-          <Route path="/accounts" element={<ProtectedRoute><AccountsPage /></ProtectedRoute>} />
+          <Route path="/accounts" element={<ProtectedRoute><Navigate to="/profile" replace /></ProtectedRoute>} />
           <Route path="/import" element={<ProtectedRoute><ImportPage /></ProtectedRoute>} />
-          <Route path="/money-map" element={<ProtectedRoute><MoneyMapPage /></ProtectedRoute>} />
+          <Route path="/money-map" element={<ProtectedRoute><Navigate to="/analytics" replace /></ProtectedRoute>} />
           <Route path="/budgets" element={<ProtectedRoute><BudgetsPage /></ProtectedRoute>} />
-          <Route path="/simulator" element={<ProtectedRoute><SimulatorPage /></ProtectedRoute>} />
+          <Route path="/simulator" element={<ProtectedRoute><Navigate to="/budgets" replace /></ProtectedRoute>} />
         </Routes>
       </Suspense>
     </BrowserRouter>

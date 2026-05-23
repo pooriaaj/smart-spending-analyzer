@@ -123,13 +123,15 @@ function buildAssistantActionUrl(action) {
     analytics: "/analytics",
     assistant: "/assistant",
     budgets: "/budgets",
-    dashboard: "/dashboard",
-    simulator: "/simulator",
+    dashboard: "/analytics",
+    simulator: "/budgets",
+    "money-map": "/analytics",
+    accounts: "/profile",
     transactions: "/transactions",
   };
   const query = params.toString();
 
-  return `${routeMap[action?.page] || "/dashboard"}${query ? `?${query}` : ""}`;
+  return `${routeMap[action?.page] || "/analytics"}${query ? `?${query}` : ""}`;
 }
 
 function AssistantMessageDetails({ message, onFollowup, onAction, t }) {
@@ -433,7 +435,7 @@ function AssistantPage() {
           <div className="header-actions">
             <button
               className="secondary-button"
-              onClick={() => navigate("/dashboard")}
+              onClick={() => navigate("/analytics")}
             >
               {t("common.backToDashboard")}
             </button>

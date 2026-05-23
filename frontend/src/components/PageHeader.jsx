@@ -2,15 +2,11 @@ import { useNavigate } from "react-router-dom";
 import { useLanguage } from "../i18n/LanguageContext";
 
 const APP_DESTINATIONS = [
-  { labelKey: "common.dashboard", path: "/dashboard" },
-  { labelKey: "common.transactions", path: "/transactions" },
-  { labelKey: "common.smartImport", path: "/import" },
-  { labelKey: "common.moneyMap", path: "/money-map" },
   { labelKey: "common.analytics", path: "/analytics" },
+  { labelKey: "common.smartImport", path: "/import" },
+  { labelKey: "common.transactions", path: "/transactions" },
   { labelKey: "common.budgets", path: "/budgets" },
-  { labelKey: "common.simulator", path: "/simulator" },
   { labelKey: "common.assistant", path: "/assistant" },
-  { labelKey: "common.accounts", path: "/accounts" },
   { labelKey: "common.profileSettings", path: "/profile" },
 ];
 

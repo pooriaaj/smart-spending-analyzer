@@ -24,7 +24,7 @@ function LoginPage() {
   useEffect(() => {
     const token = localStorage.getItem("token");
     if (token) {
-      navigate("/dashboard", { replace: true });
+      navigate("/analytics", { replace: true });
     }
   }, [navigate]);
 
@@ -44,7 +44,7 @@ function LoginPage() {
       });
 
       localStorage.setItem("token", response.data.access_token);
-      navigate("/dashboard", { replace: true });
+      navigate("/analytics", { replace: true });
     } catch {
       setError(t("auth.loginFailed"));
     }
