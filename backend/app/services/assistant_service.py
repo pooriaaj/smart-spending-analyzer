@@ -1310,6 +1310,14 @@ def is_external_learning_request(text: str) -> bool:
     return any(
         phrase in text
         for phrase in [
+            "send link",
+            "send links",
+            "share link",
+            "share links",
+            "links for",
+            "videos for",
+            "video about",
+            "videos about",
             "youtube link",
             "youtube links",
             "youtube video",

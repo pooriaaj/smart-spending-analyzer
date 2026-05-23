@@ -1237,6 +1237,28 @@ class AnalyticsRouteTest(unittest.TestCase):
         self.assertEqual(payload["suggested_actions"][0]["label"], "Open cooking videos")
         self.assertEqual(payload["suggested_actions"][0]["page"], "external_resource")
 
+    def test_assistant_generic_link_request_gets_external_resource_fallback(self) -> None:
+        with patch("app.services.budget_metrics.date", FixedBudgetDate), patch(
+            "app.services.assistant_service.generate_llm_assistant_response",
+            return_value=None,
+        ) as mocked_llm:
+            response = self.client.post(
+                "/assistant/response",
+                json={
+                    "question": "Can you send links for beginner cooking recipes?",
+                    "history": [],
+                    "mode": "balanced",
+                    "account_id": None,
+                },
+            )
+
+        self.assertEqual(response.status_code, 200, response.text)
+        payload = response.json()
+
+        mocked_llm.assert_called_once()
+        self.assertIn("youtube.com/results?search_query=Can+you+send+links", payload["answer"])
+        self.assertEqual(payload["suggested_actions"][0]["page"], "external_resource")
+
     def test_assistant_off_topic_question_has_safe_rule_based_redirect(self) -> None:
         self.seed_transactions()
 
@@ -1266,6 +1288,35 @@ class AnalyticsRouteTest(unittest.TestCase):
         self.assertIn("mainly built to help with your money", payload["answer"])
         self.assertIn("does not look related to your financial data", payload["supporting_points"][0])
         self.assertNotIn("Your balance is", payload["answer"])
+
+    def test_assistant_weather_question_has_safe_rule_based_redirect(self) -> None:
+        self.seed_transactions()
+
+        with patch("app.services.budget_metrics.date", FixedBudgetDate), patch(
+            "app.services.assistant_service.generate_llm_assistant_response",
+            return_value=None,
+        ) as mocked_llm:
+            response = self.client.post(
+                "/assistant/response",
+                json={
+                    "question": "What is the weather tomorrow?",
+                    "history": [
+                        {
+                            "role": "assistant",
+                            "content": "Your budgets are on track this month.",
+                        },
+                    ],
+                    "mode": "balanced",
+                    "account_id": self.chequing_account_id,
+                },
+            )
+
+        self.assertEqual(response.status_code, 200, response.text)
+        payload = response.json()
+
+        mocked_llm.assert_called_once()
+        self.assertIn("mainly built to help with your money", payload["answer"])
+        self.assertNotIn("budgets are on track", payload["answer"].lower())
 
     def test_assistant_off_topic_question_uses_llm_answer_when_available(self) -> None:
         llm_answer = {
@@ -1302,6 +1353,78 @@ class AnalyticsRouteTest(unittest.TestCase):
         mocked_llm.assert_called_once()
         self.assertEqual(payload["answer"], llm_answer["answer"])
         self.assertEqual(payload["suggested_actions"], [])
+
+    def test_assistant_finance_question_with_cooking_term_stays_financial(self) -> None:
+        with self.session_local() as session:
+            session.add(
+                Transaction(
+                    amount=44.0,
+                    category="education",
+                    description="Cooking class",
+                    date=date(2026, 4, 11),
+                    type="expense",
+                    owner_id=self.user_id,
+                    account_id=self.chequing_account_id,
+                )
+            )
+            session.commit()
+
+        with patch("app.services.budget_metrics.date", FixedBudgetDate), patch(
+            "app.services.assistant_service.generate_llm_assistant_response",
+            return_value=None,
+        ) as mocked_llm:
+            response = self.client.post(
+                "/assistant/response",
+                json={
+                    "question": "How much did I spend on cooking classes?",
+                    "history": [],
+                    "mode": "balanced",
+                    "account_id": self.chequing_account_id,
+                },
+            )
+
+        self.assertEqual(response.status_code, 200, response.text)
+        payload = response.json()
+
+        mocked_llm.assert_called_once()
+        self.assertNotIn("mainly built to help with your money", payload["answer"])
+        self.assertNotEqual(payload["suggested_actions"], [])
+
+    def test_assistant_finance_question_with_programming_term_stays_financial(self) -> None:
+        with self.session_local() as session:
+            session.add(
+                Transaction(
+                    amount=29.0,
+                    category="education",
+                    description="Python course",
+                    date=date(2026, 4, 12),
+                    type="expense",
+                    owner_id=self.user_id,
+                    account_id=self.chequing_account_id,
+                )
+            )
+            session.commit()
+
+        with patch("app.services.budget_metrics.date", FixedBudgetDate), patch(
+            "app.services.assistant_service.generate_llm_assistant_response",
+            return_value=None,
+        ) as mocked_llm:
+            response = self.client.post(
+                "/assistant/response",
+                json={
+                    "question": "How much did I spend on Python courses?",
+                    "history": [],
+                    "mode": "balanced",
+                    "account_id": self.chequing_account_id,
+                },
+            )
+
+        self.assertEqual(response.status_code, 200, response.text)
+        payload = response.json()
+
+        mocked_llm.assert_called_once()
+        self.assertNotIn("mainly built to help with your money", payload["answer"])
+        self.assertNotEqual(payload["suggested_actions"], [])
 
     def test_assistant_review_path_has_rule_based_answer_without_llm(self) -> None:
         self.seed_transactions()
