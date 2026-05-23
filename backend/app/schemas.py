@@ -879,16 +879,21 @@ class AssistantAction(BaseModel):
     label: str
     page: str
     section: str | None = None
+    action_type: str | None = None
     scenario_name: str | None = None
     saved_scenario_id: int | None = None
     compare_saved_scenario_id: int | None = None
     category: str | None = None
     description: str | None = None
+    merchant_key: str | None = None
     transaction_type: str | None = None
     month: str | None = None
     months_ahead: int | None = None
     account_id: int | None = None
     amount: float | None = None
+    representative_amount: float | None = None
+    confidence: float | None = None
+    reason: str | None = None
     target_balance: float | None = None
     income_adjustment: float | None = None
     expense_adjustment: float | None = None

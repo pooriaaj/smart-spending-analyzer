@@ -13,7 +13,15 @@ from sqlalchemy.pool import StaticPool
 
 from app.database import Base
 from app.dependencies import get_current_user, get_db
-from app.models import Account, BudgetPlan, MerchantCategoryProfile, SavedScenario, Transaction, User
+from app.models import (
+    Account,
+    BudgetPlan,
+    CategoryLearningEvent,
+    MerchantCategoryProfile,
+    SavedScenario,
+    Transaction,
+    User,
+)
 from app.routes.analytics_routes import router as analytics_router
 from app.routes.assistant_routes import router as assistant_router
 
@@ -89,6 +97,7 @@ class AnalyticsRouteTest(unittest.TestCase):
             session.query(SavedScenario).delete()
             session.query(Transaction).delete()
             session.query(BudgetPlan).delete()
+            session.query(CategoryLearningEvent).delete()
             session.query(MerchantCategoryProfile).delete()
             session.commit()
 
@@ -2506,6 +2515,91 @@ class AnalyticsRouteTest(unittest.TestCase):
                 for item in llm_kwargs["recurring_expenses"]
             )
         )
+        action_types = {item.get("action_type") for item in payload["suggested_actions"]}
+        self.assertIn("show_matching_transactions", action_types)
+        self.assertIn("learn_merchant_category", action_types)
+
+    def test_assistant_can_learn_merchant_category_from_chat(self) -> None:
+        with self.session_local() as session:
+            session.add_all(
+                [
+                    Transaction(
+                        amount=4.96,
+                        category="Other",
+                        description="THE UPS STORE #",
+                        date=date(2026, 1, 10),
+                        type="expense",
+                        owner_id=self.user_id,
+                        account_id=self.chequing_account_id,
+                    ),
+                    Transaction(
+                        amount=5.29,
+                        category="Other",
+                        description="THE UPS STORE #",
+                        date=date(2026, 2, 10),
+                        type="expense",
+                        owner_id=self.user_id,
+                        account_id=self.chequing_account_id,
+                    ),
+                    Transaction(
+                        amount=6.29,
+                        category="Other",
+                        description="THE UPS STORE #",
+                        date=date(2026, 3, 10),
+                        type="expense",
+                        owner_id=self.user_id,
+                        account_id=self.chequing_account_id,
+                    ),
+                ]
+            )
+            session.commit()
+
+        response = self.client.post(
+            "/assistant/response",
+            json={
+                "question": "Please remember that THE UPS STORE is shipping?",
+                "history": [],
+                "mode": "balanced",
+                "account_id": self.chequing_account_id,
+            },
+        )
+
+        self.assertEqual(response.status_code, 200, response.text)
+        payload = response.json()
+        self.assertIn("remember", payload["answer"].lower())
+        self.assertTrue(
+            any(
+                item.get("action_type") == "show_matching_transactions"
+                for item in payload["suggested_actions"]
+            )
+        )
+
+        with self.session_local() as session:
+            categories = {
+                category
+                for (category,) in session.query(Transaction.category)
+                .filter(Transaction.description == "THE UPS STORE #")
+                .all()
+            }
+            profile = (
+                session.query(MerchantCategoryProfile)
+                .filter(
+                    MerchantCategoryProfile.owner_id == self.user_id,
+                    MerchantCategoryProfile.merchant_key == "the ups store",
+                )
+                .first()
+            )
+            learning_event = (
+                session.query(CategoryLearningEvent)
+                .filter(CategoryLearningEvent.owner_id == self.user_id)
+                .first()
+            )
+
+        self.assertEqual(categories, {"shipping"})
+        self.assertIsNotNone(profile)
+        self.assertEqual(profile.category, "shipping")
+        self.assertIsNotNone(learning_event)
+        self.assertEqual(learning_event.category, "shipping")
 
     def test_assistant_can_model_cancelling_biggest_subscription(self) -> None:
         with self.session_local() as session:

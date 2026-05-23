@@ -36,7 +36,16 @@ from app.services.assistant_guard_service import (
 from app.services.budget_metrics import build_budget_action_insights, get_default_budget_month
 from app.services.llm_service import generate_llm_assistant_response
 from app.services.saved_scenario_service import list_saved_scenarios
-from app.services.transaction_service import get_transaction_data_quality_report
+from app.services.transaction_service import (
+    apply_category_to_merchant_learning_group,
+    extract_merchant_fingerprint,
+    get_transaction_data_quality_report,
+    is_usable_category_name,
+    normalize_category_name,
+    record_category_learning_event,
+    save_category_memory,
+    should_store_category_memory,
+)
 
 
 def build_data_quality_supporting_point(data_quality: dict[str, Any]) -> str | None:
@@ -382,6 +391,299 @@ def build_recurring_review_phrase(item: dict[str, Any]) -> str:
             "cancel target. Review the plan, usage, contract, or provider instead."
         )
     return "This looks discretionary enough to review, reduce, or cancel if you no longer use it."
+
+
+ASSISTANT_LEARNING_PATTERNS = [
+    re.compile(
+        r"^(?:(?:please|can you|could you)\s+)?"
+        r"(?:learn|remember)\s+(?:that\s+)?(?P<merchant>.+?)\s+"
+        r"(?:is|are|means|should be|goes under|goes to|as)\s+"
+        r"(?P<category>[a-z][a-z0-9 &/_-]{1,80})$",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"^(?:categorize|classify|mark)\s+(?P<merchant>.+?)\s+as\s+"
+        r"(?P<category>[a-z][a-z0-9 &/_-]{1,80})$",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"^(?P<merchant>[a-z0-9][a-z0-9 &'.#*_-]{2,100})\s+"
+        r"(?:is|are|means|=)\s+(?P<category>[a-z][a-z0-9 &/_-]{1,80})$",
+        re.IGNORECASE,
+    ),
+]
+
+ASSISTANT_LEARNING_PRONOUNS = {
+    "it",
+    "that",
+    "this",
+    "this one",
+    "that one",
+    "merchant",
+    "the merchant",
+}
+ASSISTANT_LEARNING_REJECT_TERMS = {
+    "how",
+    "what",
+    "when",
+    "where",
+    "which",
+    "why",
+    "who",
+}
+
+
+def clean_assistant_learning_piece(value: str) -> str:
+    cleaned = re.sub(r"^[\"'`]+|[\"'`.!?]+$", "", str(value or "").strip())
+    cleaned = re.sub(r"\s+", " ", cleaned)
+    return cleaned.strip()
+
+
+def parse_assistant_merchant_learning_request(question: str) -> dict[str, str] | None:
+    text = clean_assistant_learning_piece(question)
+    if not text:
+        return None
+
+    for pattern in ASSISTANT_LEARNING_PATTERNS:
+        match = pattern.match(text)
+        if not match:
+            continue
+
+        merchant = clean_assistant_learning_piece(match.group("merchant"))
+        category = clean_assistant_learning_piece(match.group("category"))
+        category = re.sub(
+            r"^(?:a|an|the|for|category)\s+",
+            "",
+            category,
+            flags=re.IGNORECASE,
+        ).strip()
+
+        if not merchant or not category:
+            return None
+
+        normalized_merchant = normalize_text_for_matching(merchant)
+        normalized_category = normalize_category_name(category)
+        merchant_first_token = normalized_merchant.split(" ", 1)[0] if normalized_merchant else ""
+        if (
+            normalized_merchant in ASSISTANT_LEARNING_REJECT_TERMS
+            or merchant_first_token in ASSISTANT_LEARNING_REJECT_TERMS
+        ):
+            return None
+        if not should_store_category_memory(normalized_category) or not is_usable_category_name(
+            normalized_category
+        ):
+            return None
+
+        return {
+            "merchant": merchant,
+            "category": normalized_category,
+            "type": "expense",
+        }
+
+    return None
+
+
+def resolve_learning_merchant_phrase(
+    merchant_phrase: str,
+    question: str,
+    context_text: str,
+    recurring_expenses: list[dict[str, Any]],
+) -> str:
+    normalized_merchant = normalize_text_for_matching(merchant_phrase)
+    if normalized_merchant not in ASSISTANT_LEARNING_PRONOUNS:
+        return merchant_phrase
+
+    matched_item = find_recurring_item_from_question(
+        f"{question}\n{context_text}",
+        recurring_expenses,
+    )
+    return str(matched_item.get("description") or merchant_phrase) if matched_item else merchant_phrase
+
+
+def build_assistant_merchant_learning_response(
+    db: Session,
+    user_id: int,
+    *,
+    question: str,
+    context_text: str,
+    recurring_expenses: list[dict[str, Any]],
+    account_id: int | None,
+    scope_label: str,
+) -> dict[str, Any] | None:
+    learning_request = parse_assistant_merchant_learning_request(question)
+    if not learning_request:
+        return None
+
+    merchant_phrase = resolve_learning_merchant_phrase(
+        learning_request["merchant"],
+        question,
+        context_text,
+        recurring_expenses,
+    )
+    fingerprint = extract_merchant_fingerprint(merchant_phrase)
+    if not fingerprint:
+        return {
+            "answer": (
+                "I could not safely identify the merchant name in that correction. "
+                "Try writing it like: 'THE UPS STORE is shipping'."
+            ),
+            "supporting_points": [
+                "No reliable merchant fingerprint was found.",
+                f"Current scope: {scope_label}",
+            ],
+            "suggested_followups": [
+                "Show my uncategorized transactions",
+                "Which category needs the most cleanup?",
+            ],
+            "suggested_actions": [],
+            "scope_label": scope_label,
+        }
+
+    merchant_key, display_name = fingerprint
+    category = learning_request["category"]
+    tx_type = learning_request["type"]
+    representative_amount = None
+    matched_item = find_recurring_item_from_question(
+        f"{merchant_phrase}\n{question}\n{context_text}",
+        recurring_expenses,
+    )
+    if matched_item:
+        representative_amount = matched_item.get("average_amount") or matched_item.get("latest_amount")
+
+    result = apply_category_to_merchant_learning_group(
+        db=db,
+        owner_id=user_id,
+        merchant_key=merchant_key,
+        tx_type=tx_type,
+        category=category,
+        account_id=account_id,
+        representative_amount=representative_amount,
+    )
+
+    if result["matched_count"] == 0:
+        memory_stats = save_category_memory(
+            db=db,
+            owner_id=user_id,
+            description=merchant_phrase,
+            category=category,
+            tx_type=tx_type,
+            amount=representative_amount,
+        )
+        event_recorded = record_category_learning_event(
+            db=db,
+            owner_id=user_id,
+            description=merchant_phrase,
+            category=category,
+            tx_type=tx_type,
+            amount=representative_amount,
+            account_id=account_id,
+            signal_source="assistant_learning",
+            confidence=0.98,
+            affected_count=1,
+        )
+        db.commit()
+        result = {
+            **result,
+            "memory_entries_created": memory_stats["created"],
+            "memory_entries_updated": memory_stats["updated"],
+            "learning_event_recorded": event_recorded,
+        }
+
+    category_label = format_category_label(category)
+    answer = (
+        f"Got it. I will remember {display_name} as {category_label} for your future {tx_type} transactions."
+    )
+    if result["updated_count"] > 0:
+        answer += f" I also updated {result['updated_count']} matching transaction(s) now."
+    elif result["matched_count"] > 0:
+        answer += " Matching transactions already had that category, so I reinforced the memory."
+    else:
+        answer += " I saved the merchant memory even though there were no matching transactions to update right now."
+
+    return {
+        "answer": answer,
+        "supporting_points": [
+            f"Merchant learned: {display_name}",
+            f"Saved category: {category_label}",
+            f"Matching transactions found: {result['matched_count']}",
+        ],
+        "suggested_followups": [
+            f"Show matching {display_name} transactions",
+            "Which categories still need cleanup?",
+        ],
+        "suggested_actions": [
+            {
+                "label": f"Show matching {display_name} transactions",
+                "page": "transactions",
+                "section": "merchant",
+                "action_type": "show_matching_transactions",
+                "description": display_name,
+                "merchant_key": merchant_key,
+                "category": category,
+                "transaction_type": tx_type,
+                "account_id": account_id,
+                "representative_amount": representative_amount,
+                "confidence": 0.98,
+                "reason": "User taught the assistant this merchant category.",
+            }
+        ],
+        "scope_label": scope_label,
+    }
+
+
+def build_merchant_context_actions(
+    question: str,
+    context_text: str,
+    recurring_expenses: list[dict[str, Any]],
+    account_id: int | None,
+) -> list[dict[str, Any]]:
+    matched_item = find_recurring_item_from_question(
+        f"{question}\n{context_text}",
+        recurring_expenses,
+    )
+    if not matched_item:
+        return []
+
+    description = str(matched_item.get("description") or "").strip()
+    fingerprint = extract_merchant_fingerprint(description)
+    if not fingerprint:
+        return []
+
+    merchant_key, display_name = fingerprint
+    category = normalize_category_name(matched_item.get("category"))
+    tx_type = str(matched_item.get("type") or "expense")
+    representative_amount = matched_item.get("average_amount") or matched_item.get("latest_amount")
+
+    return [
+        {
+            "label": f"Show matching {display_name} transactions",
+            "page": "transactions",
+            "section": "merchant",
+            "action_type": "show_matching_transactions",
+            "description": description,
+            "merchant_key": merchant_key,
+            "category": category,
+            "transaction_type": tx_type,
+            "account_id": account_id,
+            "representative_amount": representative_amount,
+            "confidence": float(matched_item.get("confidence") or 0.0),
+            "reason": "Matched the merchant being discussed in the assistant chat.",
+        },
+        {
+            "label": f"Teach category for {display_name}",
+            "page": "transactions",
+            "section": "learning",
+            "action_type": "learn_merchant_category",
+            "description": description,
+            "merchant_key": merchant_key,
+            "category": category,
+            "transaction_type": tx_type,
+            "account_id": account_id,
+            "representative_amount": representative_amount,
+            "confidence": float(matched_item.get("confidence") or 0.0),
+            "reason": "Use this when the assistant's category is wrong and you want similar transactions updated.",
+        },
+    ]
 
 
 def detect_named_saved_scenarios(
@@ -1392,6 +1694,7 @@ def build_llm_response_payload(
     current_month: str | None,
     account_id: int | None,
     scope_label: str,
+    extra_actions: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     suggested_actions: list[dict[str, Any]] = []
 
@@ -1465,7 +1768,7 @@ def build_llm_response_payload(
         "answer": llm_result["answer"],
         "supporting_points": llm_result.get("supporting_points", []),
         "suggested_followups": llm_result.get("suggested_followups", []),
-        "suggested_actions": suggested_actions,
+        "suggested_actions": [*suggested_actions, *(extra_actions or [])][:4],
         "scope_label": scope_label,
     }
 
@@ -1615,10 +1918,12 @@ def generate_assistant_response(
         if intent in {"saved_scenario_list", "saved_scenario_compare"} or likely_saved_scenario_question
         else []
     )
-    needs_recurring_context = intent in {"recurring_expenses", "saving_advice"} or (
+    learning_request = parse_assistant_merchant_learning_request(question)
+    needs_recurring_context = bool(learning_request) or intent in {"recurring_expenses", "saving_advice"} or (
         llm_allowed
         and any(
             phrase in q
+            or phrase in normalize_text_for_matching(context_text)
             for phrase in [
                 "what is",
                 "what's",
@@ -1643,6 +1948,23 @@ def generate_assistant_response(
         if needs_recurring_context
         else []
     )
+    merchant_context_actions = build_merchant_context_actions(
+        question=question,
+        context_text=context_text,
+        recurring_expenses=recurring_expenses,
+        account_id=account_id,
+    )
+    learning_response = build_assistant_merchant_learning_response(
+        db=db,
+        user_id=user_id,
+        question=question,
+        context_text=context_text,
+        recurring_expenses=recurring_expenses,
+        account_id=account_id,
+        scope_label=scope_label,
+    )
+    if learning_response:
+        return learning_response
     simulation_recommendations = (
         build_future_simulation_recommendations(
             db=db,
@@ -1689,6 +2011,7 @@ def generate_assistant_response(
                 current_month=current_month,
                 account_id=account_id,
                 scope_label=scope_label,
+                extra_actions=merchant_context_actions,
             )
 
         # The LLM was already attempted. Keep the rest of this request on the
@@ -2863,7 +3186,7 @@ def generate_assistant_response(
             "answer": llm_result["answer"],
             "supporting_points": llm_result["supporting_points"],
             "suggested_followups": followups,
-            "suggested_actions": suggested_actions,
+            "suggested_actions": [*suggested_actions, *merchant_context_actions][:4],
             "scope_label": scope_label,
         }
 
