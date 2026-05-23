@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import secrets
+import json
 import unittest
 from collections.abc import Generator
 from datetime import datetime, timedelta, timezone
@@ -34,6 +35,7 @@ from app.security import (
     get_allowed_origins,
 )
 from app.services import llm_service
+from app.services import email_service
 from app.services.assistant_service import generate_assistant_response
 from app.services.llm_service import ANSWER_MAX_CHARS, build_finance_prompt, parse_llm_response
 from app.services import vision_ocr_service
@@ -590,6 +592,78 @@ class AuthSecurityTest(unittest.TestCase):
         payload = {"token": raw_token, "new_password": "BetterPass1"}
         self.assertEqual(client.post("/auth/reset-password", json=payload).status_code, 200)
         self.assertEqual(client.post("/auth/reset-password", json=payload).status_code, 400)
+
+
+class EmailDeliveryTest(unittest.TestCase):
+    def test_email_is_not_configured_without_provider_settings(self) -> None:
+        with patch.dict("os.environ", {}, clear=True):
+            self.assertFalse(email_service.password_reset_email_is_configured())
+            self.assertFalse(
+                email_service.send_password_reset_email(
+                    "user@example.com",
+                    "https://example.com/reset-password?token=abc",
+                )
+            )
+
+    def test_resend_provider_sends_password_reset_email(self) -> None:
+        captured_requests = []
+
+        class FakeResponse:
+            status = 200
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, exc_type, exc, traceback):
+                return False
+
+        def fake_urlopen(request, timeout):
+            captured_requests.append((request, timeout))
+            return FakeResponse()
+
+        with patch.dict(
+            "os.environ",
+            {
+                "RESEND_API_KEY": "re_test_key",
+                "RESEND_FROM_EMAIL": "onboarding@resend.dev",
+                "EMAIL_FROM_NAME": "Smart Spending Analyzer",
+                "EMAIL_TIMEOUT_SECONDS": "7",
+            },
+            clear=True,
+        ), patch("app.services.email_service.urllib.request.urlopen", side_effect=fake_urlopen):
+            sent = email_service.send_password_reset_email(
+                "user@example.com",
+                "https://example.com/reset-password?token=abc",
+            )
+
+        self.assertTrue(sent)
+        request, timeout = captured_requests[0]
+        self.assertEqual(timeout, 7)
+        self.assertEqual(request.full_url, "https://api.resend.com/emails")
+        self.assertEqual(request.headers["Authorization"], "Bearer re_test_key")
+        payload = json.loads(request.data.decode("utf-8"))
+        self.assertEqual(payload["to"], ["user@example.com"])
+        self.assertEqual(payload["from"], "Smart Spending Analyzer <onboarding@resend.dev>")
+        self.assertIn("Reset your Smart Spending Analyzer password", payload["subject"])
+
+    def test_resend_provider_returns_false_on_delivery_error(self) -> None:
+        with patch.dict(
+            "os.environ",
+            {
+                "RESEND_API_KEY": "re_test_key",
+                "RESEND_FROM_EMAIL": "onboarding@resend.dev",
+            },
+            clear=True,
+        ), patch(
+            "app.services.email_service.urllib.request.urlopen",
+            side_effect=email_service.urllib.error.URLError("offline"),
+        ):
+            sent = email_service.send_password_reset_email(
+                "user@example.com",
+                "https://example.com/reset-password?token=abc",
+            )
+
+        self.assertFalse(sent)
 
 
 class ValidationErrorSafetyTest(unittest.TestCase):
