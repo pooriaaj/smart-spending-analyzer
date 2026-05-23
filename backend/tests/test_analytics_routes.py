@@ -1386,9 +1386,10 @@ class AnalyticsRouteTest(unittest.TestCase):
         self.assertEqual(response.status_code, 200, response.text)
         payload = response.json()
 
-        mocked_llm.assert_called_once()
-        self.assertNotIn("mainly built to help with your money", payload["answer"])
-        self.assertNotEqual(payload["suggested_actions"], [])
+        mocked_llm.assert_not_called()
+        self.assertIn("$44.00", payload["answer"])
+        self.assertIn("Cooking class", payload["answer"])
+        self.assertEqual(payload["suggested_actions"][0]["page"], "transactions")
 
     def test_assistant_finance_question_with_programming_term_stays_financial(self) -> None:
         with self.session_local() as session:
@@ -1422,9 +1423,10 @@ class AnalyticsRouteTest(unittest.TestCase):
         self.assertEqual(response.status_code, 200, response.text)
         payload = response.json()
 
-        mocked_llm.assert_called_once()
-        self.assertNotIn("mainly built to help with your money", payload["answer"])
-        self.assertNotEqual(payload["suggested_actions"], [])
+        mocked_llm.assert_not_called()
+        self.assertIn("$29.00", payload["answer"])
+        self.assertIn("Python course", payload["answer"])
+        self.assertEqual(payload["suggested_actions"][0]["page"], "transactions")
 
     def test_assistant_review_path_has_rule_based_answer_without_llm(self) -> None:
         self.seed_transactions()
@@ -1483,9 +1485,11 @@ class AnalyticsRouteTest(unittest.TestCase):
         self.assertEqual(response.status_code, 200, response.text)
         payload = response.json()
 
-        mocked_llm.assert_called_once()
-        self.assertNotIn("broader learning request", payload["answer"])
-        self.assertNotEqual(payload["suggested_actions"][0]["page"], "external_resource")
+        mocked_llm.assert_not_called()
+        self.assertIn("$12.99", payload["answer"])
+        self.assertIn("YouTube Premium", payload["answer"])
+        self.assertEqual(payload["suggested_actions"][0]["page"], "transactions")
+        self.assertEqual(payload["suggested_actions"][0]["action_type"], "show_matching_transactions")
 
     def test_assistant_google_merchant_question_stays_financial(self) -> None:
         with self.session_local() as session:
@@ -1519,9 +1523,10 @@ class AnalyticsRouteTest(unittest.TestCase):
         self.assertEqual(response.status_code, 200, response.text)
         payload = response.json()
 
-        mocked_llm.assert_called_once()
-        self.assertNotIn("broader learning request", payload["answer"])
-        self.assertNotEqual(payload["suggested_actions"][0]["page"], "external_resource")
+        mocked_llm.assert_not_called()
+        self.assertIn("$3.99", payload["answer"])
+        self.assertIn("Google One", payload["answer"])
+        self.assertEqual(payload["suggested_actions"][0]["page"], "transactions")
 
     def test_assistant_response_surfaces_low_data_quality_context(self) -> None:
         with self.session_local() as session:

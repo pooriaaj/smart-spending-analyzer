@@ -689,6 +689,120 @@ def build_merchant_context_actions(
     ]
 
 
+def is_merchant_spend_question(question: str) -> bool:
+    normalized_question = normalize_text_for_matching(question)
+    return any(
+        phrase in normalized_question
+        for phrase in [
+            "how much did i spend",
+            "how much have i spent",
+            "what did i spend",
+            "spent on",
+            "spend on",
+            "paid to",
+            "pay to",
+            "charged me",
+            "charge me",
+        ]
+    )
+
+
+def build_merchant_spend_snapshot(
+    db: Session,
+    user_id: int,
+    *,
+    question: str,
+    account_id: int | None,
+) -> dict[str, Any] | None:
+    if not is_merchant_spend_question(question):
+        return None
+
+    query = db.query(Transaction).filter(
+        Transaction.owner_id == user_id,
+        Transaction.type == "expense",
+    )
+    if account_id is not None:
+        query = query.filter(Transaction.account_id == account_id)
+
+    transactions = query.order_by(Transaction.date.desc(), Transaction.id.desc()).limit(500).all()
+    scored_transactions = [
+        (get_recurring_match_score(question, {"description": tx.description}), tx)
+        for tx in transactions
+    ]
+    matching_transactions = [tx for score, tx in scored_transactions if score > 0]
+    if not matching_transactions:
+        return None
+
+    best_score, best_transaction = max(
+        scored_transactions,
+        key=lambda item: (item[0], item[1].date, item[1].amount),
+    )
+    if best_score <= 0:
+        return None
+
+    return {
+        "display_name": str(best_transaction.description or "that merchant").strip(),
+        "category": best_transaction.category,
+        "total_amount": sum(float(tx.amount or 0.0) for tx in matching_transactions),
+        "transaction_count": len(matching_transactions),
+        "recent_transactions": matching_transactions[:3],
+    }
+
+
+def build_merchant_spend_response(
+    merchant_snapshot: dict[str, Any],
+    *,
+    account_id: int | None,
+    scope_label: str,
+) -> dict[str, Any]:
+    display_name = str(merchant_snapshot["display_name"] or "that merchant")
+    total_amount = float(merchant_snapshot["total_amount"] or 0.0)
+    transaction_count = int(merchant_snapshot["transaction_count"] or 0)
+    recent_transactions = merchant_snapshot["recent_transactions"]
+    fingerprint = extract_merchant_fingerprint(display_name)
+    merchant_key = fingerprint[0] if fingerprint else None
+
+    recent_text = ", ".join(
+        f"{tx.date}: {tx.description} ({format_currency(tx.amount)})"
+        for tx in recent_transactions
+    )
+    supporting_points = [
+        f"Matched merchant text: {display_name}",
+        f"Matching transactions: {transaction_count}",
+        f"Total matched spending: {format_currency(total_amount)}",
+    ]
+    if recent_text:
+        supporting_points.append(f"Recent matches: {recent_text}")
+    supporting_points.append(f"Current scope: {scope_label}")
+
+    return {
+        "answer": (
+            f"You spent {format_currency(total_amount)} on transactions matching {display_name} "
+            f"in {scope_label}, across {transaction_count} transaction(s)."
+        ),
+        "supporting_points": supporting_points[:5],
+        "suggested_followups": [
+            f"Show matching {display_name} transactions",
+            f"Which category is {display_name} in?",
+            "What should I review first?",
+        ],
+        "suggested_actions": [
+            {
+                "label": f"Show matching {display_name} transactions",
+                "page": "transactions",
+                "section": "merchant",
+                "action_type": "show_matching_transactions",
+                "description": display_name,
+                "merchant_key": merchant_key,
+                "category": merchant_snapshot.get("category"),
+                "transaction_type": "expense",
+                "account_id": account_id,
+            }
+        ],
+        "scope_label": scope_label,
+    }
+
+
 def build_category_learning_quality_response(
     db: Session,
     user_id: int,
@@ -2226,6 +2340,19 @@ def generate_assistant_response(
     )
     if learning_response:
         return learning_response
+
+    merchant_spend_snapshot = build_merchant_spend_snapshot(
+        db=db,
+        user_id=user_id,
+        question=question,
+        account_id=account_id,
+    )
+    if merchant_spend_snapshot:
+        return build_merchant_spend_response(
+            merchant_spend_snapshot,
+            account_id=account_id,
+            scope_label=scope_label,
+        )
 
     if intent == "category_learning_quality":
         return build_category_learning_quality_response(
