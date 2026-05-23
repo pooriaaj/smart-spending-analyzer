@@ -8,9 +8,14 @@ import urllib.request
 from email.message import EmailMessage
 from html import escape
 import json
+from pathlib import Path
+
+from dotenv import load_dotenv
 
 
 logger = logging.getLogger(__name__)
+ENV_PATH = Path(__file__).resolve().parents[2] / ".env"
+load_dotenv(dotenv_path=ENV_PATH)
 
 
 def _env_bool(name: str, default: bool) -> bool:
