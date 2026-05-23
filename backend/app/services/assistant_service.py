@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 from typing import Any
+from urllib.parse import quote_plus
 
 from sqlalchemy.orm import Session
 
@@ -1042,13 +1043,18 @@ def build_category_focus_answer(
 
 
 def classify_question(question: str, context_text: str) -> str:
-    text = f"{context_text} {question}".lower().strip()
+    text = (question or "").lower().strip()
+    context = (context_text or "").lower().strip()
+    contextual_text = f"{context} {text}".strip()
     has_month_horizon = re.search(r"\d+\s+month", text) is not None
     has_goal_amount = parse_target_balance(text) is not None
     has_one_time_event = (
         parse_one_time_event_amount(text) is not None
         and parse_one_time_event_offset(text) is not None
     )
+
+    if is_external_learning_request(text):
+        return "education"
 
     if any(
         phrase in text
@@ -1263,7 +1269,7 @@ def classify_question(question: str, context_text: str) -> str:
     if any(word in text for word in ["summary", "summarize", "overview", "my finances"]):
         return "summary"
 
-    if any(word in text for word in ["driving this", "which category", "what caused", "reason for increase"]):
+    if any(word in contextual_text for word in ["driving this", "which category", "what caused", "reason for increase"]):
         return "driver"
 
     if any(word in text for word in ["alert", "warning", "problem", "risk"]):
@@ -1272,10 +1278,57 @@ def classify_question(question: str, context_text: str) -> str:
     if any(word in text for word in ["recent", "latest transactions", "last transactions"]):
         return "recent"
 
-    if any(word in text for word in ["youtube", "google", "resource", "article", "learn more", "guide"]):
-        return "education"
-
     return "general"
+
+
+def is_external_learning_request(text: str) -> bool:
+    if not text:
+        return False
+
+    finance_terms = [
+        "spend",
+        "spent",
+        "pay",
+        "paid",
+        "charge",
+        "transaction",
+        "budget",
+        "subscription",
+        "cost",
+        "expense",
+        "merchant",
+    ]
+    merchant_resource_terms = ["youtube", "google"]
+    if any(term in text for term in merchant_resource_terms) and any(
+        term in text for term in finance_terms
+    ):
+        return False
+
+    return any(
+        phrase in text
+        for phrase in [
+            "youtube link",
+            "youtube links",
+            "youtube video",
+            "youtube videos",
+            "google",
+            "resource",
+            "resources",
+            "article",
+            "articles",
+            "learn more",
+            "guide",
+            "tutorial",
+            "watch and learn",
+        ]
+    )
+
+
+def build_external_learning_url(question: str) -> str:
+    query = re.sub(r"\s+", " ", str(question or "").strip())
+    if not query:
+        query = "personal finance basics"
+    return f"https://www.youtube.com/results?search_query={quote_plus(query)}"
 
 
 def build_assistant_actions(
@@ -3348,6 +3401,35 @@ def generate_assistant_response(
             "scope_label": scope_label,
         }
 
+    if intent == "education":
+        learning_url = build_external_learning_url(question)
+        return {
+            "answer": (
+                "I am mainly built to help with your money, budgets, transactions, and planning. "
+                "For this kind of broader learning request, start with this YouTube search: "
+                f"{learning_url}"
+            ),
+            "supporting_points": [
+                "This question is not about your financial data, so I did not use your transactions or budgets.",
+                "When an AI provider is enabled, the assistant can answer broader learning questions more naturally.",
+                f"Current scope: {scope_label}",
+            ],
+            "suggested_followups": [
+                "How much did I spend on groceries?",
+                "Show my grocery transactions",
+                "How can I reduce food spending?",
+            ],
+            "suggested_actions": [
+                {
+                    "label": "Open YouTube search",
+                    "page": "external_resource",
+                    "section": learning_url,
+                    "account_id": account_id,
+                }
+            ],
+            "scope_label": scope_label,
+        }
+
     if total_income == 0 and total_expenses == 0:
         answer = "I do not have enough financial activity yet to give a meaningful answer."
         intro = generate_mode_intro(mode)
@@ -3386,6 +3468,51 @@ def generate_assistant_response(
                 focus_category=focus_category,
             ),
             "suggested_actions": [],
+            "scope_label": scope_label,
+        }
+
+    if intent == "review_path":
+        if recent_transactions:
+            answer = (
+                "Start with the recent transactions, then use analytics to confirm whether the pattern is a one-off "
+                "or part of a trend."
+            )
+        else:
+            answer = (
+                "Start by importing or reviewing transactions first. Charts and trends become useful once there is "
+                "enough clean activity to compare."
+            )
+
+        supporting_points = [
+            f"Current scope: {scope_label}",
+            f"Recent transactions available: {len(recent_transactions)}",
+            f"Top expense category: {top_category or 'N/A'}",
+        ]
+        data_quality_point = build_data_quality_supporting_point(data_quality)
+        if data_quality_point:
+            supporting_points.append(data_quality_point)
+
+        return {
+            "answer": answer,
+            "supporting_points": supporting_points[:5],
+            "suggested_followups": [
+                "Show my recent transactions",
+                "What changed in my spending recently?",
+                "Which category should I review first?",
+            ],
+            "suggested_actions": [
+                {
+                    "label": "Open transactions",
+                    "page": "transactions",
+                    "account_id": account_id,
+                },
+                {
+                    "label": "Open analytics",
+                    "page": "analytics",
+                    "section": "trends",
+                    "account_id": account_id,
+                },
+            ],
             "scope_label": scope_label,
         }
 

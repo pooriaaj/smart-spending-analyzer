@@ -1159,6 +1159,181 @@ class AnalyticsRouteTest(unittest.TestCase):
         self.assertIn("$1050.00", payload["answer"])
         self.assertIn("Balance: $1050.00", payload["supporting_points"])
 
+    def test_assistant_resource_question_is_not_hijacked_by_budget_history(self) -> None:
+        with patch("app.services.budget_metrics.date", FixedBudgetDate), patch(
+            "app.services.assistant_service.generate_llm_assistant_response",
+            return_value=None,
+        ) as mocked_llm:
+            response = self.client.post(
+                "/assistant/response",
+                json={
+                    "question": "Can you send some YouTube links so I can learn how to cook the recipes?",
+                    "history": [
+                        {
+                            "role": "user",
+                            "content": "Am I on track with my budget?",
+                        },
+                        {
+                            "role": "assistant",
+                            "content": "You do not have any budgets set for 2026-04 in All accounts combined yet.",
+                        },
+                    ],
+                    "mode": "balanced",
+                    "account_id": None,
+                },
+            )
+
+        self.assertEqual(response.status_code, 200, response.text)
+        payload = response.json()
+
+        mocked_llm.assert_called_once()
+        self.assertNotIn("You do not have any budgets set", payload["answer"])
+        self.assertIn("youtube.com/results?search_query=Can+you+send", payload["answer"])
+        self.assertIn("not about your financial data", payload["supporting_points"][0])
+        self.assertEqual(payload["suggested_actions"][0]["page"], "external_resource")
+
+    def test_assistant_resource_question_uses_llm_answer_when_available(self) -> None:
+        llm_answer = {
+            "answer": (
+                "Here are a few beginner-friendly cooking searches to start with: "
+                "https://www.youtube.com/results?search_query=easy+beginner+recipes"
+            ),
+            "supporting_points": [
+                "This is a general learning request, not a finance-data question.",
+            ],
+            "suggested_followups": [
+                "How much do I spend on groceries?",
+            ],
+            "action_type": "external_resource",
+            "action_label": "Open cooking videos",
+            "action_reason": "The user asked for learning links.",
+            "action_target": "easy beginner recipes",
+        }
+
+        with patch("app.services.budget_metrics.date", FixedBudgetDate), patch(
+            "app.services.assistant_service.generate_llm_assistant_response",
+            return_value=llm_answer,
+        ) as mocked_llm:
+            response = self.client.post(
+                "/assistant/response",
+                json={
+                    "question": "Can you send some YouTube links so I can learn how to cook the recipes?",
+                    "history": [
+                        {
+                            "role": "assistant",
+                            "content": "You do not have any budgets set for 2026-04 in All accounts combined yet.",
+                        },
+                    ],
+                    "mode": "balanced",
+                    "account_id": None,
+                },
+            )
+
+        self.assertEqual(response.status_code, 200, response.text)
+        payload = response.json()
+
+        mocked_llm.assert_called_once()
+        self.assertEqual(payload["answer"], llm_answer["answer"])
+        self.assertEqual(payload["suggested_actions"][0]["label"], "Open cooking videos")
+        self.assertEqual(payload["suggested_actions"][0]["page"], "external_resource")
+
+    def test_assistant_review_path_has_rule_based_answer_without_llm(self) -> None:
+        self.seed_transactions()
+
+        with patch("app.services.budget_metrics.date", FixedBudgetDate), patch(
+            "app.services.assistant_service.generate_llm_assistant_response",
+            return_value=None,
+        ):
+            response = self.client.post(
+                "/assistant/response",
+                json={
+                    "question": "Should I review charts or transactions first?",
+                    "history": [],
+                    "mode": "balanced",
+                    "account_id": self.chequing_account_id,
+                },
+            )
+
+        self.assertEqual(response.status_code, 200, response.text)
+        payload = response.json()
+
+        self.assertIn("Start with the recent transactions", payload["answer"])
+        self.assertIn("Recent transactions available: 3", payload["supporting_points"])
+        self.assertEqual(payload["suggested_actions"][0]["page"], "transactions")
+        self.assertEqual(payload["suggested_actions"][1]["section"], "trends")
+
+    def test_assistant_youtube_merchant_question_stays_financial(self) -> None:
+        with self.session_local() as session:
+            session.add(
+                Transaction(
+                    amount=12.99,
+                    category="subscriptions",
+                    description="YouTube Premium",
+                    date=date(2026, 4, 7),
+                    type="expense",
+                    owner_id=self.user_id,
+                    account_id=self.chequing_account_id,
+                )
+            )
+            session.commit()
+
+        with patch("app.services.budget_metrics.date", FixedBudgetDate), patch(
+            "app.services.assistant_service.generate_llm_assistant_response",
+            return_value=None,
+        ) as mocked_llm:
+            response = self.client.post(
+                "/assistant/response",
+                json={
+                    "question": "How much did I spend on YouTube?",
+                    "history": [],
+                    "mode": "balanced",
+                    "account_id": self.chequing_account_id,
+                },
+            )
+
+        self.assertEqual(response.status_code, 200, response.text)
+        payload = response.json()
+
+        mocked_llm.assert_called_once()
+        self.assertNotIn("broader learning request", payload["answer"])
+        self.assertNotEqual(payload["suggested_actions"][0]["page"], "external_resource")
+
+    def test_assistant_google_merchant_question_stays_financial(self) -> None:
+        with self.session_local() as session:
+            session.add(
+                Transaction(
+                    amount=3.99,
+                    category="subscriptions",
+                    description="Google One",
+                    date=date(2026, 4, 9),
+                    type="expense",
+                    owner_id=self.user_id,
+                    account_id=self.chequing_account_id,
+                )
+            )
+            session.commit()
+
+        with patch("app.services.budget_metrics.date", FixedBudgetDate), patch(
+            "app.services.assistant_service.generate_llm_assistant_response",
+            return_value=None,
+        ) as mocked_llm:
+            response = self.client.post(
+                "/assistant/response",
+                json={
+                    "question": "How much did I spend on Google?",
+                    "history": [],
+                    "mode": "balanced",
+                    "account_id": self.chequing_account_id,
+                },
+            )
+
+        self.assertEqual(response.status_code, 200, response.text)
+        payload = response.json()
+
+        mocked_llm.assert_called_once()
+        self.assertNotIn("broader learning request", payload["answer"])
+        self.assertNotEqual(payload["suggested_actions"][0]["page"], "external_resource")
+
     def test_assistant_response_surfaces_low_data_quality_context(self) -> None:
         with self.session_local() as session:
             session.add(
