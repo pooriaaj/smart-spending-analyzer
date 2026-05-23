@@ -2437,6 +2437,76 @@ class AnalyticsRouteTest(unittest.TestCase):
         self.assertEqual(payload["suggested_actions"][0]["section"], "recurring")
         self.assertEqual(payload["suggested_actions"][0]["description"], "Netflix Subscription")
 
+    def test_assistant_uses_llm_for_recurring_merchant_explanations(self) -> None:
+        with self.session_local() as session:
+            session.add_all(
+                [
+                    Transaction(
+                        amount=4.96,
+                        category="Other",
+                        description="THE UPS STORE #",
+                        date=date(2026, 1, 10),
+                        type="expense",
+                        owner_id=self.user_id,
+                        account_id=self.chequing_account_id,
+                    ),
+                    Transaction(
+                        amount=5.29,
+                        category="Other",
+                        description="THE UPS STORE #",
+                        date=date(2026, 2, 10),
+                        type="expense",
+                        owner_id=self.user_id,
+                        account_id=self.chequing_account_id,
+                    ),
+                    Transaction(
+                        amount=6.29,
+                        category="Other",
+                        description="THE UPS STORE #",
+                        date=date(2026, 3, 10),
+                        type="expense",
+                        owner_id=self.user_id,
+                        account_id=self.chequing_account_id,
+                    ),
+                ]
+            )
+            session.commit()
+
+        with patch("app.services.assistant_service.generate_llm_assistant_response") as mock_llm:
+            mock_llm.return_value = {
+                "answer": (
+                    "THE UPS STORE is most likely a shipping, mailbox, printing, or package-service charge. "
+                    "Your app sees it as a small recurring expense, but the exact purpose depends on your receipt."
+                ),
+                "supporting_points": [],
+                "suggested_followups": [],
+                "action_type": "none",
+                "action_label": None,
+                "action_target": None,
+            }
+
+            response = self.client.post(
+                "/assistant/response",
+                json={
+                    "question": "What is THE UPS STORE? What am I paying for?",
+                    "history": [],
+                    "mode": "balanced",
+                    "account_id": self.chequing_account_id,
+                },
+            )
+
+        self.assertEqual(response.status_code, 200, response.text)
+        payload = response.json()
+        llm_kwargs = mock_llm.call_args.kwargs
+
+        self.assertIn("shipping", payload["answer"].lower())
+        self.assertTrue(
+            any(
+                item["description"] == "THE UPS STORE #"
+                for item in llm_kwargs["recurring_expenses"]
+            )
+        )
+
     def test_assistant_can_model_cancelling_biggest_subscription(self) -> None:
         with self.session_local() as session:
             session.add_all(

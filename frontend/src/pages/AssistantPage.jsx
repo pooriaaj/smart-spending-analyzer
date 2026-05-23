@@ -71,19 +71,7 @@ function AssistantMessageContent({ text }) {
 
 function formatAssistantChatContent(data, t) {
   const answer = String(data?.answer || t("assistant.responseFailed")).trim();
-  const supportingPoints = Array.isArray(data?.supporting_points)
-    ? data.supporting_points
-        .map((point) => String(point || "").trim())
-        .filter(Boolean)
-    : [];
-
-  if (supportingPoints.length === 0) {
-    return answer;
-  }
-
-  return `${answer}\n\n${t("assistant.detailsUsed")}\n${supportingPoints
-    .map((point) => `- ${point}`)
-    .join("\n")}`;
+  return answer;
 }
 
 function compactHistoryContent(content) {

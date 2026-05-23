@@ -1615,14 +1615,32 @@ def generate_assistant_response(
         if intent in {"saved_scenario_list", "saved_scenario_compare"} or likely_saved_scenario_question
         else []
     )
+    needs_recurring_context = intent in {"recurring_expenses", "saving_advice"} or (
+        llm_allowed
+        and any(
+            phrase in q
+            for phrase in [
+                "what is",
+                "what's",
+                "what am i paying",
+                "what im paying",
+                "what is that",
+                "what's that",
+                "what is it",
+                "what's it",
+                "merchant",
+                "charge",
+            ]
+        )
+    )
     recurring_expenses = (
         get_recurring_expense_patterns(
             db=db,
             user_id=user_id,
             account_id=account_id,
-            limit=5,
+            limit=8,
         )
-        if intent in {"recurring_expenses", "saving_advice"}
+        if needs_recurring_context
         else []
     )
     simulation_recommendations = (
@@ -1648,7 +1666,6 @@ def generate_assistant_response(
         "saved_scenario_compare",
         "savings_scenario",
         "future_balance",
-        "recurring_expenses",
         "budget_status",
     }:
         llm_result = generate_llm_assistant_response(
@@ -1659,6 +1676,7 @@ def generate_assistant_response(
             overspending_alerts=overspending_alerts,
             recent_transactions=recent_transactions,
             focus_category_context=focus_snapshot,
+            recurring_expenses=recurring_expenses,
             mode=mode,
         )
         if llm_result:
@@ -2760,6 +2778,7 @@ def generate_assistant_response(
             overspending_alerts=overspending_alerts,
             recent_transactions=recent_transactions,
             focus_category_context=focus_snapshot,
+            recurring_expenses=recurring_expenses,
             mode=mode,
         )
 

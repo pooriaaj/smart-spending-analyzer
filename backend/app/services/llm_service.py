@@ -263,6 +263,10 @@ Reasoning policy:
 - if the user asks for learning or guidance, an external resource is allowed
 - if the user asks about risk, focus on alerts and spending concentration
 - if the user asks a follow-up, use the recent conversation context before changing topics
+- if the user asks "what is this", "what is that", or asks about a merchant, infer the referenced charge from the recent conversation and recurring-charge context
+- when explaining a merchant or charge, answer in plain language, mention the likely purpose, amount, and date when available, and clearly say when you are not certain
+- do not just repeat a list of recurring charges when the user asks what one charge is
+- do not recommend cancelling essential bills such as phone, internet, rent, utilities, debt, insurance, tuition, or taxes; suggest reviewing the plan, provider, or bill instead
 
 Answer quality rules:
 - do not repeat the user's question
@@ -326,6 +330,9 @@ Overspending alerts:
 
 Recent transactions:
 {_safe_text(account_context.get("recent_transactions_text"))}
+
+Recurring charges:
+{_safe_text(account_context.get("recurring_expenses_text"))}
 
 Category trend summary:
 {_safe_text(account_context.get("trend_summary_text"))}
@@ -466,6 +473,7 @@ def build_account_context(
     overspending_alerts: dict[str, Any],
     recent_transactions: list[Any],
     focus_category_context: dict[str, Any] | None = None,
+    recurring_expenses: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     primary_driver = None
     if category_trends.get("top_increases"):
@@ -484,11 +492,21 @@ def build_account_context(
 
     trend_summary = category_trends.get("summary", [])
     trend_summary_text = "\n".join(f"- {item}" for item in trend_summary) or "- None"
+    recurring_expenses_text = "\n".join(
+        (
+            f"- {item.get('description')} | category {item.get('category')} | "
+            f"avg {item.get('average_amount')} | latest {item.get('latest_amount')} "
+            f"on {item.get('latest_date')} | annualized {item.get('annualized_amount')} | "
+            f"review note: {item.get('review_reason')}"
+        )
+        for item in (recurring_expenses or [])[:8]
+    ) or "- None"
 
     context = dict(snapshot)
     context["primary_driver"] = primary_driver
     context["alerts_text"] = alerts_text
     context["recent_transactions_text"] = recent_transactions_text
+    context["recurring_expenses_text"] = recurring_expenses_text
     context["trend_summary_text"] = trend_summary_text
 
     focus = focus_category_context or {}
@@ -529,6 +547,7 @@ def generate_llm_assistant_response(
     overspending_alerts: dict[str, Any],
     recent_transactions: list[Any],
     focus_category_context: dict[str, Any] | None = None,
+    recurring_expenses: list[dict[str, Any]] | None = None,
     mode: str = "balanced",
 ) -> dict[str, Any] | None:
     if not llm_assistant_enabled():
@@ -540,6 +559,7 @@ def generate_llm_assistant_response(
         overspending_alerts=overspending_alerts,
         recent_transactions=recent_transactions,
         focus_category_context=focus_category_context,
+        recurring_expenses=recurring_expenses,
     )
 
     prompt = build_finance_prompt(
