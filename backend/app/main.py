@@ -8,6 +8,7 @@ from fastapi import FastAPI, Request, Response
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy import text
 
 from app.database import Base, SessionLocal, engine
 from app.routes.account_routes import router as account_router
@@ -67,13 +68,14 @@ app.include_router(assistant_router)
 @app.on_event("startup")
 def on_startup() -> None:
     ensure_runtime_database_shape(engine)
-    try:
-        with SessionLocal() as db:
-            stats = rebuild_community_merchant_profile_cache(db)
-            db.commit()
-            logger.info("Community category learning cache refreshed: %s", stats)
-    except Exception:
-        logger.exception("Community category learning cache refresh skipped")
+    if os.getenv("REBUILD_MERCHANT_CACHE_ON_STARTUP", "false").lower() == "true":
+        try:
+            with SessionLocal() as db:
+                stats = rebuild_community_merchant_profile_cache(db)
+                db.commit()
+                logger.info("Community category learning cache refreshed: %s", stats)
+        except Exception:
+            logger.exception("Community category learning cache refresh skipped")
     logger.info("Smart Spending Analyzer API started")
 
 
@@ -110,7 +112,9 @@ def root_head() -> Response:
 
 @app.get("/health")
 def health() -> dict[str, str]:
-    return {"status": "ok"}
+    with engine.connect() as connection:
+        connection.execute(text("SELECT 1"))
+    return {"status": "ok", "database": "ok"}
 
 
 @app.head("/health")

@@ -42,10 +42,12 @@ def hash_reset_token(token: str) -> str:
 
 
 def expose_reset_url_in_response() -> bool:
+    if is_production():
+        return False
     configured = os.getenv("EXPOSE_RESET_LINK_IN_RESPONSE")
     if configured is not None:
         return configured.lower() == "true"
-    return not is_production()
+    return True
 
 
 def normalize_email_address(email: str) -> str:

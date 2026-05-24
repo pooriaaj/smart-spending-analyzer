@@ -18,6 +18,7 @@ from sqlalchemy.pool import StaticPool
 
 from app import dependencies
 from app.auth import ALGORITHM, SECRET_KEY, create_access_token, hash_password
+from app import database
 from app.database import Base
 from app.dependencies import get_current_user
 from app.models import Account, AssistantUsageEvent, BudgetPlan, SavedScenario, Transaction, User
@@ -646,6 +647,45 @@ class EmailDeliveryTest(unittest.TestCase):
             )
 
         self.assertFalse(sent)
+
+
+class BackendResilienceTest(unittest.TestCase):
+    def test_database_engine_kwargs_are_bounded_for_postgres(self) -> None:
+        with patch.dict(
+            "os.environ",
+            {
+                "DB_POOL_SIZE": "500",
+                "DB_MAX_OVERFLOW": "-2",
+                "DB_POOL_TIMEOUT_SECONDS": "0",
+                "DB_POOL_RECYCLE_SECONDS": "99999",
+            },
+        ):
+            kwargs = database.build_engine_kwargs("postgresql://user:pass@example.com/db")
+
+        self.assertTrue(kwargs["pool_pre_ping"])
+        self.assertEqual(kwargs["pool_size"], 50)
+        self.assertEqual(kwargs["max_overflow"], 0)
+        self.assertEqual(kwargs["pool_timeout"], 1)
+        self.assertEqual(kwargs["pool_recycle"], 7200)
+
+    def test_database_engine_kwargs_skip_pool_options_for_sqlite(self) -> None:
+        with patch.dict("os.environ", {"DB_POOL_SIZE": "10"}):
+            kwargs = database.build_engine_kwargs("sqlite://")
+
+        self.assertEqual(kwargs, {"pool_pre_ping": True, "future": True})
+
+    def test_rate_limiter_trims_tracked_clients(self) -> None:
+        app = FastAPI()
+        middleware = SimpleRateLimitMiddleware(app, rules={"/auth/login": (10, 60)})
+        middleware.max_tracked_keys = 2
+        middleware._hits[("client-1", "/auth/login")].append(10.0)
+        middleware._hits[("client-2", "/auth/login")].append(20.0)
+        middleware._hits[("client-3", "/auth/login")].append(30.0)
+
+        middleware._trim_tracking(31.0)
+
+        self.assertLessEqual(len(middleware._hits), 2)
+        self.assertNotIn(("client-1", "/auth/login"), middleware._hits)
 
 
 class ValidationErrorSafetyTest(unittest.TestCase):

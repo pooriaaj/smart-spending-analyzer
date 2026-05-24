@@ -252,6 +252,7 @@ class SimpleRateLimitMiddleware(BaseHTTPMiddleware):
             "/transactions/import/files": (5, 300),
         }
         self._hits: dict[tuple[str, str], deque[float]] = defaultdict(deque)
+        self.max_tracked_keys = int(os.getenv("RATE_LIMIT_MAX_TRACKED_KEYS", "10000"))
 
     async def dispatch(self, request: Request, call_next):
         rule = self._matching_rule(request.url.path)
@@ -269,6 +270,7 @@ class SimpleRateLimitMiddleware(BaseHTTPMiddleware):
                     content={"detail": "Too many requests. Please wait and try again."},
                 )
             hits.append(now)
+            self._trim_tracking(now)
         return await call_next(request)
 
     def _matching_rule(self, path: str) -> tuple[int, int] | None:
@@ -276,6 +278,36 @@ class SimpleRateLimitMiddleware(BaseHTTPMiddleware):
             if path == prefix or path.startswith(f"{prefix}/"):
                 return rule
         return None
+
+    def _trim_tracking(self, now: float) -> None:
+        if len(self._hits) <= self.max_tracked_keys:
+            return
+
+        expired_keys = []
+        for key, hits in self._hits.items():
+            rule = self._matching_rule(key[1])
+            if not rule:
+                expired_keys.append(key)
+                continue
+            _, window_seconds = rule
+            while hits and now - hits[0] > window_seconds:
+                hits.popleft()
+            if not hits:
+                expired_keys.append(key)
+
+        for key in expired_keys:
+            self._hits.pop(key, None)
+
+        if len(self._hits) <= self.max_tracked_keys:
+            return
+
+        overflow = len(self._hits) - self.max_tracked_keys
+        oldest_keys = sorted(
+            self._hits,
+            key=lambda item: self._hits[item][0] if self._hits[item] else now,
+        )[:overflow]
+        for key in oldest_keys:
+            self._hits.pop(key, None)
 
     @staticmethod
     def _client_id(request: Request) -> str:
