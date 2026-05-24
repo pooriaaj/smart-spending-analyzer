@@ -58,6 +58,7 @@ COMMUNITY_PROFILE_EXCLUDED_CATEGORIES = {
     "transfer",
 }
 MAX_TRANSACTION_PAGE_SIZE = 100
+MAX_BULK_CATEGORY_CANDIDATES = 500
 TRANSACTION_SOURCE_LABELS = {
     "manual": "Written transactions",
     "manual_import_review": "Manual import review rows",
@@ -4067,7 +4068,14 @@ def get_transactions_for_user(
     )
 
 
-def get_uncategorized_candidates(db: Session, owner_id: int, account_id: int | None = None) -> list[Transaction]:
+def get_uncategorized_candidates(
+    db: Session,
+    owner_id: int,
+    account_id: int | None = None,
+    *,
+    limit: int = MAX_BULK_CATEGORY_CANDIDATES,
+    transaction_ids: Iterable[int] | None = None,
+) -> list[Transaction]:
     query = (
         db.query(Transaction)
         .filter(Transaction.owner_id == owner_id)
@@ -4077,7 +4085,20 @@ def get_uncategorized_candidates(db: Session, owner_id: int, account_id: int | N
     if account_id is not None:
         query = query.filter(Transaction.account_id == account_id)
 
-    return query.order_by(Transaction.date.desc(), Transaction.id.desc()).all()
+    if transaction_ids is not None:
+        requested_ids = [int(item) for item in transaction_ids if item]
+        if not requested_ids:
+            return []
+        query = query.filter(Transaction.id.in_(requested_ids))
+        safe_limit = min(len(set(requested_ids)), 1000)
+    else:
+        safe_limit = max(1, min(int(limit or MAX_BULK_CATEGORY_CANDIDATES), MAX_BULK_CATEGORY_CANDIDATES))
+
+    return (
+        query.order_by(Transaction.date.desc(), Transaction.id.desc())
+        .limit(safe_limit)
+        .all()
+    )
 
 
 def apply_bulk_categories(

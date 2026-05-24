@@ -581,8 +581,10 @@ async def smart_import_file(
         commit_pending_side_effects_safely(db)
         return result
     except ValueError as exc:
+        db.rollback()
         raise HTTPException(status_code=400, detail=str(exc))
     except Exception as exc:
+        db.rollback()
         logger.exception("Smart import failed for user_id=%s account_id=%s", current_user.id, account_id)
         raise HTTPException(status_code=500, detail="Smart import failed. Please try a different file.")
 
@@ -612,8 +614,10 @@ async def smart_import_files(
         commit_pending_side_effects_safely(db)
         return result
     except ValueError as exc:
+        db.rollback()
         raise HTTPException(status_code=400, detail=str(exc))
     except Exception as exc:
+        db.rollback()
         logger.exception("Smart batch import failed for user_id=%s account_id=%s", current_user.id, account_id)
         raise HTTPException(status_code=500, detail="Smart batch import failed. Please review the files and try again.")
 
@@ -1045,7 +1049,11 @@ def apply_bulk_category_suggestions(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    candidates = get_uncategorized_candidates(db, current_user.id)
+    candidates = get_uncategorized_candidates(
+        db,
+        current_user.id,
+        transaction_ids=payload.transaction_ids,
+    )
 
     suggestion_map: dict[int, str] = {}
     for transaction in candidates:

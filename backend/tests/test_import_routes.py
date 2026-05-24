@@ -25,7 +25,7 @@ from app.models import (
 )
 from app.routes.transaction_routes import router as transaction_router
 from app.services import pdf_statement_service
-from app.services.transaction_service import rebuild_community_merchant_profile_cache
+from app.services.transaction_service import CategoryDecision, rebuild_community_merchant_profile_cache
 
 
 def build_text_pdf(lines: list[str]) -> bytes:
@@ -3057,6 +3057,55 @@ class SmartImportRouteTest(unittest.TestCase):
         self.assertEqual(updated_transaction.category, "restaurant")
         self.assertIsNotNone(learning_event)
         self.assertEqual(learning_event.category, "restaurant")
+
+    def test_bulk_apply_only_categorizes_selected_uncategorized_rows(self) -> None:
+        with self.session_local() as session:
+            selected = Transaction(
+                amount=16.10,
+                category="other",
+                description="Chipotle Union",
+                date=date(2025, 1, 4),
+                type="expense",
+                owner_id=self.user_id,
+                account_id=self.account_id,
+            )
+            unselected = Transaction(
+                amount=22.00,
+                category="other",
+                description="Amazon Marketplace",
+                date=date(2025, 1, 5),
+                type="expense",
+                owner_id=self.user_id,
+                account_id=self.account_id,
+            )
+            session.add_all([selected, unselected])
+            session.commit()
+            selected_id = selected.id
+            unselected_id = unselected.id
+
+        decision = CategoryDecision(
+            category="restaurant",
+            confidence=0.9,
+            matched_keyword="chipotle",
+            reason="Matched test category.",
+            source="rule",
+        )
+        with patch("app.routes.transaction_routes.categorize_transaction_details", return_value=decision) as mock_categorize:
+            apply_response = self.client.post(
+                "/transactions/categorize/bulk-apply",
+                json={"transaction_ids": [selected_id]},
+            )
+
+        self.assertEqual(apply_response.status_code, 200, apply_response.text)
+        self.assertEqual(apply_response.json()["updated_count"], 1)
+        self.assertEqual(mock_categorize.call_count, 1)
+
+        with self.session_local() as session:
+            selected_after = session.get(Transaction, selected_id)
+            unselected_after = session.get(Transaction, unselected_id)
+
+        self.assertEqual(selected_after.category, "restaurant")
+        self.assertEqual(unselected_after.category, "other")
 
     def test_learning_candidates_group_similar_merchants_for_user_review(self) -> None:
         for amount in (8.90, 12.60, 10.25):

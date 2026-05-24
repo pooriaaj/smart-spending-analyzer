@@ -170,23 +170,31 @@ def sanitize_import_text(value: str) -> str:
 
 
 def max_upload_bytes() -> int:
-    return int(os.getenv("MAX_IMPORT_FILE_BYTES", str(DEFAULT_MAX_UPLOAD_BYTES)))
+    return _bounded_int_env("MAX_IMPORT_FILE_BYTES", DEFAULT_MAX_UPLOAD_BYTES, 1024, 100 * 1024 * 1024)
 
 
 def max_batch_files() -> int:
-    return int(os.getenv("MAX_IMPORT_BATCH_FILES", str(DEFAULT_MAX_BATCH_FILES)))
+    return _bounded_int_env("MAX_IMPORT_BATCH_FILES", DEFAULT_MAX_BATCH_FILES, 1, 100)
 
 
 def max_batch_upload_bytes() -> int:
-    return int(os.getenv("MAX_IMPORT_BATCH_BYTES", str(DEFAULT_MAX_BATCH_UPLOAD_BYTES)))
+    return _bounded_int_env("MAX_IMPORT_BATCH_BYTES", DEFAULT_MAX_BATCH_UPLOAD_BYTES, 1024, 250 * 1024 * 1024)
 
 
 def max_csv_rows() -> int:
-    return int(os.getenv("MAX_IMPORT_CSV_ROWS", str(DEFAULT_MAX_CSV_ROWS)))
+    return _bounded_int_env("MAX_IMPORT_CSV_ROWS", DEFAULT_MAX_CSV_ROWS, 1, 100_000)
 
 
 def max_api_request_body_bytes() -> int:
-    return int(os.getenv("MAX_API_REQUEST_BODY_BYTES", str(DEFAULT_MAX_API_REQUEST_BODY_BYTES)))
+    return _bounded_int_env("MAX_API_REQUEST_BODY_BYTES", DEFAULT_MAX_API_REQUEST_BODY_BYTES, 1024, 50 * 1024 * 1024)
+
+
+def _bounded_int_env(name: str, default: int, minimum: int, maximum: int) -> int:
+    try:
+        value = int(os.getenv(name, str(default)))
+    except (TypeError, ValueError):
+        return default
+    return max(minimum, min(value, maximum))
 
 
 def _file_extension(filename: str | None) -> str:

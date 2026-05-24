@@ -36,6 +36,11 @@ from app.security import (
     build_validation_error_response,
     get_allowed_hosts,
     get_allowed_origins,
+    max_api_request_body_bytes,
+    max_batch_files,
+    max_batch_upload_bytes,
+    max_csv_rows,
+    max_upload_bytes,
 )
 from app.services import llm_service
 from app.services import email_service
@@ -712,6 +717,23 @@ class BackendResilienceTest(unittest.TestCase):
             kwargs = database.build_engine_kwargs("sqlite://")
 
         self.assertEqual(kwargs, {"pool_pre_ping": True, "future": True})
+
+    def test_request_limit_env_values_are_bounded(self) -> None:
+        with patch.dict(
+            "os.environ",
+            {
+                "MAX_IMPORT_FILE_BYTES": "not-a-number",
+                "MAX_IMPORT_BATCH_FILES": "0",
+                "MAX_IMPORT_BATCH_BYTES": "999999999999",
+                "MAX_IMPORT_CSV_ROWS": "-5",
+                "MAX_API_REQUEST_BODY_BYTES": "bad",
+            },
+        ):
+            self.assertEqual(max_upload_bytes(), 10 * 1024 * 1024)
+            self.assertEqual(max_batch_files(), 1)
+            self.assertEqual(max_batch_upload_bytes(), 250 * 1024 * 1024)
+            self.assertEqual(max_csv_rows(), 1)
+            self.assertEqual(max_api_request_body_bytes(), 1 * 1024 * 1024)
 
     def test_rate_limiter_trims_tracked_clients(self) -> None:
         app = FastAPI()
