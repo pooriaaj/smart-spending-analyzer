@@ -165,6 +165,19 @@ class SecurityRouteTest(unittest.TestCase):
         response = client.get("/protected", headers={"Authorization": f"Bearer {expired_token}"})
         self.assertEqual(response.status_code, 401)
 
+    def test_password_change_invalidates_older_jwt(self) -> None:
+        client = self.build_protected_client()
+        token = create_access_token({"sub": str(self.user_a_id)})
+
+        with self.session_local() as session:
+            user = session.get(User, self.user_a_id)
+            assert user is not None
+            user.password_changed_at = datetime.now(timezone.utc) + timedelta(seconds=1)
+            session.commit()
+
+        response = client.get("/protected", headers={"Authorization": f"Bearer {token}"})
+        self.assertEqual(response.status_code, 401)
+
     def test_user_a_cannot_use_user_b_account_for_transaction(self) -> None:
         client = self.build_owned_resource_client()
         response = client.post(
@@ -595,6 +608,29 @@ class AuthSecurityTest(unittest.TestCase):
         payload = {"token": raw_token, "new_password": "BetterPass1"}
         self.assertEqual(client.post("/auth/reset-password", json=payload).status_code, 200)
         self.assertEqual(client.post("/auth/reset-password", json=payload).status_code, 400)
+
+    def test_password_reset_marks_password_changed_at(self) -> None:
+        user_id = self.create_user()
+        raw_token = secrets.token_urlsafe(32)
+        with self.session_local() as session:
+            user = session.get(User, user_id)
+            assert user is not None
+            self.assertIsNone(user.password_changed_at)
+            user.reset_token_hash = auth_routes.hash_reset_token(raw_token)
+            user.reset_token_expires_at = datetime.now(timezone.utc) + timedelta(minutes=30)
+            session.commit()
+
+        client = self.build_auth_client()
+        response = client.post(
+            "/auth/reset-password",
+            json={"token": raw_token, "new_password": "BetterPass1"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        with self.session_local() as session:
+            user = session.get(User, user_id)
+            assert user is not None
+            self.assertIsNotNone(user.password_changed_at)
 
 
 class EmailDeliveryTest(unittest.TestCase):

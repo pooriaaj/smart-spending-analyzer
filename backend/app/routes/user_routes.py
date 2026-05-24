@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import func
 from sqlalchemy.orm import Session
@@ -144,6 +146,7 @@ def change_my_password(
         )
 
     current_user.password_hash = hash_password(payload.new_password)
+    current_user.password_changed_at = datetime.now(timezone.utc)
     db.commit()
 
     return MessageResponse(message="Password changed successfully")

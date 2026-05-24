@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import unittest
 from collections.abc import Generator
+from datetime import datetime, timezone
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -12,7 +13,9 @@ from sqlalchemy.pool import StaticPool
 from app.database import Base
 from app.dependencies import get_current_user, get_db
 from app.models import MerchantCategoryProfile, MerchantLookupCache, User, UserLearningPreference
-from app.routes.user_routes import router as user_router
+from app.routes.user_routes import change_my_password, router as user_router
+from app.schemas import ChangePasswordRequest
+from app.auth import hash_password
 
 
 class UserRouteTest(unittest.TestCase):
@@ -205,6 +208,33 @@ class UserRouteTest(unittest.TestCase):
 
         self.assertIsNotNone(cached)
         self.assertEqual(cached.category, "entertainment")
+
+    def test_password_change_marks_password_changed_at(self) -> None:
+        with self.session_local() as session:
+            user = session.get(User, self.user_id)
+            assert user is not None
+            user.password_hash = hash_password("StrongPass1")
+            user.password_changed_at = None
+            session.commit()
+
+        before_change = datetime.now(timezone.utc)
+        with self.session_local() as session:
+            user = session.get(User, self.user_id)
+            assert user is not None
+            response = change_my_password(
+                ChangePasswordRequest(
+                    current_password="StrongPass1",
+                    new_password="BetterPass1",
+                ),
+                db=session,
+                current_user=user,
+            )
+            self.assertEqual(response.message, "Password changed successfully")
+            self.assertIsNotNone(user.password_changed_at)
+            changed_at = user.password_changed_at
+            if changed_at.tzinfo is None:
+                changed_at = changed_at.replace(tzinfo=timezone.utc)
+            self.assertGreaterEqual(changed_at, before_change)
 
 
 if __name__ == "__main__":

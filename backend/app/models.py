@@ -14,6 +14,7 @@ class User(Base):
     password_hash = Column(String(255), nullable=False)
     reset_token_hash = Column(String(255), nullable=True)
     reset_token_expires_at = Column(DateTime(timezone=True), nullable=True)
+    password_changed_at = Column(DateTime(timezone=True), nullable=True)
 
     accounts = relationship(
         "Account",

@@ -72,6 +72,7 @@ def register(user: UserCreate, db: Session = Depends(get_db)) -> Token:
     new_user = User(
         email=normalized_email,
         password_hash=hash_password(user.password),
+        password_changed_at=datetime.now(timezone.utc),
     )
     db.add(new_user)
     db.commit()
@@ -170,6 +171,7 @@ def reset_password(
     user.password_hash = hash_password(payload.new_password)
     user.reset_token_hash = None
     user.reset_token_expires_at = None
+    user.password_changed_at = datetime.now(timezone.utc)
     db.commit()
 
     return {"message": "Password has been reset successfully"}
