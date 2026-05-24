@@ -1674,6 +1674,40 @@ class SmartImportRouteTest(unittest.TestCase):
         self.assertIn("weak or generic signal", paypal_row["category_review_reason"])
         self.assertEqual(preview_rows[3]["category_source"], "merchant_override")
 
+    def test_import_file_categorizes_non_rbc_canadian_statement_rows(self) -> None:
+        pdf_bytes = build_text_pdf(
+            [
+                "Desjardins",
+                "Releve de compte",
+                "Periode du 2026-04-01 au 2026-04-30",
+                "Solde precedent 1 000,00",
+                "Date Description Retraits Depots Solde",
+                "02 avr Depot paie ACME 2 000,00 3 000,00",
+                "03 avr Achat par carte de debit, PROVIGO 45,21 2 954,79",
+                "04 avr Paiement facture Hydro Quebec 90,00 2 864,79",
+            ]
+        )
+
+        response = self.client.post(
+            "/transactions/import/file",
+            data={"account_id": str(self.account_id)},
+            files={"file": ("desjardins-statement.pdf", pdf_bytes, "application/pdf")},
+        )
+
+        self.assertEqual(response.status_code, 200, response.text)
+        preview_rows = response.json()["preview_rows"]
+
+        self.assertEqual([row["type"] for row in preview_rows], ["income", "expense", "expense"])
+        self.assertEqual(
+            [row["description"] for row in preview_rows],
+            ["Depot paie ACME", "PROVIGO", "Paiement facture Hydro Quebec"],
+        )
+        self.assertEqual(
+            [row["category"] for row in preview_rows],
+            ["salary", "groceries", "utilities"],
+        )
+        self.assertTrue(all(row["confidence"] >= 0.9 for row in preview_rows))
+
     def test_import_file_strips_payment_processor_prefixes_safely(self) -> None:
         pdf_bytes = build_text_pdf(
             [

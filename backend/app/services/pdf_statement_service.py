@@ -70,6 +70,12 @@ NUMERIC_STATEMENT_RANGE_REGEX = re.compile(
     r"(?P<end>\d{1,2}[/-]\d{1,2}[/-]\d{2,4})",
     flags=re.IGNORECASE,
 )
+ISO_STATEMENT_RANGE_REGEX = re.compile(
+    r"(?:(?:statement\s+period|period|from|du|de)\s*:?\s*)?"
+    r"(?P<start>\d{4}[/-]\d{1,2}[/-]\d{1,2})\s*(?:to|-|au)\s*"
+    r"(?P<end>\d{4}[/-]\d{1,2}[/-]\d{1,2})",
+    flags=re.IGNORECASE,
+)
 FRENCH_STATEMENT_END_DATE_REGEX = re.compile(
     rf"periode\s+terminee\s+le\s+(?P<day>\d{{1,2}})\s+(?P<mon>{MONTH_WORD_PATTERN})\s+(?P<year>\d{{4}})",
     flags=re.IGNORECASE,
@@ -330,6 +336,95 @@ STATEMENT_PROFILES = (
             "statement period",
         ),
         extra_balance_markers=("opening balance", "closing balance"),
+    ),
+    StatementProfile(
+        profile_id="tangerine",
+        display_name="Tangerine",
+        detection_markers=("tangerine",),
+        extra_noise_prefixes=(
+            "tangerine bank",
+            "tangerine",
+            "account activity",
+            "transaction details",
+            "transaction date",
+            "posting date",
+            "statement period",
+            "account summary",
+        ),
+        extra_balance_markers=(
+            "opening balance",
+            "closing balance",
+            "previous balance",
+            "new balance",
+            "available credit",
+        ),
+    ),
+    StatementProfile(
+        profile_id="simplii",
+        display_name="Simplii Financial",
+        detection_markers=("simplii financial", "simplii"),
+        extra_noise_prefixes=(
+            "simplii financial",
+            "account activity",
+            "transaction details",
+            "statement period",
+            "account summary",
+        ),
+        extra_balance_markers=(
+            "opening balance",
+            "closing balance",
+            "previous balance",
+            "new balance",
+        ),
+    ),
+    StatementProfile(
+        profile_id="desjardins",
+        display_name="Desjardins",
+        detection_markers=("desjardins",),
+        extra_noise_prefixes=(
+            "desjardins",
+            "caisse desjardins",
+            "releve de compte",
+            "releve d'operations",
+            "periode du",
+            "date description",
+            "description retrait depot solde",
+            "description retraits depots solde",
+            "folio",
+            "transit",
+        ),
+        extra_balance_markers=(
+            "solde d'ouverture",
+            "solde precedent",
+            "solde anterieur",
+            "nouveau solde",
+            "solde de cloture",
+            "solde de fermeture",
+        ),
+        balance_delta_type_inference=True,
+    ),
+    StatementProfile(
+        profile_id="national_bank",
+        display_name="National Bank",
+        detection_markers=("national bank of canada", "banque nationale"),
+        extra_noise_prefixes=(
+            "national bank of canada",
+            "banque nationale",
+            "account statement",
+            "statement period",
+            "account activity",
+            "transaction details",
+            "date description",
+        ),
+        extra_balance_markers=(
+            "opening balance",
+            "closing balance",
+            "previous balance",
+            "new balance",
+            "solde d'ouverture",
+            "solde de fermeture",
+        ),
+        balance_delta_type_inference=True,
     ),
     StatementProfile(
         profile_id="bmo_french",
@@ -818,6 +913,12 @@ def extract_statement_period(text: str) -> tuple[date | None, date | None]:
         )
         return None, end_date
 
+    iso_match = ISO_STATEMENT_RANGE_REGEX.search(text)
+    if iso_match:
+        start_date = parse_iso_statement_date(iso_match.group("start"))
+        end_date = parse_iso_statement_date(iso_match.group("end"))
+        return start_date, end_date
+
     numeric_match = NUMERIC_STATEMENT_RANGE_REGEX.search(text)
     if not numeric_match:
         return None, None
@@ -840,6 +941,17 @@ def extract_statement_period(text: str) -> tuple[date | None, date | None]:
         datetime.now().year,
     )
     return start_date, end_date
+
+
+def parse_iso_statement_date(value: str) -> date | None:
+    parts = re.split(r"[/-]", value)
+    if len(parts) != 3:
+        return None
+
+    try:
+        return date(int(parts[0]), int(parts[1]), int(parts[2]))
+    except ValueError:
+        return None
 
 
 def extract_statement_year(text: str) -> int:

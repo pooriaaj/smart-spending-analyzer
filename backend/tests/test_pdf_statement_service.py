@@ -151,6 +151,14 @@ class PdfStatementServiceHelpersTest(unittest.TestCase):
         self.assertEqual(start_year, 2024)
         self.assertEqual(end_year, 2025)
 
+    def test_extract_statement_year_range_supports_iso_periods(self) -> None:
+        start_year, end_year = service.extract_statement_year_range(
+            "Periode du 2026-04-01 au 2026-04-30"
+        )
+
+        self.assertEqual(start_year, 2026)
+        self.assertEqual(end_year, 2026)
+
     def test_build_numeric_date_candidates_can_disambiguate_with_statement_period(self) -> None:
         candidates = service.build_numeric_date_candidates(
             "03",
@@ -170,6 +178,18 @@ class PdfStatementServiceHelpersTest(unittest.TestCase):
         )
 
         self.assertEqual(profile.profile_id, "td")
+
+    def test_detect_statement_profile_identifies_additional_canadian_banks(self) -> None:
+        examples = {
+            "tangerine": "Tangerine Bank\nTransaction details",
+            "simplii": "Simplii Financial\nAccount Activity",
+            "desjardins": "Desjardins\nReleve de compte",
+            "national_bank": "National Bank of Canada\nAccount statement",
+        }
+
+        for expected_profile, text in examples.items():
+            with self.subTest(expected_profile=expected_profile):
+                self.assertEqual(service.detect_statement_profile(text).profile_id, expected_profile)
 
     def test_strip_secondary_leading_date_removes_posted_date_prefix(self) -> None:
         stripped = service.strip_secondary_leading_date(
@@ -452,6 +472,116 @@ Jan 02 PAYROLL DEPOSIT $1,500.00
         )
         self.assertEqual(len(result["preview_rows"]), 1)
         self.assertEqual(result["preview_rows"][0].date, "2025-01-02")
+
+    def test_parse_pdf_statement_preview_supports_tangerine_credit_debit_rows(self) -> None:
+        text = """
+Tangerine Bank
+Statement period 04/01/2026 - 04/30/2026
+Transaction Date Posting Date Description Amount
+Apr 02 Apr 03 PAYROLL DEPOSIT 2,100.00CR
+Apr 05 Apr 06 NO FRILLS 84.21DR
+        """.strip()
+
+        with (
+            patch.object(
+                service,
+                "extract_pdf_text_result",
+                return_value=self.extraction_result(text),
+            ),
+            patch.object(service, "categorize_transaction_details", side_effect=self.categorize),
+        ):
+            result = service.parse_pdf_statement_preview(
+                db=self.db,
+                owner_id=123,
+                file_bytes=b"fake-pdf",
+            )
+
+        self.assertEqual(
+            result["notes"],
+            ["Detected bank profile: Tangerine. Using generic parser with bank-aware noise filtering; review carefully."],
+        )
+        preview_rows = result["preview_rows"]
+        self.assertEqual(len(preview_rows), 2)
+        self.assertEqual(preview_rows[0].date, "2026-04-02")
+        self.assertEqual(preview_rows[0].type, "income")
+        self.assertEqual(preview_rows[0].amount, 2100.00)
+        self.assertEqual(preview_rows[1].description, "NO FRILLS")
+        self.assertEqual(preview_rows[1].type, "expense")
+        self.assertEqual(preview_rows[1].amount, 84.21)
+
+    def test_parse_pdf_statement_preview_supports_desjardins_iso_period_and_balances(self) -> None:
+        text = """
+Desjardins
+Releve de compte
+Periode du 2026-04-01 au 2026-04-30
+Solde precedent 1 000,00
+Date Description Retraits Depots Solde
+02 avr Depot paie ACME 2 000,00 3 000,00
+03 avr Achat par carte de debit, PROVIGO 45,21 2 954,79
+        """.strip()
+
+        with (
+            patch.object(
+                service,
+                "extract_pdf_text_result",
+                return_value=self.extraction_result(text),
+            ),
+            patch.object(service, "categorize_transaction_details", side_effect=self.categorize),
+        ):
+            result = service.parse_pdf_statement_preview(
+                db=self.db,
+                owner_id=123,
+                file_bytes=b"fake-pdf",
+            )
+
+        self.assertEqual(
+            result["notes"],
+            [
+                "Detected bank profile: Desjardins. Using running-balance checks to infer income vs expense direction."
+            ],
+        )
+        preview_rows = result["preview_rows"]
+        self.assertEqual(len(preview_rows), 2)
+        self.assertEqual(preview_rows[0].date, "2026-04-02")
+        self.assertEqual(preview_rows[0].type, "income")
+        self.assertEqual(preview_rows[0].amount, 2000.00)
+        self.assertEqual(preview_rows[1].date, "2026-04-03")
+        self.assertEqual(preview_rows[1].description, "PROVIGO")
+        self.assertEqual(preview_rows[1].type, "expense")
+        self.assertEqual(preview_rows[1].amount, 45.21)
+
+    def test_parse_pdf_statement_preview_supports_national_bank_running_balances(self) -> None:
+        text = """
+National Bank of Canada
+Account statement
+Statement period 04/01/2026 - 04/30/2026
+Opening balance 1,000.00
+Date Description Amount Balance
+Apr 02 Salary Deposit 2,000.00 3,000.00
+Apr 03 Debit Card Purchase METRO SUPERMARKET 53.10 2,946.90
+        """.strip()
+
+        with (
+            patch.object(
+                service,
+                "extract_pdf_text_result",
+                return_value=self.extraction_result(text),
+            ),
+            patch.object(service, "categorize_transaction_details", side_effect=self.categorize),
+        ):
+            result = service.parse_pdf_statement_preview(
+                db=self.db,
+                owner_id=123,
+                file_bytes=b"fake-pdf",
+            )
+
+        preview_rows = result["preview_rows"]
+        self.assertEqual(len(preview_rows), 2)
+        self.assertEqual(preview_rows[0].type, "income")
+        self.assertEqual(preview_rows[0].amount, 2000.00)
+        self.assertEqual(preview_rows[1].type, "expense")
+        self.assertEqual(preview_rows[1].description, "Debit Card Purchase METRO SUPERMARKET")
+        self.assertEqual(preview_rows[1].amount, 53.10)
 
     def test_parse_pdf_statement_preview_supports_bmo_french_rows(self) -> None:
         text = """

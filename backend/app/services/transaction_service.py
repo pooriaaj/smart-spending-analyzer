@@ -96,6 +96,9 @@ CATEGORY_RULES = {
         "pay/pay",
         "pay pay",
         "paie",
+        "depot paie",
+        "depot de paie",
+        "depot direct paie",
         "cffa vendome",
     ],
     "rent": ["rent", "lease", "landlord", "hazelview", "hazielview", "hazielview prop"],
@@ -119,6 +122,11 @@ CATEGORY_RULES = {
         "transfer to deposit account",
         "virement interac",
         "virement en ligne",
+        "interac e-transfer received",
+        "interac e-transfer sent",
+        "abm transfer",
+        "transfer from",
+        "transfer to",
         "atm deposit",
         "payment - thank you",
         "payment thank you",
@@ -142,6 +150,11 @@ CATEGORY_RULES["groceries"].extend([
     "farmers market",
     "no frills",
     "metro grocery",
+    "metro supermarket",
+    "provigo",
+    "maxi",
+    "iga",
+    "super c",
     "food basics",
     "food store",
     "farm boy",
@@ -259,6 +272,7 @@ CATEGORY_RULES.update(
 )
 CATEGORY_RULES["utilities"].extend(["metergy", "ez-pay", "ez pay"])
 CATEGORY_RULES["utilities"].extend(["alectra", "enbridge", "toronto hydro"])
+CATEGORY_RULES["utilities"].extend(["hydro quebec", "hydro-quebec", "paiement facture hydro"])
 CATEGORY_RULES["phone"].extend(["bell mobility", "koodo", "phone bill", "virgin plus"])
 CATEGORY_RULES["internet"].extend(["teksavvy", "internet provider"])
 CATEGORY_RULES["subscriptions"].extend([
