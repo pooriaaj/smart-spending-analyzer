@@ -44,6 +44,12 @@ def resolve_assistant_account_scope(
     return resolve_account_scope_label(db, current_user, account_id)
 
 
+def assistant_history_item_content(item) -> str:
+    if isinstance(item, dict):
+        return str(item.get("content") or "")
+    return str(getattr(item, "content", "") or "")
+
+
 @router.get("/status", response_model=AssistantStatusResponse)
 def get_assistant_status_route(
     db: Session = Depends(get_db),
@@ -107,11 +113,17 @@ def get_assistant_response_route(
 ) -> AssistantQueryResponse:
     scope_label = resolve_assistant_account_scope(db, current_user, payload.account_id)
     active_llm_provider = get_active_llm_provider()
+    history = payload.history or get_recent_assistant_history_payload(
+        db,
+        current_user.id,
+        account_id=payload.account_id,
+        limit=8,
+    )
     llm_allowed = True
     if active_llm_provider is not None:
         estimated_request_chars = len(payload.question or "") + sum(
-            len(str(item.content or ""))
-            for item in (payload.history or [])
+            len(assistant_history_item_content(item))
+            for item in history
         )
         llm_allowed = assistant_llm_usage_allowed(
             db,
@@ -119,12 +131,6 @@ def get_assistant_response_route(
             estimated_request_chars=estimated_request_chars,
         )
 
-    history = payload.history or get_recent_assistant_history_payload(
-        db,
-        current_user.id,
-        account_id=payload.account_id,
-        limit=8,
-    )
     response = generate_assistant_response(
         db,
         current_user.id,

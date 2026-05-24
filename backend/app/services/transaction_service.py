@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import csv
 import io
+import os
 import re
 import unicodedata
 from collections import Counter
@@ -59,6 +60,7 @@ COMMUNITY_PROFILE_EXCLUDED_CATEGORIES = {
 }
 MAX_TRANSACTION_PAGE_SIZE = 100
 MAX_BULK_CATEGORY_CANDIDATES = 500
+MAX_REVIEW_SCAN_TRANSACTIONS_DEFAULT = 2500
 TRANSACTION_SOURCE_LABELS = {
     "manual": "Written transactions",
     "manual_import_review": "Manual import review rows",
@@ -75,6 +77,23 @@ IMPORTED_TRANSACTION_SOURCES = {
     "receipt_import",
     "statement_import",
 }
+
+
+def _bounded_int_env(name: str, default: int, minimum: int, maximum: int) -> int:
+    try:
+        value = int(os.getenv(name, str(default)))
+    except (TypeError, ValueError):
+        return default
+    return max(minimum, min(value, maximum))
+
+
+def max_review_scan_transactions() -> int:
+    return _bounded_int_env(
+        "MAX_TRANSACTION_REVIEW_SCAN",
+        MAX_REVIEW_SCAN_TRANSACTIONS_DEFAULT,
+        100,
+        25_000,
+    )
 
 HEADER_ALIASES = {
     "date": {"date", "transaction_date", "posted_date"},
@@ -1471,11 +1490,16 @@ def get_category_learning_candidates(
     limit: int = 12,
 ) -> list[CategoryLearningCandidate]:
     max_candidates = max(1, min(int(limit or 12), 50))
+    scan_limit = max_review_scan_transactions()
     query = db.query(Transaction).filter(Transaction.owner_id == owner_id)
     if account_id is not None:
         query = query.filter(Transaction.account_id == account_id)
 
-    transactions = query.order_by(Transaction.date.desc(), Transaction.id.desc()).all()
+    transactions = (
+        query.order_by(Transaction.date.desc(), Transaction.id.desc())
+        .limit(scan_limit)
+        .all()
+    )
     grouped: dict[tuple[str, str, int], list[Transaction]] = {}
     display_names: dict[tuple[str, str, int], str] = {}
     representative_amounts: dict[tuple[str, str, int], float | None] = {}
@@ -1924,12 +1948,17 @@ def get_suspicious_amount_repair_candidates(
     owner_id: int,
     account_id: int | None = None,
 ) -> list[SuspiciousAmountRepairCandidate]:
+    scan_limit = max_review_scan_transactions()
     query = db.query(Transaction).filter(Transaction.owner_id == owner_id)
     if account_id is not None:
         query = query.filter(Transaction.account_id == account_id)
 
     candidates: list[SuspiciousAmountRepairCandidate] = []
-    for transaction in query.order_by(Transaction.date.desc(), Transaction.id.desc()).all():
+    for transaction in (
+        query.order_by(Transaction.date.desc(), Transaction.id.desc())
+        .limit(scan_limit)
+        .all()
+    ):
         candidate = suggest_reference_code_amount_repair(transaction)
         if candidate:
             candidates.append(candidate)
@@ -1967,12 +1996,17 @@ def get_likely_duplicate_transaction_groups(
     limit: int = 10,
 ) -> list[DuplicateTransactionGroup]:
     max_groups = max(1, min(int(limit or 10), 50))
+    scan_limit = max_review_scan_transactions()
     query = db.query(Transaction).filter(Transaction.owner_id == owner_id)
     if account_id is not None:
         query = query.filter(Transaction.account_id == account_id)
 
     grouped: dict[tuple, list[Transaction]] = {}
-    for transaction in query.order_by(Transaction.date.desc(), Transaction.id.desc()).all():
+    for transaction in (
+        query.order_by(Transaction.date.desc(), Transaction.id.desc())
+        .limit(scan_limit)
+        .all()
+    ):
         duplicate_key = (
             transaction.account_id or 0,
             transaction.date.isoformat(),

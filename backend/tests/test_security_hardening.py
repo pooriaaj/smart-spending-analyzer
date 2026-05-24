@@ -21,7 +21,7 @@ from app.auth import ALGORITHM, SECRET_KEY, create_access_token, hash_password
 from app import database
 from app.database import Base
 from app.dependencies import get_current_user
-from app.models import Account, AssistantUsageEvent, BudgetPlan, SavedScenario, Transaction, User
+from app.models import Account, AssistantChatMessage, AssistantUsageEvent, BudgetPlan, SavedScenario, Transaction, User
 from app.routes import auth_routes
 from app.routes.account_routes import router as account_router
 from app.routes.analytics_routes import router as analytics_router
@@ -46,6 +46,7 @@ from app.services import llm_service
 from app.services import email_service
 from app.services.assistant_service import generate_assistant_response
 from app.services.llm_service import ANSWER_MAX_CHARS, build_finance_prompt, parse_llm_response
+from app.services.transaction_service import max_review_scan_transactions
 from app.services import vision_ocr_service
 
 
@@ -347,6 +348,49 @@ class SecurityRouteTest(unittest.TestCase):
         self.assertTrue(
             any("daily safety limit" in point for point in response.json()["supporting_points"])
         )
+
+    def test_assistant_usage_estimate_includes_saved_history(self) -> None:
+        client = self.build_owned_resource_client()
+        saved_context = "Earlier saved context. " * 40
+        with self.session_local() as session:
+            session.add(
+                AssistantChatMessage(
+                    role="assistant",
+                    content=saved_context,
+                    mode="balanced",
+                    scope_label="User A Account",
+                    owner_id=self.user_a_id,
+                    account_id=self.account_a_id,
+                )
+            )
+            session.commit()
+
+        response_payload = {
+            "answer": "Safe fallback answer.",
+            "supporting_points": [],
+            "suggested_followups": [],
+            "suggested_actions": [],
+            "scope_label": "User A Account",
+        }
+        with patch("app.routes.assistant_routes.get_active_llm_provider", return_value="openai"), patch(
+            "app.routes.assistant_routes.assistant_llm_usage_allowed",
+            return_value=False,
+        ) as mock_allowed, patch(
+            "app.routes.assistant_routes.generate_assistant_response",
+            return_value=response_payload,
+        ):
+            response = client.post(
+                "/assistant/response",
+                json={
+                    "question": "What changed?",
+                    "mode": "balanced",
+                    "account_id": self.account_a_id,
+                },
+            )
+
+        self.assertEqual(response.status_code, 200, response.text)
+        estimated_chars = mock_allowed.call_args.kwargs["estimated_request_chars"]
+        self.assertGreaterEqual(estimated_chars, len(saved_context) + len("What changed?"))
 
     def test_assistant_uses_rule_based_fallback_when_daily_char_budget_is_reached(self) -> None:
         client = self.build_owned_resource_client()
@@ -727,6 +771,7 @@ class BackendResilienceTest(unittest.TestCase):
                 "MAX_IMPORT_BATCH_BYTES": "999999999999",
                 "MAX_IMPORT_CSV_ROWS": "-5",
                 "MAX_API_REQUEST_BODY_BYTES": "bad",
+                "MAX_TRANSACTION_REVIEW_SCAN": "999999",
             },
         ):
             self.assertEqual(max_upload_bytes(), 10 * 1024 * 1024)
@@ -734,6 +779,7 @@ class BackendResilienceTest(unittest.TestCase):
             self.assertEqual(max_batch_upload_bytes(), 250 * 1024 * 1024)
             self.assertEqual(max_csv_rows(), 1)
             self.assertEqual(max_api_request_body_bytes(), 1 * 1024 * 1024)
+            self.assertEqual(max_review_scan_transactions(), 25_000)
 
     def test_rate_limiter_trims_tracked_clients(self) -> None:
         app = FastAPI()
