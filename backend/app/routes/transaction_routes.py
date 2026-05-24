@@ -169,13 +169,21 @@ def entry_source_for_preview_row(row) -> str:
 @router.get("/", response_model=list[TransactionResponse])
 def get_transactions(
     account_id: int | None = Query(default=None),
+    limit: int = Query(default=500, ge=1, le=1000),
+    offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     ensure_default_account(db, current_user)
     require_owned_account(db, current_user, account_id, allow_all=True)
 
-    return get_transactions_for_user(db, current_user.id, account_id=account_id)
+    return get_transactions_for_user(
+        db,
+        current_user.id,
+        account_id=account_id,
+        limit=limit,
+        offset=offset,
+    )
 
 
 @router.get("/page", response_model=TransactionListResponse)

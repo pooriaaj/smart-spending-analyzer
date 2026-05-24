@@ -312,6 +312,7 @@ function AnalyticsPage() {
           api.get("/transactions/", {
             params: {
               account_id: normalizedAccountId,
+              limit: 1000,
             },
           }),
         ]);

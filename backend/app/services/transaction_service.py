@@ -4030,13 +4030,27 @@ def get_transactions_page_for_user(
     }
 
 
-def get_transactions_for_user(db: Session, owner_id: int, account_id: int | None = None) -> list[Transaction]:
+def get_transactions_for_user(
+    db: Session,
+    owner_id: int,
+    account_id: int | None = None,
+    *,
+    limit: int = 500,
+    offset: int = 0,
+) -> list[Transaction]:
     query = db.query(Transaction).filter(Transaction.owner_id == owner_id)
 
     if account_id is not None:
         query = query.filter(Transaction.account_id == account_id)
 
-    return query.order_by(Transaction.date.desc(), Transaction.id.desc()).all()
+    safe_limit = max(1, min(int(limit or 500), 1000))
+    safe_offset = max(0, int(offset or 0))
+    return (
+        query.order_by(Transaction.date.desc(), Transaction.id.desc())
+        .offset(safe_offset)
+        .limit(safe_limit)
+        .all()
+    )
 
 
 def get_uncategorized_candidates(db: Session, owner_id: int, account_id: int | None = None) -> list[Transaction]:

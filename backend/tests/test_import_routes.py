@@ -164,6 +164,34 @@ class SmartImportRouteTest(unittest.TestCase):
         self.assertIsNone(payload[0]["account_id"])
         self.assertEqual(payload[0]["description"], "Older imported transaction")
 
+    def test_transactions_route_limits_legacy_response_size(self) -> None:
+        with self.session_local() as session:
+            session.add_all(
+                [
+                    Transaction(
+                        amount=10 + index,
+                        category="groceries",
+                        description=f"Paged legacy transaction {index}",
+                        date=date(2026, 4, 10 + index),
+                        type="expense",
+                        owner_id=self.user_id,
+                        account_id=self.account_id,
+                    )
+                    for index in range(4)
+                ]
+            )
+            session.commit()
+
+        response = self.client.get("/transactions/", params={"limit": 2, "offset": 1})
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(len(payload), 2)
+        self.assertEqual(
+            [item["description"] for item in payload],
+            ["Paged legacy transaction 2", "Paged legacy transaction 1"],
+        )
+
     def test_transactions_page_filters_and_paginates_in_database(self) -> None:
         with self.session_local() as session:
             session.add_all(
