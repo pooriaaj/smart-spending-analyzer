@@ -9,6 +9,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
+from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from app.database import Base, SessionLocal, engine
 from app.routes.account_routes import router as account_router
@@ -19,9 +20,12 @@ from app.routes.budget_routes import router as budget_router
 from app.routes.transaction_routes import router as transaction_router
 from app.routes.user_routes import router as user_router
 from app.security import (
+    RequestBodySizeLimitMiddleware,
+    RequestIdMiddleware,
     SecurityHeadersMiddleware,
     SimpleRateLimitMiddleware,
     build_validation_error_response,
+    get_allowed_hosts,
     get_allowed_origins,
 )
 from app.services.database_maintenance_service import ensure_runtime_database_shape
@@ -53,6 +57,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+app.add_middleware(TrustedHostMiddleware, allowed_hosts=get_allowed_hosts())
+app.add_middleware(RequestIdMiddleware)
+app.add_middleware(RequestBodySizeLimitMiddleware)
 app.add_middleware(SecurityHeadersMiddleware)
 app.add_middleware(SimpleRateLimitMiddleware)
 
@@ -81,10 +88,11 @@ def on_startup() -> None:
 
 @app.exception_handler(Exception)
 async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
-    logger.exception("Unhandled API error at %s", request.url.path)
+    request_id = getattr(request.state, "request_id", None)
+    logger.exception("Unhandled API error at %s request_id=%s", request.url.path, request_id)
     return JSONResponse(
         status_code=500,
-        content={"detail": "Internal server error"},
+        content={"detail": "Internal server error", "request_id": request_id},
     )
 
 
@@ -93,10 +101,13 @@ async def request_validation_exception_handler(
     request: Request,
     exc: RequestValidationError,
 ) -> JSONResponse:
-    logger.info("Validation error at %s", request.url.path)
+    request_id = getattr(request.state, "request_id", None)
+    logger.info("Validation error at %s request_id=%s", request.url.path, request_id)
+    content = build_validation_error_response(exc.errors())
+    content["request_id"] = request_id
     return JSONResponse(
         status_code=422,
-        content=build_validation_error_response(exc.errors()),
+        content=content,
     )
 
 

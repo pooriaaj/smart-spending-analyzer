@@ -3,8 +3,10 @@ from __future__ import annotations
 import os
 import re
 import time
+import uuid
 from collections import defaultdict, deque
 from collections.abc import Iterable
+from urllib.parse import urlparse
 
 from fastapi import Request, UploadFile, status
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -15,6 +17,7 @@ DEFAULT_MAX_UPLOAD_BYTES = 10 * 1024 * 1024
 DEFAULT_MAX_BATCH_FILES = 24
 DEFAULT_MAX_BATCH_UPLOAD_BYTES = 50 * 1024 * 1024
 DEFAULT_MAX_CSV_ROWS = 5000
+DEFAULT_MAX_API_REQUEST_BODY_BYTES = 1 * 1024 * 1024
 
 ALLOWED_IMPORT_EXTENSIONS = {".csv", ".pdf", ".jpg", ".jpeg", ".png", ".webp"}
 ALLOWED_IMPORT_CONTENT_TYPES = {
@@ -94,6 +97,24 @@ def get_allowed_origins() -> list[str]:
     return safe_origins
 
 
+def get_allowed_hosts() -> list[str]:
+    hosts = parse_csv_env(os.getenv("ALLOWED_HOSTS"))
+    backend_url = (os.getenv("BACKEND_URL") or "").strip()
+    frontend_url = (os.getenv("FRONTEND_URL") or "").strip()
+
+    for url in (backend_url, frontend_url):
+        parsed = urlparse(url)
+        if parsed.hostname:
+            hosts.append(parsed.hostname)
+
+    if not is_production():
+        hosts.extend(["localhost", "127.0.0.1", "testserver"])
+    else:
+        hosts.append("*.onrender.com")
+
+    return list(dict.fromkeys(hosts))
+
+
 def validate_password_strength(password: str) -> None:
     if len(password or "") < 8:
         raise ValueError("Password must be at least 8 characters long.")
@@ -164,6 +185,10 @@ def max_csv_rows() -> int:
     return int(os.getenv("MAX_IMPORT_CSV_ROWS", str(DEFAULT_MAX_CSV_ROWS)))
 
 
+def max_api_request_body_bytes() -> int:
+    return int(os.getenv("MAX_API_REQUEST_BODY_BYTES", str(DEFAULT_MAX_API_REQUEST_BODY_BYTES)))
+
+
 def _file_extension(filename: str | None) -> str:
     _, ext = os.path.splitext(filename or "")
     return ext.lower()
@@ -229,6 +254,10 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         response.headers.setdefault("X-Frame-Options", "DENY")
         response.headers.setdefault("X-Permitted-Cross-Domain-Policies", "none")
         response.headers.setdefault(
+            "Permissions-Policy",
+            "camera=(), microphone=(), geolocation=(), payment=()",
+        )
+        response.headers.setdefault(
             "Content-Security-Policy",
             "default-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'",
         )
@@ -237,6 +266,45 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         if is_production():
             response.headers.setdefault("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
         return response
+
+
+class RequestIdMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        request_id = request.headers.get("x-request-id") or str(uuid.uuid4())
+        if not re.fullmatch(r"[A-Za-z0-9_.:-]{1,80}", request_id):
+            request_id = str(uuid.uuid4())
+        request.state.request_id = request_id
+        response: Response = await call_next(request)
+        response.headers.setdefault("X-Request-ID", request_id)
+        return response
+
+
+class RequestBodySizeLimitMiddleware(BaseHTTPMiddleware):
+    def __init__(self, app, max_body_bytes: int | None = None):
+        super().__init__(app)
+        self.max_body_bytes = max_body_bytes or max_api_request_body_bytes()
+
+    async def dispatch(self, request: Request, call_next):
+        if self._is_exempt_path(request.url.path) or request.method in {"GET", "HEAD", "OPTIONS"}:
+            return await call_next(request)
+
+        content_length = request.headers.get("content-length")
+        if content_length:
+            try:
+                request_size = int(content_length)
+            except ValueError:
+                request_size = 0
+            if request_size > self.max_body_bytes:
+                return JSONResponse(
+                    status_code=status.HTTP_413_CONTENT_TOO_LARGE,
+                    content={"detail": "Request body is too large."},
+                )
+
+        return await call_next(request)
+
+    @staticmethod
+    def _is_exempt_path(path: str) -> bool:
+        return path.startswith("/transactions/import/")
 
 
 class SimpleRateLimitMiddleware(BaseHTTPMiddleware):

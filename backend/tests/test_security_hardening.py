@@ -6,7 +6,7 @@ from collections.abc import Generator
 from datetime import datetime, timedelta, timezone
 from unittest.mock import patch
 
-from fastapi import Depends, FastAPI
+from fastapi import Depends, FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -30,8 +30,11 @@ from app.routes.budget_routes import router as budget_router
 from app.routes.transaction_routes import router as transaction_router
 from app.schemas import ResetPasswordRequest
 from app.security import (
+    RequestBodySizeLimitMiddleware,
+    RequestIdMiddleware,
     SimpleRateLimitMiddleware,
     build_validation_error_response,
+    get_allowed_hosts,
     get_allowed_origins,
 )
 from app.services import llm_service
@@ -686,6 +689,62 @@ class BackendResilienceTest(unittest.TestCase):
 
         self.assertLessEqual(len(middleware._hits), 2)
         self.assertNotIn(("client-1", "/auth/login"), middleware._hits)
+
+    def test_request_id_middleware_adds_header_and_sanitizes_input(self) -> None:
+        app = FastAPI()
+        app.add_middleware(RequestIdMiddleware)
+
+        @app.get("/")
+        def root(request: Request) -> dict[str, str]:
+            return {"request_id": request.state.request_id}
+
+        client = TestClient(app)
+        response = client.get("/", headers={"X-Request-ID": "bad value with spaces"})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertRegex(response.headers["X-Request-ID"], r"^[a-f0-9-]{36}$")
+        self.assertEqual(response.json()["request_id"], response.headers["X-Request-ID"])
+
+    def test_request_body_size_limit_rejects_large_json_payloads(self) -> None:
+        app = FastAPI()
+        app.add_middleware(RequestBodySizeLimitMiddleware, max_body_bytes=20)
+
+        @app.post("/submit")
+        async def submit() -> dict[str, bool]:
+            return {"ok": True}
+
+        client = TestClient(app)
+        response = client.post("/submit", json={"value": "x" * 200})
+
+        self.assertEqual(response.status_code, 413)
+
+    def test_request_body_size_limit_skips_import_paths(self) -> None:
+        app = FastAPI()
+        app.add_middleware(RequestBodySizeLimitMiddleware, max_body_bytes=20)
+
+        @app.post("/transactions/import/file")
+        async def submit() -> dict[str, bool]:
+            return {"ok": True}
+
+        client = TestClient(app)
+        response = client.post("/transactions/import/file", json={"value": "x" * 200})
+
+        self.assertEqual(response.status_code, 200)
+
+    def test_allowed_hosts_includes_render_hosts_in_production(self) -> None:
+        with patch.dict(
+            "os.environ",
+            {
+                "ENVIRONMENT": "production",
+                "BACKEND_URL": "https://api.example.com",
+                "FRONTEND_URL": "https://app.example.com",
+            },
+        ):
+            hosts = get_allowed_hosts()
+
+        self.assertIn("api.example.com", hosts)
+        self.assertIn("app.example.com", hosts)
+        self.assertIn("*.onrender.com", hosts)
 
 
 class ValidationErrorSafetyTest(unittest.TestCase):
