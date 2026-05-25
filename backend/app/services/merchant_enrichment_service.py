@@ -26,7 +26,17 @@ GOOGLE_PLACES_TEXT_SEARCH_URL = "https://places.googleapis.com/v1/places:searchT
 GOOGLE_PLACES_API_KEY = os.getenv("GOOGLE_PLACES_API_KEY", "")
 MERCHANT_LOOKUP_REGION = os.getenv("MERCHANT_LOOKUP_REGION", "Toronto, Canada")
 MERCHANT_LOOKUP_REGION_CODE = os.getenv("MERCHANT_LOOKUP_REGION_CODE", "CA")
-MERCHANT_LOOKUP_TIMEOUT_SECONDS = float(os.getenv("MERCHANT_LOOKUP_TIMEOUT_SECONDS", "2.5"))
+
+
+def _bounded_float_env(name: str, default: float, minimum: float, maximum: float) -> float:
+    try:
+        value = float(os.getenv(name, str(default)))
+    except (TypeError, ValueError):
+        return default
+    return max(minimum, min(value, maximum))
+
+
+MERCHANT_LOOKUP_TIMEOUT_SECONDS = _bounded_float_env("MERCHANT_LOOKUP_TIMEOUT_SECONDS", 2.5, 0.5, 10.0)
 
 LOOKUP_STOPWORDS = {
     "achat",

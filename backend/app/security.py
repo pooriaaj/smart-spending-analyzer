@@ -328,7 +328,7 @@ class SimpleRateLimitMiddleware(BaseHTTPMiddleware):
             "/transactions/import/files": (5, 300),
         }
         self._hits: dict[tuple[str, str], deque[float]] = defaultdict(deque)
-        self.max_tracked_keys = int(os.getenv("RATE_LIMIT_MAX_TRACKED_KEYS", "10000"))
+        self.max_tracked_keys = _bounded_int_env("RATE_LIMIT_MAX_TRACKED_KEYS", 10000, 100, 100000)
 
     async def dispatch(self, request: Request, call_next):
         rule = self._matching_rule(request.url.path)

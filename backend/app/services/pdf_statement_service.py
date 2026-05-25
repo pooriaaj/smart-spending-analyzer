@@ -483,7 +483,11 @@ class PdfOcrFallbackResult:
 
 
 def get_pdf_text_max_pages() -> int:
-    return int(os.getenv("PDF_TEXT_MAX_PAGES", str(PDF_TEXT_MAX_PAGES_DEFAULT)))
+    try:
+        value = int(os.getenv("PDF_TEXT_MAX_PAGES", str(PDF_TEXT_MAX_PAGES_DEFAULT)))
+    except (TypeError, ValueError):
+        return PDF_TEXT_MAX_PAGES_DEFAULT
+    return max(1, min(value, 200))
 
 
 def strip_accents(value: str) -> str:

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import importlib
 import secrets
 import unittest
 from collections.abc import Generator
@@ -17,6 +18,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from app import dependencies
+from app import auth as auth_module
 from app.auth import ALGORITHM, SECRET_KEY, create_access_token, hash_password
 from app import database
 from app.database import Base
@@ -44,6 +46,7 @@ from app.security import (
 )
 from app.services import llm_service
 from app.services import email_service
+from app.services import merchant_enrichment_service, pdf_statement_service
 from app.services.assistant_service import generate_assistant_response
 from app.services.llm_service import ANSWER_MAX_CHARS, build_finance_prompt, parse_llm_response
 from app.services.transaction_service import max_review_scan_transactions
@@ -780,6 +783,46 @@ class BackendResilienceTest(unittest.TestCase):
             self.assertEqual(max_csv_rows(), 1)
             self.assertEqual(max_api_request_body_bytes(), 1 * 1024 * 1024)
             self.assertEqual(max_review_scan_transactions(), 25_000)
+
+    def test_auth_env_values_are_bounded_on_import(self) -> None:
+        original_auth_state = {
+            "ALGORITHM": auth_module.ALGORITHM,
+            "ACCESS_TOKEN_EXPIRE_MINUTES": auth_module.ACCESS_TOKEN_EXPIRE_MINUTES,
+            "BCRYPT_ROUNDS": auth_module.BCRYPT_ROUNDS,
+        }
+        with patch.dict(
+            "os.environ",
+            {
+                "SECRET_KEY": "x" * 64,
+                "ALGORITHM": "none",
+                "ACCESS_TOKEN_EXPIRE_MINUTES": "bad",
+                "BCRYPT_ROUNDS": "99",
+            },
+        ):
+            reloaded = importlib.reload(auth_module)
+            self.assertEqual(reloaded.ALGORITHM, "HS256")
+            self.assertEqual(reloaded.ACCESS_TOKEN_EXPIRE_MINUTES, 60)
+            self.assertEqual(reloaded.BCRYPT_ROUNDS, 16)
+
+        restored = importlib.reload(auth_module)
+        self.assertEqual(restored.ALGORITHM, original_auth_state["ALGORITHM"])
+
+    def test_parser_and_enrichment_env_values_are_bounded(self) -> None:
+        with patch.dict(
+            "os.environ",
+            {
+                "PDF_TEXT_MAX_PAGES": "not-a-number",
+                "MERCHANT_LOOKUP_TIMEOUT_SECONDS": "999",
+            },
+        ):
+            self.assertEqual(
+                pdf_statement_service.get_pdf_text_max_pages(),
+                pdf_statement_service.PDF_TEXT_MAX_PAGES_DEFAULT,
+            )
+            reloaded_enrichment = importlib.reload(merchant_enrichment_service)
+            self.assertEqual(reloaded_enrichment.MERCHANT_LOOKUP_TIMEOUT_SECONDS, 10.0)
+
+        importlib.reload(merchant_enrichment_service)
 
     def test_rate_limiter_trims_tracked_clients(self) -> None:
         app = FastAPI()

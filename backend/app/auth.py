@@ -15,11 +15,29 @@ from app.security import is_production, validate_password_strength
 load_dotenv()
 
 SECRET_KEY = os.getenv("SECRET_KEY", "")
-ALGORITHM = os.getenv("ALGORITHM", "HS256")
-ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "60"))
 LEGACY_PBKDF2_ITERATIONS = 100000
-BCRYPT_ROUNDS = int(os.getenv("BCRYPT_ROUNDS", "12"))
 BCRYPT_HASH_PREFIXES = ("$2a$", "$2b$", "$2y$")
+SUPPORTED_JWT_ALGORITHMS = {"HS256", "HS384", "HS512"}
+
+
+def _bounded_int_env(name: str, default: int, minimum: int, maximum: int) -> int:
+    try:
+        value = int(os.getenv(name, str(default)))
+    except (TypeError, ValueError):
+        return default
+    return max(minimum, min(value, maximum))
+
+
+def _jwt_algorithm_env() -> str:
+    algorithm = os.getenv("ALGORITHM", "HS256").strip().upper()
+    if algorithm not in SUPPORTED_JWT_ALGORITHMS:
+        return "HS256"
+    return algorithm
+
+
+ALGORITHM = _jwt_algorithm_env()
+ACCESS_TOKEN_EXPIRE_MINUTES = _bounded_int_env("ACCESS_TOKEN_EXPIRE_MINUTES", 60, 5, 24 * 60)
+BCRYPT_ROUNDS = _bounded_int_env("BCRYPT_ROUNDS", 12, 4, 16)
 
 if not SECRET_KEY:
     raise RuntimeError("SECRET_KEY is not set.")
