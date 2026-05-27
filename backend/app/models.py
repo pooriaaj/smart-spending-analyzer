@@ -70,6 +70,12 @@ class User(Base):
         cascade="all, delete-orphan",
         passive_deletes=True,
     )
+    assistant_learning_examples = relationship(
+        "AssistantLearningExample",
+        back_populates="owner",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
 
     budgets = relationship(
         "BudgetPlan",
@@ -117,6 +123,11 @@ class Account(Base):
         "AssistantChatMessage",
         back_populates="account",
         cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
+    assistant_learning_examples = relationship(
+        "AssistantLearningExample",
+        back_populates="account",
         passive_deletes=True,
     )
 
@@ -277,6 +288,32 @@ class AssistantUsageEvent(Base):
     __table_args__ = (
         Index("ix_assistant_usage_owner_created", "owner_id", "created_at"),
         Index("ix_assistant_usage_owner_provider_created", "owner_id", "provider", "created_at"),
+    )
+
+
+class AssistantLearningExample(Base):
+    __tablename__ = "assistant_learning_examples"
+
+    id = Column(Integer, primary_key=True, index=True)
+    question = Column(Text, nullable=False)
+    answer = Column(Text, nullable=False)
+    intent = Column(String(80), nullable=False, default="general")
+    mode = Column(String(20), nullable=False, default="balanced")
+    scope_label = Column(String(160), nullable=False, default="All accounts combined")
+    source = Column(String(40), nullable=False, default="assistant_exchange")
+    quality_score = Column(Float, nullable=True)
+    metadata_json = Column(Text, nullable=True)
+    owner_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    account_id = Column(Integer, ForeignKey("accounts.id", ondelete="SET NULL"), nullable=True, index=True)
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now(), index=True)
+
+    owner = relationship("User", back_populates="assistant_learning_examples")
+    account = relationship("Account", back_populates="assistant_learning_examples")
+
+    __table_args__ = (
+        Index("ix_assistant_learning_owner_created", "owner_id", "created_at"),
+        Index("ix_assistant_learning_owner_intent_created", "owner_id", "intent", "created_at"),
+        Index("ix_assistant_learning_owner_account_created", "owner_id", "account_id", "created_at"),
     )
 
 

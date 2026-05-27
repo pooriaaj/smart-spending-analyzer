@@ -12,10 +12,14 @@ from app.schemas import (
     AssistantHistoryClearResponse,
     AssistantHistoryItem,
     AssistantHistoryResponse,
+    AssistantLearningClearResponse,
+    AssistantLearningExampleResponse,
+    AssistantLearningSummaryResponse,
     AssistantQueryRequest,
     AssistantQueryResponse,
     AssistantStatusResponse,
     AssistantSuggestionsResponse,
+    AssistantTrainingExportResponse,
 )
 from app.services.assistant_service import (
     generate_assistant_response,
@@ -23,12 +27,16 @@ from app.services.assistant_service import (
 )
 from app.services.assistant_memory_service import (
     assistant_llm_usage_allowed,
+    build_assistant_training_export,
+    clear_assistant_learning_examples,
     clear_assistant_history,
+    get_assistant_learning_summary,
     get_assistant_usage_status,
     get_recent_assistant_history_payload,
     get_recent_assistant_messages,
     record_assistant_usage_event,
     save_assistant_exchange,
+    save_assistant_learning_example,
 )
 from app.services.llm_service import get_active_llm_provider, get_llm_provider_status
 
@@ -105,6 +113,68 @@ def clear_assistant_history_route(
     )
 
 
+@router.get("/learning-summary", response_model=AssistantLearningSummaryResponse)
+def get_assistant_learning_summary_route(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> AssistantLearningSummaryResponse:
+    summary = get_assistant_learning_summary(db, current_user.id)
+    return AssistantLearningSummaryResponse(
+        total_examples=summary["total_examples"],
+        intent_counts=summary["intent_counts"],
+        recent_examples=[
+            AssistantLearningExampleResponse(
+                id=example.id,
+                question=example.question,
+                answer=example.answer,
+                intent=example.intent,
+                mode=example.mode,
+                scope_label=example.scope_label,
+                source=example.source,
+                quality_score=example.quality_score,
+                account_id=example.account_id,
+                created_at=example.created_at,
+            )
+            for example in summary["recent_examples"]
+        ],
+    )
+
+
+@router.get("/training-export", response_model=AssistantTrainingExportResponse)
+def get_assistant_training_export_route(
+    account_id: int | None = Query(default=None),
+    intent: str | None = Query(default=None, min_length=1, max_length=80),
+    limit: int = Query(default=100, ge=1, le=500),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> AssistantTrainingExportResponse:
+    resolve_assistant_account_scope(db, current_user, account_id)
+    return AssistantTrainingExportResponse(
+        items=build_assistant_training_export(
+            db,
+            current_user.id,
+            account_id=account_id,
+            intent=intent,
+            limit=limit,
+        )
+    )
+
+
+@router.delete("/training-examples", response_model=AssistantLearningClearResponse)
+def clear_assistant_training_examples_route(
+    account_id: int | None = Query(default=None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> AssistantLearningClearResponse:
+    resolve_assistant_account_scope(db, current_user, account_id)
+    deleted_count = clear_assistant_learning_examples(db, current_user.id, account_id=account_id)
+    db.commit()
+    return AssistantLearningClearResponse(
+        message="Assistant training examples cleared.",
+        deleted_count=deleted_count,
+    )
+
+
 @router.post("/response", response_model=AssistantQueryResponse)
 def get_assistant_response_route(
     payload: AssistantQueryRequest,
@@ -156,6 +226,19 @@ def get_assistant_response_route(
             scope_label=scope_label,
             question=payload.question,
             answer=response["answer"],
+        )
+        save_assistant_learning_example(
+            db=db,
+            owner_id=current_user.id,
+            account_id=payload.account_id,
+            mode=payload.mode,
+            scope_label=scope_label,
+            question=payload.question,
+            answer=response["answer"],
+            metadata={
+                "active_provider": active_llm_provider or "rule_based",
+                "llm_allowed": llm_allowed,
+            },
         )
         if active_llm_provider is not None and llm_allowed:
             record_assistant_usage_event(

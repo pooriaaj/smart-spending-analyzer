@@ -6,6 +6,8 @@ from collections.abc import Iterable
 from sqlalchemy import text
 from sqlalchemy.engine import Engine
 
+from app.models import AssistantLearningExample
+
 logger = logging.getLogger(__name__)
 
 
@@ -80,6 +82,18 @@ RUNTIME_INDEX_STATEMENTS = (
     CREATE INDEX IF NOT EXISTS ix_merchant_profiles_runtime_owner_type_key
     ON merchant_category_profiles (owner_id, transaction_type, merchant_key)
     """,
+    """
+    CREATE INDEX IF NOT EXISTS ix_assistant_learning_runtime_owner_created
+    ON assistant_learning_examples (owner_id, created_at DESC, id DESC)
+    """,
+    """
+    CREATE INDEX IF NOT EXISTS ix_assistant_learning_runtime_owner_intent_created
+    ON assistant_learning_examples (owner_id, intent, created_at DESC, id DESC)
+    """,
+    """
+    CREATE INDEX IF NOT EXISTS ix_assistant_learning_runtime_owner_account_created
+    ON assistant_learning_examples (owner_id, account_id, created_at DESC, id DESC)
+    """,
 )
 
 
@@ -99,6 +113,11 @@ def ensure_runtime_database_shape(engine: Engine) -> None:
     """
 
     dialect_name = engine.dialect.name
+    try:
+        AssistantLearningExample.__table__.create(bind=engine, checkfirst=True)
+    except Exception as exc:
+        logger.warning("Assistant learning table maintenance skipped: %s", exc)
+
     for statement in _statements_for_dialect(dialect_name):
         try:
             with engine.begin() as connection:

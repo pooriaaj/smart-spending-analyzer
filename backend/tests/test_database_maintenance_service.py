@@ -37,6 +37,9 @@ class DatabaseMaintenanceServiceTest(unittest.TestCase):
             merchant_profile_index_names = {
                 item["name"] for item in inspector.get_indexes("merchant_category_profiles")
             }
+            assistant_learning_index_names = {
+                item["name"] for item in inspector.get_indexes("assistant_learning_examples")
+            }
 
             self.assertIn("entry_source", transaction_columns)
             self.assertIn("category_confidence", transaction_columns)
@@ -89,6 +92,18 @@ class DatabaseMaintenanceServiceTest(unittest.TestCase):
             self.assertIn(
                 "ix_merchant_profiles_runtime_owner_type_key",
                 merchant_profile_index_names,
+            )
+            self.assertIn(
+                "ix_assistant_learning_runtime_owner_created",
+                assistant_learning_index_names,
+            )
+            self.assertIn(
+                "ix_assistant_learning_runtime_owner_intent_created",
+                assistant_learning_index_names,
+            )
+            self.assertIn(
+                "ix_assistant_learning_runtime_owner_account_created",
+                assistant_learning_index_names,
             )
         finally:
             Base.metadata.drop_all(bind=engine)

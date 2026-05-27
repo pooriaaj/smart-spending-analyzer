@@ -23,7 +23,16 @@ from app.auth import ALGORITHM, SECRET_KEY, create_access_token, hash_password
 from app import database
 from app.database import Base
 from app.dependencies import get_current_user
-from app.models import Account, AssistantChatMessage, AssistantUsageEvent, BudgetPlan, SavedScenario, Transaction, User
+from app.models import (
+    Account,
+    AssistantChatMessage,
+    AssistantLearningExample,
+    AssistantUsageEvent,
+    BudgetPlan,
+    SavedScenario,
+    Transaction,
+    User,
+)
 from app.routes import auth_routes
 from app.routes.account_routes import router as account_router
 from app.routes.analytics_routes import router as analytics_router
@@ -312,6 +321,51 @@ class SecurityRouteTest(unittest.TestCase):
         self.assertIn("sensitive value redacted", history_text)
         self.assertNotIn("sk-proj-secret-value", history_text)
         self.assertGreaterEqual(len(history_response.json()["messages"]), 2)
+
+    def test_assistant_response_saves_redacted_training_example(self) -> None:
+        client = self.build_owned_resource_client()
+        with patch("app.services.assistant_service.generate_llm_assistant_response", return_value=None):
+            response = client.post(
+                "/assistant/response",
+                json={
+                    "question": "Can you help my budget? OPENAI_API_KEY=sk-proj-secret-value",
+                    "history": [],
+                    "mode": "balanced",
+                    "account_id": self.account_a_id,
+                },
+            )
+
+        self.assertEqual(response.status_code, 200, response.text)
+        with self.session_local() as session:
+            example = (
+                session.query(AssistantLearningExample)
+                .filter(AssistantLearningExample.owner_id == self.user_a_id)
+                .one()
+            )
+            self.assertEqual(example.intent, "budget")
+            self.assertIn("Sensitive value redacted", example.question)
+            self.assertNotIn("sk-proj-secret-value", example.question)
+
+        summary_response = client.get("/assistant/learning-summary")
+        self.assertEqual(summary_response.status_code, 200, summary_response.text)
+        self.assertEqual(summary_response.json()["total_examples"], 1)
+        self.assertEqual(summary_response.json()["intent_counts"]["budget"], 1)
+
+        export_response = client.get(
+            "/assistant/training-export",
+            params={"account_id": self.account_a_id, "limit": 10},
+        )
+        self.assertEqual(export_response.status_code, 200, export_response.text)
+        export_item = export_response.json()["items"][0]
+        self.assertEqual(export_item["messages"][1]["role"], "user")
+        self.assertEqual(export_item["metadata"]["intent"], "budget")
+
+        delete_response = client.delete(
+            "/assistant/training-examples",
+            params={"account_id": self.account_a_id},
+        )
+        self.assertEqual(delete_response.status_code, 200, delete_response.text)
+        self.assertEqual(delete_response.json()["deleted_count"], 1)
 
     def test_assistant_can_clear_saved_history_for_scope(self) -> None:
         client = self.build_owned_resource_client()

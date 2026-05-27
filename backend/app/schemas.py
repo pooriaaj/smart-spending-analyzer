@@ -875,6 +875,39 @@ class AssistantHistoryClearResponse(BaseModel):
     deleted_count: int
 
 
+class AssistantLearningExampleResponse(BaseModel):
+    id: int
+    question: str
+    answer: str
+    intent: str
+    mode: AssistantMode = "balanced"
+    scope_label: str = "All accounts combined"
+    source: str = "assistant_exchange"
+    quality_score: float | None = None
+    account_id: int | None = None
+    created_at: datetime
+
+
+class AssistantLearningSummaryResponse(BaseModel):
+    total_examples: int = 0
+    intent_counts: dict[str, int] = Field(default_factory=dict)
+    recent_examples: list[AssistantLearningExampleResponse] = Field(default_factory=list)
+
+
+class AssistantTrainingExportItem(BaseModel):
+    messages: list[dict[str, str]]
+    metadata: dict[str, str | int | float | bool | None] = Field(default_factory=dict)
+
+
+class AssistantTrainingExportResponse(BaseModel):
+    items: list[AssistantTrainingExportItem] = Field(default_factory=list)
+
+
+class AssistantLearningClearResponse(BaseModel):
+    message: str
+    deleted_count: int
+
+
 class AssistantAction(BaseModel):
     label: str
     page: str

@@ -2,18 +2,21 @@ from __future__ import annotations
 
 import os
 import re
+import json
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from app.models import AssistantChatMessage, AssistantUsageEvent
+from app.models import AssistantChatMessage, AssistantLearningExample, AssistantUsageEvent
 from app.security import redact_sensitive_text
 
 ASSISTANT_MESSAGE_MAX_CHARS = 1800
 ASSISTANT_HISTORY_DEFAULT_LIMIT = 30
 ASSISTANT_HISTORY_MAX_STORED_PER_SCOPE = 120
+ASSISTANT_LEARNING_DEFAULT_LIMIT = 50
+ASSISTANT_LEARNING_EXPORT_MAX_LIMIT = 500
 
 
 def _bounded_int_env(name: str, default: int, minimum: int, maximum: int) -> int:
@@ -32,10 +35,20 @@ def assistant_daily_llm_char_limit() -> int:
     return _bounded_int_env("ASSISTANT_DAILY_LLM_CHAR_LIMIT", 150_000, 1_000, 5_000_000)
 
 
+def assistant_learning_max_examples_per_user() -> int:
+    return _bounded_int_env("ASSISTANT_LEARNING_MAX_EXAMPLES_PER_USER", 2000, 100, 50_000)
+
+
 def _scope_filter(query, account_id: int | None):
     if account_id is None:
         return query.filter(AssistantChatMessage.account_id.is_(None))
     return query.filter(AssistantChatMessage.account_id == account_id)
+
+
+def _learning_scope_filter(query, account_id: int | None):
+    if account_id is None:
+        return query
+    return query.filter(AssistantLearningExample.account_id == account_id)
 
 
 def clean_assistant_message(value: Any, *, limit: int = ASSISTANT_MESSAGE_MAX_CHARS) -> str:
@@ -161,6 +174,190 @@ def clear_assistant_history(
 ) -> int:
     query = db.query(AssistantChatMessage).filter(AssistantChatMessage.owner_id == owner_id)
     query = _scope_filter(query, account_id)
+    deleted_count = query.delete(synchronize_session=False)
+    return int(deleted_count or 0)
+
+
+def infer_assistant_learning_intent(question: str) -> str:
+    text = re.sub(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]", "", str(question or "")).lower()
+    text = re.sub(r"\s+", " ", text).strip()
+    if not text:
+        return "general"
+
+    keyword_groups = (
+        ("budget", ("budget", "over budget", "under budget", "target", "monthly limit")),
+        ("transactions", ("transaction", "spending", "expense", "income", "merchant", "purchase", "charge")),
+        ("statement_import", ("statement", "upload", "csv", "pdf", "import", "bank file")),
+        ("categorization", ("category", "categorize", "classified", "learn this merchant", "merchant learning")),
+        ("account_summary", ("balance", "account", "cash flow", "net worth", "standing")),
+        ("saving_advice", ("save", "saving", "cut", "reduce", "subscription", "goal")),
+        ("external_learning", ("youtube", "video", "link", "learn how", "recipe", "tutorial")),
+        ("auth_help", ("login", "password", "reset", "email", "verify")),
+    )
+    for intent, keywords in keyword_groups:
+        if any(keyword in text for keyword in keywords):
+            return intent
+    return "general"
+
+
+def save_assistant_learning_example(
+    db: Session,
+    owner_id: int,
+    *,
+    account_id: int | None,
+    mode: str,
+    scope_label: str,
+    question: str,
+    answer: str,
+    source: str = "assistant_exchange",
+    quality_score: float | None = None,
+    metadata: dict[str, Any] | None = None,
+) -> AssistantLearningExample | None:
+    clean_question = clean_assistant_message(question, limit=1200)
+    clean_answer = clean_assistant_message(answer)
+    if not clean_question or not clean_answer:
+        return None
+
+    safe_score = None
+    if quality_score is not None:
+        safe_score = max(0.0, min(float(quality_score), 1.0))
+
+    example = AssistantLearningExample(
+        question=clean_question,
+        answer=clean_answer,
+        intent=infer_assistant_learning_intent(question),
+        mode=(mode or "balanced")[:20],
+        scope_label=(scope_label or "All accounts combined")[:160],
+        source=(source or "assistant_exchange")[:40],
+        quality_score=safe_score,
+        metadata_json=json.dumps(metadata or {}, sort_keys=True)[:4000] if metadata else None,
+        owner_id=owner_id,
+        account_id=account_id,
+    )
+    db.add(example)
+    db.flush()
+    trim_assistant_learning_examples(db, owner_id)
+    return example
+
+
+def trim_assistant_learning_examples(
+    db: Session,
+    owner_id: int,
+    *,
+    max_examples: int | None = None,
+) -> int:
+    safe_max = max_examples or assistant_learning_max_examples_per_user()
+    keep_ids = [
+        item.id
+        for item in db.query(AssistantLearningExample.id)
+        .filter(AssistantLearningExample.owner_id == owner_id)
+        .order_by(AssistantLearningExample.created_at.desc(), AssistantLearningExample.id.desc())
+        .limit(safe_max)
+        .all()
+    ]
+    if not keep_ids:
+        return 0
+
+    deleted_count = (
+        db.query(AssistantLearningExample)
+        .filter(
+            AssistantLearningExample.owner_id == owner_id,
+            ~AssistantLearningExample.id.in_(keep_ids),
+        )
+        .delete(synchronize_session=False)
+    )
+    return int(deleted_count or 0)
+
+
+def get_assistant_learning_examples(
+    db: Session,
+    owner_id: int,
+    *,
+    account_id: int | None = None,
+    intent: str | None = None,
+    limit: int = ASSISTANT_LEARNING_DEFAULT_LIMIT,
+) -> list[AssistantLearningExample]:
+    safe_limit = max(1, min(int(limit or ASSISTANT_LEARNING_DEFAULT_LIMIT), ASSISTANT_LEARNING_EXPORT_MAX_LIMIT))
+    query = db.query(AssistantLearningExample).filter(AssistantLearningExample.owner_id == owner_id)
+    query = _learning_scope_filter(query, account_id)
+    if intent:
+        query = query.filter(AssistantLearningExample.intent == intent[:80])
+    return list(
+        query.order_by(AssistantLearningExample.created_at.desc(), AssistantLearningExample.id.desc())
+        .limit(safe_limit)
+        .all()
+    )
+
+
+def get_assistant_learning_summary(db: Session, owner_id: int) -> dict[str, Any]:
+    total = (
+        db.query(func.count(AssistantLearningExample.id))
+        .filter(AssistantLearningExample.owner_id == owner_id)
+        .scalar()
+    )
+    intent_rows = (
+        db.query(AssistantLearningExample.intent, func.count(AssistantLearningExample.id))
+        .filter(AssistantLearningExample.owner_id == owner_id)
+        .group_by(AssistantLearningExample.intent)
+        .order_by(func.count(AssistantLearningExample.id).desc())
+        .all()
+    )
+    recent_examples = get_assistant_learning_examples(db, owner_id, limit=5)
+    return {
+        "total_examples": int(total or 0),
+        "intent_counts": {str(intent): int(count or 0) for intent, count in intent_rows},
+        "recent_examples": recent_examples,
+    }
+
+
+def build_assistant_training_export(
+    db: Session,
+    owner_id: int,
+    *,
+    account_id: int | None = None,
+    intent: str | None = None,
+    limit: int = 100,
+) -> list[dict[str, Any]]:
+    examples = get_assistant_learning_examples(
+        db,
+        owner_id,
+        account_id=account_id,
+        intent=intent,
+        limit=limit,
+    )
+    return [
+        {
+            "messages": [
+                {
+                    "role": "system",
+                    "content": (
+                        "You are Smart Spending Analyzer's assistant. Answer simply and use the "
+                        "user's real financial data only when the question is about their finances."
+                    ),
+                },
+                {"role": "user", "content": example.question},
+                {"role": "assistant", "content": example.answer},
+            ],
+            "metadata": {
+                "intent": example.intent,
+                "mode": example.mode,
+                "scope_label": example.scope_label,
+                "source": example.source,
+                "created_at": example.created_at.isoformat() if example.created_at else None,
+            },
+        }
+        for example in examples
+    ]
+
+
+def clear_assistant_learning_examples(
+    db: Session,
+    owner_id: int,
+    *,
+    account_id: int | None = None,
+) -> int:
+    query = db.query(AssistantLearningExample).filter(AssistantLearningExample.owner_id == owner_id)
+    query = _learning_scope_filter(query, account_id)
     deleted_count = query.delete(synchronize_session=False)
     return int(deleted_count or 0)
 
