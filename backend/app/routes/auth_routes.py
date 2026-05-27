@@ -29,6 +29,14 @@ router = APIRouter(prefix="/auth", tags=["Auth"])
 logger = logging.getLogger(__name__)
 
 
+def _bounded_int_env(name: str, default: int, minimum: int, maximum: int) -> int:
+    try:
+        value = int(os.getenv(name, str(default)))
+    except (TypeError, ValueError):
+        return default
+    return max(minimum, min(value, maximum))
+
+
 def get_db():
     db = SessionLocal()
     try:
@@ -50,6 +58,19 @@ def expose_reset_url_in_response() -> bool:
     return True
 
 
+def password_reset_token_expire_minutes() -> int:
+    return _bounded_int_env("PASSWORD_RESET_TOKEN_EXPIRE_MINUTES", 30, 5, 120)
+
+
+def get_password_reset_frontend_url() -> str:
+    frontend_url = os.getenv("FRONTEND_URL", "http://localhost:5173").strip().rstrip("/")
+    if not frontend_url:
+        raise ValueError("FRONTEND_URL is not configured.")
+    if is_production() and not frontend_url.startswith("https://"):
+        raise ValueError("FRONTEND_URL must use https in production.")
+    return frontend_url
+
+
 def normalize_email_address(email: str) -> str:
     return str(email or "").strip().lower()
 
@@ -57,6 +78,26 @@ def normalize_email_address(email: str) -> str:
 def find_user_by_email(db: Session, email: str) -> User | None:
     normalized_email = normalize_email_address(email)
     return db.query(User).filter(func.lower(User.email) == normalized_email).first()
+
+
+def clear_expired_password_reset_tokens(db: Session) -> int:
+    now = datetime.now(timezone.utc)
+    cleared_count = (
+        db.query(User)
+        .filter(
+            User.reset_token_hash.is_not(None),
+            User.reset_token_expires_at.is_not(None),
+            User.reset_token_expires_at < now,
+        )
+        .update(
+            {
+                User.reset_token_hash: None,
+                User.reset_token_expires_at: None,
+            },
+            synchronize_session=False,
+        )
+    )
+    return int(cleared_count or 0)
 
 
 @router.post("/register", response_model=Token)
@@ -106,6 +147,9 @@ def forgot_password(
     payload: ForgotPasswordRequest,
     db: Session = Depends(get_db),
 ) -> ForgotPasswordResponse:
+    if clear_expired_password_reset_tokens(db):
+        db.commit()
+
     user = find_user_by_email(db, payload.email)
 
     generic_message = "If an account with that email exists, reset instructions have been sent."
@@ -114,12 +158,19 @@ def forgot_password(
         logger.info("Password reset requested for an email without an account.")
         return ForgotPasswordResponse(message=generic_message)
 
+    try:
+        frontend_url = get_password_reset_frontend_url()
+    except ValueError as exc:
+        logger.error("Password reset skipped due to unsafe reset URL configuration: %s", exc)
+        return ForgotPasswordResponse(message=generic_message)
+
     raw_token = secrets.token_urlsafe(32)
     user.reset_token_hash = hash_reset_token(raw_token)
-    user.reset_token_expires_at = datetime.now(timezone.utc) + timedelta(minutes=30)
+    user.reset_token_expires_at = datetime.now(timezone.utc) + timedelta(
+        minutes=password_reset_token_expire_minutes()
+    )
     db.commit()
 
-    frontend_url = os.getenv("FRONTEND_URL", "http://localhost:5173").rstrip("/")
     reset_url = f"{frontend_url}/reset-password?token={quote(raw_token)}"
     email_sent = send_password_reset_email(user.email, reset_url)
     if email_sent:
@@ -138,6 +189,9 @@ def reset_password(
     payload: ResetPasswordRequest,
     db: Session = Depends(get_db),
 ) -> dict[str, str]:
+    if clear_expired_password_reset_tokens(db):
+        db.commit()
+
     token_hash = hash_reset_token(payload.token)
 
     user = (

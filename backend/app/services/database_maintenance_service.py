@@ -94,6 +94,14 @@ RUNTIME_INDEX_STATEMENTS = (
     CREATE INDEX IF NOT EXISTS ix_assistant_learning_runtime_owner_account_created
     ON assistant_learning_examples (owner_id, account_id, created_at DESC, id DESC)
     """,
+    """
+    CREATE INDEX IF NOT EXISTS ix_users_runtime_reset_token_hash
+    ON users (reset_token_hash)
+    """,
+    """
+    CREATE INDEX IF NOT EXISTS ix_users_runtime_reset_token_expires_at
+    ON users (reset_token_expires_at)
+    """,
 )
 
 

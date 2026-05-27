@@ -28,6 +28,9 @@ class DatabaseMaintenanceServiceTest(unittest.TestCase):
             user_columns = {
                 item["name"] for item in inspector.get_columns("users")
             }
+            user_index_names = {
+                item["name"] for item in inspector.get_indexes("users")
+            }
             transaction_index_names = {
                 item["name"] for item in inspector.get_indexes("transactions")
             }
@@ -49,6 +52,8 @@ class DatabaseMaintenanceServiceTest(unittest.TestCase):
             self.assertIn("import_file_type", transaction_columns)
             self.assertIn("imported_at", transaction_columns)
             self.assertIn("password_changed_at", user_columns)
+            self.assertIn("ix_users_runtime_reset_token_hash", user_index_names)
+            self.assertIn("ix_users_runtime_reset_token_expires_at", user_index_names)
             self.assertIn(
                 "ix_transactions_runtime_owner_date_id",
                 transaction_index_names,

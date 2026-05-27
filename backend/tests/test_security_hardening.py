@@ -692,7 +692,14 @@ class AuthSecurityTest(unittest.TestCase):
     def test_forgot_password_does_not_expose_reset_url_in_production(self) -> None:
         self.create_user()
         client = self.build_auth_client()
-        with patch.dict("os.environ", {"ENVIRONMENT": "production"}, clear=False), patch(
+        with patch.dict(
+            "os.environ",
+            {
+                "ENVIRONMENT": "production",
+                "FRONTEND_URL": "https://smart-spending-analyzer.vercel.app",
+            },
+            clear=False,
+        ), patch(
             "app.routes.auth_routes.send_password_reset_email",
             return_value=True,
         ) as send_reset_email:
@@ -703,6 +710,32 @@ class AuthSecurityTest(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIsNone(response.json().get("reset_url"))
         send_reset_email.assert_called_once()
+
+    def test_forgot_password_refuses_insecure_production_reset_link(self) -> None:
+        user_id = self.create_user()
+        client = self.build_auth_client()
+
+        with patch.dict(
+            "os.environ",
+            {
+                "ENVIRONMENT": "production",
+                "FRONTEND_URL": "http://localhost:5173",
+            },
+            clear=False,
+        ), patch("app.routes.auth_routes.send_password_reset_email", return_value=True) as send_reset_email:
+            response = client.post(
+                "/auth/forgot-password",
+                json={"email": "auth-security@example.com"},
+            )
+
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertIsNone(response.json().get("reset_url"))
+        send_reset_email.assert_not_called()
+        with self.session_local() as session:
+            user = session.get(User, user_id)
+            assert user is not None
+            self.assertIsNone(user.reset_token_hash)
+            self.assertIsNone(user.reset_token_expires_at)
 
     def test_forgot_password_sends_reset_email_for_existing_user(self) -> None:
         self.create_user()
@@ -719,6 +752,54 @@ class AuthSecurityTest(unittest.TestCase):
         to_email, reset_url = send_reset_email.call_args.args
         self.assertEqual(to_email, "auth-security@example.com")
         self.assertIn("/reset-password?token=", reset_url)
+
+    def test_forgot_password_uses_bounded_reset_expiry(self) -> None:
+        user_id = self.create_user()
+        client = self.build_auth_client()
+        before_request = datetime.now(timezone.utc)
+
+        with patch.dict("os.environ", {"PASSWORD_RESET_TOKEN_EXPIRE_MINUTES": "5"}, clear=False), patch(
+            "app.routes.auth_routes.send_password_reset_email",
+            return_value=True,
+        ):
+            response = client.post(
+                "/auth/forgot-password",
+                json={"email": "auth-security@example.com"},
+            )
+
+        self.assertEqual(response.status_code, 200, response.text)
+        with self.session_local() as session:
+            user = session.get(User, user_id)
+            assert user is not None
+            self.assertIsNotNone(user.reset_token_expires_at)
+            expires_at = user.reset_token_expires_at
+            if expires_at.tzinfo is None:
+                expires_at = expires_at.replace(tzinfo=timezone.utc)
+            self.assertGreaterEqual(expires_at, before_request + timedelta(minutes=4, seconds=50))
+            self.assertLessEqual(expires_at, before_request + timedelta(minutes=5, seconds=30))
+
+    def test_forgot_password_clears_expired_reset_tokens(self) -> None:
+        user_id = self.create_user()
+        with self.session_local() as session:
+            user = session.get(User, user_id)
+            assert user is not None
+            user.reset_token_hash = auth_routes.hash_reset_token("expired-token")
+            user.reset_token_expires_at = datetime.now(timezone.utc) - timedelta(minutes=1)
+            session.commit()
+
+        client = self.build_auth_client()
+        with patch("app.routes.auth_routes.send_password_reset_email", return_value=True):
+            response = client.post(
+                "/auth/forgot-password",
+                json={"email": "missing@example.com"},
+            )
+
+        self.assertEqual(response.status_code, 200, response.text)
+        with self.session_local() as session:
+            user = session.get(User, user_id)
+            assert user is not None
+            self.assertIsNone(user.reset_token_hash)
+            self.assertIsNone(user.reset_token_expires_at)
 
     def test_forgot_password_does_not_send_email_for_unknown_user(self) -> None:
         client = self.build_auth_client()
