@@ -41,6 +41,7 @@ function ResetPasswordPage() {
         new_password: newPassword,
       });
 
+      window.history.replaceState(null, "", "/reset-password");
       setMessage(getApiSuccessMessage(response.data, t("auth.passwordResetSuccess")));
       setTimeout(() => {
         navigate("/", { replace: true });

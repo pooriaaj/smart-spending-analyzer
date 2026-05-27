@@ -2,11 +2,17 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from app.auth import hash_password, verify_password
+from app.auth import (
+    clear_access_token_cookie,
+    create_access_token,
+    hash_password,
+    set_access_token_cookie,
+    verify_password,
+)
 from app.dependencies import get_current_user, get_db
 from app.models import MerchantCategoryProfile, User, UserLearningPreference
 from app.schemas import (
@@ -130,6 +136,7 @@ def update_my_learning_preferences(
 @router.put("/me/password", response_model=MessageResponse)
 def change_my_password(
     payload: ChangePasswordRequest,
+    response: Response,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> MessageResponse:
@@ -148,6 +155,7 @@ def change_my_password(
     current_user.password_hash = hash_password(payload.new_password)
     current_user.password_changed_at = datetime.now(timezone.utc)
     db.commit()
+    set_access_token_cookie(response, create_access_token({"sub": str(current_user.id)}))
 
     return MessageResponse(message="Password changed successfully")
 
@@ -155,6 +163,7 @@ def change_my_password(
 @router.delete("/me", response_model=MessageResponse)
 def delete_my_account(
     payload: DeleteAccountRequest,
+    response: Response,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> MessageResponse:
@@ -166,5 +175,6 @@ def delete_my_account(
 
     db.delete(current_user)
     db.commit()
+    clear_access_token_cookie(response)
 
     return MessageResponse(message="Account deleted successfully")

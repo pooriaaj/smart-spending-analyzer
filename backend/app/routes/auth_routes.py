@@ -13,12 +13,10 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.auth import (
-    ACCESS_TOKEN_COOKIE_NAME,
-    ACCESS_TOKEN_EXPIRE_MINUTES,
-    AUTH_COOKIE_SAMESITE,
-    AUTH_COOKIE_SECURE,
+    clear_access_token_cookie,
     create_access_token,
     hash_password,
+    set_access_token_cookie,
     verify_password,
 )
 from app.database import SessionLocal
@@ -28,7 +26,6 @@ from app.schemas import (
     ForgotPasswordResponse,
     MessageResponse,
     ResetPasswordRequest,
-    Token,
     UserCreate,
 )
 from app.security import is_production
@@ -52,28 +49,6 @@ def get_db():
         yield db
     finally:
         db.close()
-
-
-def set_auth_cookie(response: Response, access_token: str) -> None:
-    response.set_cookie(
-        key=ACCESS_TOKEN_COOKIE_NAME,
-        value=access_token,
-        max_age=ACCESS_TOKEN_EXPIRE_MINUTES * 60,
-        path="/",
-        httponly=True,
-        secure=AUTH_COOKIE_SECURE,
-        samesite=AUTH_COOKIE_SAMESITE,
-    )
-
-
-def clear_auth_cookie(response: Response) -> None:
-    response.delete_cookie(
-        key=ACCESS_TOKEN_COOKIE_NAME,
-        path="/",
-        secure=AUTH_COOKIE_SECURE,
-        httponly=True,
-        samesite=AUTH_COOKIE_SAMESITE,
-    )
 
 
 def hash_reset_token(token: str) -> str:
@@ -131,8 +106,8 @@ def clear_expired_password_reset_tokens(db: Session) -> int:
     return int(cleared_count or 0)
 
 
-@router.post("/register", response_model=Token)
-def register(user: UserCreate, response: Response, db: Session = Depends(get_db)) -> Token:
+@router.post("/register", response_model=MessageResponse)
+def register(user: UserCreate, response: Response, db: Session = Depends(get_db)) -> MessageResponse:
     normalized_email = normalize_email_address(user.email)
     existing_user = find_user_by_email(db, normalized_email)
     if existing_user:
@@ -151,17 +126,17 @@ def register(user: UserCreate, response: Response, db: Session = Depends(get_db)
     db.refresh(new_user)
 
     access_token = create_access_token({"sub": str(new_user.id)})
-    set_auth_cookie(response, access_token)
+    set_access_token_cookie(response, access_token)
 
-    return Token(access_token=access_token, token_type="bearer")
+    return MessageResponse(message="Registered successfully")
 
 
-@router.post("/login", response_model=Token)
+@router.post("/login", response_model=MessageResponse)
 def login(
     response: Response,
     form_data: OAuth2PasswordRequestForm = Depends(),
     db: Session = Depends(get_db),
-) -> Token:
+) -> MessageResponse:
     user = find_user_by_email(db, form_data.username)
 
     if not user or not verify_password(form_data.password, user.password_hash):
@@ -171,14 +146,14 @@ def login(
         )
 
     access_token = create_access_token({"sub": str(user.id)})
-    set_auth_cookie(response, access_token)
+    set_access_token_cookie(response, access_token)
 
-    return Token(access_token=access_token, token_type="bearer")
+    return MessageResponse(message="Logged in successfully")
 
 
 @router.post("/logout", response_model=MessageResponse)
 def logout(response: Response) -> MessageResponse:
-    clear_auth_cookie(response)
+    clear_access_token_cookie(response)
     return MessageResponse(message="Logged out successfully")
 
 

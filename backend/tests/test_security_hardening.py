@@ -681,6 +681,7 @@ class AuthSecurityTest(unittest.TestCase):
             json={"email": "CaseUser@Example.com", "password": "StrongPass1"},
         )
         self.assertEqual(response.status_code, 200)
+        self.assertNotIn("access_token", response.json())
 
         duplicate = client.post(
             "/auth/register",
@@ -707,6 +708,7 @@ class AuthSecurityTest(unittest.TestCase):
         )
 
         self.assertEqual(response.status_code, 200, response.text)
+        self.assertNotIn("access_token", response.json())
         set_cookie = response.headers.get("set-cookie", "").lower()
         self.assertIn("access_token=", set_cookie)
         self.assertIn("httponly", set_cookie)
@@ -946,6 +948,31 @@ class EmailDeliveryTest(unittest.TestCase):
             )
 
         self.assertFalse(sent)
+
+    def test_resend_error_logging_redacts_sensitive_response_text(self) -> None:
+        with patch.dict(
+            "os.environ",
+            {
+                "RESEND_API_KEY": "re_test_key",
+                "RESEND_FROM_EMAIL": "onboarding@resend.dev",
+            },
+            clear=True,
+        ), patch("app.services.email_service.httpx.post") as post, self.assertLogs(
+            "app.services.email_service",
+            level="ERROR",
+        ) as captured_logs:
+            post.return_value.status_code = 403
+            post.return_value.text = "bad token=secret-reset-token"
+
+            sent = email_service.send_password_reset_email(
+                "user@example.com",
+                "https://example.com/reset-password?token=abc",
+            )
+
+        self.assertFalse(sent)
+        log_output = "\n".join(captured_logs.output)
+        self.assertIn("Sensitive value redacted.", log_output)
+        self.assertNotIn("secret-reset-token", log_output)
 
 
 class BackendResilienceTest(unittest.TestCase):

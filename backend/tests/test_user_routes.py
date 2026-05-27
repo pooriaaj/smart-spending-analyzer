@@ -4,7 +4,7 @@ import unittest
 from collections.abc import Generator
 from datetime import datetime, timezone
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Response
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
@@ -13,8 +13,8 @@ from sqlalchemy.pool import StaticPool
 from app.database import Base
 from app.dependencies import get_current_user, get_db
 from app.models import MerchantCategoryProfile, MerchantLookupCache, User, UserLearningPreference
-from app.routes.user_routes import change_my_password, router as user_router
-from app.schemas import ChangePasswordRequest
+from app.routes.user_routes import change_my_password, delete_my_account, router as user_router
+from app.schemas import ChangePasswordRequest, DeleteAccountRequest
 from app.auth import hash_password
 
 
@@ -221,20 +221,46 @@ class UserRouteTest(unittest.TestCase):
         with self.session_local() as session:
             user = session.get(User, self.user_id)
             assert user is not None
+            cookie_response = Response()
             response = change_my_password(
                 ChangePasswordRequest(
                     current_password="StrongPass1",
                     new_password="BetterPass1",
                 ),
+                response=cookie_response,
                 db=session,
                 current_user=user,
             )
             self.assertEqual(response.message, "Password changed successfully")
+            self.assertIn("access_token=", cookie_response.headers.get("set-cookie", ""))
             self.assertIsNotNone(user.password_changed_at)
             changed_at = user.password_changed_at
             if changed_at.tzinfo is None:
                 changed_at = changed_at.replace(tzinfo=timezone.utc)
             self.assertGreaterEqual(changed_at, before_change)
+
+    def test_delete_account_clears_auth_cookie(self) -> None:
+        with self.session_local() as session:
+            user = User(
+                email="delete-cookie@example.com",
+                password_hash=hash_password("StrongPass1"),
+            )
+            session.add(user)
+            session.commit()
+            session.refresh(user)
+
+            cookie_response = Response()
+            response = delete_my_account(
+                DeleteAccountRequest(password="StrongPass1"),
+                response=cookie_response,
+                db=session,
+                current_user=user,
+            )
+
+            self.assertEqual(response.message, "Account deleted successfully")
+            set_cookie = cookie_response.headers.get("set-cookie", "").lower()
+            self.assertIn("access_token=", set_cookie)
+            self.assertIn("max-age=0", set_cookie)
 
 
 if __name__ == "__main__":

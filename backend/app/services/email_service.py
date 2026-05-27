@@ -10,6 +10,8 @@ from pathlib import Path
 import httpx
 from dotenv import load_dotenv
 
+from app.security import redact_sensitive_text
+
 
 logger = logging.getLogger(__name__)
 ENV_PATH = Path(__file__).resolve().parents[2] / ".env"
@@ -153,7 +155,7 @@ def _send_password_reset_email_with_resend(to_email: str, reset_url: str) -> boo
         logger.error(
             "Password reset email could not be sent with Resend. status=%s response=%s",
             response.status_code,
-            response.text[:500],
+            redact_sensitive_text(response.text[:500]),
         )
         return False
     except httpx.HTTPError:

@@ -9,6 +9,7 @@ from datetime import datetime, timedelta, timezone
 import bcrypt
 from jose import jwt
 from dotenv import load_dotenv
+from starlette.responses import Response
 
 from app.security import is_production, validate_password_strength
 
@@ -130,6 +131,28 @@ def create_access_token(data: dict) -> str:
     expire = datetime.now(timezone.utc) + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     to_encode.update({"exp": expire, "iat": datetime.now(timezone.utc)})
     return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+
+
+def set_access_token_cookie(response: Response, access_token: str) -> None:
+    response.set_cookie(
+        key=ACCESS_TOKEN_COOKIE_NAME,
+        value=access_token,
+        max_age=ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+        path="/",
+        httponly=True,
+        secure=AUTH_COOKIE_SECURE,
+        samesite=AUTH_COOKIE_SAMESITE,
+    )
+
+
+def clear_access_token_cookie(response: Response) -> None:
+    response.delete_cookie(
+        key=ACCESS_TOKEN_COOKIE_NAME,
+        path="/",
+        secure=AUTH_COOKIE_SECURE,
+        httponly=True,
+        samesite=AUTH_COOKIE_SAMESITE,
+    )
 
 
 def decode_access_token(token: str) -> dict | None:
