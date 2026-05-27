@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { Suspense, lazy, useEffect, useState } from "react";
 import ThemeToggle from "./components/ThemeToggle";
 import { LanguageProvider, useLanguage } from "./i18n/LanguageContext";
+import api from "./services/api";
 
 const LoginPage = lazy(() => import("./pages/LoginPage"));
 const RegisterPage = lazy(() => import("./pages/RegisterPage"));
@@ -15,8 +16,27 @@ const ImportPage = lazy(() => import("./pages/ImportPage"));
 const BudgetsPage = lazy(() => import("./pages/BudgetsPage"));
 
 function ProtectedRoute({ children }) {
-  const token = localStorage.getItem("token");
-  return token ? children : <Navigate to="/" replace />;
+  const [authState, setAuthState] = useState("checking");
+
+  useEffect(() => {
+    let active = true;
+
+    api
+      .get("/users/me")
+      .then(() => {
+        if (active) setAuthState("authenticated");
+      })
+      .catch(() => {
+        if (active) setAuthState("guest");
+      });
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  if (authState === "checking") return <RouteLoader />;
+  return authState === "authenticated" ? children : <Navigate to="/" replace />;
 }
 
 function RouteLoader() {
@@ -35,8 +55,27 @@ function RouteLoader() {
 }
 
 function PublicHomeRoute() {
-  const token = localStorage.getItem("token");
-  return token ? <Navigate to="/analytics" replace /> : <LoginPage />;
+  const [authState, setAuthState] = useState("checking");
+
+  useEffect(() => {
+    let active = true;
+
+    api
+      .get("/users/me")
+      .then(() => {
+        if (active) setAuthState("authenticated");
+      })
+      .catch(() => {
+        if (active) setAuthState("guest");
+      });
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  if (authState === "checking") return <RouteLoader />;
+  return authState === "authenticated" ? <Navigate to="/analytics" replace /> : <LoginPage />;
 }
 
 function AppRoutes() {

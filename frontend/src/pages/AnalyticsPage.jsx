@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import api from "../services/api";
+import api, { handleApiAuthError } from "../services/api";
 import AccountSelector from "../components/AccountSelector";
 import PageHeader from "../components/PageHeader";
 import { ALL_ACCOUNTS_VALUE, getSelectedAccountId } from "../services/accountStorage";
@@ -322,10 +322,7 @@ function AnalyticsPage() {
       } catch (error) {
         console.error("Failed to load analytics data:", error);
 
-        if (error.response?.status === 401) {
-          localStorage.removeItem("token");
-          navigate("/", { replace: true });
-        }
+        handleApiAuthError(error, navigate);
       } finally {
         setLoading(false);
       }

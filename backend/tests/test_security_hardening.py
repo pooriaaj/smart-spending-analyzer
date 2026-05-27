@@ -42,6 +42,7 @@ from app.routes.transaction_routes import router as transaction_router
 from app.schemas import ResetPasswordRequest
 from app.security import (
     RequestBodySizeLimitMiddleware,
+    CsrfOriginMiddleware,
     RequestIdMiddleware,
     SimpleRateLimitMiddleware,
     build_validation_error_response,
@@ -643,12 +644,19 @@ class AuthSecurityTest(unittest.TestCase):
         finally:
             session.close()
 
-    def build_auth_client(self, *, rate_limit: bool = False) -> TestClient:
+    def build_auth_client(self, *, rate_limit: bool = False, protected_route: bool = False) -> TestClient:
         app = FastAPI()
         if rate_limit:
             app.add_middleware(SimpleRateLimitMiddleware, rules={"/auth/login": (2, 60)})
         app.include_router(auth_routes.router)
         app.dependency_overrides[auth_routes.get_db] = self.override_get_db
+        app.dependency_overrides[dependencies.get_db] = self.override_get_db
+
+        if protected_route:
+            @app.get("/protected-cookie")
+            def protected_cookie_route(current_user: User = Depends(get_current_user)) -> dict[str, int]:
+                return {"user_id": current_user.id}
+
         return TestClient(app)
 
     def create_user(self) -> int:
@@ -688,6 +696,39 @@ class AuthSecurityTest(unittest.TestCase):
         self.assertEqual(client.post("/auth/login", data=payload).status_code, 401)
         self.assertEqual(client.post("/auth/login", data=payload).status_code, 401)
         self.assertEqual(client.post("/auth/login", data=payload).status_code, 429)
+
+    def test_login_sets_httponly_cookie_and_cookie_auth_works(self) -> None:
+        user_id = self.create_user()
+        client = self.build_auth_client(protected_route=True)
+
+        response = client.post(
+            "/auth/login",
+            data={"username": "auth-security@example.com", "password": "StrongPass1"},
+        )
+
+        self.assertEqual(response.status_code, 200, response.text)
+        set_cookie = response.headers.get("set-cookie", "").lower()
+        self.assertIn("access_token=", set_cookie)
+        self.assertIn("httponly", set_cookie)
+
+        protected_response = client.get("/protected-cookie")
+        self.assertEqual(protected_response.status_code, 200, protected_response.text)
+        self.assertEqual(protected_response.json()["user_id"], user_id)
+
+    def test_logout_clears_auth_cookie(self) -> None:
+        self.create_user()
+        client = self.build_auth_client()
+        client.post(
+            "/auth/login",
+            data={"username": "auth-security@example.com", "password": "StrongPass1"},
+        )
+
+        response = client.post("/auth/logout")
+
+        self.assertEqual(response.status_code, 200, response.text)
+        set_cookie = response.headers.get("set-cookie", "").lower()
+        self.assertIn("access_token=", set_cookie)
+        self.assertIn("max-age=0", set_cookie)
 
     def test_forgot_password_does_not_expose_reset_url_in_production(self) -> None:
         self.create_user()
@@ -1042,6 +1083,32 @@ class BackendResilienceTest(unittest.TestCase):
 
         client = TestClient(app)
         response = client.post("/transactions/import/file", json={"value": "x" * 200})
+
+        self.assertEqual(response.status_code, 200)
+
+    def test_csrf_origin_middleware_blocks_untrusted_unsafe_origin(self) -> None:
+        app = FastAPI()
+        app.add_middleware(CsrfOriginMiddleware, allowed_origins=["https://app.example.com"])
+
+        @app.post("/change")
+        def change_route() -> dict[str, str]:
+            return {"status": "ok"}
+
+        client = TestClient(app)
+        response = client.post("/change", headers={"Origin": "https://evil.example.com"})
+
+        self.assertEqual(response.status_code, 403)
+
+    def test_csrf_origin_middleware_allows_configured_origin(self) -> None:
+        app = FastAPI()
+        app.add_middleware(CsrfOriginMiddleware, allowed_origins=["https://app.example.com"])
+
+        @app.post("/change")
+        def change_route() -> dict[str, str]:
+            return {"status": "ok"}
+
+        client = TestClient(app)
+        response = client.post("/change", headers={"Origin": "https://app.example.com"})
 
         self.assertEqual(response.status_code, 200)
 

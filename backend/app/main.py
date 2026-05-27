@@ -22,6 +22,7 @@ from app.routes.user_routes import router as user_router
 from app.security import (
     RequestBodySizeLimitMiddleware,
     RequestIdMiddleware,
+    CsrfOriginMiddleware,
     SecurityHeadersMiddleware,
     SimpleRateLimitMiddleware,
     build_validation_error_response,
@@ -59,6 +60,7 @@ app.add_middleware(
 )
 app.add_middleware(TrustedHostMiddleware, allowed_hosts=get_allowed_hosts())
 app.add_middleware(RequestIdMiddleware)
+app.add_middleware(CsrfOriginMiddleware, allowed_origins=allowed_origins)
 app.add_middleware(RequestBodySizeLimitMiddleware)
 app.add_middleware(SecurityHeadersMiddleware)
 app.add_middleware(SimpleRateLimitMiddleware)

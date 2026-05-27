@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import api from "../services/api";
 import PasswordField from "../components/PasswordField";
@@ -21,13 +21,6 @@ function LoginPage() {
     event.target.value = "";
   };
 
-  useEffect(() => {
-    const token = localStorage.getItem("token");
-    if (token) {
-      navigate("/analytics", { replace: true });
-    }
-  }, [navigate]);
-
   const handleLogin = async (e) => {
     e.preventDefault();
     setError("");
@@ -37,13 +30,12 @@ function LoginPage() {
       formData.append("username", email);
       formData.append("password", password);
 
-      const response = await api.post("/auth/login", formData, {
+      await api.post("/auth/login", formData, {
         headers: {
           "Content-Type": "application/x-www-form-urlencoded",
         },
       });
 
-      localStorage.setItem("token", response.data.access_token);
       navigate("/analytics", { replace: true });
     } catch {
       setError(t("auth.loginFailed"));

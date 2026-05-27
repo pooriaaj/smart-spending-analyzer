@@ -30,6 +30,11 @@ def _env_int(name: str, default: int) -> int:
         return default
 
 
+def _password_reset_expire_minutes() -> int:
+    value = _env_int("PASSWORD_RESET_TOKEN_EXPIRE_MINUTES", 30)
+    return max(5, min(value, 120))
+
+
 def password_reset_email_is_configured() -> bool:
     return bool(_resend_is_configured() or _smtp_is_configured())
 
@@ -62,6 +67,7 @@ def _from_name() -> str:
 
 
 def _password_reset_text(reset_url: str) -> str:
+    expire_minutes = _password_reset_expire_minutes()
     return "\n".join(
         [
             "Hi,",
@@ -69,7 +75,7 @@ def _password_reset_text(reset_url: str) -> str:
             "Use this secure link to reset your password:",
             reset_url,
             "",
-            "This link expires in 30 minutes. If you did not request it, you can ignore this email.",
+            f"This link expires in {expire_minutes} minutes. If you did not request it, you can ignore this email.",
             "",
             "Smart Spending Analyzer",
         ]
@@ -78,12 +84,13 @@ def _password_reset_text(reset_url: str) -> str:
 
 def _password_reset_html(reset_url: str) -> str:
     safe_reset_url = escape(reset_url, quote=True)
+    expire_minutes = _password_reset_expire_minutes()
     return f"""
     <div style="font-family:Arial,sans-serif;line-height:1.5;color:#111827">
       <h2>Reset your password</h2>
       <p>Use this secure link to reset your Smart Spending Analyzer password:</p>
       <p><a href="{safe_reset_url}">Reset password</a></p>
-      <p>This link expires in 30 minutes. If you did not request it, you can ignore this email.</p>
+      <p>This link expires in {expire_minutes} minutes. If you did not request it, you can ignore this email.</p>
     </div>
     """.strip()
 

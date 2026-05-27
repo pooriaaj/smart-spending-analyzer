@@ -315,6 +315,29 @@ class RequestBodySizeLimitMiddleware(BaseHTTPMiddleware):
         return path.startswith("/transactions/import/")
 
 
+class CsrfOriginMiddleware(BaseHTTPMiddleware):
+    def __init__(self, app, allowed_origins: Iterable[str] | None = None):
+        super().__init__(app)
+        self.allowed_origins = {
+            origin.rstrip("/")
+            for origin in (allowed_origins if allowed_origins is not None else get_allowed_origins())
+            if origin and origin != "*"
+        }
+
+    async def dispatch(self, request: Request, call_next):
+        if request.method in {"GET", "HEAD", "OPTIONS"}:
+            return await call_next(request)
+
+        origin = (request.headers.get("origin") or "").rstrip("/")
+        if origin and origin not in self.allowed_origins:
+            return JSONResponse(
+                status_code=status.HTTP_403_FORBIDDEN,
+                content={"detail": "Request origin is not allowed."},
+            )
+
+        return await call_next(request)
+
+
 class SimpleRateLimitMiddleware(BaseHTTPMiddleware):
     def __init__(self, app, rules: dict[str, tuple[int, int]] | None = None):
         super().__init__(app)

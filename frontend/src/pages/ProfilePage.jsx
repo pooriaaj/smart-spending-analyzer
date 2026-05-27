@@ -129,7 +129,6 @@ function ProfilePage() {
         },
       });
 
-      localStorage.removeItem("token");
       navigate("/", { replace: true });
     } catch (error) {
       if (!handleApiAuthError(error, navigate)) {
@@ -142,8 +141,8 @@ function ProfilePage() {
     }
   };
 
-  const handleLogout = () => {
-    localStorage.removeItem("token");
+  const handleLogout = async () => {
+    await api.post("/auth/logout").catch(() => {});
     navigate("/", { replace: true });
   };
 

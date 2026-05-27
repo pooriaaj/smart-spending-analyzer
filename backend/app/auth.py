@@ -38,6 +38,30 @@ def _jwt_algorithm_env() -> str:
 ALGORITHM = _jwt_algorithm_env()
 ACCESS_TOKEN_EXPIRE_MINUTES = _bounded_int_env("ACCESS_TOKEN_EXPIRE_MINUTES", 60, 5, 24 * 60)
 BCRYPT_ROUNDS = _bounded_int_env("BCRYPT_ROUNDS", 12, 4, 16)
+ACCESS_TOKEN_COOKIE_NAME = os.getenv("ACCESS_TOKEN_COOKIE_NAME", "access_token")
+
+
+def _auth_cookie_secure_env() -> bool:
+    configured = os.getenv("AUTH_COOKIE_SECURE")
+    if configured is None:
+        return is_production()
+    return configured.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _auth_cookie_samesite_env() -> str:
+    configured = os.getenv(
+        "AUTH_COOKIE_SAMESITE",
+        "none" if is_production() else "lax",
+    ).strip().lower()
+    if configured not in {"lax", "strict", "none"}:
+        return "none" if is_production() else "lax"
+    return configured
+
+
+AUTH_COOKIE_SECURE = _auth_cookie_secure_env()
+AUTH_COOKIE_SAMESITE = _auth_cookie_samesite_env()
+if AUTH_COOKIE_SAMESITE == "none" and not AUTH_COOKIE_SECURE:
+    AUTH_COOKIE_SAMESITE = "lax"
 
 if not SECRET_KEY:
     raise RuntimeError("SECRET_KEY is not set.")

@@ -7,17 +7,26 @@ from datetime import datetime, timedelta, timezone
 import os
 from urllib.parse import quote
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from app.auth import create_access_token, hash_password, verify_password
+from app.auth import (
+    ACCESS_TOKEN_COOKIE_NAME,
+    ACCESS_TOKEN_EXPIRE_MINUTES,
+    AUTH_COOKIE_SAMESITE,
+    AUTH_COOKIE_SECURE,
+    create_access_token,
+    hash_password,
+    verify_password,
+)
 from app.database import SessionLocal
 from app.models import User
 from app.schemas import (
     ForgotPasswordRequest,
     ForgotPasswordResponse,
+    MessageResponse,
     ResetPasswordRequest,
     Token,
     UserCreate,
@@ -43,6 +52,28 @@ def get_db():
         yield db
     finally:
         db.close()
+
+
+def set_auth_cookie(response: Response, access_token: str) -> None:
+    response.set_cookie(
+        key=ACCESS_TOKEN_COOKIE_NAME,
+        value=access_token,
+        max_age=ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+        path="/",
+        httponly=True,
+        secure=AUTH_COOKIE_SECURE,
+        samesite=AUTH_COOKIE_SAMESITE,
+    )
+
+
+def clear_auth_cookie(response: Response) -> None:
+    response.delete_cookie(
+        key=ACCESS_TOKEN_COOKIE_NAME,
+        path="/",
+        secure=AUTH_COOKIE_SECURE,
+        httponly=True,
+        samesite=AUTH_COOKIE_SAMESITE,
+    )
 
 
 def hash_reset_token(token: str) -> str:
@@ -101,7 +132,7 @@ def clear_expired_password_reset_tokens(db: Session) -> int:
 
 
 @router.post("/register", response_model=Token)
-def register(user: UserCreate, db: Session = Depends(get_db)) -> Token:
+def register(user: UserCreate, response: Response, db: Session = Depends(get_db)) -> Token:
     normalized_email = normalize_email_address(user.email)
     existing_user = find_user_by_email(db, normalized_email)
     if existing_user:
@@ -120,12 +151,14 @@ def register(user: UserCreate, db: Session = Depends(get_db)) -> Token:
     db.refresh(new_user)
 
     access_token = create_access_token({"sub": str(new_user.id)})
+    set_auth_cookie(response, access_token)
 
     return Token(access_token=access_token, token_type="bearer")
 
 
 @router.post("/login", response_model=Token)
 def login(
+    response: Response,
     form_data: OAuth2PasswordRequestForm = Depends(),
     db: Session = Depends(get_db),
 ) -> Token:
@@ -138,8 +171,15 @@ def login(
         )
 
     access_token = create_access_token({"sub": str(user.id)})
+    set_auth_cookie(response, access_token)
 
     return Token(access_token=access_token, token_type="bearer")
+
+
+@router.post("/logout", response_model=MessageResponse)
+def logout(response: Response) -> MessageResponse:
+    clear_auth_cookie(response)
+    return MessageResponse(message="Logged out successfully")
 
 
 @router.post("/forgot-password", response_model=ForgotPasswordResponse)

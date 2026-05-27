@@ -3,15 +3,15 @@ from __future__ import annotations
 from collections.abc import Generator
 from datetime import datetime, timezone
 
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
 
-from app.auth import decode_access_token
+from app.auth import ACCESS_TOKEN_COOKIE_NAME, decode_access_token
 from app.database import SessionLocal
 from app.models import User
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login", auto_error=False)
 
 
 def get_db() -> Generator[Session, None, None]:
@@ -23,9 +23,17 @@ def get_db() -> Generator[Session, None, None]:
 
 
 def get_current_user(
-    token: str = Depends(oauth2_scheme),
+    request: Request,
+    token: str | None = Depends(oauth2_scheme),
     db: Session = Depends(get_db),
 ) -> User:
+    token = token or request.cookies.get(ACCESS_TOKEN_COOKIE_NAME)
+    if not token:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired token",
+        )
+
     payload = decode_access_token(token)
 
     if not payload:

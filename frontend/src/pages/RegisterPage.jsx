@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import api from "../services/api";
 import PasswordField from "../components/PasswordField";
@@ -12,13 +12,6 @@ function RegisterPage() {
   const navigate = useNavigate();
   const { t } = useLanguage();
 
-  useEffect(() => {
-    const token = localStorage.getItem("token");
-    if (token) {
-      navigate("/analytics", { replace: true });
-    }
-  }, [navigate]);
-
   const handleRegister = async (e) => {
     e.preventDefault();
     setError("");
@@ -29,12 +22,11 @@ function RegisterPage() {
     }
 
     try {
-      const response = await api.post("/auth/register", {
+      await api.post("/auth/register", {
         email,
         password,
       });
 
-      localStorage.setItem("token", response.data.access_token);
       navigate("/import", { replace: true });
     } catch {
       setError(t("auth.registrationFailed"));

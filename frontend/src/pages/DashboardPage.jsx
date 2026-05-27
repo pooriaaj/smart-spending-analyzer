@@ -398,8 +398,8 @@ function DashboardPage() {
           actions={(
             <button
               className="logout-button"
-              onClick={() => {
-                localStorage.removeItem("token");
+              onClick={async () => {
+                await api.post("/auth/logout").catch(() => {});
                 navigate("/", { replace: true });
               }}
             >
