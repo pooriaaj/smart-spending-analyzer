@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from app.dependencies import get_current_user, get_db
@@ -14,6 +14,7 @@ from app.schemas import (
     AssistantHistoryResponse,
     AssistantLearningClearResponse,
     AssistantLearningExampleResponse,
+    AssistantLearningFeedbackRequest,
     AssistantLearningSummaryResponse,
     AssistantQueryRequest,
     AssistantQueryResponse,
@@ -37,6 +38,7 @@ from app.services.assistant_memory_service import (
     record_assistant_usage_event,
     save_assistant_exchange,
     save_assistant_learning_example,
+    update_assistant_learning_example_quality,
 )
 from app.services.llm_service import get_active_llm_provider, get_llm_provider_status
 
@@ -172,6 +174,37 @@ def clear_assistant_training_examples_route(
     return AssistantLearningClearResponse(
         message="Assistant training examples cleared.",
         deleted_count=deleted_count,
+    )
+
+
+@router.post("/training-examples/{example_id}/feedback", response_model=AssistantLearningExampleResponse)
+def update_assistant_training_example_feedback_route(
+    example_id: int,
+    payload: AssistantLearningFeedbackRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> AssistantLearningExampleResponse:
+    example = update_assistant_learning_example_quality(
+        db,
+        current_user.id,
+        example_id,
+        quality_score=payload.quality_score,
+    )
+    if example is None:
+        raise HTTPException(status_code=404, detail="Assistant training example not found.")
+    db.commit()
+    db.refresh(example)
+    return AssistantLearningExampleResponse(
+        id=example.id,
+        question=example.question,
+        answer=example.answer,
+        intent=example.intent,
+        mode=example.mode,
+        scope_label=example.scope_label,
+        source=example.source,
+        quality_score=example.quality_score,
+        account_id=example.account_id,
+        created_at=example.created_at,
     )
 
 

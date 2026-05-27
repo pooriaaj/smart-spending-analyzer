@@ -17,6 +17,7 @@ ASSISTANT_HISTORY_DEFAULT_LIMIT = 30
 ASSISTANT_HISTORY_MAX_STORED_PER_SCOPE = 120
 ASSISTANT_LEARNING_DEFAULT_LIMIT = 50
 ASSISTANT_LEARNING_EXPORT_MAX_LIMIT = 500
+ASSISTANT_LEARNING_CONTEXT_MAX_CHARS = 1400
 
 
 def _bounded_int_env(name: str, default: int, minimum: int, maximum: int) -> int:
@@ -183,6 +184,20 @@ def infer_assistant_learning_intent(question: str) -> str:
     text = re.sub(r"\s+", " ", text).strip()
     if not text:
         return "general"
+    if any(
+        marker in text
+        for marker in (
+            "api_key",
+            "apikey",
+            "secret",
+            "token",
+            "password",
+            "database_url",
+            "jwt",
+            "bearer ",
+        )
+    ):
+        return "security_refusal"
 
     keyword_groups = (
         ("budget", ("budget", "over budget", "under budget", "target", "monthly limit")),
@@ -287,6 +302,142 @@ def get_assistant_learning_examples(
         .limit(safe_limit)
         .all()
     )
+
+
+def update_assistant_learning_example_quality(
+    db: Session,
+    owner_id: int,
+    example_id: int,
+    *,
+    quality_score: float,
+) -> AssistantLearningExample | None:
+    example = (
+        db.query(AssistantLearningExample)
+        .filter(
+            AssistantLearningExample.id == example_id,
+            AssistantLearningExample.owner_id == owner_id,
+        )
+        .one_or_none()
+    )
+    if example is None:
+        return None
+
+    example.quality_score = max(0.0, min(float(quality_score), 1.0))
+    db.flush()
+    return example
+
+
+def _learning_tokens(value: str) -> set[str]:
+    stopwords = {
+        "about",
+        "after",
+        "again",
+        "also",
+        "because",
+        "before",
+        "could",
+        "from",
+        "have",
+        "help",
+        "into",
+        "that",
+        "the",
+        "this",
+        "what",
+        "when",
+        "where",
+        "which",
+        "with",
+        "would",
+        "your",
+    }
+    return {
+        token
+        for token in re.findall(r"[a-z0-9]{3,}", str(value or "").lower())
+        if token not in stopwords
+    }
+
+
+def get_relevant_assistant_learning_examples(
+    db: Session,
+    owner_id: int,
+    *,
+    question: str,
+    account_id: int | None = None,
+    limit: int = 3,
+) -> list[AssistantLearningExample]:
+    intent = infer_assistant_learning_intent(question)
+    question_tokens = _learning_tokens(question)
+    if not question_tokens:
+        return []
+
+    query = db.query(AssistantLearningExample).filter(
+        AssistantLearningExample.owner_id == owner_id,
+        AssistantLearningExample.intent == intent,
+    )
+    if account_id is not None:
+        query = query.filter(
+            (AssistantLearningExample.account_id == account_id)
+            | (AssistantLearningExample.account_id.is_(None))
+        )
+    query = query.filter(
+        (AssistantLearningExample.quality_score.is_(None))
+        | (AssistantLearningExample.quality_score >= 0.4)
+    )
+    candidates = (
+        query.order_by(AssistantLearningExample.created_at.desc(), AssistantLearningExample.id.desc())
+        .limit(80)
+        .all()
+    )
+
+    scored: list[tuple[float, AssistantLearningExample]] = []
+    for example in candidates:
+        example_tokens = _learning_tokens(f"{example.question} {example.answer}")
+        if not example_tokens:
+            continue
+        overlap = len(question_tokens & example_tokens)
+        if overlap <= 0:
+            continue
+        quality_bonus = 0.5 if example.quality_score is None else float(example.quality_score)
+        score = overlap + quality_bonus
+        scored.append((score, example))
+
+    scored.sort(key=lambda item: (item[0], item[1].created_at, item[1].id), reverse=True)
+    return [example for _, example in scored[: max(1, min(limit, 5))]]
+
+
+def build_assistant_learning_context(
+    db: Session,
+    owner_id: int,
+    *,
+    question: str,
+    account_id: int | None = None,
+    limit: int = 3,
+) -> str:
+    examples = get_relevant_assistant_learning_examples(
+        db,
+        owner_id,
+        question=question,
+        account_id=account_id,
+        limit=limit,
+    )
+    if not examples:
+        return ""
+
+    lines = [
+        "Relevant past assistant answer patterns. Use these for style and intent only; do not copy old financial facts."
+    ]
+    for example in examples:
+        lines.append(
+            "- User asked: "
+            f"{clean_assistant_message(example.question, limit=220)} | "
+            f"Assistant answered: {clean_assistant_message(example.answer, limit=320)}"
+        )
+
+    text = "\n".join(lines)
+    if len(text) > ASSISTANT_LEARNING_CONTEXT_MAX_CHARS:
+        return f"{text[:ASSISTANT_LEARNING_CONTEXT_MAX_CHARS].rstrip()}..."
+    return text
 
 
 def get_assistant_learning_summary(db: Session, owner_id: int) -> dict[str, Any]:

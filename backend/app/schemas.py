@@ -908,6 +908,10 @@ class AssistantLearningClearResponse(BaseModel):
     deleted_count: int
 
 
+class AssistantLearningFeedbackRequest(BaseModel):
+    quality_score: float = Field(ge=0.0, le=1.0)
+
+
 class AssistantAction(BaseModel):
     label: str
     page: str

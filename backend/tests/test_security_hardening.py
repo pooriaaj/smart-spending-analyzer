@@ -56,6 +56,7 @@ from app.security import (
 from app.services import llm_service
 from app.services import email_service
 from app.services import merchant_enrichment_service, pdf_statement_service
+from app.services.assistant_memory_service import build_assistant_learning_context
 from app.services.assistant_service import generate_assistant_response
 from app.services.llm_service import ANSWER_MAX_CHARS, build_finance_prompt, parse_llm_response
 from app.services.transaction_service import max_review_scan_transactions
@@ -342,14 +343,15 @@ class SecurityRouteTest(unittest.TestCase):
                 .filter(AssistantLearningExample.owner_id == self.user_a_id)
                 .one()
             )
-            self.assertEqual(example.intent, "budget")
+            self.assertEqual(example.intent, "security_refusal")
             self.assertIn("Sensitive value redacted", example.question)
             self.assertNotIn("sk-proj-secret-value", example.question)
+            example_id = example.id
 
         summary_response = client.get("/assistant/learning-summary")
         self.assertEqual(summary_response.status_code, 200, summary_response.text)
         self.assertEqual(summary_response.json()["total_examples"], 1)
-        self.assertEqual(summary_response.json()["intent_counts"]["budget"], 1)
+        self.assertEqual(summary_response.json()["intent_counts"]["security_refusal"], 1)
 
         export_response = client.get(
             "/assistant/training-export",
@@ -358,7 +360,37 @@ class SecurityRouteTest(unittest.TestCase):
         self.assertEqual(export_response.status_code, 200, export_response.text)
         export_item = export_response.json()["items"][0]
         self.assertEqual(export_item["messages"][1]["role"], "user")
-        self.assertEqual(export_item["metadata"]["intent"], "budget")
+        self.assertEqual(export_item["metadata"]["intent"], "security_refusal")
+
+        feedback_response = client.post(
+            f"/assistant/training-examples/{example_id}/feedback",
+            json={"quality_score": 1.0},
+        )
+        self.assertEqual(feedback_response.status_code, 200, feedback_response.text)
+        self.assertEqual(feedback_response.json()["quality_score"], 1.0)
+
+        with self.session_local() as session:
+            learning_context = build_assistant_learning_context(
+                session,
+                self.user_a_id,
+                question="Can you help with this secret token?",
+                account_id=self.account_a_id,
+            )
+            self.assertIn("Relevant past assistant answer patterns", learning_context)
+            self.assertIn("cannot help reveal secrets", learning_context.lower())
+
+            stored_example = session.get(AssistantLearningExample, example_id)
+            assert stored_example is not None
+            stored_example.quality_score = 0.1
+            session.commit()
+
+            ignored_context = build_assistant_learning_context(
+                session,
+                self.user_a_id,
+                question="Can you help with this secret token?",
+                account_id=self.account_a_id,
+            )
+            self.assertEqual(ignored_context, "")
 
         delete_response = client.delete(
             "/assistant/training-examples",

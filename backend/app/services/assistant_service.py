@@ -34,6 +34,7 @@ from app.services.assistant_guard_service import (
     extract_recent_context,
     is_security_sensitive_assistant_request,
 )
+from app.services.assistant_memory_service import build_assistant_learning_context
 from app.services.budget_metrics import build_budget_action_insights, get_default_budget_month
 from app.services.llm_service import generate_llm_assistant_response
 from app.services.saved_scenario_service import list_saved_scenarios
@@ -2413,6 +2414,18 @@ def generate_assistant_response(
 
     q = (question or "").strip().lower()
     intent = classify_question(q, context_text)
+    learning_context = build_assistant_learning_context(
+        db,
+        user_id,
+        question=question,
+        account_id=account_id,
+        limit=3,
+    )
+    llm_context_text = (
+        f"{context_text}\n\n{learning_context}".strip()
+        if learning_context
+        else context_text
+    )
     likely_saved_scenario_question = any(
         phrase in q
         for phrase in [
@@ -2635,7 +2648,7 @@ def generate_assistant_response(
     }:
         llm_result = generate_llm_assistant_response(
             question=question,
-            conversation_context=context_text,
+            conversation_context=llm_context_text,
             snapshot=snapshot,
             category_trends=category_trends,
             overspending_alerts=overspending_alerts,
@@ -3738,7 +3751,7 @@ def generate_assistant_response(
     if llm_allowed:
         llm_result = generate_llm_assistant_response(
             question=question,
-            conversation_context=context_text,
+            conversation_context=llm_context_text,
             snapshot=snapshot,
             category_trends=category_trends,
             overspending_alerts=overspending_alerts,
