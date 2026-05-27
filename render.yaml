@@ -4,5 +4,5 @@ services:
     runtime: docker
     dockerfilePath: backend/Dockerfile
     dockerContext: backend
-    healthCheckPath: /health
+    healthCheckPath: /ready
     autoDeploy: true

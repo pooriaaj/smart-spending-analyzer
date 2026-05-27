@@ -2,9 +2,10 @@ from __future__ import annotations
 
 import logging
 import os
+from contextlib import asynccontextmanager
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, Request, Response
+from fastapi import FastAPI, Request, Response, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -41,10 +42,31 @@ logging.basicConfig(
 
 logger = logging.getLogger(__name__)
 
+
+def on_startup() -> None:
+    ensure_runtime_database_shape(engine)
+    if os.getenv("REBUILD_MERCHANT_CACHE_ON_STARTUP", "false").lower() == "true":
+        try:
+            with SessionLocal() as db:
+                stats = rebuild_community_merchant_profile_cache(db)
+                db.commit()
+                logger.info("Community category learning cache refreshed: %s", stats)
+        except Exception:
+            logger.exception("Community category learning cache refresh skipped")
+    logger.info("Smart Spending Analyzer API started")
+
+
+@asynccontextmanager
+async def lifespan(app_instance: FastAPI):
+    on_startup()
+    yield
+
+
 app = FastAPI(
     title="Smart Spending Analyzer API",
     version="1.0.0",
     description="Backend API for Smart Spending Analyzer",
+    lifespan=lifespan,
 )
 
 Base.metadata.create_all(bind=engine)
@@ -72,20 +94,6 @@ app.include_router(budget_router)
 app.include_router(transaction_router)
 app.include_router(analytics_router)
 app.include_router(assistant_router)
-
-
-@app.on_event("startup")
-def on_startup() -> None:
-    ensure_runtime_database_shape(engine)
-    if os.getenv("REBUILD_MERCHANT_CACHE_ON_STARTUP", "false").lower() == "true":
-        try:
-            with SessionLocal() as db:
-                stats = rebuild_community_merchant_profile_cache(db)
-                db.commit()
-                logger.info("Community category learning cache refreshed: %s", stats)
-        except Exception:
-            logger.exception("Community category learning cache refresh skipped")
-    logger.info("Smart Spending Analyzer API started")
 
 
 @app.exception_handler(Exception)
@@ -123,13 +131,51 @@ def root_head() -> Response:
     return Response(status_code=200)
 
 
-@app.get("/health")
-def health() -> dict[str, str]:
+def check_database_ready() -> bool:
     with engine.connect() as connection:
         connection.execute(text("SELECT 1"))
-    return {"status": "ok", "database": "ok"}
+    return True
+
+
+def readiness_response() -> JSONResponse:
+    try:
+        check_database_ready()
+    except Exception:
+        logger.exception("Readiness check failed")
+        return JSONResponse(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            content={"status": "error", "database": "unavailable"},
+        )
+    return JSONResponse(content={"status": "ok", "database": "ok"})
+
+
+@app.get("/live")
+def live() -> dict[str, str]:
+    return {"status": "ok"}
+
+
+@app.head("/live")
+def live_head() -> Response:
+    return Response(status_code=200)
+
+
+@app.get("/ready")
+def ready() -> JSONResponse:
+    return readiness_response()
+
+
+@app.head("/ready")
+def ready_head() -> Response:
+    response = readiness_response()
+    return Response(status_code=response.status_code)
+
+
+@app.get("/health")
+def health() -> JSONResponse:
+    return readiness_response()
 
 
 @app.head("/health")
 def health_head() -> Response:
-    return Response(status_code=200)
+    response = readiness_response()
+    return Response(status_code=response.status_code)

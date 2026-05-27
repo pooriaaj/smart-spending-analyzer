@@ -99,6 +99,12 @@ It is designed as a foundation for an intelligent financial assistant that:
 - Backend: Render
 - Frontend: Vercel
 
+### Runtime Health Checks
+- `/live` returns 200 when the API process is running.
+- `/ready` returns 200 only when the API can reach the database.
+- `/health` mirrors readiness for backward compatibility.
+- Render is configured to use `/ready` so bad database connectivity blocks unhealthy deploys.
+
 ### Free Scanned PDF OCR
 - Text-based statement PDFs work without OCR.
 - Scanned or screenshot-style PDFs are rendered with PyMuPDF, then read with Tesseract OCR when available.

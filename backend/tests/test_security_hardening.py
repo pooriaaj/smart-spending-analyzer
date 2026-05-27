@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib
+import json
 import secrets
 import unittest
 from collections.abc import Generator
@@ -21,6 +22,7 @@ from app import dependencies
 from app import auth as auth_module
 from app.auth import ALGORITHM, SECRET_KEY, create_access_token, hash_password
 from app import database
+from app import main as main_module
 from app.database import Base
 from app.dependencies import get_current_user
 from app.models import (
@@ -1112,6 +1114,23 @@ class BackendResilienceTest(unittest.TestCase):
         response = client.post("/transactions/import/file", json={"value": "x" * 200})
 
         self.assertEqual(response.status_code, 200)
+
+    def test_readiness_response_reports_database_failure_without_stack_details(self) -> None:
+        with patch.object(main_module, "check_database_ready", side_effect=RuntimeError("db password leaked")):
+            response = main_module.readiness_response()
+
+        self.assertEqual(response.status_code, 503)
+        payload = json.loads(response.body.decode("utf-8"))
+        self.assertEqual(payload, {"status": "error", "database": "unavailable"})
+        self.assertNotIn("password", response.body.decode("utf-8").lower())
+
+    def test_readiness_response_reports_database_success(self) -> None:
+        with patch.object(main_module, "check_database_ready", return_value=True):
+            response = main_module.readiness_response()
+
+        self.assertEqual(response.status_code, 200)
+        payload = json.loads(response.body.decode("utf-8"))
+        self.assertEqual(payload, {"status": "ok", "database": "ok"})
 
     def test_csrf_origin_middleware_blocks_untrusted_unsafe_origin(self) -> None:
         app = FastAPI()
