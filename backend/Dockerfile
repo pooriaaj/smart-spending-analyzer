@@ -17,4 +17,4 @@ ENV LOCAL_OCR_COMMAND=tesseract
 ENV LOCAL_OCR_LANGUAGE=eng
 ENV PDF_OCR_RENDER_DPI=200
 
-CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-10000}"]
+CMD ["python", "run.py"]

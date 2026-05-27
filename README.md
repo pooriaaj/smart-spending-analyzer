@@ -105,6 +105,11 @@ It is designed as a foundation for an intelligent financial assistant that:
 - `/health` mirrors readiness for backward compatibility.
 - Render is configured to use `/ready` so bad database connectivity blocks unhealthy deploys.
 
+Runtime scaling knobs:
+- `WEB_CONCURRENCY` controls Uvicorn workers in production. Start with `1` on small Render instances, then raise it when CPU and database pool size can support it.
+- `UVICORN_TIMEOUT_KEEP_ALIVE` controls idle HTTP keep-alive seconds.
+- `UVICORN_GRACEFUL_TIMEOUT` controls graceful shutdown time during deploys.
+
 ### Free Scanned PDF OCR
 - Text-based statement PDFs work without OCR.
 - Scanned or screenshot-style PDFs are rendered with PyMuPDF, then read with Tesseract OCR when available.

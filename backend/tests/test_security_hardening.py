@@ -23,6 +23,7 @@ from app import auth as auth_module
 from app.auth import ALGORITHM, SECRET_KEY, create_access_token, hash_password
 from app import database
 from app import main as main_module
+import run as run_module
 from app.database import Base
 from app.dependencies import get_current_user
 from app.models import (
@@ -1001,6 +1002,39 @@ class BackendResilienceTest(unittest.TestCase):
             kwargs = database.build_engine_kwargs("sqlite://")
 
         self.assertEqual(kwargs, {"pool_pre_ping": True, "future": True})
+
+    def test_uvicorn_production_config_is_bounded(self) -> None:
+        with patch.dict(
+            "os.environ",
+            {
+                "ENVIRONMENT": "production",
+                "PORT": "70000",
+                "WEB_CONCURRENCY": "99",
+                "UVICORN_TIMEOUT_KEEP_ALIVE": "0",
+                "UVICORN_GRACEFUL_TIMEOUT": "999",
+                "FORWARDED_ALLOW_IPS": "10.0.0.1",
+            },
+            clear=False,
+        ):
+            config = run_module.build_uvicorn_config()
+
+        self.assertEqual(config["host"], "0.0.0.0")
+        self.assertEqual(config["port"], 65535)
+        self.assertEqual(config["workers"], 8)
+        self.assertFalse(config["reload"])
+        self.assertTrue(config["proxy_headers"])
+        self.assertEqual(config["forwarded_allow_ips"], "10.0.0.1")
+        self.assertEqual(config["timeout_keep_alive"], 1)
+        self.assertEqual(config["timeout_graceful_shutdown"], 120)
+
+    def test_uvicorn_development_config_uses_reload_and_loopback(self) -> None:
+        with patch.dict("os.environ", {"ENVIRONMENT": "development"}, clear=False):
+            config = run_module.build_uvicorn_config()
+
+        self.assertEqual(config["host"], "127.0.0.1")
+        self.assertEqual(config["port"], 8000)
+        self.assertEqual(config["workers"], 1)
+        self.assertTrue(config["reload"])
 
     def test_request_limit_env_values_are_bounded(self) -> None:
         with patch.dict(
