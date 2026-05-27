@@ -25,7 +25,7 @@ It is designed as a foundation for an intelligent financial assistant that:
 ## Features
 
 ### Core System
-- User authentication with JWT
+- User authentication with HttpOnly session cookies
 - Secure PostgreSQL database
 - FastAPI backend with structured services
 - React frontend with modern UI
@@ -88,7 +88,7 @@ It is designed as a foundation for an intelligent financial assistant that:
 - FastAPI
 - SQLAlchemy
 - PostgreSQL (Render)
-- JWT authentication
+- HttpOnly cookie authentication backed by signed JWTs
 
 ### Frontend
 - React (Vite)
@@ -158,10 +158,14 @@ This structure improves:
 
 ## Security
 
-- Password hashing (PBKDF2)
-- JWT authentication
-- Environment-based configuration
-- `.env` excluded from repository
+- Bcrypt password hashing with legacy PBKDF2 verification for older accounts
+- HttpOnly, Secure production auth cookies backed by signed JWTs
+- CSRF Origin checks for unsafe cookie-authenticated requests
+- Strict CORS origins with credentials support
+- Request size limits and upload file signature checks
+- Rate limits on auth, assistant, and import endpoints
+- Security headers on backend and Vercel frontend responses
+- Environment-based configuration with `.env` excluded from repository
 
 ---
 

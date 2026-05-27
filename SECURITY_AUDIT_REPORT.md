@@ -101,25 +101,25 @@ Smart Spending Analyzer defensive audit for the FastAPI backend, React frontend,
 
 ## Low Issues
 
-### 1. Frontend token storage is convenient but not ideal
+### 1. Frontend token storage moved to HttpOnly cookies
 
 - Files: `frontend/src/App.jsx`, `frontend/src/services/api.js`, `frontend/src/pages/LoginPage.jsx`, `frontend/src/pages/RegisterPage.jsx`
 - Why it matters: JWT in `localStorage` is vulnerable if an XSS bug ever appears.
-- Free fix: keep React escaping user-controlled text, avoid `dangerouslySetInnerHTML`, and plan a future move to secure HTTP-only cookies when backend/frontend deployment is ready.
+- Status: fixed. The frontend no longer stores auth tokens in `localStorage`; the backend sets an HttpOnly cookie and uses CSRF Origin checks for unsafe requests.
 - Test to prove the fix: `rg -n "dangerouslySetInnerHTML" frontend` should remain empty.
 
 ### 2. Vercel frontend headers should reduce browser attack surface
 
 - Files: `frontend/vercel.json`
 - Why it matters: static frontend responses also benefit from MIME-sniffing, clickjacking, referrer, permission, and HTTPS downgrade protections.
-- Free fix: add Vercel response headers for `X-Content-Type-Options`, `Referrer-Policy`, `X-Frame-Options`, `X-Permitted-Cross-Domain-Policies`, `Permissions-Policy`, and production HTTPS HSTS.
+- Status: fixed. Vercel response headers include `X-Content-Type-Options`, `Referrer-Policy`, `X-Frame-Options`, `X-Permitted-Cross-Domain-Policies`, `Permissions-Policy`, HSTS, COOP, CORP, and a conservative CSP.
 - Test to prove the fix: after Vercel deploy, inspect response headers in browser devtools or run `curl -I https://your-domain`.
 
 ### 3. Free dependency/security checks were not automated
 
 - Files: `.github/workflows/security-ci.yml`, `backend/requirements-dev.txt`, `backend/requirements.txt`, `backend/bandit.yaml`
 - Why it matters: vulnerable packages and unsafe Python patterns can slip in quietly.
-- Free fix: add GitHub Actions for backend tests, frontend build, `pip-audit`, `npm audit`, and `bandit`; upgrade vulnerable `pypdf` and `python-multipart` versions, and pin direct backend dependencies for more reproducible audits.
+- Status: fixed. GitHub Actions run backend tests, frontend build, `pip-audit`, `npm audit`, and `bandit`; local `pip-audit` and `npm audit` currently report no known vulnerabilities.
 - Test to prove the fix: `python -m pip_audit -r requirements.txt --cache-dir .pip-audit-cache` reports no known vulnerabilities.
 
 ### 4. Secrets should be scanned locally before public sharing
@@ -132,6 +132,6 @@ Smart Spending Analyzer defensive audit for the FastAPI backend, React frontend,
 ## Notes On Remaining Work
 
 - The in-process rate limiter is good free protection for a single Render worker. If the backend later scales horizontally, use a shared store such as Redis or database-backed counters.
-- Password reset currently generates a token but does not send email. For production, use a transactional email provider or your own SMTP and keep reset URLs out of API responses.
+- Password reset supports Resend or SMTP email delivery. For production, use a verified sender domain and keep reset URLs out of API responses.
 - The AI assistant is hardened so it cannot access the database directly and only receives already-filtered context. Keep that pattern when adding future assistant actions.
 - Continue adding ownership tests for every new id-based route before launch.

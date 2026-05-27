@@ -26,6 +26,18 @@
         {
           "key": "Strict-Transport-Security",
           "value": "max-age=31536000"
+        },
+        {
+          "key": "Cross-Origin-Opener-Policy",
+          "value": "same-origin"
+        },
+        {
+          "key": "Cross-Origin-Resource-Policy",
+          "value": "same-origin"
+        },
+        {
+          "key": "Content-Security-Policy",
+          "value": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self' https://smart-spending-analyzer.onrender.com; img-src 'self' data: blob:; font-src 'self' data:; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
         }
       ]
     }
