@@ -2,6 +2,33 @@
 
 Use this file for safe, non-secret maintenance summaries. Do not record real user data, real secrets, database URLs, access tokens, reset links, private provider logs, or raw exports here.
 
+## 2026-05-28 Account Selector Test Expansion
+
+Scope: added focused frontend tests for account selector loading, persistence, all-account behavior, and single-account fallback.
+
+Commit checked before expansion: `c89f82899029408b582ceb5e4d136bba1293f014`
+
+### Safety Boundaries
+
+- No `.env` values were read or printed.
+- No production settings were changed.
+- No backend code was changed.
+- No database migrations were run.
+- No production user data was exported.
+
+### Verification
+
+- Frontend tests: `11 files passed`, `30 tests passed`.
+- Frontend lint: passed.
+- Frontend build: passed.
+- Frontend high-severity audit: `0 vulnerabilities`.
+- `git diff --check`: passed before staging.
+
+### Notes
+
+- Tests use mocked frontend services and fake account data only.
+- Manual QA is still required for full account-scoped dashboard, analytics, transaction, assistant, and budget confidence.
+
 ## 2026-05-28 Transaction Form Test Expansion
 
 Scope: added focused frontend tests for transaction form create, edit, and category suggestion behavior.

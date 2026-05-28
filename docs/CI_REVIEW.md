@@ -21,6 +21,7 @@ As of the current docs refresh, frontend tests cover:
 
 - API base URL and 401 logout handling.
 - Protected-route auth gates.
+- Account selector loading, persistence, and all-account/single-account behavior.
 - Login success and failure behavior.
 - Registration success, mismatch validation, and failure behavior.
 - Forgot-password request success and failure behavior.

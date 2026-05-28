@@ -15,7 +15,7 @@ For recurring weekly/monthly maintenance, use `docs/OPERATIONS_CALENDAR.md`.
 - [ ] Confirm GitHub Actions `Security CI` passes for the pushed commit.
 - [ ] Confirm Vercel deployment status is successful for the pushed commit.
 
-Current focused frontend automated coverage includes API auth handling, protected-route auth gates, login, registration, forgot/reset password, transaction form create/edit/category suggestion behavior, profile data export, password visibility, and error helpers. Manual QA is still required for full product confidence.
+Current focused frontend automated coverage includes API auth handling, protected-route auth gates, account selector/account-scope behavior, login, registration, forgot/reset password, transaction form create/edit/category suggestion behavior, profile data export, password visibility, and error helpers. Manual QA is still required for full product confidence.
 
 ## Auth
 
@@ -39,6 +39,7 @@ Current focused frontend automated coverage includes API auth handling, protecte
 - [ ] `/profile` requires login.
 - [ ] `/import` requires login.
 - [ ] `/budgets` requires login.
+- [ ] Account selector loads account options and preserves the intended account scope.
 
 ## Transactions
 
@@ -58,6 +59,7 @@ Current focused frontend automated coverage includes API auth handling, protecte
 - [ ] Recent transactions render.
 - [ ] Filters change the displayed results.
 - [ ] Account-scoped views show the expected account data.
+- [ ] Switching between all accounts and one account changes the scope as expected.
 - [ ] Budget and simulator surfaces load if present in the current UI.
 
 ## Import Flow
