@@ -2,6 +2,33 @@
 
 Use this file for safe, non-secret maintenance summaries. Do not record real user data, real secrets, database URLs, access tokens, reset links, private provider logs, or raw exports here.
 
+## 2026-05-28 Transaction Ledger Test Expansion
+
+Scope: added focused frontend tests for transaction ledger loading, server-side filter request behavior, table edit/save, and delete refresh behavior.
+
+Commit checked before expansion: `bf4225266e3d22cdd685b4fbb4a836cd29b662bb`
+
+### Safety Boundaries
+
+- No `.env` values were read or printed.
+- No production settings were changed.
+- No backend code was changed.
+- No database migrations were run.
+- No production user data was exported.
+
+### Verification
+
+- Transactions page focused test: `1 file passed`, `3 tests passed`.
+- Frontend tests: `13 files passed`, `36 tests passed`.
+- Frontend lint: passed.
+- Frontend build: passed.
+- Frontend high-severity audit: `0 vulnerabilities`.
+
+### Notes
+
+- Tests use mocked frontend services and fake transaction data only.
+- Manual QA is still required for real backend pagination, account-scoped filtering, bulk category actions, fresh-start safety, import reconciliation, and mobile layout.
+
 ## 2026-05-28 Dashboard Test Expansion
 
 Scope: added focused frontend tests for dashboard summary display, budget/future outlook display, recent transaction filters, and manual transaction add behavior.
