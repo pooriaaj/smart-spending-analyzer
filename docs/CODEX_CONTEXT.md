@@ -58,7 +58,7 @@ Observed note: the README mentions PyMuPDF for rendering scanned PDFs before OCR
 - `frontend/src/components/`: shared controls and form components.
 - `frontend/src/utils/`: display and error helpers.
 - `frontend/src/i18n/`: language context.
-- Frontend tests now use Vitest, jsdom, and Testing Library for focused component/service/unit coverage, including API auth handling, profile data export, and login success/failure behavior.
+- Frontend tests now use Vitest, jsdom, and Testing Library for focused component/service/unit coverage, including API auth handling, profile data export, login success/failure behavior, and registration success/failure validation.
 
 ## 6. Current Database Approach
 
@@ -105,7 +105,7 @@ Known limitation: the in-process rate limiter is fine for a small single-instanc
 
 - Alembic exists, but production migration workflow is not complete yet.
 - `docs/BACKUP_RESTORE.md` now documents backup and restore safety, including Render export/PITR paths and local `pg_dump` fallback.
-- Frontend automated tests exist, but coverage is still intentionally small. Current coverage includes API auth handling, error utilities, profile data export, and login success/failure behavior.
+- Frontend automated tests exist, but coverage is still intentionally small. Current coverage includes API auth handling, error utilities, profile data export, login success/failure behavior, and registration success/failure validation.
 - `docs/STAGING.md` documents the staging workflow, but the actual staging provider resources have not been created.
 - Monitoring now includes platform logs, health endpoints, and a scheduled/manual GitHub Actions smoke check. It is still not a commercial uptime SLA.
 - `docs/INCIDENT_RESPONSE.md` documents a solo-developer incident response process, but no real incident drill has been performed yet.
