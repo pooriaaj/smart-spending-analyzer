@@ -56,6 +56,7 @@ This is not a full uptime service. GitHub scheduled workflows can run late or be
 5. If `/ready` failed but `/live` passed, check Render PostgreSQL status, `DATABASE_URL` configuration, and database connection errors in logs.
 6. Do not change production environment variables until the cause is understood.
 7. If database readiness is the problem, do not run migrations or restore steps until `docs/BACKUP_RESTORE.md` has been followed.
+8. Follow `docs/INCIDENT_RESPONSE.md` for severity, evidence capture, rollback, and communication steps.
 
 ## Logs To Check
 
@@ -98,6 +99,7 @@ Optional later:
 - Never log full database URLs.
 - Never paste logs containing secrets into Codex.
 - Keep API errors sanitized for users and detailed only in server-side logs.
+- If logs may contain real secrets or user data, handle them through `docs/INCIDENT_RESPONSE.md`.
 
 ## Manual Weekly Review
 

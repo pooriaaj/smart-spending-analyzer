@@ -16,6 +16,7 @@ Use this before sharing the repo, deploying, rotating keys, or asking Codex to m
 
 - [ ] `git status --short` has no `.env` files staged.
 - [ ] Pull requests do not include secrets in code, screenshots, logs, or comments.
+- [ ] If a secret is exposed in git, follow `docs/INCIDENT_RESPONSE.md` before discussing or cleaning it up.
 - [ ] GitHub Actions secrets are stored in GitHub settings only.
 - [ ] Dependency audit and Bandit checks pass or have documented exceptions.
 - [ ] Smoke-check workflows use public URLs or GitHub secrets only, never hardcoded private credentials.
@@ -44,6 +45,7 @@ Use this before sharing the repo, deploying, rotating keys, or asking Codex to m
 
 - [ ] Use a test account for QA whenever possible.
 - [ ] Avoid downloading production data to local machines.
+- [ ] If user data may have leaked, follow `docs/INCIDENT_RESPONSE.md` and treat it as sensitive until scoped.
 - [ ] Follow `docs/PRIVACY_DATA.md` before handling account deletion, data export, or data subject requests.
 - [ ] Keep `docs/PRIVACY_NOTICE_DRAFT.md` marked as draft until reviewed for publication.
 - [ ] Confirm `docs/RETENTION.md` before making public retention promises.
@@ -69,6 +71,7 @@ Use this before sharing the repo, deploying, rotating keys, or asking Codex to m
 
 - [ ] Do not paste secrets into Codex.
 - [ ] Ask Codex to list variable names only, never values.
+- [ ] If sensitive data is pasted into Codex or another AI tool, follow `docs/INCIDENT_RESPONSE.md`.
 - [ ] Require approval before auth, security, database model, migration, backup, restore, or deployment-config changes.
 - [ ] Require approval before adding any new vendor that receives user data.
 - [ ] Require approval before changing account deletion, user export, retention, or community learning behavior.

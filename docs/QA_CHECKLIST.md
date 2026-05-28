@@ -102,6 +102,7 @@ Use this checklist before important releases and after production deploys. Prefe
 - [ ] Render `/live` responds.
 - [ ] Render `/ready` responds with database readiness.
 - [ ] GitHub Actions `Production Smoke Check` passes or has a clear known reason for failure.
+- [ ] If production smoke fails unexpectedly, follow `docs/INCIDENT_RESPONSE.md`.
 - [ ] Register/login works on the production domain.
 - [ ] Create/edit/delete transaction works.
 - [ ] Analytics update after a transaction change.
@@ -117,3 +118,10 @@ Use this checklist before important releases and after production deploys. Prefe
 - [ ] Create/edit/delete transaction works with staging data.
 - [ ] Import flow uses safe test files only.
 - [ ] Staging does not point at production data.
+
+## Incident Drill
+
+- [ ] Read `docs/INCIDENT_RESPONSE.md` before broad launch.
+- [ ] Simulate a failed deploy or broken health check using staging/test-only context.
+- [ ] Simulate a leaked-secret response using fake variable names and no real values.
+- [ ] Confirm rollback, evidence capture, and post-incident notes are understandable.
