@@ -62,8 +62,8 @@ Those locations must age out through their own retention policies or be handled 
 
 ## Current Privacy Gaps
 
-- No formal privacy policy document exists.
-- No written retention schedule exists for logs, backups, or exported data.
+- `docs/PRIVACY_NOTICE_DRAFT.md` exists, but it is not legal-approved public policy.
+- `docs/RETENTION.md` exists, but provider-specific production retention values still need confirmation.
 - No admin/user support workflow exists for data subject requests.
 - Self-serve data export covers app-owned database rows, but does not cover provider logs, backups, email provider records, or third-party AI/provider records.
 - Backend tests cover account deletion cleanup for core user-owned models; keep this coverage updated when new user-owned tables are added.
@@ -114,6 +114,8 @@ See `docs/BACKUP_RESTORE.md` for backup and restore mechanics.
 ## Pre-Launch Privacy Checklist
 
 - [ ] Publish a plain-language privacy policy.
+- [ ] Turn `docs/PRIVACY_NOTICE_DRAFT.md` into a reviewed public privacy policy before broad launch.
+- [ ] Confirm `docs/RETENTION.md` against actual provider settings before broad launch.
 - [ ] Verify self-serve user data export in staging before advertising it broadly.
 - [ ] Keep account deletion cascade tests current when new user-owned models are added.
 - [ ] Keep data export tests current when new user-owned models are added.

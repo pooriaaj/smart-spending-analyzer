@@ -77,6 +77,8 @@ Use this checklist before important releases and after production deploys. Prefe
 - [ ] Data export with a wrong password is rejected safely.
 - [ ] Data export with the current password downloads a JSON file for the current account.
 - [ ] Data export does not include password hashes, reset token hashes, or another user's data.
+- [ ] Draft privacy notice still matches the production app behavior and enabled vendors.
+- [ ] Retention draft still matches provider settings, backups, logs, and export behavior.
 - [ ] Test data and screenshots do not include real bank transactions or statement content.
 
 ## Mobile And Responsive Check

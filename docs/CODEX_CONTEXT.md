@@ -17,7 +17,7 @@ Smart Spending Analyzer is a full-stack personal finance web app. It helps users
 - Deployment: frontend on Vercel, backend on Render, database on Render PostgreSQL.
 - Staging: `docs/STAGING.md` proposes a safe manual staging path using a `staging` branch, Vercel Preview, a separate Render backend service, and a separate staging database.
 - Monitoring: `docs/MONITORING.md` and `.github/workflows/production-smoke.yml` provide a free-first smoke-check and incident runbook.
-- Privacy/data lifecycle: `docs/PRIVACY_DATA.md` documents current deletion behavior, data handling rules, and the future export plan.
+- Privacy/data lifecycle: `docs/PRIVACY_DATA.md` documents deletion/export behavior and data handling rules; `docs/PRIVACY_NOTICE_DRAFT.md` and `docs/RETENTION.md` provide non-legal draft privacy/retention language.
 - Migrations: Alembic config and an initial schema baseline now exist under `backend/alembic/`; production migrations are not automatic and are not approved by default.
 - CI/security: GitHub Actions with backend tests, pip-audit, bandit, frontend npm audit, frontend tests, and frontend build.
 
@@ -104,7 +104,7 @@ Known limitation: the in-process rate limiter is fine for a small single-instanc
 - `docs/STAGING.md` documents the staging workflow, but the actual staging provider resources have not been created.
 - Monitoring now includes platform logs, health endpoints, and a scheduled/manual GitHub Actions smoke check. It is still not a commercial uptime SLA.
 - Deployment/QA documentation was missing before this docs pass.
-- `docs/PRIVACY_DATA.md` documents the current privacy/data lifecycle and manual safety rules. Self-serve JSON data export exists for the authenticated current user with password confirmation. Backend tests cover account deletion cleanup, export scoping, and sensitive field exclusion for core user-owned rows.
+- `docs/PRIVACY_DATA.md`, `docs/PRIVACY_NOTICE_DRAFT.md`, and `docs/RETENTION.md` document the current privacy/data lifecycle, draft public-facing privacy language, and draft retention targets. Self-serve JSON data export exists for the authenticated current user with password confirmation. Backend tests cover account deletion cleanup, export scoping, and sensitive field exclusion for core user-owned rows.
 - Runtime schema maintenance should be replaced by controlled migrations before many real users depend on production data.
 - Production migrations should still wait for an actual fresh backup and restore verification for the target database.
 - Optional scanned-PDF rendering should be verified because PyMuPDF was not listed in `backend/requirements.txt` during this inspection.
@@ -144,6 +144,8 @@ Known limitation: the in-process rate limiter is fine for a small single-instanc
 - `docs/STAGING.md`
 - `docs/MONITORING.md`
 - `docs/PRIVACY_DATA.md`
+- `docs/PRIVACY_NOTICE_DRAFT.md`
+- `docs/RETENTION.md`
 - Dependency lock/manifests when the change installs, removes, or upgrades packages: `backend/requirements.txt`, `backend/requirements-dev.txt`, `frontend/package.json`, `frontend/package-lock.json`.
 - Future migration files, backup scripts, and restore scripts.
 - `docs/BACKUP_RESTORE.md`
@@ -202,10 +204,20 @@ Known limitation: the in-process rate limiter is fine for a small single-instanc
 
 ### Phase 7: Privacy And Data Lifecycle
 
-- Status: privacy/data lifecycle runbook, backend account deletion cleanup tests, and self-serve user data export are implemented.
+- Status: privacy/data lifecycle runbook, backend account deletion cleanup tests, self-serve user data export, draft privacy notice, and draft retention plan are implemented.
 - Goal: make user data handling, deletion expectations, export planning, retention caveats, and AI/Codex safety rules explicit before many real users depend on the app.
-- Likely files changed: `docs/PRIVACY_DATA.md`, `docs/SECURITY_CHECKLIST.md`, `docs/QA_CHECKLIST.md`, `backend/app/routes/user_routes.py`, `backend/app/schemas.py`, `backend/app/services/user_export_service.py`, backend tests, frontend profile page, and i18n copy.
-- Risk level: low for docs, medium for export implementation, high for any production manual export.
+- Likely files changed: `docs/PRIVACY_DATA.md`, `docs/PRIVACY_NOTICE_DRAFT.md`, `docs/RETENTION.md`, `docs/SECURITY_CHECKLIST.md`, `docs/QA_CHECKLIST.md`, `backend/app/routes/user_routes.py`, `backend/app/schemas.py`, `backend/app/services/user_export_service.py`, backend tests, frontend profile page, and i18n copy.
+- Risk level: low for draft docs, medium for export implementation, high for any production manual export.
 - Touches database: export uses read-only current-user queries; no production export by Codex.
 - Free/feasible tools: yes.
 - Approval question for future hardening: "Do you approve tightening the user data export coverage with additional tests and documentation only, without changing production data or deletion behavior?"
+
+### Phase 8: Privacy Launch Review
+
+- Status: draft privacy notice and draft retention plan exist, but they are not legal-approved public policies.
+- Goal: convert draft privacy/retention language into publishable user-facing docs after verifying provider settings, enabled vendors, and production behavior.
+- Likely files changed: final public privacy page/document, `docs/PRIVACY_NOTICE_DRAFT.md`, `docs/RETENTION.md`, `docs/PRIVACY_DATA.md`, and possibly frontend route/page copy if a privacy page is added.
+- Risk level: medium because privacy language can create legal or user-trust obligations.
+- Touches database: no.
+- Free/feasible tools: yes, but legal review may not be free.
+- Approval question: "Do you approve reviewing provider settings and turning the draft privacy notice into a publishable privacy page, without changing app data behavior or exporting production data?"

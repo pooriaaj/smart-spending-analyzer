@@ -45,6 +45,8 @@ Use this before sharing the repo, deploying, rotating keys, or asking Codex to m
 - [ ] Use a test account for QA whenever possible.
 - [ ] Avoid downloading production data to local machines.
 - [ ] Follow `docs/PRIVACY_DATA.md` before handling account deletion, data export, or data subject requests.
+- [ ] Keep `docs/PRIVACY_NOTICE_DRAFT.md` marked as draft until reviewed for publication.
+- [ ] Confirm `docs/RETENTION.md` before making public retention promises.
 - [ ] If production data must be exported, get explicit approval and store it outside git.
 - [ ] Do not paste real user transactions, statements, emails, screenshots, or API responses into AI prompts.
 - [ ] Keep backups private and encrypted when possible.
