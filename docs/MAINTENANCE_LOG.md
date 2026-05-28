@@ -2,6 +2,33 @@
 
 Use this file for safe, non-secret maintenance summaries. Do not record real user data, real secrets, database URLs, access tokens, reset links, private provider logs, or raw exports here.
 
+## 2026-05-28 Dashboard Test Expansion
+
+Scope: added focused frontend tests for dashboard summary display, budget/future outlook display, recent transaction filters, and manual transaction add behavior.
+
+Commit checked before expansion: `13d72640af9e258633a278872c5d6b6e43e4bef4`
+
+### Safety Boundaries
+
+- No `.env` values were read or printed.
+- No production settings were changed.
+- No backend code was changed.
+- No database migrations were run.
+- No production user data was exported.
+
+### Verification
+
+- Dashboard focused test: `1 file passed`, `3 tests passed`.
+- Frontend tests: `12 files passed`, `33 tests passed`.
+- Frontend lint: passed.
+- Frontend build: passed.
+- Frontend high-severity audit: `0 vulnerabilities`.
+
+### Notes
+
+- Tests use mocked frontend services and fake account, transaction, budget, and simulator data only.
+- Manual QA is still required for full dashboard confidence with real accounts, imported data, mobile layout, and production backend behavior.
+
 ## 2026-05-28 Account Selector Test Expansion
 
 Scope: added focused frontend tests for account selector loading, persistence, all-account behavior, and single-account fallback.
