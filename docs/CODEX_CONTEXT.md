@@ -18,6 +18,7 @@ Smart Spending Analyzer is a full-stack personal finance web app. It helps users
 - Staging: `docs/STAGING.md` proposes a safe manual staging path using a `staging` branch, Vercel Preview, a separate Render backend service, and a separate staging database.
 - Monitoring: `docs/MONITORING.md` and `.github/workflows/production-smoke.yml` provide a free-first smoke-check and incident runbook.
 - Incident response: `docs/INCIDENT_RESPONSE.md` documents outage, leaked-secret, data-exposure, database, dependency, and AI/Codex incident handling.
+- Runbooks: `docs/RUNBOOK_INDEX.md` is the starting map for operational docs and safety rules.
 - Operations: `docs/OPERATIONS_CALENDAR.md` provides daily, weekly, monthly, pre-release, pre-migration, and incident-follow-up routines for solo maintenance; `docs/MAINTENANCE_LOG.md` records safe non-secret maintenance summaries.
 - Privacy/data lifecycle: `docs/PRIVACY_DATA.md` documents deletion/export behavior and data handling rules; `docs/PRIVACY_NOTICE_DRAFT.md` and `docs/RETENTION.md` provide non-legal draft privacy/retention language.
 - Migrations: Alembic config and an initial schema baseline now exist under `backend/alembic/`; production migrations are not automatic and are not approved by default.
@@ -147,6 +148,7 @@ Known limitation: the in-process rate limiter is fine for a small single-instanc
 - `.github/workflows/production-smoke.yml`
 - `docs/STAGING.md`
 - `docs/MONITORING.md`
+- `docs/RUNBOOK_INDEX.md`
 - `docs/INCIDENT_RESPONSE.md`
 - `docs/OPERATIONS_CALENDAR.md`
 - `docs/MAINTENANCE_LOG.md`
