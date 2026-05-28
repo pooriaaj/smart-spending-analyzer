@@ -19,6 +19,8 @@ from app.schemas import (
     ChangePasswordRequest,
     DeleteAccountRequest,
     MessageResponse,
+    UserDataExportRequest,
+    UserDataExportResponse,
     UserLearningPreferenceUpdate,
     UserProfileResponse,
     UserProfileUpdate,
@@ -27,6 +29,7 @@ from app.services.transaction_service import (
     merchant_profile_base_key,
     refresh_community_merchant_profile_cache,
 )
+from app.services.user_export_service import build_user_data_export
 
 router = APIRouter(prefix="/users", tags=["Users"])
 
@@ -158,6 +161,21 @@ def change_my_password(
     set_access_token_cookie(response, create_access_token({"sub": str(current_user.id)}))
 
     return MessageResponse(message="Password changed successfully")
+
+
+@router.post("/me/export", response_model=UserDataExportResponse)
+def export_my_data(
+    payload: UserDataExportRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> UserDataExportResponse:
+    if not verify_password(payload.password, current_user.password_hash):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Password is incorrect",
+        )
+
+    return UserDataExportResponse.model_validate(build_user_data_export(db, current_user))
 
 
 @router.delete("/me", response_model=MessageResponse)

@@ -50,7 +50,8 @@ Use this before sharing the repo, deploying, rotating keys, or asking Codex to m
 - [ ] Keep backups private and encrypted when possible.
 - [ ] Test restore steps on local or staging before relying on them.
 - [ ] Keep account deletion behavior covered by tests.
-- [ ] Add a self-serve full data export process before many real users depend on the app.
+- [ ] Keep self-serve full data export covered by tests.
+- [ ] Confirm data export excludes password hashes, reset token hashes, and non-user-owned shared cache rows.
 - [ ] Do not promise instant deletion from backups, provider logs, or third-party logs.
 
 ## Database Backup Reminder

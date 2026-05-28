@@ -104,7 +104,7 @@ Known limitation: the in-process rate limiter is fine for a small single-instanc
 - `docs/STAGING.md` documents the staging workflow, but the actual staging provider resources have not been created.
 - Monitoring now includes platform logs, health endpoints, and a scheduled/manual GitHub Actions smoke check. It is still not a commercial uptime SLA.
 - Deployment/QA documentation was missing before this docs pass.
-- `docs/PRIVACY_DATA.md` documents the current privacy/data lifecycle and manual safety rules. Backend tests now cover account deletion cleanup for core user-owned rows. A self-serve full user data export endpoint is still missing.
+- `docs/PRIVACY_DATA.md` documents the current privacy/data lifecycle and manual safety rules. Self-serve JSON data export exists for the authenticated current user with password confirmation. Backend tests cover account deletion cleanup, export scoping, and sensitive field exclusion for core user-owned rows.
 - Runtime schema maintenance should be replaced by controlled migrations before many real users depend on production data.
 - Production migrations should still wait for an actual fresh backup and restore verification for the target database.
 - Optional scanned-PDF rendering should be verified because PyMuPDF was not listed in `backend/requirements.txt` during this inspection.
@@ -202,10 +202,10 @@ Known limitation: the in-process rate limiter is fine for a small single-instanc
 
 ### Phase 7: Privacy And Data Lifecycle
 
-- Status: privacy/data lifecycle runbook and backend account deletion cleanup tests are documented; self-serve full export is not implemented.
+- Status: privacy/data lifecycle runbook, backend account deletion cleanup tests, and self-serve user data export are implemented.
 - Goal: make user data handling, deletion expectations, export planning, retention caveats, and AI/Codex safety rules explicit before many real users depend on the app.
-- Likely files changed: `docs/PRIVACY_DATA.md`, `docs/SECURITY_CHECKLIST.md`, `docs/QA_CHECKLIST.md`, optional backend/frontend files only if a self-serve export feature is explicitly approved later.
-- Risk level: low for docs, medium for future export implementation, high for any production manual export.
-- Touches database: documentation does not; future export implementation would use read-only current-user queries.
+- Likely files changed: `docs/PRIVACY_DATA.md`, `docs/SECURITY_CHECKLIST.md`, `docs/QA_CHECKLIST.md`, `backend/app/routes/user_routes.py`, `backend/app/schemas.py`, `backend/app/services/user_export_service.py`, backend tests, frontend profile page, and i18n copy.
+- Risk level: low for docs, medium for export implementation, high for any production manual export.
+- Touches database: export uses read-only current-user queries; no production export by Codex.
 - Free/feasible tools: yes.
-- Approval question: "Do you approve adding a self-serve user data export endpoint and frontend download flow for the authenticated current user only, with tests, no production export by Codex, and no deletion behavior changes?"
+- Approval question for future hardening: "Do you approve tightening the user data export coverage with additional tests and documentation only, without changing production data or deletion behavior?"

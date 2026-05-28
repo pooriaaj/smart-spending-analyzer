@@ -26,6 +26,11 @@ function ProfilePage() {
   const [passwordMessage, setPasswordMessage] = useState("");
   const [passwordError, setPasswordError] = useState("");
 
+  const [exportPassword, setExportPassword] = useState("");
+  const [exportMessage, setExportMessage] = useState("");
+  const [exportError, setExportError] = useState("");
+  const [exporting, setExporting] = useState(false);
+
   const [deletePassword, setDeletePassword] = useState("");
   const [deleteConfirmText, setDeleteConfirmText] = useState("");
   const [deleteError, setDeleteError] = useState("");
@@ -108,6 +113,41 @@ function ProfilePage() {
           getApiErrorMessage(error, t("profile.passwordChangeFailed"))
         );
       }
+    }
+  };
+
+  const handleExportData = async (e) => {
+    e.preventDefault();
+    setExportMessage("");
+    setExportError("");
+
+    try {
+      setExporting(true);
+      const response = await api.post("/users/me/export", {
+        password: exportPassword,
+      });
+      const exportDate = new Date().toISOString().slice(0, 10);
+      const blob = new Blob([JSON.stringify(response.data, null, 2)], {
+        type: "application/json",
+      });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `smart-spending-analyzer-export-${exportDate}.json`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+      setExportPassword("");
+      setExportMessage(t("profile.exportReady"));
+    } catch (error) {
+      if (!handleApiAuthError(error, navigate)) {
+        setExportError(
+          getApiErrorMessage(error, t("profile.exportFailed"))
+        );
+      }
+    } finally {
+      setExporting(false);
     }
   };
 
@@ -280,6 +320,39 @@ function ProfilePage() {
 
           {passwordMessage && <p style={{ color: "green" }}>{passwordMessage}</p>}
           {passwordError && <p className="error-text">{passwordError}</p>}
+        </div>
+
+        <div className="dashboard-card large-card">
+          <div className="section-header">
+            <h2>{t("profile.dataExportTitle")}</h2>
+            <p>{t("profile.dataExportDetail")}</p>
+          </div>
+
+          <form className="auth-form" onSubmit={handleExportData}>
+            <PasswordField
+              label={t("profile.exportPassword")}
+              name="export-password"
+              placeholder={t("profile.enterPassword")}
+              value={exportPassword}
+              onChange={(e) => setExportPassword(e.target.value)}
+              autoComplete="current-password"
+              required
+            />
+
+            <button
+              type="submit"
+              className="auth-submit-button"
+              disabled={exporting}
+            >
+              {exporting ? t("profile.exportingData") : t("profile.exportData")}
+            </button>
+          </form>
+
+          <p className="learning-privacy-note">
+            {t("profile.exportPrivacyNote")}
+          </p>
+          {exportMessage && <p style={{ color: "green" }}>{exportMessage}</p>}
+          {exportError && <p className="error-text">{exportError}</p>}
         </div>
 
         <div id="plans" className="dashboard-card large-card premium-plans-card">

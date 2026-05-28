@@ -1359,6 +1359,16 @@ const translations = {
       profileUpdateFailed: "Failed to update profile.",
       passwordChanged: "Password changed successfully.",
       passwordChangeFailed: "Failed to change password.",
+      dataExportTitle: "Download Your Data",
+      dataExportDetail:
+        "Export your profile, accounts, transactions, learning data, assistant history, budgets, and saved scenarios as a JSON file.",
+      exportPassword: "Password for export",
+      exportData: "Download Data",
+      exportingData: "Preparing Download...",
+      exportReady: "Your data export downloaded.",
+      exportFailed: "Failed to export your data.",
+      exportPrivacyNote:
+        "Password hashes, reset tokens, shared merchant cache rows, provider logs, and backups are not included.",
       deleteConfirmError: "Please type DELETE to confirm account deletion.",
       deleteFailed: "Failed to delete account.",
     },
@@ -2745,6 +2755,16 @@ const translations = {
       profileUpdateFailed: "Impossible de mettre à jour le profil.",
       passwordChanged: "Mot de passe changé avec succès.",
       passwordChangeFailed: "Impossible de changer le mot de passe.",
+      dataExportTitle: "Telecharger vos donnees",
+      dataExportDetail:
+        "Exportez votre profil, comptes, transactions, donnees d'apprentissage, historique assistant, budgets et scenarios en JSON.",
+      exportPassword: "Mot de passe pour l'export",
+      exportData: "Telecharger les donnees",
+      exportingData: "Preparation...",
+      exportReady: "Votre export de donnees a ete telecharge.",
+      exportFailed: "Impossible d'exporter vos donnees.",
+      exportPrivacyNote:
+        "Les hachages de mots de passe, jetons de reinitialisation, cache marchand partage, journaux fournisseur et sauvegardes ne sont pas inclus.",
       deleteConfirmError: "Veuillez taper SUPPRIMER pour confirmer la suppression du compte.",
       deleteFailed: "Impossible de supprimer le compte.",
     },

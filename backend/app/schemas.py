@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import date, datetime
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 
@@ -66,6 +66,28 @@ class ChangePasswordRequest(BaseModel):
 
 class DeleteAccountRequest(BaseModel):
     password: str = Field(min_length=6, max_length=128)
+
+
+class UserDataExportRequest(BaseModel):
+    password: str = Field(min_length=6, max_length=128)
+
+
+class UserDataExportResponse(BaseModel):
+    schema_version: int
+    exported_at: str
+    user: dict[str, Any]
+    accounts: list[dict[str, Any]]
+    transactions: list[dict[str, Any]]
+    category_memories: list[dict[str, Any]]
+    merchant_category_profiles: list[dict[str, Any]]
+    user_learning_preferences: list[dict[str, Any]]
+    assistant_chat_messages: list[dict[str, Any]]
+    assistant_usage_events: list[dict[str, Any]]
+    assistant_learning_examples: list[dict[str, Any]]
+    category_learning_events: list[dict[str, Any]]
+    budget_plans: list[dict[str, Any]]
+    saved_scenarios: list[dict[str, Any]]
+    excluded: list[str]
 
 
 class ForgotPasswordRequest(BaseModel):

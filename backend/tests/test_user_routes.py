@@ -27,9 +27,23 @@ from app.models import (
     User,
     UserLearningPreference,
 )
-from app.routes.user_routes import change_my_password, delete_my_account, router as user_router
-from app.schemas import ChangePasswordRequest, DeleteAccountRequest
+from app.routes.user_routes import change_my_password, delete_my_account, export_my_data, router as user_router
+from app.schemas import ChangePasswordRequest, DeleteAccountRequest, UserDataExportRequest
 from app.auth import hash_password
+
+
+def collect_export_keys(value: object) -> set[str]:
+    if isinstance(value, dict):
+        keys = set(value)
+        for item in value.values():
+            keys.update(collect_export_keys(item))
+        return keys
+    if isinstance(value, list):
+        keys: set[str] = set()
+        for item in value:
+            keys.update(collect_export_keys(item))
+        return keys
+    return set()
 
 
 class UserRouteTest(unittest.TestCase):
@@ -426,6 +440,169 @@ class UserRouteTest(unittest.TestCase):
                         session.query(model).filter(model.owner_id == user_id).count(),
                         0,
                     )
+
+    def test_export_my_data_rejects_wrong_password_without_writing(self) -> None:
+        with self.session_local() as session:
+            user = User(
+                email="export-wrong-password@example.com",
+                password_hash=hash_password("StrongPass1"),
+            )
+            session.add(user)
+            session.commit()
+            session.refresh(user)
+
+            with self.assertRaises(HTTPException) as exc:
+                export_my_data(
+                    UserDataExportRequest(password="WrongPass1"),
+                    db=session,
+                    current_user=user,
+                )
+
+            self.assertEqual(exc.exception.status_code, 400)
+            self.assertEqual(exc.exception.detail, "Password is incorrect")
+            self.assertIsNotNone(session.get(User, user.id))
+
+    def test_export_my_data_includes_current_user_rows_without_sensitive_fields(self) -> None:
+        with self.session_local() as session:
+            user = User(
+                email="export-owner@example.com",
+                password_hash=hash_password("StrongPass1"),
+                reset_token_hash="hashed-reset-token",
+                reset_token_expires_at=datetime(2026, 5, 28, tzinfo=timezone.utc),
+            )
+            other_user = User(
+                email="export-other@example.com",
+                password_hash=hash_password("StrongPass1"),
+            )
+            session.add_all([user, other_user])
+            session.flush()
+
+            account = Account(name="Chequing", type="chequing", owner_id=user.id)
+            other_account = Account(name="Other", type="savings", owner_id=other_user.id)
+            session.add_all([account, other_account])
+            session.flush()
+
+            session.add_all(
+                [
+                    Transaction(
+                        amount=25.0,
+                        category="transport",
+                        description="Current user bus pass",
+                        date=date(2026, 5, 2),
+                        type="expense",
+                        owner_id=user.id,
+                        account_id=account.id,
+                    ),
+                    Transaction(
+                        amount=99.0,
+                        category="other",
+                        description="Other user hidden transaction",
+                        date=date(2026, 5, 3),
+                        type="expense",
+                        owner_id=other_user.id,
+                        account_id=other_account.id,
+                    ),
+                    CategoryMemory(
+                        keyword="bus pass",
+                        category="transport",
+                        transaction_type="expense",
+                        owner_id=user.id,
+                    ),
+                    MerchantCategoryProfile(
+                        merchant_key="bus-pass",
+                        display_name="Bus Pass",
+                        category="transport",
+                        transaction_type="expense",
+                        owner_id=user.id,
+                    ),
+                    UserLearningPreference(
+                        owner_id=user.id,
+                        community_learning_enabled=True,
+                    ),
+                    AssistantChatMessage(
+                        role="assistant",
+                        content="You spent $25 on transport.",
+                        owner_id=user.id,
+                        account_id=account.id,
+                    ),
+                    AssistantUsageEvent(
+                        provider="test",
+                        request_chars=10,
+                        response_chars=20,
+                        owner_id=user.id,
+                    ),
+                    AssistantLearningExample(
+                        question="Transport summary?",
+                        answer="Bus pass was the only item.",
+                        intent="category_summary",
+                        owner_id=user.id,
+                        account_id=account.id,
+                    ),
+                    CategoryLearningEvent(
+                        merchant_key="bus-pass",
+                        display_name="Bus Pass",
+                        category="transport",
+                        transaction_type="expense",
+                        owner_id=user.id,
+                        account_id=account.id,
+                    ),
+                    MerchantLookupCache(
+                        merchant_key="bus-pass",
+                        display_name="Bus Pass",
+                        category="transport",
+                        transaction_type="expense",
+                        provider="community",
+                    ),
+                    BudgetPlan(
+                        month="2026-05",
+                        category="transport",
+                        amount=100.0,
+                        owner_id=user.id,
+                        account_id=account.id,
+                    ),
+                    SavedScenario(
+                        name="Transit plan",
+                        months=2,
+                        income_adjustment=0.0,
+                        expense_adjustment=-10.0,
+                        owner_id=user.id,
+                        account_id=account.id,
+                    ),
+                ]
+            )
+            session.commit()
+            session.refresh(user)
+
+            response = export_my_data(
+                UserDataExportRequest(password="StrongPass1"),
+                db=session,
+                current_user=user,
+            )
+            payload = response.model_dump()
+
+        self.assertEqual(payload["schema_version"], 1)
+        self.assertEqual(payload["user"]["email"], "export-owner@example.com")
+        self.assertEqual(len(payload["accounts"]), 1)
+        self.assertEqual(payload["accounts"][0]["name"], "Chequing")
+        self.assertEqual(len(payload["transactions"]), 1)
+        self.assertEqual(payload["transactions"][0]["description"], "Current user bus pass")
+        self.assertEqual(payload["transactions"][0]["date"], "2026-05-02")
+        self.assertEqual(len(payload["category_memories"]), 1)
+        self.assertEqual(len(payload["merchant_category_profiles"]), 1)
+        self.assertEqual(len(payload["user_learning_preferences"]), 1)
+        self.assertEqual(len(payload["assistant_chat_messages"]), 1)
+        self.assertEqual(len(payload["assistant_usage_events"]), 1)
+        self.assertEqual(len(payload["assistant_learning_examples"]), 1)
+        self.assertEqual(len(payload["category_learning_events"]), 1)
+        self.assertEqual(len(payload["budget_plans"]), 1)
+        self.assertEqual(len(payload["saved_scenarios"]), 1)
+        self.assertNotIn("Other user hidden transaction", str(payload))
+        self.assertNotIn("merchant_lookup_cache", payload)
+
+        exported_keys = collect_export_keys(payload)
+        self.assertNotIn("password_hash", exported_keys)
+        self.assertNotIn("reset_token_hash", exported_keys)
+        self.assertNotIn("reset_token_expires_at", exported_keys)
 
 
 if __name__ == "__main__":

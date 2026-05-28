@@ -70,11 +70,13 @@ Use this checklist before important releases and after production deploys. Prefe
 
 ## Privacy And Data Lifecycle
 
-- [ ] `docs/PRIVACY_DATA.md` still matches the implemented account deletion and learning preference behavior.
+- [ ] `docs/PRIVACY_DATA.md` still matches the implemented account deletion, data export, and learning preference behavior.
 - [ ] Account deletion with a wrong password is rejected safely.
 - [ ] Account deletion with the required confirmation removes the session and redirects away from protected pages.
 - [ ] A deleted test account cannot log back in.
-- [ ] No full data export is advertised in the UI unless a tested export feature exists.
+- [ ] Data export with a wrong password is rejected safely.
+- [ ] Data export with the current password downloads a JSON file for the current account.
+- [ ] Data export does not include password hashes, reset token hashes, or another user's data.
 - [ ] Test data and screenshots do not include real bank transactions or statement content.
 
 ## Mobile And Responsive Check

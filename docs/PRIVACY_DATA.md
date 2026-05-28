@@ -7,7 +7,9 @@ Use this runbook before handling user data, account deletion, future data export
 - Account deletion exists through the profile page and `DELETE /users/me`.
 - Account deletion requires the current password.
 - The backend deletes the current `User` row and relies on SQLAlchemy/database cascades for user-owned rows.
-- A self-serve full user data export endpoint does not exist yet.
+- Self-serve user data export exists through the profile page and `POST /users/me/export`.
+- Data export requires the current password and returns a JSON download for the authenticated current user only.
+- Data export omits password hashes, reset token hashes, reset token expiry timestamps, shared merchant lookup cache rows, provider logs, and backups.
 - Assistant training export exists for assistant learning examples only; it is not a full account export.
 - Backups and provider logs may retain deleted data for a limited retention window.
 
@@ -60,16 +62,17 @@ Those locations must age out through their own retention policies or be handled 
 
 ## Current Privacy Gaps
 
-- No self-serve full data export endpoint exists.
 - No formal privacy policy document exists.
 - No written retention schedule exists for logs, backups, or exported data.
 - No admin/user support workflow exists for data subject requests.
+- Self-serve data export covers app-owned database rows, but does not cover provider logs, backups, email provider records, or third-party AI/provider records.
 - Backend tests cover account deletion cleanup for core user-owned models; keep this coverage updated when new user-owned tables are added.
+- Backend tests cover export password validation, current-user row scoping, and sensitive field exclusion; keep this coverage updated when new user-owned tables are added.
 - Shared merchant lookup cache behavior should be documented before promising deletion semantics for learned community data.
 
 ## Manual Data Request Rules
 
-Until a full export/delete workflow is implemented:
+For any manual data request beyond the self-serve export:
 
 - Do not export production user data from Codex without explicit approval.
 - Do not paste real transactions, statements, emails, passwords, reset links, tokens, or API responses into AI prompts.
@@ -111,21 +114,22 @@ See `docs/BACKUP_RESTORE.md` for backup and restore mechanics.
 ## Pre-Launch Privacy Checklist
 
 - [ ] Publish a plain-language privacy policy.
-- [ ] Add a self-serve user data export endpoint or a documented support workflow.
+- [ ] Verify self-serve user data export in staging before advertising it broadly.
 - [ ] Keep account deletion cascade tests current when new user-owned models are added.
+- [ ] Keep data export tests current when new user-owned models are added.
 - [ ] Decide and document backup retention.
 - [ ] Decide and document log retention.
 - [ ] Decide and document third-party AI/provider data use.
 - [ ] Verify community learning language matches implementation.
 - [ ] Verify account deletion and data export behavior in staging before advertising it.
 
-## Future Self-Serve Export Plan
+## Future Export Hardening Plan
 
-Proposed implementation, not approved yet:
+Proposed follow-up, not approved yet:
 
-- Files likely changed: `backend/app/routes/user_routes.py`, `backend/app/schemas.py`, `backend/app/services/user_export_service.py`, backend tests, frontend profile page, i18n copy, and docs.
-- Risk level: medium, because it handles sensitive user financial data.
-- Touches database: read-only queries for the authenticated current user.
+- Files likely changed: backend tests, frontend tests, `docs/PRIVACY_DATA.md`, and possibly the export service if new user-owned models are added.
+- Risk level: low to medium, because it verifies sensitive user financial data handling.
+- Touches database: local/test databases only.
 - Free tools: yes.
-- Guardrails: authenticated current user only, password confirmation or recent auth check, JSON download, no secrets, no password hashes, no reset token hashes, tests for cross-user isolation.
-- Exact approval question: "Do you approve adding a self-serve user data export endpoint and frontend download flow for the authenticated current user only, with tests, no production export by Codex, and no deletion behavior changes?"
+- Guardrails: authenticated current user only, password confirmation, JSON download, no secrets, no password hashes, no reset token hashes, tests for cross-user isolation.
+- Exact approval question: "Do you approve tightening the user data export coverage with additional tests and documentation only, without changing production data or deletion behavior?"
