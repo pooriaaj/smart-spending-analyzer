@@ -77,7 +77,7 @@ For a direct `main` release:
 1. Stage only intended files.
 2. Commit with a clear short message.
 3. Push to `origin main`.
-4. Watch GitHub Actions, Vercel, and Render for the expected commit.
+4. Watch GitHub Actions, Vercel, and Render for the expected commit. Use `docs/CI_REVIEW.md` for the Actions review.
 
 For a safer branch release:
 
@@ -85,6 +85,7 @@ For a safer branch release:
 2. Push the branch.
 3. Open a draft pull request.
 4. Run checks and review the diff before merging.
+5. Use `docs/CI_REVIEW.md` to inspect workflow status and failures safely.
 
 Direct pushes are convenient for a solo project, but use branches for risky, large, database, auth, security, or provider changes.
 

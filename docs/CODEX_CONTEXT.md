@@ -17,6 +17,7 @@ Smart Spending Analyzer is a full-stack personal finance web app. It helps users
 - Deployment: frontend on Vercel, backend on Render, database on Render PostgreSQL.
 - Staging: `docs/STAGING.md` proposes a safe manual staging path using a `staging` branch, Vercel Preview, a separate Render backend service, and a separate staging database.
 - Monitoring: `docs/MONITORING.md` and `.github/workflows/production-smoke.yml` provide a free-first smoke-check and incident runbook.
+- CI review: `docs/CI_REVIEW.md` documents browser-first and optional GitHub CLI review steps for GitHub Actions.
 - Incident response: `docs/INCIDENT_RESPONSE.md` documents outage, leaked-secret, data-exposure, database, dependency, and AI/Codex incident handling.
 - Runbooks: `docs/RUNBOOK_INDEX.md` is the starting map for operational docs and safety rules.
 - Release process: `docs/RELEASE_PROCESS.md` documents release types, pre-release checks, direct-push versus branch releases, production smoke tests, rollback basics, and post-release notes.
@@ -150,6 +151,7 @@ Known limitation: the in-process rate limiter is fine for a small single-instanc
 - `.github/workflows/production-smoke.yml`
 - `docs/STAGING.md`
 - `docs/MONITORING.md`
+- `docs/CI_REVIEW.md`
 - `docs/RUNBOOK_INDEX.md`
 - `docs/RELEASE_PROCESS.md`
 - `docs/INCIDENT_RESPONSE.md`
