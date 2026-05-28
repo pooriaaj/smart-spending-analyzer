@@ -52,6 +52,7 @@ Backend:
 - `GET /live` should return a healthy process response.
 - `GET /ready` should return healthy only when the database is reachable.
 - `GET /health` mirrors readiness for compatibility.
+- GitHub Actions also includes `Production Smoke Check`, which can be run manually after deploys.
 
 Frontend:
 
@@ -70,6 +71,7 @@ Production smoke test after deploy:
 6. Confirm protected routes redirect.
 7. Check Render logs for unexpected server errors.
 8. Check browser console/network for obvious frontend errors.
+9. Optionally run the `Production Smoke Check` workflow from GitHub Actions.
 
 ## Rollback Basics
 

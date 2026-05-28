@@ -18,6 +18,7 @@ Use this before sharing the repo, deploying, rotating keys, or asking Codex to m
 - [ ] Pull requests do not include secrets in code, screenshots, logs, or comments.
 - [ ] GitHub Actions secrets are stored in GitHub settings only.
 - [ ] Dependency audit and Bandit checks pass or have documented exceptions.
+- [ ] Smoke-check workflows use public URLs or GitHub secrets only, never hardcoded private credentials.
 - [ ] Security-sensitive changes include tests when practical.
 
 ## Render And Vercel Safety

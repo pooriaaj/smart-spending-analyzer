@@ -88,6 +88,7 @@ Use this checklist before important releases and after production deploys. Prefe
 - [ ] Vercel frontend loads.
 - [ ] Render `/live` responds.
 - [ ] Render `/ready` responds with database readiness.
+- [ ] GitHub Actions `Production Smoke Check` passes or has a clear known reason for failure.
 - [ ] Register/login works on the production domain.
 - [ ] Create/edit/delete transaction works.
 - [ ] Analytics update after a transaction change.

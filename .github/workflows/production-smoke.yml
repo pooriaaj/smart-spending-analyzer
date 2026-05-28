@@ -1,0 +1,37 @@
+name: Production Smoke Check
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "17 12 * * *"
+
+permissions:
+  contents: read
+
+env:
+  FRONTEND_URL: https://smart-spending-analyzer.vercel.app
+  BACKEND_URL: https://smart-spending-analyzer.onrender.com
+
+jobs:
+  smoke-check:
+    name: Check deployed app health
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check frontend loads
+        run: |
+          curl --fail --location --silent --show-error \
+            --retry 2 --retry-delay 10 --connect-timeout 10 --max-time 60 \
+            "$FRONTEND_URL" --output /dev/null
+
+      - name: Check backend process liveness
+        run: |
+          curl --fail --silent --show-error \
+            --retry 2 --retry-delay 10 --connect-timeout 10 --max-time 60 \
+            "$BACKEND_URL/live" --output /dev/null
+
+      - name: Check backend database readiness
+        run: |
+          curl --fail --silent --show-error \
+            --retry 2 --retry-delay 10 --connect-timeout 10 --max-time 60 \
+            "$BACKEND_URL/ready" --output /dev/null

@@ -16,6 +16,7 @@ Smart Spending Analyzer is a full-stack personal finance web app. It helps users
 - AI assistant: OpenAI SDK or OpenAI-compatible local provider when enabled; rule-based fallback paths when disabled.
 - Deployment: frontend on Vercel, backend on Render, database on Render PostgreSQL.
 - Staging: `docs/STAGING.md` proposes a safe manual staging path using a `staging` branch, Vercel Preview, a separate Render backend service, and a separate staging database.
+- Monitoring: `docs/MONITORING.md` and `.github/workflows/production-smoke.yml` provide a free-first smoke-check and incident runbook.
 - Migrations: Alembic config and an initial schema baseline now exist under `backend/alembic/`; production migrations are not automatic and are not approved by default.
 - CI/security: GitHub Actions with backend tests, pip-audit, bandit, frontend npm audit, frontend tests, and frontend build.
 
@@ -100,7 +101,7 @@ Known limitation: the in-process rate limiter is fine for a small single-instanc
 - `docs/BACKUP_RESTORE.md` now documents backup and restore safety, including Render export/PITR paths and local `pg_dump` fallback.
 - Frontend automated tests exist, but coverage is still intentionally small.
 - `docs/STAGING.md` documents the staging workflow, but the actual staging provider resources have not been created.
-- Monitoring/alerting is limited to platform logs and health endpoints unless configured externally.
+- Monitoring now includes platform logs, health endpoints, and a scheduled/manual GitHub Actions smoke check. It is still not a commercial uptime SLA.
 - Deployment/QA documentation was missing before this docs pass.
 - Privacy/data export discipline is not complete; account deletion exists, but a formal export/deletion policy and manual runbook are still needed.
 - Runtime schema maintenance should be replaced by controlled migrations before many real users depend on production data.
@@ -138,7 +139,9 @@ Known limitation: the in-process rate limiter is fine for a small single-instanc
 - `render.yaml`
 - `frontend/vercel.json`
 - `.github/workflows/security-ci.yml`
+- `.github/workflows/production-smoke.yml`
 - `docs/STAGING.md`
+- `docs/MONITORING.md`
 - Dependency lock/manifests when the change installs, removes, or upgrades packages: `backend/requirements.txt`, `backend/requirements-dev.txt`, `frontend/package.json`, `frontend/package-lock.json`.
 - Future migration files, backup scripts, and restore scripts.
 - `docs/BACKUP_RESTORE.md`
@@ -187,6 +190,7 @@ Known limitation: the in-process rate limiter is fine for a small single-instanc
 
 ### Phase 6: Optional Monitoring
 
+- Status: free-first monitoring documentation and a GitHub Actions production smoke check are complete.
 - Goal: add low-cost visibility into uptime, deploy health, and application errors.
 - Likely files changed: `docs/MONITORING.md`, optional GitHub Actions scheduled smoke check, optional logging/error-reporting setup if approved.
 - Risk level: low for documentation and health checks, medium if adding an error-reporting SDK.
