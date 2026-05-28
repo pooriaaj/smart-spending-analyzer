@@ -104,7 +104,7 @@ Known limitation: the in-process rate limiter is fine for a small single-instanc
 - `docs/STAGING.md` documents the staging workflow, but the actual staging provider resources have not been created.
 - Monitoring now includes platform logs, health endpoints, and a scheduled/manual GitHub Actions smoke check. It is still not a commercial uptime SLA.
 - Deployment/QA documentation was missing before this docs pass.
-- `docs/PRIVACY_DATA.md` documents the current privacy/data lifecycle and manual safety rules. A self-serve full user data export endpoint is still missing.
+- `docs/PRIVACY_DATA.md` documents the current privacy/data lifecycle and manual safety rules. Backend tests now cover account deletion cleanup for core user-owned rows. A self-serve full user data export endpoint is still missing.
 - Runtime schema maintenance should be replaced by controlled migrations before many real users depend on production data.
 - Production migrations should still wait for an actual fresh backup and restore verification for the target database.
 - Optional scanned-PDF rendering should be verified because PyMuPDF was not listed in `backend/requirements.txt` during this inspection.
@@ -202,7 +202,7 @@ Known limitation: the in-process rate limiter is fine for a small single-instanc
 
 ### Phase 7: Privacy And Data Lifecycle
 
-- Status: privacy/data lifecycle runbook is documented; self-serve full export is not implemented.
+- Status: privacy/data lifecycle runbook and backend account deletion cleanup tests are documented; self-serve full export is not implemented.
 - Goal: make user data handling, deletion expectations, export planning, retention caveats, and AI/Codex safety rules explicit before many real users depend on the app.
 - Likely files changed: `docs/PRIVACY_DATA.md`, `docs/SECURITY_CHECKLIST.md`, `docs/QA_CHECKLIST.md`, optional backend/frontend files only if a self-serve export feature is explicitly approved later.
 - Risk level: low for docs, medium for future export implementation, high for any production manual export.

@@ -64,7 +64,7 @@ Those locations must age out through their own retention policies or be handled 
 - No formal privacy policy document exists.
 - No written retention schedule exists for logs, backups, or exported data.
 - No admin/user support workflow exists for data subject requests.
-- No automated test proves that account deletion removes every user-owned row.
+- Backend tests cover account deletion cleanup for core user-owned models; keep this coverage updated when new user-owned tables are added.
 - Shared merchant lookup cache behavior should be documented before promising deletion semantics for learned community data.
 
 ## Manual Data Request Rules
@@ -112,7 +112,7 @@ See `docs/BACKUP_RESTORE.md` for backup and restore mechanics.
 
 - [ ] Publish a plain-language privacy policy.
 - [ ] Add a self-serve user data export endpoint or a documented support workflow.
-- [ ] Add tests for account deletion cascades.
+- [ ] Keep account deletion cascade tests current when new user-owned models are added.
 - [ ] Decide and document backup retention.
 - [ ] Decide and document log retention.
 - [ ] Decide and document third-party AI/provider data use.

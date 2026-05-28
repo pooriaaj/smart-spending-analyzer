@@ -2,17 +2,31 @@ from __future__ import annotations
 
 import unittest
 from collections.abc import Generator
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 
-from fastapi import FastAPI, Response
+from fastapi import FastAPI, HTTPException, Response
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, event
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from app.database import Base
 from app.dependencies import get_current_user, get_db
-from app.models import MerchantCategoryProfile, MerchantLookupCache, User, UserLearningPreference
+from app.models import (
+    Account,
+    AssistantChatMessage,
+    AssistantLearningExample,
+    AssistantUsageEvent,
+    BudgetPlan,
+    CategoryLearningEvent,
+    CategoryMemory,
+    MerchantCategoryProfile,
+    MerchantLookupCache,
+    SavedScenario,
+    Transaction,
+    User,
+    UserLearningPreference,
+)
 from app.routes.user_routes import change_my_password, delete_my_account, router as user_router
 from app.schemas import ChangePasswordRequest, DeleteAccountRequest
 from app.auth import hash_password
@@ -27,6 +41,13 @@ class UserRouteTest(unittest.TestCase):
             poolclass=StaticPool,
             future=True,
         )
+
+        @event.listens_for(cls.engine, "connect")
+        def enable_sqlite_foreign_keys(dbapi_connection, _connection_record) -> None:
+            cursor = dbapi_connection.cursor()
+            cursor.execute("PRAGMA foreign_keys=ON")
+            cursor.close()
+
         cls.session_local = sessionmaker(bind=cls.engine, autocommit=False, autoflush=False, future=True)
         Base.metadata.create_all(bind=cls.engine)
 
@@ -261,6 +282,150 @@ class UserRouteTest(unittest.TestCase):
             set_cookie = cookie_response.headers.get("set-cookie", "").lower()
             self.assertIn("access_token=", set_cookie)
             self.assertIn("max-age=0", set_cookie)
+
+    def test_delete_account_rejects_wrong_password_without_deleting_user(self) -> None:
+        with self.session_local() as session:
+            user = User(
+                email="delete-wrong-password@example.com",
+                password_hash=hash_password("StrongPass1"),
+            )
+            session.add(user)
+            session.commit()
+            session.refresh(user)
+
+            with self.assertRaises(HTTPException) as exc:
+                delete_my_account(
+                    DeleteAccountRequest(password="WrongPass1"),
+                    response=Response(),
+                    db=session,
+                    current_user=user,
+                )
+
+            self.assertEqual(exc.exception.status_code, 400)
+            self.assertEqual(exc.exception.detail, "Password is incorrect")
+            self.assertIsNotNone(session.get(User, user.id))
+
+    def test_delete_account_removes_user_owned_rows(self) -> None:
+        with self.session_local() as session:
+            user = User(
+                email="delete-owned-rows@example.com",
+                password_hash=hash_password("StrongPass1"),
+            )
+            session.add(user)
+            session.flush()
+
+            account = Account(
+                name="Chequing",
+                type="chequing",
+                owner_id=user.id,
+            )
+            session.add(account)
+            session.flush()
+
+            session.add_all(
+                [
+                    Transaction(
+                        amount=42.5,
+                        category="groceries",
+                        description="Sample grocery transaction",
+                        date=date(2026, 5, 1),
+                        type="expense",
+                        owner_id=user.id,
+                        account_id=account.id,
+                    ),
+                    CategoryMemory(
+                        keyword="sample grocery",
+                        category="groceries",
+                        transaction_type="expense",
+                        owner_id=user.id,
+                    ),
+                    MerchantCategoryProfile(
+                        merchant_key="sample-grocery",
+                        display_name="Sample Grocery",
+                        category="groceries",
+                        transaction_type="expense",
+                        owner_id=user.id,
+                    ),
+                    UserLearningPreference(
+                        owner_id=user.id,
+                        community_learning_enabled=False,
+                    ),
+                    AssistantChatMessage(
+                        role="user",
+                        content="How much did I spend on groceries?",
+                        owner_id=user.id,
+                        account_id=account.id,
+                    ),
+                    AssistantUsageEvent(
+                        provider="test",
+                        request_chars=12,
+                        response_chars=34,
+                        owner_id=user.id,
+                    ),
+                    AssistantLearningExample(
+                        question="What changed?",
+                        answer="Groceries increased.",
+                        intent="spending_summary",
+                        owner_id=user.id,
+                        account_id=account.id,
+                    ),
+                    CategoryLearningEvent(
+                        merchant_key="sample-grocery",
+                        display_name="Sample Grocery",
+                        category="groceries",
+                        transaction_type="expense",
+                        owner_id=user.id,
+                        account_id=account.id,
+                    ),
+                    BudgetPlan(
+                        month="2026-05",
+                        category="groceries",
+                        amount=300.0,
+                        owner_id=user.id,
+                        account_id=account.id,
+                    ),
+                    SavedScenario(
+                        name="Tighter grocery plan",
+                        months=3,
+                        income_adjustment=0.0,
+                        expense_adjustment=-50.0,
+                        owner_id=user.id,
+                        account_id=account.id,
+                    ),
+                ]
+            )
+            session.commit()
+            user_id = user.id
+
+            response = delete_my_account(
+                DeleteAccountRequest(password="StrongPass1"),
+                response=Response(),
+                db=session,
+                current_user=user,
+            )
+
+            self.assertEqual(response.message, "Account deleted successfully")
+            self.assertIsNone(session.get(User, user_id))
+
+            owner_models = [
+                Account,
+                Transaction,
+                CategoryMemory,
+                MerchantCategoryProfile,
+                UserLearningPreference,
+                AssistantChatMessage,
+                AssistantUsageEvent,
+                AssistantLearningExample,
+                CategoryLearningEvent,
+                BudgetPlan,
+                SavedScenario,
+            ]
+            for model in owner_models:
+                with self.subTest(model=model.__name__):
+                    self.assertEqual(
+                        session.query(model).filter(model.owner_id == user_id).count(),
+                        0,
+                    )
 
 
 if __name__ == "__main__":
