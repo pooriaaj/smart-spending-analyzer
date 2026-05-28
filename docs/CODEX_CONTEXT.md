@@ -19,6 +19,7 @@ Smart Spending Analyzer is a full-stack personal finance web app. It helps users
 - Monitoring: `docs/MONITORING.md` and `.github/workflows/production-smoke.yml` provide a free-first smoke-check and incident runbook.
 - Incident response: `docs/INCIDENT_RESPONSE.md` documents outage, leaked-secret, data-exposure, database, dependency, and AI/Codex incident handling.
 - Runbooks: `docs/RUNBOOK_INDEX.md` is the starting map for operational docs and safety rules.
+- Release process: `docs/RELEASE_PROCESS.md` documents release types, pre-release checks, direct-push versus branch releases, production smoke tests, rollback basics, and post-release notes.
 - Operations: `docs/OPERATIONS_CALENDAR.md` provides daily, weekly, monthly, pre-release, pre-migration, and incident-follow-up routines for solo maintenance; `docs/MAINTENANCE_LOG.md` records safe non-secret maintenance summaries.
 - Privacy/data lifecycle: `docs/PRIVACY_DATA.md` documents deletion/export behavior and data handling rules; `docs/PRIVACY_NOTICE_DRAFT.md` and `docs/RETENTION.md` provide non-legal draft privacy/retention language.
 - Migrations: Alembic config and an initial schema baseline now exist under `backend/alembic/`; production migrations are not automatic and are not approved by default.
@@ -107,8 +108,9 @@ Known limitation: the in-process rate limiter is fine for a small single-instanc
 - `docs/STAGING.md` documents the staging workflow, but the actual staging provider resources have not been created.
 - Monitoring now includes platform logs, health endpoints, and a scheduled/manual GitHub Actions smoke check. It is still not a commercial uptime SLA.
 - `docs/INCIDENT_RESPONSE.md` documents a solo-developer incident response process, but no real incident drill has been performed yet.
+- `docs/RELEASE_PROCESS.md` documents the release process, but it has not been practiced across multiple releases yet.
 - `docs/OPERATIONS_CALENDAR.md` documents recurring solo-maintainer routines, and `docs/MAINTENANCE_LOG.md` has the first test-only weekly maintenance pass. The cadence still has not been practiced over multiple weeks yet.
-- Deployment/QA documentation was missing before this docs pass.
+- Deployment and QA documentation now exist, but they should be reviewed for drift before broad beta use.
 - `docs/PRIVACY_DATA.md`, `docs/PRIVACY_NOTICE_DRAFT.md`, and `docs/RETENTION.md` document the current privacy/data lifecycle, draft public-facing privacy language, and draft retention targets. Self-serve JSON data export exists for the authenticated current user with password confirmation. Backend tests cover account deletion cleanup, export scoping, and sensitive field exclusion for core user-owned rows.
 - Runtime schema maintenance should be replaced by controlled migrations before many real users depend on production data.
 - Production migrations should still wait for an actual fresh backup and restore verification for the target database.
@@ -149,6 +151,7 @@ Known limitation: the in-process rate limiter is fine for a small single-instanc
 - `docs/STAGING.md`
 - `docs/MONITORING.md`
 - `docs/RUNBOOK_INDEX.md`
+- `docs/RELEASE_PROCESS.md`
 - `docs/INCIDENT_RESPONSE.md`
 - `docs/OPERATIONS_CALENDAR.md`
 - `docs/MAINTENANCE_LOG.md`

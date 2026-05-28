@@ -14,6 +14,7 @@ Keep this file free of secrets, real user data, provider logs, database URLs, ac
 
 ## Release And Operations
 
+- `docs/RELEASE_PROCESS.md`: release types, pre-release checks, push flow, production smoke testing, rollback basics, and post-release notes.
 - `docs/OPERATIONS_CALENDAR.md`: daily, weekly, monthly, release, migration, backup, and incident-follow-up cadence.
 - `docs/MAINTENANCE_LOG.md`: safe non-secret summaries of maintenance passes that are useful for future context.
 - `docs/MONITORING.md`: free-first monitoring plan and production smoke workflow notes.
