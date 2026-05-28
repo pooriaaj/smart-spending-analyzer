@@ -59,7 +59,7 @@ Observed note: the README mentions PyMuPDF for rendering scanned PDFs before OCR
 - `frontend/src/components/`: shared controls and form components.
 - `frontend/src/utils/`: display and error helpers.
 - `frontend/src/i18n/`: language context.
-- Frontend tests now use Vitest, jsdom, and Testing Library for focused component/service/unit coverage, including API auth handling, protected-route auth gates, profile data export, login/register success and failure behavior, and forgot/reset password flows.
+- Frontend tests now use Vitest, jsdom, and Testing Library for focused component/service/unit coverage, including API auth handling, protected-route auth gates, transaction form create/edit/category suggestion behavior, profile data export, login/register success and failure behavior, and forgot/reset password flows.
 
 ## 6. Current Database Approach
 
@@ -101,14 +101,14 @@ Known limitation: the in-process rate limiter is fine for a small single-instanc
   - frontend tests,
   - frontend build.
 - Frontend currently has build, lint, test, and watch-test scripts.
-- Current frontend suite has focused Vitest coverage for API auth handling, protected route gates, login, registration, forgot/reset password, profile export, password visibility, and error helpers.
+- Current frontend suite has focused Vitest coverage for API auth handling, protected route gates, login, registration, forgot/reset password, transaction form create/edit/category suggestion behavior, profile export, password visibility, and error helpers.
 - End-to-end tests are not present yet.
 
 ## 9. Known Risks And Missing Company-Readiness Pieces
 
 - Alembic exists, but production migration workflow is not complete yet.
 - `docs/BACKUP_RESTORE.md` now documents backup and restore safety, including Render export/PITR paths and local `pg_dump` fallback.
-- Frontend automated tests exist, but coverage is still intentionally small. Current coverage includes API auth handling, protected-route auth gates, error utilities, profile data export, login/register success and failure behavior, and forgot/reset password flows.
+- Frontend automated tests exist, but coverage is still intentionally small. Current coverage includes API auth handling, protected-route auth gates, error utilities, transaction form create/edit/category suggestion behavior, profile data export, login/register success and failure behavior, and forgot/reset password flows.
 - `docs/STAGING.md` documents the staging workflow, but the actual staging provider resources have not been created.
 - Monitoring now includes platform logs, health endpoints, and a scheduled/manual GitHub Actions smoke check. It is still not a commercial uptime SLA.
 - `docs/INCIDENT_RESPONSE.md` documents a solo-developer incident response process, but no real incident drill has been performed yet.
@@ -191,7 +191,7 @@ Known limitation: the in-process rate limiter is fine for a small single-instanc
 
 ### Phase 4: Frontend Testing
 
-- Status: Vitest and Testing Library setup is complete with focused tests for API auth handling, protected route gates, login, registration, forgot/reset password, profile export, password visibility, and error helpers.
+- Status: Vitest and Testing Library setup is complete with focused tests for API auth handling, protected route gates, login, registration, forgot/reset password, transaction form create/edit/category suggestion behavior, profile export, password visibility, and error helpers.
 - Goal: add beginner-friendly frontend confidence around auth, protected routes, transactions, analytics, and imports.
 - Likely files changed: `frontend/package.json`, `frontend/package-lock.json`, `frontend/vitest.config.*` or similar, `frontend/src/**/*.test.jsx`, optional testing setup file.
 - Risk level: low to medium.

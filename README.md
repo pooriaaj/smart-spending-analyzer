@@ -105,7 +105,7 @@ It is designed as a foundation for an intelligent financial assistant that:
 ### Testing And CI
 - Backend tests run through GitHub Actions.
 - Frontend tests use Vitest, jsdom, and Testing Library.
-- Current focused frontend coverage includes API auth handling, protected route gates, login, registration, forgot/reset password, profile export, password visibility, and error helpers.
+- Current focused frontend coverage includes API auth handling, protected route gates, login, registration, forgot/reset password, transaction form create/edit/category suggestion behavior, profile export, password visibility, and error helpers.
 - GitHub workflows:
   - `.github/workflows/security-ci.yml`
   - `.github/workflows/production-smoke.yml`

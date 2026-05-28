@@ -2,6 +2,32 @@
 
 Use this file for safe, non-secret maintenance summaries. Do not record real user data, real secrets, database URLs, access tokens, reset links, private provider logs, or raw exports here.
 
+## 2026-05-28 Transaction Form Test Expansion
+
+Scope: added focused frontend tests for transaction form create, edit, and category suggestion behavior.
+
+Commit checked before expansion: `b2ff5c148cc0478a7460b46322c7fc7232ea3faa`
+
+### Safety Boundaries
+
+- No `.env` values were read or printed.
+- No production settings were changed.
+- No backend code was changed.
+- No database migrations were run.
+- No production user data was exported.
+
+### Verification
+
+- Frontend tests: `10 files passed`, `26 tests passed`.
+- Frontend lint: passed.
+- Frontend build: passed.
+- `git diff --check`: passed before staging.
+
+### Notes
+
+- Tests use mocked frontend services and fake transaction data only.
+- Manual QA is still required for full transaction-page create/edit/delete confidence.
+
 ## 2026-05-28 Checklist And README Refresh
 
 Scope: refreshed README, GitHub/CI docs, QA checklist, security checklist, release process, runbook index, and Codex context after the frontend auth test expansion.

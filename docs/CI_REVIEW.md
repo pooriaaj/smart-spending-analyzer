@@ -25,6 +25,7 @@ As of the current docs refresh, frontend tests cover:
 - Registration success, mismatch validation, and failure behavior.
 - Forgot-password request success and failure behavior.
 - Reset-password token, mismatch, success, and redirect behavior.
+- Transaction form create, edit, and category suggestion behavior.
 - Profile data export download behavior.
 - Password visibility controls.
 - API error/success message formatting.
