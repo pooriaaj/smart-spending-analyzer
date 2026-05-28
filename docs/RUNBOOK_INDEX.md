@@ -7,6 +7,7 @@ Keep this file free of secrets, real user data, provider logs, database URLs, ac
 ## Start Here
 
 - `docs/CODEX_CONTEXT.md`: persistent project context for future Codex sessions.
+- `README.md`: public project overview, live URLs, GitHub workflow badges, testing summary, and docs entry points.
 - `docs/ENVIRONMENT.md`: local, Render, and Vercel environment variable guidance by variable name only.
 - `docs/DEPLOYMENT.md`: deploy, smoke-test, rollback, and production database warnings.
 - `docs/SECURITY_CHECKLIST.md`: recurring security checks before sharing, deploying, rotating keys, or using Codex on sensitive areas.

@@ -21,6 +21,16 @@ Use this before sharing the repo, deploying, rotating keys, or asking Codex to m
 - [ ] Dependency audit and Bandit checks pass or have documented exceptions.
 - [ ] Smoke-check workflows use public URLs or GitHub secrets only, never hardcoded private credentials.
 - [ ] Security-sensitive changes include tests when practical.
+- [ ] Review GitHub Actions through `docs/CI_REVIEW.md` after meaningful pushes.
+
+## Automated Regression Safety
+
+- [ ] Frontend auth route guard tests still pass.
+- [ ] Login, registration, forgot-password, and reset-password frontend tests still pass.
+- [ ] API auth error handling tests still pass.
+- [ ] Profile data export tests still pass.
+- [ ] Backend auth, user, export, and account deletion tests still pass when those areas change.
+- [ ] Test fixtures use fake emails, fake tokens, and dummy passwords only.
 
 ## Render And Vercel Safety
 

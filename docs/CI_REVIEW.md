@@ -6,12 +6,30 @@ Do not paste GitHub logs containing secrets, tokens, user data, or private provi
 
 ## Current Workflows
 
+- Repository: `pooriaaj/smart-spending-analyzer`.
+- Default branch: `main`.
 - `Security CI`: runs on pull requests and pushes to `main`.
 - `Production Smoke Check`: runs on a schedule and can be triggered manually.
 
 `Security CI` is the main code-quality gate. It covers backend tests, Python dependency audit, Bandit static scan, frontend dependency audit, frontend tests, and frontend build.
 
 `Production Smoke Check` verifies the deployed frontend and backend health endpoints using public URLs only.
+
+## Current Frontend Test Surface
+
+As of the current docs refresh, frontend tests cover:
+
+- API base URL and 401 logout handling.
+- Protected-route auth gates.
+- Login success and failure behavior.
+- Registration success, mismatch validation, and failure behavior.
+- Forgot-password request success and failure behavior.
+- Reset-password token, mismatch, success, and redirect behavior.
+- Profile data export download behavior.
+- Password visibility controls.
+- API error/success message formatting.
+
+Keep expanding this list toward transactions, import review, analytics filters, assistant flows, budgets, and responsive UI checks.
 
 ## Browser Review
 

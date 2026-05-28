@@ -4,6 +4,19 @@ Use this checklist before important releases and after production deploys. Prefe
 
 For recurring weekly/monthly maintenance, use `docs/OPERATIONS_CALENDAR.md`.
 
+## Automated Checks
+
+- [ ] For frontend changes, run `npm test` from `frontend`.
+- [ ] For frontend changes, run `npm run lint` from `frontend`.
+- [ ] For frontend changes, run `npm run build` from `frontend`.
+- [ ] For backend changes, run focused backend tests for the changed area.
+- [ ] Before risky backend releases, run the full backend test suite.
+- [ ] Run `git diff --check` before committing.
+- [ ] Confirm GitHub Actions `Security CI` passes for the pushed commit.
+- [ ] Confirm Vercel deployment status is successful for the pushed commit.
+
+Current focused frontend automated coverage includes API auth handling, protected-route auth gates, login, registration, forgot/reset password, profile data export, password visibility, and error helpers. Manual QA is still required for full product confidence.
+
 ## Auth
 
 - [ ] Register with a new email and strong password.
@@ -15,6 +28,8 @@ For recurring weekly/monthly maintenance, use `docs/OPERATIONS_CALENDAR.md`.
 - [ ] Protected routes redirect when logged out.
 - [ ] Password reset request shows a safe generic message.
 - [ ] Reset password works in the intended environment.
+- [ ] Auth-gated routes redirect logged-out users to login.
+- [ ] Logged-in users are routed away from the public login page to analytics.
 
 ## Protected Navigation
 
@@ -103,7 +118,9 @@ For recurring weekly/monthly maintenance, use `docs/OPERATIONS_CALENDAR.md`.
 - [ ] Vercel frontend loads.
 - [ ] Render `/live` responds.
 - [ ] Render `/ready` responds with database readiness.
+- [ ] Vercel deploy status is successful for the commit under test.
 - [ ] GitHub Actions `Production Smoke Check` passes or has a clear known reason for failure.
+- [ ] GitHub Actions `Security CI` passes or has a clear known reason for failure.
 - [ ] If production smoke fails unexpectedly, follow `docs/INCIDENT_RESPONSE.md`.
 - [ ] Register/login works on the production domain.
 - [ ] Create/edit/delete transaction works.

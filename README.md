@@ -1,10 +1,17 @@
 # Smart Spending Analyzer
 
+[![Security CI](https://github.com/pooriaaj/smart-spending-analyzer/actions/workflows/security-ci.yml/badge.svg?branch=main)](https://github.com/pooriaaj/smart-spending-analyzer/actions/workflows/security-ci.yml)
+[![Production Smoke Check](https://github.com/pooriaaj/smart-spending-analyzer/actions/workflows/production-smoke.yml/badge.svg)](https://github.com/pooriaaj/smart-spending-analyzer/actions/workflows/production-smoke.yml)
+
 A full-stack financial intelligence web application that helps users track, analyze, and improve their spending behavior.
 
 Live Demo:
 Frontend: https://smart-spending-analyzer.vercel.app  
 Backend API: https://smart-spending-analyzer.onrender.com
+
+GitHub:
+Repository: https://github.com/pooriaaj/smart-spending-analyzer
+Default branch: `main`
 
 ---
 
@@ -94,6 +101,14 @@ It is designed as a foundation for an intelligent financial assistant that:
 - React (Vite)
 - Recharts (data visualization)
 - Axios
+
+### Testing And CI
+- Backend tests run through GitHub Actions.
+- Frontend tests use Vitest, jsdom, and Testing Library.
+- Current focused frontend coverage includes API auth handling, protected route gates, login, registration, forgot/reset password, profile export, password visibility, and error helpers.
+- GitHub workflows:
+  - `.github/workflows/security-ci.yml`
+  - `.github/workflows/production-smoke.yml`
 
 ### Deployment
 - Backend: Render
@@ -188,6 +203,7 @@ Key docs:
 - `docs/ENVIRONMENT.md` for local, Render, and Vercel environment setup.
 - `docs/DEPLOYMENT.md` for deployment, smoke tests, and rollback basics.
 - `docs/RELEASE_PROCESS.md` for release checks and push flow.
+- `docs/CI_REVIEW.md` for GitHub Actions review from the browser or optional GitHub CLI.
 - `docs/SECURITY_CHECKLIST.md` for secret, GitHub, provider, user data, backup, and Codex safety.
 - `docs/QA_CHECKLIST.md` for manual product checks.
 
@@ -196,11 +212,13 @@ Key docs:
 ## How to Run Locally
 
 ### Backend
+```powershell
 cd backend
 python -m venv .venv
 .venv\Scripts\activate
 pip install -r requirements.txt
 uvicorn app.main:app --reload
+```
 
 To enable the model-backed assistant locally, copy `.env.example` to `backend/.env`, set `USE_LLM_ASSISTANT=true`, and add either:
 - `OPENAI_API_KEY` for OpenAI, or
@@ -210,9 +228,19 @@ Without those settings, the assistant still works through the safe rule-based ba
 
 
 ### Frontend
+```powershell
 cd frontend
 npm install
 npm run dev
+```
+
+Useful frontend checks:
+
+```powershell
+npm test
+npm run lint
+npm run build
+```
 
 
 ---

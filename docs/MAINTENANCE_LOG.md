@@ -2,6 +2,45 @@
 
 Use this file for safe, non-secret maintenance summaries. Do not record real user data, real secrets, database URLs, access tokens, reset links, private provider logs, or raw exports here.
 
+## 2026-05-28 Checklist And README Refresh
+
+Scope: refreshed README, GitHub/CI docs, QA checklist, security checklist, release process, runbook index, and Codex context after the frontend auth test expansion.
+
+Commit checked before refresh: `d03cb19848a75f7ef2920d651ef4725f548face6`
+
+### Safety Boundaries
+
+- No `.env` values were read or printed.
+- No production settings were changed.
+- No database migrations were run.
+- No backup or restore commands were run.
+- No production user data was exported.
+- No GitHub Actions secrets or provider dashboard settings were changed.
+
+### Updates
+
+- README now includes GitHub workflow badges, repository/default-branch details, testing/CI summary, and safer fenced local commands.
+- `docs/QA_CHECKLIST.md` now includes automated checks and current frontend automated coverage.
+- `docs/SECURITY_CHECKLIST.md` now includes automated regression safety items.
+- `docs/CI_REVIEW.md` now includes repository/default-branch details and the current frontend test surface.
+- `docs/RELEASE_PROCESS.md` now reminds future sessions to update README, Codex context, and relevant checklists when readiness changes.
+- `docs/RUNBOOK_INDEX.md` now points to the README as a public overview and docs entry point.
+- `docs/CODEX_CONTEXT.md` now reflects the latest GitHub and frontend test state.
+
+### Verification
+
+- Frontend tests: `9 files passed`, `23 tests passed`.
+- Frontend lint: passed.
+- Frontend build: passed.
+- Frontend high-severity audit: `0 vulnerabilities`.
+- `git diff --check`: passed.
+
+### Not Done In This Pass
+
+- Backend tests were not rerun because no backend code changed.
+- GitHub Actions browser review was not completed from Codex.
+- Provider dashboard settings and logs were not reviewed.
+
 ## 2026-05-28 Release Dry-Run Review
 
 Scope: safe dry run of `docs/RELEASE_PROCESS.md` and `docs/RUNBOOK_INDEX.md` after the operations documentation commits.

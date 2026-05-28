@@ -18,6 +18,7 @@ Smart Spending Analyzer is a full-stack personal finance web app. It helps users
 - Staging: `docs/STAGING.md` proposes a safe manual staging path using a `staging` branch, Vercel Preview, a separate Render backend service, and a separate staging database.
 - Monitoring: `docs/MONITORING.md` and `.github/workflows/production-smoke.yml` provide a free-first smoke-check and incident runbook.
 - CI review: `docs/CI_REVIEW.md` documents browser-first and optional GitHub CLI review steps for GitHub Actions.
+- GitHub: repository is `pooriaaj/smart-spending-analyzer`; default branch is `main`.
 - Incident response: `docs/INCIDENT_RESPONSE.md` documents outage, leaked-secret, data-exposure, database, dependency, and AI/Codex incident handling.
 - Runbooks: `docs/RUNBOOK_INDEX.md` is the starting map for operational docs and safety rules.
 - Release process: `docs/RELEASE_PROCESS.md` documents release types, pre-release checks, direct-push versus branch releases, production smoke tests, rollback basics, and post-release notes.
@@ -99,7 +100,9 @@ Known limitation: the in-process rate limiter is fine for a small single-instanc
   - frontend npm audit,
   - frontend tests,
   - frontend build.
-- Frontend currently has build, lint, test, and watch-test scripts. End-to-end tests are not present yet.
+- Frontend currently has build, lint, test, and watch-test scripts.
+- Current frontend suite has focused Vitest coverage for API auth handling, protected route gates, login, registration, forgot/reset password, profile export, password visibility, and error helpers.
+- End-to-end tests are not present yet.
 
 ## 9. Known Risks And Missing Company-Readiness Pieces
 
@@ -188,7 +191,7 @@ Known limitation: the in-process rate limiter is fine for a small single-instanc
 
 ### Phase 4: Frontend Testing
 
-- Status: initial Vitest and Testing Library setup is complete with focused tests for error parsing, API auth handling, and password visibility.
+- Status: Vitest and Testing Library setup is complete with focused tests for API auth handling, protected route gates, login, registration, forgot/reset password, profile export, password visibility, and error helpers.
 - Goal: add beginner-friendly frontend confidence around auth, protected routes, transactions, analytics, and imports.
 - Likely files changed: `frontend/package.json`, `frontend/package-lock.json`, `frontend/vitest.config.*` or similar, `frontend/src/**/*.test.jsx`, optional testing setup file.
 - Risk level: low to medium.
