@@ -18,6 +18,7 @@ Smart Spending Analyzer is a full-stack personal finance web app. It helps users
 - Staging: `docs/STAGING.md` proposes a safe manual staging path using a `staging` branch, Vercel Preview, a separate Render backend service, and a separate staging database.
 - Monitoring: `docs/MONITORING.md` and `.github/workflows/production-smoke.yml` provide a free-first smoke-check and incident runbook.
 - Incident response: `docs/INCIDENT_RESPONSE.md` documents outage, leaked-secret, data-exposure, database, dependency, and AI/Codex incident handling.
+- Operations: `docs/OPERATIONS_CALENDAR.md` provides daily, weekly, monthly, pre-release, pre-migration, and incident-follow-up routines for solo maintenance.
 - Privacy/data lifecycle: `docs/PRIVACY_DATA.md` documents deletion/export behavior and data handling rules; `docs/PRIVACY_NOTICE_DRAFT.md` and `docs/RETENTION.md` provide non-legal draft privacy/retention language.
 - Migrations: Alembic config and an initial schema baseline now exist under `backend/alembic/`; production migrations are not automatic and are not approved by default.
 - CI/security: GitHub Actions with backend tests, pip-audit, bandit, frontend npm audit, frontend tests, and frontend build.
@@ -105,6 +106,7 @@ Known limitation: the in-process rate limiter is fine for a small single-instanc
 - `docs/STAGING.md` documents the staging workflow, but the actual staging provider resources have not been created.
 - Monitoring now includes platform logs, health endpoints, and a scheduled/manual GitHub Actions smoke check. It is still not a commercial uptime SLA.
 - `docs/INCIDENT_RESPONSE.md` documents a solo-developer incident response process, but no real incident drill has been performed yet.
+- `docs/OPERATIONS_CALENDAR.md` documents recurring solo-maintainer routines, but the cadence has not been practiced over time yet.
 - Deployment/QA documentation was missing before this docs pass.
 - `docs/PRIVACY_DATA.md`, `docs/PRIVACY_NOTICE_DRAFT.md`, and `docs/RETENTION.md` document the current privacy/data lifecycle, draft public-facing privacy language, and draft retention targets. Self-serve JSON data export exists for the authenticated current user with password confirmation. Backend tests cover account deletion cleanup, export scoping, and sensitive field exclusion for core user-owned rows.
 - Runtime schema maintenance should be replaced by controlled migrations before many real users depend on production data.
@@ -146,6 +148,7 @@ Known limitation: the in-process rate limiter is fine for a small single-instanc
 - `docs/STAGING.md`
 - `docs/MONITORING.md`
 - `docs/INCIDENT_RESPONSE.md`
+- `docs/OPERATIONS_CALENDAR.md`
 - `docs/PRIVACY_DATA.md`
 - `docs/PRIVACY_NOTICE_DRAFT.md`
 - `docs/RETENTION.md`
@@ -234,3 +237,13 @@ Known limitation: the in-process rate limiter is fine for a small single-instanc
 - Touches database: no.
 - Free/feasible tools: yes.
 - Approval question: "Do you approve running a simulated incident drill using only test data and documentation, without changing production settings, secrets, or database state?"
+
+### Phase 10: Operations Cadence
+
+- Status: operations calendar exists; the routine has not been practiced over multiple weeks.
+- Goal: turn release, smoke-test, backup, logs, privacy, dependency, and incident-review tasks into a manageable solo-maintainer rhythm.
+- Likely files changed: `docs/OPERATIONS_CALENDAR.md`, `docs/QA_CHECKLIST.md`, `docs/MONITORING.md`, and possibly docs for lessons learned.
+- Risk level: low for documentation, medium if provider dashboards or production checks are involved.
+- Touches database: no routine database writes; backup verification should follow `docs/BACKUP_RESTORE.md`.
+- Free/feasible tools: yes.
+- Approval question: "Do you approve using the operations calendar for a test-only weekly maintenance pass, without changing production settings, secrets, or database state?"

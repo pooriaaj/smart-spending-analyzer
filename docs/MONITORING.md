@@ -110,3 +110,5 @@ Once per week during beta:
 - Check Vercel deployments for build warnings.
 - Run a production smoke test from `docs/QA_CHECKLIST.md`.
 - Confirm backups are still understood before any database changes.
+
+For the broader solo-maintainer cadence, use `docs/OPERATIONS_CALENDAR.md`.

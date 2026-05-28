@@ -2,6 +2,8 @@
 
 Use this checklist before important releases and after production deploys. Prefer a dedicated test account and safe sample data.
 
+For recurring weekly/monthly maintenance, use `docs/OPERATIONS_CALENDAR.md`.
+
 ## Auth
 
 - [ ] Register with a new email and strong password.
@@ -122,6 +124,7 @@ Use this checklist before important releases and after production deploys. Prefe
 ## Incident Drill
 
 - [ ] Read `docs/INCIDENT_RESPONSE.md` before broad launch.
+- [ ] Confirm `docs/OPERATIONS_CALENDAR.md` has a cadence for the next drill.
 - [ ] Simulate a failed deploy or broken health check using staging/test-only context.
 - [ ] Simulate a leaked-secret response using fake variable names and no real values.
 - [ ] Confirm rollback, evidence capture, and post-incident notes are understandable.

@@ -212,6 +212,7 @@ Due date:
 - [ ] Add or update tests.
 - [ ] Add or update monitoring.
 - [ ] Add or update docs.
+- [ ] Update `docs/OPERATIONS_CALENDAR.md` if the incident changes the weekly or monthly maintenance routine.
 - [ ] Rotate exposed credentials if needed.
 - [ ] Review backup/restore readiness if data was involved.
 - [ ] Review privacy/retention language if user data was involved.
