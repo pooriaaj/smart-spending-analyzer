@@ -53,6 +53,7 @@ Use this before sharing the repo, deploying, rotating keys, or asking Codex to m
 - [ ] Take a backup before any schema migration.
 - [ ] Take a backup before any bulk data repair.
 - [ ] Verify the backup can be restored in local or staging.
+- [ ] Keep backup files in ignored local paths such as `local-backups/` or `backups/`.
 - [ ] Never test restore steps against production without explicit approval.
 - [ ] Never drop production tables from Codex.
 

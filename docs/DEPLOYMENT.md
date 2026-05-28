@@ -40,6 +40,7 @@ Before deploying:
 7. Confirm `FRONTEND_URL`, `BACKEND_URL`, `ALLOWED_ORIGINS`, and `ALLOWED_HOSTS` match the deployed domains.
 8. Confirm `AUTH_COOKIE_SECURE` and `AUTH_COOKIE_SAMESITE` are production-safe.
 9. Confirm no production migration or destructive database change is part of the deploy unless separately approved.
+10. If a production migration is approved, follow `docs/BACKUP_RESTORE.md` first.
 
 ## Health And Smoke Tests
 
@@ -73,4 +74,4 @@ Production smoke test after deploy:
 - Backend: use Render deploy history or redeploy a previous known-good commit.
 - Database: rollback is not the same as code rollback. Restore requires a backup and explicit approval.
 
-Never use rollback as a substitute for database backups. Do not run destructive database changes in production without a tested backup and a clear restore plan.
+Never use rollback as a substitute for database backups. Do not run destructive database changes in production without a tested backup and a clear restore plan. For database-specific preparation, use `docs/BACKUP_RESTORE.md`.

@@ -62,6 +62,6 @@ Use a local or temporary database URL before any upgrade command. Never paste th
 7. Back up production before any production migration.
 8. Apply production migration only after explicit approval.
 
-## Phase 3 Dependency
+## Production Dependency
 
-Before any production schema migration, create a backup/restore runbook and test restore locally or in staging.
+Before any production schema migration, follow `docs/BACKUP_RESTORE.md` and verify a fresh backup for the target database.

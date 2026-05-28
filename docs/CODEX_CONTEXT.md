@@ -95,14 +95,14 @@ Known limitation: the in-process rate limiter is fine for a small single-instanc
 ## 9. Known Risks And Missing Company-Readiness Pieces
 
 - Alembic exists, but production migration workflow is not complete yet.
-- No documented backup/restore process yet.
+- `docs/BACKUP_RESTORE.md` now documents backup and restore safety, including Render export/PITR paths and local `pg_dump` fallback.
 - No frontend automated test suite yet.
 - No staging workflow yet.
 - Monitoring/alerting is limited to platform logs and health endpoints unless configured externally.
 - Deployment/QA documentation was missing before this docs pass.
 - Privacy/data export discipline is not complete; account deletion exists, but a formal export/deletion policy and manual runbook are still needed.
 - Runtime schema maintenance should be replaced by controlled migrations before many real users depend on production data.
-- Production migrations should wait until the backup/restore phase is complete.
+- Production migrations should still wait for an actual fresh backup and restore verification for the target database.
 - Optional scanned-PDF rendering should be verified because PyMuPDF was not listed in `backend/requirements.txt` during this inspection.
 
 ## 10. Safe Rules For Future Codex Sessions
@@ -138,11 +138,13 @@ Known limitation: the in-process rate limiter is fine for a small single-instanc
 - `.github/workflows/security-ci.yml`
 - Dependency lock/manifests when the change installs, removes, or upgrades packages: `backend/requirements.txt`, `backend/requirements-dev.txt`, `frontend/package.json`, `frontend/package-lock.json`.
 - Future migration files, backup scripts, and restore scripts.
+- `docs/BACKUP_RESTORE.md`
 
 ## 12. Recommended Phase Roadmap
 
 ### Phase 2: Alembic Migration Setup
 
+- Status: initial local Alembic baseline is complete.
 - Goal: add controlled database migration discipline without changing production data.
 - Likely files changed: `backend/requirements.txt` or `backend/requirements-dev.txt`, `alembic.ini`, `backend/alembic/env.py`, `backend/alembic/script.py.mako`, `backend/alembic/versions/*.py`, possibly docs.
 - Risk level: medium.
@@ -152,7 +154,8 @@ Known limitation: the in-process rate limiter is fine for a small single-instanc
 
 ### Phase 3: Backup And Restore Process
 
-- Goal: document and script safe backups before production schema changes.
+- Status: backup/restore runbook and ignored local backup paths are complete; no production backup has been taken by Codex.
+- Goal: document safe backups before production schema changes.
 - Likely files changed: `docs/BACKUP_RESTORE.md`, optional `scripts/` or `backend/scripts/` backup helpers, `.gitignore` entries for local backup artifacts if needed.
 - Risk level: medium for backup, high for restore.
 - Touches database: backup is read-only; restore writes data and must only target local/staging unless explicitly approved.

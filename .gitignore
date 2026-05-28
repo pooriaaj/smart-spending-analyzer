@@ -50,5 +50,14 @@ backend/pytest-cache-files-*/
 *.log
 logs/
 
+# Local database backups and restore drills
+backups/
+local-backups/
+*.dump
+*.backup
+*.pgdump
+*.sql.gz
+*.dir.tar.gz
+
 # Misc
 *.sqlite3
