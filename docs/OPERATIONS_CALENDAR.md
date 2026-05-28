@@ -55,7 +55,8 @@ Time estimate: 20 to 40 minutes.
   - account deletion only with disposable test data.
 - [ ] Confirm no `.env` files or generated exports are staged.
 - [ ] Delete local exports, logs, or backups that are no longer needed.
-- [ ] Add a short note outside git for anything operationally important.
+- [ ] Add a short non-secret summary to `docs/MAINTENANCE_LOG.md` when the pass is useful for future Codex context.
+- [ ] Keep private notes outside git for anything involving real users, secrets, providers, incidents, or raw logs.
 
 ## Monthly Routine
 
