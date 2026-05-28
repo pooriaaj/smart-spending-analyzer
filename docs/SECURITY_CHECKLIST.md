@@ -44,11 +44,14 @@ Use this before sharing the repo, deploying, rotating keys, or asking Codex to m
 
 - [ ] Use a test account for QA whenever possible.
 - [ ] Avoid downloading production data to local machines.
+- [ ] Follow `docs/PRIVACY_DATA.md` before handling account deletion, data export, or data subject requests.
 - [ ] If production data must be exported, get explicit approval and store it outside git.
+- [ ] Do not paste real user transactions, statements, emails, screenshots, or API responses into AI prompts.
 - [ ] Keep backups private and encrypted when possible.
 - [ ] Test restore steps on local or staging before relying on them.
 - [ ] Keep account deletion behavior covered by tests.
-- [ ] Add a formal data export process before many real users depend on the app.
+- [ ] Add a self-serve full data export process before many real users depend on the app.
+- [ ] Do not promise instant deletion from backups, provider logs, or third-party logs.
 
 ## Database Backup Reminder
 
@@ -65,6 +68,7 @@ Use this before sharing the repo, deploying, rotating keys, or asking Codex to m
 - [ ] Ask Codex to list variable names only, never values.
 - [ ] Require approval before auth, security, database model, migration, backup, restore, or deployment-config changes.
 - [ ] Require approval before adding any new vendor that receives user data.
+- [ ] Require approval before changing account deletion, user export, retention, or community learning behavior.
 - [ ] Do not let Codex run production migrations.
 - [ ] Do not let Codex run destructive database commands.
 - [ ] Review generated docs for accidental secret values before committing.

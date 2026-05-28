@@ -17,6 +17,7 @@ Smart Spending Analyzer is a full-stack personal finance web app. It helps users
 - Deployment: frontend on Vercel, backend on Render, database on Render PostgreSQL.
 - Staging: `docs/STAGING.md` proposes a safe manual staging path using a `staging` branch, Vercel Preview, a separate Render backend service, and a separate staging database.
 - Monitoring: `docs/MONITORING.md` and `.github/workflows/production-smoke.yml` provide a free-first smoke-check and incident runbook.
+- Privacy/data lifecycle: `docs/PRIVACY_DATA.md` documents current deletion behavior, data handling rules, and the future export plan.
 - Migrations: Alembic config and an initial schema baseline now exist under `backend/alembic/`; production migrations are not automatic and are not approved by default.
 - CI/security: GitHub Actions with backend tests, pip-audit, bandit, frontend npm audit, frontend tests, and frontend build.
 
@@ -103,7 +104,7 @@ Known limitation: the in-process rate limiter is fine for a small single-instanc
 - `docs/STAGING.md` documents the staging workflow, but the actual staging provider resources have not been created.
 - Monitoring now includes platform logs, health endpoints, and a scheduled/manual GitHub Actions smoke check. It is still not a commercial uptime SLA.
 - Deployment/QA documentation was missing before this docs pass.
-- Privacy/data export discipline is not complete; account deletion exists, but a formal export/deletion policy and manual runbook are still needed.
+- `docs/PRIVACY_DATA.md` documents the current privacy/data lifecycle and manual safety rules. A self-serve full user data export endpoint is still missing.
 - Runtime schema maintenance should be replaced by controlled migrations before many real users depend on production data.
 - Production migrations should still wait for an actual fresh backup and restore verification for the target database.
 - Optional scanned-PDF rendering should be verified because PyMuPDF was not listed in `backend/requirements.txt` during this inspection.
@@ -142,6 +143,7 @@ Known limitation: the in-process rate limiter is fine for a small single-instanc
 - `.github/workflows/production-smoke.yml`
 - `docs/STAGING.md`
 - `docs/MONITORING.md`
+- `docs/PRIVACY_DATA.md`
 - Dependency lock/manifests when the change installs, removes, or upgrades packages: `backend/requirements.txt`, `backend/requirements-dev.txt`, `frontend/package.json`, `frontend/package-lock.json`.
 - Future migration files, backup scripts, and restore scripts.
 - `docs/BACKUP_RESTORE.md`
@@ -197,3 +199,13 @@ Known limitation: the in-process rate limiter is fine for a small single-instanc
 - Touches database: normally no.
 - Free/feasible tools: yes for Render/Vercel logs and GitHub Actions checks; third-party free tiers should be checked before adoption.
 - Approval question: "Do you approve Phase 6 to add a free or free-tier monitoring plan and optional health-check automation, without adding paid services or sending user data to a new vendor?"
+
+### Phase 7: Privacy And Data Lifecycle
+
+- Status: privacy/data lifecycle runbook is documented; self-serve full export is not implemented.
+- Goal: make user data handling, deletion expectations, export planning, retention caveats, and AI/Codex safety rules explicit before many real users depend on the app.
+- Likely files changed: `docs/PRIVACY_DATA.md`, `docs/SECURITY_CHECKLIST.md`, `docs/QA_CHECKLIST.md`, optional backend/frontend files only if a self-serve export feature is explicitly approved later.
+- Risk level: low for docs, medium for future export implementation, high for any production manual export.
+- Touches database: documentation does not; future export implementation would use read-only current-user queries.
+- Free/feasible tools: yes.
+- Approval question: "Do you approve adding a self-serve user data export endpoint and frontend download flow for the authenticated current user only, with tests, no production export by Codex, and no deletion behavior changes?"
