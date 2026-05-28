@@ -16,7 +16,7 @@ Smart Spending Analyzer is a full-stack personal finance web app. It helps users
 - AI assistant: OpenAI SDK or OpenAI-compatible local provider when enabled; rule-based fallback paths when disabled.
 - Deployment: frontend on Vercel, backend on Render, database on Render PostgreSQL.
 - Migrations: Alembic config and an initial schema baseline now exist under `backend/alembic/`; production migrations are not automatic and are not approved by default.
-- CI/security: GitHub Actions with backend tests, pip-audit, bandit, frontend npm audit, and frontend build.
+- CI/security: GitHub Actions with backend tests, pip-audit, bandit, frontend npm audit, frontend tests, and frontend build.
 
 Observed note: the README mentions PyMuPDF for rendering scanned PDFs before OCR, and `pdf_statement_service.py` imports `fitz` dynamically, but `backend/requirements.txt` did not list PyMuPDF during this inspection. Verify this before relying on rendered scanned-PDF OCR in production.
 
@@ -50,7 +50,7 @@ Observed note: the README mentions PyMuPDF for rendering scanned PDFs before OCR
 - `frontend/src/components/`: shared controls and form components.
 - `frontend/src/utils/`: display and error helpers.
 - `frontend/src/i18n/`: language context.
-- No frontend test framework or frontend test files were found during this inspection.
+- Frontend tests now use Vitest, jsdom, and Testing Library for focused component/service/unit coverage.
 
 ## 6. Current Database Approach
 
@@ -89,14 +89,15 @@ Known limitation: the in-process rate limiter is fine for a small single-instanc
   - Bandit scan,
   - frontend npm install,
   - frontend npm audit,
+  - frontend tests,
   - frontend build.
-- Frontend currently has build and lint scripts, but no frontend unit, component, or end-to-end tests were found.
+- Frontend currently has build, lint, test, and watch-test scripts. End-to-end tests are not present yet.
 
 ## 9. Known Risks And Missing Company-Readiness Pieces
 
 - Alembic exists, but production migration workflow is not complete yet.
 - `docs/BACKUP_RESTORE.md` now documents backup and restore safety, including Render export/PITR paths and local `pg_dump` fallback.
-- No frontend automated test suite yet.
+- Frontend automated tests exist, but coverage is still intentionally small.
 - No staging workflow yet.
 - Monitoring/alerting is limited to platform logs and health endpoints unless configured externally.
 - Deployment/QA documentation was missing before this docs pass.
@@ -164,6 +165,7 @@ Known limitation: the in-process rate limiter is fine for a small single-instanc
 
 ### Phase 4: Frontend Testing
 
+- Status: initial Vitest and Testing Library setup is complete with focused tests for error parsing, API auth handling, and password visibility.
 - Goal: add beginner-friendly frontend confidence around auth, protected routes, transactions, analytics, and imports.
 - Likely files changed: `frontend/package.json`, `frontend/package-lock.json`, `frontend/vitest.config.*` or similar, `frontend/src/**/*.test.jsx`, optional testing setup file.
 - Risk level: low to medium.
