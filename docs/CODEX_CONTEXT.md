@@ -1,0 +1,187 @@
+# Smart Spending Analyzer Codex Context
+
+This file is persistent context for future Codex sessions. Keep it factual, current, and free of secret values.
+
+## 1. Project Name And Purpose
+
+Smart Spending Analyzer is a full-stack personal finance web app. It helps users register, log in, track transactions, import statement data, analyze spending, manage budgets, and use a guarded assistant for finance-related questions and guidance.
+
+## 2. Current Stack
+
+- Frontend: React, Vite, React Router, Axios, Recharts.
+- Backend: FastAPI, SQLAlchemy, Pydantic, Uvicorn.
+- Database: PostgreSQL-ready through `DATABASE_URL`; tests use SQLite.
+- Auth: JWT-backed HttpOnly cookies with bcrypt password hashing and legacy PBKDF2 verification.
+- Imports/OCR: CSV and PDF import paths, pypdf, optional local Tesseract OCR, optional OpenAI vision OCR.
+- AI assistant: OpenAI SDK or OpenAI-compatible local provider when enabled; rule-based fallback paths when disabled.
+- Deployment: frontend on Vercel, backend on Render, database on Render PostgreSQL.
+- Migrations: Alembic config and an initial schema baseline now exist under `backend/alembic/`; production migrations are not automatic and are not approved by default.
+- CI/security: GitHub Actions with backend tests, pip-audit, bandit, frontend npm audit, and frontend build.
+
+Observed note: the README mentions PyMuPDF for rendering scanned PDFs before OCR, and `pdf_statement_service.py` imports `fitz` dynamically, but `backend/requirements.txt` did not list PyMuPDF during this inspection. Verify this before relying on rendered scanned-PDF OCR in production.
+
+## 3. Current Deployment Structure
+
+- `frontend/vercel.json` defines frontend security headers and SPA rewrites to `index.html`.
+- `render.yaml` defines a Docker web service named `smart-spending-analyzer` with `backend/Dockerfile`, Docker context `backend`, automatic deploys, and health check path `/ready`.
+- `backend/Dockerfile` installs Python dependencies and the Tesseract system package, then runs `python run.py`.
+- `backend/run.py` reads host, port, worker, proxy, and timeout settings from environment variable names.
+- Backend health endpoints in `backend/app/main.py` include `/live`, `/ready`, and `/health`; `/ready` checks database connectivity.
+
+## 4. Current Backend Structure
+
+- `backend/app/main.py`: FastAPI app, middleware registration, routers, health endpoints, startup maintenance.
+- `backend/app/database.py`: SQLAlchemy engine/session setup from `DATABASE_URL`.
+- `backend/app/models.py`: SQLAlchemy models for users, accounts, transactions, category memory, assistant data, merchant lookup cache, budgets, and saved scenarios.
+- `backend/app/schemas.py`: request/response schemas and validation.
+- `backend/app/auth.py`: password hashing, JWT creation/decoding, auth cookie helpers.
+- `backend/app/security.py`: CORS helpers, trusted host helpers, CSRF Origin middleware, body size middleware, security headers, rate limiting, import validation helpers, redaction helpers.
+- `backend/app/dependencies.py`: shared request dependencies such as current user and database session.
+- `backend/app/routes/`: route layer for auth, users, accounts, budgets, transactions/imports, analytics, and assistant.
+- `backend/app/services/`: business logic for analytics, transactions, imports, budgets, assistant, OCR, email, merchant enrichment, database maintenance, and related helpers.
+- `backend/tests/`: backend regression tests for routes, imports, analytics, budgets, security hardening, PDF parsing, users, and database maintenance.
+
+## 5. Current Frontend Structure
+
+- `frontend/src/App.jsx`: React Router setup, protected routes, lazy-loaded pages, auth gate based on `/users/me`.
+- `frontend/src/main.jsx`: React root and `ErrorBoundary`.
+- `frontend/src/services/api.js`: Axios client using `VITE_API_BASE_URL` and `withCredentials: true`.
+- `frontend/src/pages/`: login, register, forgot/reset password, transactions, analytics, assistant, profile, import, budgets, and legacy/redirected pages.
+- `frontend/src/components/`: shared controls and form components.
+- `frontend/src/utils/`: display and error helpers.
+- `frontend/src/i18n/`: language context.
+- No frontend test framework or frontend test files were found during this inspection.
+
+## 6. Current Database Approach
+
+- The app uses SQLAlchemy models and `Base.metadata.create_all(bind=engine)` at backend startup.
+- Production is expected to use PostgreSQL through `DATABASE_URL`.
+- Backend tests create SQLite databases for isolated test runs.
+- `backend/app/services/database_maintenance_service.py` runs idempotent startup maintenance for selected columns and indexes. This is helpful for early deployment drift but should be replaced over time by reviewed migrations.
+- `backend/sql/add_indexes.sql` contains manual index SQL.
+- `backend/alembic/versions/20260528_0001_initial_schema.py` is the first Alembic baseline for fresh databases.
+- `backend/tests/test_alembic_baseline.py` verifies that the baseline can create the expected schema on a temporary SQLite database.
+
+## 7. Current Auth And Security Approach
+
+- Auth uses HttpOnly cookies containing signed JWTs.
+- New passwords are hashed with bcrypt; legacy PBKDF2 hashes remain verifiable.
+- Password reset tokens are hashed before storage; reset URLs are not exposed in production responses.
+- CORS is origin-based and credentials-aware.
+- Trusted host middleware is enabled.
+- Unsafe requests are checked with CSRF Origin middleware.
+- Request body limits and import upload validation are implemented.
+- Backend security headers and Vercel frontend security headers are present.
+- Simple in-process rate limiting covers auth, assistant, and import-heavy paths.
+- Backend error handling returns sanitized generic server errors and frontend-safe validation shapes.
+- Assistant logic includes prompt-injection and secret-request guardrails.
+
+Known limitation: the in-process rate limiter is fine for a small single-instance app but should move to a shared store if the backend scales horizontally.
+
+## 8. Existing Test And CI Setup
+
+- Backend tests exist in `backend/tests/`.
+- Dev security/test dependencies are listed in `backend/requirements-dev.txt`.
+- `.github/workflows/security-ci.yml` runs:
+  - backend dependency install,
+  - backend pytest,
+  - Python dependency audit with pip-audit,
+  - Bandit scan,
+  - frontend npm install,
+  - frontend npm audit,
+  - frontend build.
+- Frontend currently has build and lint scripts, but no frontend unit, component, or end-to-end tests were found.
+
+## 9. Known Risks And Missing Company-Readiness Pieces
+
+- Alembic exists, but production migration workflow is not complete yet.
+- No documented backup/restore process yet.
+- No frontend automated test suite yet.
+- No staging workflow yet.
+- Monitoring/alerting is limited to platform logs and health endpoints unless configured externally.
+- Deployment/QA documentation was missing before this docs pass.
+- Privacy/data export discipline is not complete; account deletion exists, but a formal export/deletion policy and manual runbook are still needed.
+- Runtime schema maintenance should be replaced by controlled migrations before many real users depend on production data.
+- Production migrations should wait until the backup/restore phase is complete.
+- Optional scanned-PDF rendering should be verified because PyMuPDF was not listed in `backend/requirements.txt` during this inspection.
+
+## 10. Safe Rules For Future Codex Sessions
+
+- Never expose, print, summarize, or copy real secret values.
+- Do not modify `.env` files unless the user explicitly asks and approves the exact change.
+- Do not commit API keys, database URLs, JWT secrets, passwords, tokens, or production credentials.
+- If inspecting environment files, only mention variable names, never values.
+- Do not run production migrations.
+- Do not drop tables.
+- Do not run destructive database changes.
+- Do not change auth, security, or database model behavior without first explaining the risk and asking for approval.
+- Prefer narrow, documented changes over broad refactors.
+- Use backend tests and frontend build/lint checks when changes touch behavior.
+- For database work, default to local/test databases first and keep production as a separate explicit approval step.
+
+## 11. Files That Should Not Be Changed Without Confirmation
+
+- `.env`, `backend/.env`, and any `.env.*` file containing local or deployed settings.
+- Render and Vercel dashboard environment variables.
+- `backend/app/models.py`
+- `backend/app/database.py`
+- `backend/app/auth.py`
+- `backend/app/security.py`
+- `backend/app/dependencies.py`
+- `backend/app/services/database_maintenance_service.py`
+- `backend/sql/add_indexes.sql`
+- `backend/alembic.ini`
+- `backend/alembic/env.py`
+- `backend/alembic/versions/*.py`
+- `render.yaml`
+- `frontend/vercel.json`
+- `.github/workflows/security-ci.yml`
+- Dependency lock/manifests when the change installs, removes, or upgrades packages: `backend/requirements.txt`, `backend/requirements-dev.txt`, `frontend/package.json`, `frontend/package-lock.json`.
+- Future migration files, backup scripts, and restore scripts.
+
+## 12. Recommended Phase Roadmap
+
+### Phase 2: Alembic Migration Setup
+
+- Goal: add controlled database migration discipline without changing production data.
+- Likely files changed: `backend/requirements.txt` or `backend/requirements-dev.txt`, `alembic.ini`, `backend/alembic/env.py`, `backend/alembic/script.py.mako`, `backend/alembic/versions/*.py`, possibly docs.
+- Risk level: medium.
+- Touches database: yes, but setup should start with local/test inspection only. Do not run production migrations.
+- Free/feasible tools: yes, Alembic is free.
+- Approval question: "Do you approve Phase 2 to add Alembic configuration and a local baseline migration only, without running production migrations or changing auth/security/model behavior?"
+
+### Phase 3: Backup And Restore Process
+
+- Goal: document and script safe backups before production schema changes.
+- Likely files changed: `docs/BACKUP_RESTORE.md`, optional `scripts/` or `backend/scripts/` backup helpers, `.gitignore` entries for local backup artifacts if needed.
+- Risk level: medium for backup, high for restore.
+- Touches database: backup is read-only; restore writes data and must only target local/staging unless explicitly approved.
+- Free/feasible tools: yes, PostgreSQL tools such as `pg_dump` and `pg_restore` are free; provider limits should be checked before relying on free tiers.
+- Approval question: "Do you approve Phase 3 to create backup/restore documentation and local-safe scripts, with no production restore and no destructive database action?"
+
+### Phase 4: Frontend Testing
+
+- Goal: add beginner-friendly frontend confidence around auth, protected routes, transactions, analytics, and imports.
+- Likely files changed: `frontend/package.json`, `frontend/package-lock.json`, `frontend/vitest.config.*` or similar, `frontend/src/**/*.test.jsx`, optional testing setup file.
+- Risk level: low to medium.
+- Touches database: no, unless later end-to-end tests call a backend.
+- Free/feasible tools: yes, Vitest and React Testing Library are free; Playwright can be added later if wanted.
+- Approval question: "Do you approve Phase 4 to add a free frontend test setup and focused tests, without changing production app behavior?"
+
+### Phase 5: Staging Setup
+
+- Goal: create a safer pre-production deployment path.
+- Likely files changed: `docs/STAGING.md`, deployment docs, possibly Render/Vercel project settings, possibly `render.yaml` only after a careful plan.
+- Risk level: medium.
+- Touches database: yes if a staging PostgreSQL database is created; it must be separate from production.
+- Free/feasible tools: feasible, but provider free-tier limits and current pricing should be checked before committing to a staging design.
+- Approval question: "Do you approve Phase 5 to design a separate staging environment using separate environment variables and a separate database, without changing production settings yet?"
+
+### Phase 6: Optional Monitoring
+
+- Goal: add low-cost visibility into uptime, deploy health, and application errors.
+- Likely files changed: `docs/MONITORING.md`, optional GitHub Actions scheduled smoke check, optional logging/error-reporting setup if approved.
+- Risk level: low for documentation and health checks, medium if adding an error-reporting SDK.
+- Touches database: normally no.
+- Free/feasible tools: yes for Render/Vercel logs and GitHub Actions checks; third-party free tiers should be checked before adoption.
+- Approval question: "Do you approve Phase 6 to add a free or free-tier monitoring plan and optional health-check automation, without adding paid services or sending user data to a new vendor?"
