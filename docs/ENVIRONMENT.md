@@ -6,10 +6,14 @@ This guide explains how environment configuration should work for local developm
 
 Local development runs on your machine and can use local-only values, test databases, or disabled optional services. Production runs on Render and Vercel and must use production-safe settings configured in those providers' dashboards.
 
+Staging should use separate provider settings and a separate database. See `docs/STAGING.md`.
+
 - Backend local: FastAPI reads environment variables for database, auth, CORS, email, imports, OCR, and assistant behavior.
 - Frontend local: Vite reads frontend variables from the frontend project environment.
 - Backend production: Render should store backend variables in the Render dashboard or a Render environment group.
 - Frontend production: Vercel should store frontend variables in the Vercel project environment settings.
+- Backend staging: use a separate Render service and staging-only values.
+- Frontend staging: use Vercel Preview or branch-specific variables for the staging branch.
 
 ## Backend Environment Variable Names
 

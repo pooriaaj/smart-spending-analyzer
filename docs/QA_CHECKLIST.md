@@ -93,3 +93,13 @@ Use this checklist before important releases and after production deploys. Prefe
 - [ ] Analytics update after a transaction change.
 - [ ] Logout works.
 - [ ] Render logs show no unexpected errors during the smoke test.
+
+## Staging Smoke Test
+
+- [ ] Vercel staging preview loads.
+- [ ] Render staging `/live` responds.
+- [ ] Render staging `/ready` uses the staging database.
+- [ ] Register/login works with a staging-only test account.
+- [ ] Create/edit/delete transaction works with staging data.
+- [ ] Import flow uses safe test files only.
+- [ ] Staging does not point at production data.

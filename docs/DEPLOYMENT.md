@@ -2,6 +2,8 @@
 
 Smart Spending Analyzer currently deploys the frontend to Vercel, the backend to Render, and the database to Render PostgreSQL.
 
+For pre-production testing, see `docs/STAGING.md`.
+
 ## Frontend On Vercel
 
 - Project root should be `frontend`.
@@ -34,13 +36,14 @@ Before deploying:
 1. Confirm `git status --short` only shows intentional changes.
 2. Run backend tests when backend code or database behavior changed.
 3. Run frontend build when frontend code changed.
-4. Confirm `.env` files are not staged.
-5. Confirm Render has the required backend variable names configured.
-6. Confirm Vercel has the required frontend variable names configured.
-7. Confirm `FRONTEND_URL`, `BACKEND_URL`, `ALLOWED_ORIGINS`, and `ALLOWED_HOSTS` match the deployed domains.
-8. Confirm `AUTH_COOKIE_SECURE` and `AUTH_COOKIE_SAMESITE` are production-safe.
-9. Confirm no production migration or destructive database change is part of the deploy unless separately approved.
-10. If a production migration is approved, follow `docs/BACKUP_RESTORE.md` first.
+4. Run frontend tests when frontend code changed.
+5. Confirm `.env` files are not staged.
+6. Confirm Render has the required backend variable names configured.
+7. Confirm Vercel has the required frontend variable names configured.
+8. Confirm `FRONTEND_URL`, `BACKEND_URL`, `ALLOWED_ORIGINS`, and `ALLOWED_HOSTS` match the deployed domains.
+9. Confirm `AUTH_COOKIE_SECURE` and `AUTH_COOKIE_SAMESITE` are production-safe.
+10. Confirm no production migration or destructive database change is part of the deploy unless separately approved.
+11. If a production migration is approved, follow `docs/BACKUP_RESTORE.md` first.
 
 ## Health And Smoke Tests
 

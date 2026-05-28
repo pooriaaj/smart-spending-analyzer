@@ -15,6 +15,7 @@ Smart Spending Analyzer is a full-stack personal finance web app. It helps users
 - Imports/OCR: CSV and PDF import paths, pypdf, optional local Tesseract OCR, optional OpenAI vision OCR.
 - AI assistant: OpenAI SDK or OpenAI-compatible local provider when enabled; rule-based fallback paths when disabled.
 - Deployment: frontend on Vercel, backend on Render, database on Render PostgreSQL.
+- Staging: `docs/STAGING.md` proposes a safe manual staging path using a `staging` branch, Vercel Preview, a separate Render backend service, and a separate staging database.
 - Migrations: Alembic config and an initial schema baseline now exist under `backend/alembic/`; production migrations are not automatic and are not approved by default.
 - CI/security: GitHub Actions with backend tests, pip-audit, bandit, frontend npm audit, frontend tests, and frontend build.
 
@@ -98,7 +99,7 @@ Known limitation: the in-process rate limiter is fine for a small single-instanc
 - Alembic exists, but production migration workflow is not complete yet.
 - `docs/BACKUP_RESTORE.md` now documents backup and restore safety, including Render export/PITR paths and local `pg_dump` fallback.
 - Frontend automated tests exist, but coverage is still intentionally small.
-- No staging workflow yet.
+- `docs/STAGING.md` documents the staging workflow, but the actual staging provider resources have not been created.
 - Monitoring/alerting is limited to platform logs and health endpoints unless configured externally.
 - Deployment/QA documentation was missing before this docs pass.
 - Privacy/data export discipline is not complete; account deletion exists, but a formal export/deletion policy and manual runbook are still needed.
@@ -137,6 +138,7 @@ Known limitation: the in-process rate limiter is fine for a small single-instanc
 - `render.yaml`
 - `frontend/vercel.json`
 - `.github/workflows/security-ci.yml`
+- `docs/STAGING.md`
 - Dependency lock/manifests when the change installs, removes, or upgrades packages: `backend/requirements.txt`, `backend/requirements-dev.txt`, `frontend/package.json`, `frontend/package-lock.json`.
 - Future migration files, backup scripts, and restore scripts.
 - `docs/BACKUP_RESTORE.md`
@@ -175,6 +177,7 @@ Known limitation: the in-process rate limiter is fine for a small single-instanc
 
 ### Phase 5: Staging Setup
 
+- Status: staging workflow documentation is complete; provider resources are not created yet.
 - Goal: create a safer pre-production deployment path.
 - Likely files changed: `docs/STAGING.md`, deployment docs, possibly Render/Vercel project settings, possibly `render.yaml` only after a careful plan.
 - Risk level: medium.

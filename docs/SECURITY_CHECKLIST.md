@@ -25,6 +25,7 @@ Use this before sharing the repo, deploying, rotating keys, or asking Codex to m
 - [ ] Render backend secrets are configured in Render, not in git.
 - [ ] Vercel frontend variables are configured in Vercel, not in git.
 - [ ] Production `FRONTEND_URL`, `BACKEND_URL`, `ALLOWED_ORIGINS`, and `ALLOWED_HOSTS` match real domains.
+- [ ] Staging uses separate Render/Vercel settings and a separate database.
 - [ ] Production cookies are secure and same-site settings are intentional.
 - [ ] Render health check uses `/ready`.
 - [ ] Vercel security headers remain in place.
