@@ -2,6 +2,56 @@
 
 Use this file for safe, non-secret maintenance summaries. Do not record real user data, real secrets, database URLs, access tokens, reset links, private provider logs, or raw exports here.
 
+## 2026-05-28 Release Dry-Run Review
+
+Scope: safe dry run of `docs/RELEASE_PROCESS.md` and `docs/RUNBOOK_INDEX.md` after the operations documentation commits.
+
+Commit checked: `94d1570be598bdfdcd71bb17170786c66ec35828`
+
+### Safety Boundaries
+
+- No `.env` values were read or printed.
+- No production settings were changed.
+- No database migrations were run.
+- No backup or restore commands were run.
+- No production user data was exported.
+- No provider dashboard settings were changed.
+
+### Release Dry-Run Result
+
+- Working tree was clean at the start.
+- Latest local branch matched `origin/main`.
+- `docs/RELEASE_PROCESS.md` and `docs/RUNBOOK_INDEX.md` were reviewed as the release entry points.
+- `git diff --check` passed.
+- This was treated as a docs-only release dry run; backend and frontend behavior tests were not required for this pass.
+
+### GitHub And Deploy Status
+
+- GitHub connector combined status for the checked commit reported Vercel success.
+- GitHub connector returned no workflow runs for the checked commit.
+- `gh` CLI was not installed, so full GitHub Actions history review was not completed from the terminal.
+
+### Public Smoke Checks
+
+- Vercel frontend: HTTP 200.
+- Render `/live`: HTTP 200.
+- Render `/ready`: HTTP 200.
+- Note: Render health checks again took about one minute, consistent with a free-tier/cold-start style delay.
+
+### Not Done In This Pass
+
+- Full backend test suite was not rerun.
+- Frontend tests, lint, and build were not rerun because no application code changed.
+- Provider dashboard logs were not reviewed.
+- Manual browser QA with a live test account was not performed.
+- Backup creation and restore verification were not performed.
+
+### Follow-Ups
+
+- Install and authenticate GitHub CLI or use the GitHub Actions UI for fuller release review.
+- Keep watching repeated Render cold-start latency during future smoke checks.
+- Use `docs/RELEASE_PROCESS.md` before the next non-docs release.
+
 ## 2026-05-28 Weekly Test-Only Maintenance Pass
 
 Scope: first pass through `docs/OPERATIONS_CALENDAR.md` using local checks and public health endpoints only.
