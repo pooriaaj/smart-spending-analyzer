@@ -24,6 +24,7 @@ As of the current docs refresh, frontend tests cover:
 - Account selector loading, persistence, and all-account/single-account behavior.
 - Dashboard summary, budget/future outlook display, recent filters, and manual add flow.
 - Transaction ledger loading, server-filter requests, table edit/save, and delete refresh behavior.
+- Analytics summary, trends/insights/alerts display, filter requests, and category drilldown navigation.
 - Login success and failure behavior.
 - Registration success, mismatch validation, and failure behavior.
 - Forgot-password request success and failure behavior.

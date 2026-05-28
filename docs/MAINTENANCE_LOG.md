@@ -2,6 +2,33 @@
 
 Use this file for safe, non-secret maintenance summaries. Do not record real user data, real secrets, database URLs, access tokens, reset links, private provider logs, or raw exports here.
 
+## 2026-05-28 Analytics Test Expansion
+
+Scope: added focused frontend tests for analytics summary display, trends/insights/alerts/account comparison display, filter request behavior, date presets, and category drilldown navigation.
+
+Commit checked before expansion: `639b554fb87742888529d800cdf7be7ccd619008`
+
+### Safety Boundaries
+
+- No `.env` values were read or printed.
+- No production settings were changed.
+- No backend code was changed.
+- No database migrations were run.
+- No production user data was exported.
+
+### Verification
+
+- Analytics page focused test: `1 file passed`, `3 tests passed`.
+- Frontend tests: `14 files passed`, `39 tests passed`.
+- Frontend lint: passed.
+- Frontend build: passed.
+- Frontend high-severity audit: `0 vulnerabilities`.
+
+### Notes
+
+- Tests use mocked frontend services, mocked chart components, and fake analytics/transaction data only.
+- Manual QA is still required for real chart rendering, mobile layout, backend-derived analytics correctness, account-scoped analytics, and production data behavior.
+
 ## 2026-05-28 Transaction Ledger Test Expansion
 
 Scope: added focused frontend tests for transaction ledger loading, server-side filter request behavior, table edit/save, and delete refresh behavior.
