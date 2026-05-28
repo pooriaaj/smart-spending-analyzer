@@ -127,7 +127,7 @@ Render setup for free OCR:
 ## Architecture
 
 The backend follows a service-based architecture:
-routes → services → database
+routes -> services -> database
 
 This structure improves:
 - maintainability
@@ -180,6 +180,19 @@ This structure improves:
 
 ---
 
+## Operational Docs
+
+Start with `docs/RUNBOOK_INDEX.md` for the current operations map.
+
+Key docs:
+- `docs/ENVIRONMENT.md` for local, Render, and Vercel environment setup.
+- `docs/DEPLOYMENT.md` for deployment, smoke tests, and rollback basics.
+- `docs/RELEASE_PROCESS.md` for release checks and push flow.
+- `docs/SECURITY_CHECKLIST.md` for secret, GitHub, provider, user data, backup, and Codex safety.
+- `docs/QA_CHECKLIST.md` for manual product checks.
+
+---
+
 ## How to Run Locally
 
 ### Backend
@@ -206,28 +219,9 @@ npm run dev
 
 ## Environment Variables
 
-Create a `.env` file in the root:
-DATABASE_URL=your_database_url
-SECRET_KEY=your_secret
-ALGORITHM=HS256
-ACCESS_TOKEN_EXPIRE_MINUTES=60
-FRONTEND_URL=http://localhost:5173
+Use `.env.example` and `docs/ENVIRONMENT.md` for environment variable names and setup guidance.
 
-VITE_API_BASE_URL=http://localhost:8000
-
-# Optional: improves unknown merchant categorization with Google Places.
-# The backend only sends cleaned merchant names, not amounts, dates, account ids, or full transaction data.
-GOOGLE_PLACES_API_KEY=
-MERCHANT_LOOKUP_REGION=Toronto, Canada
-MERCHANT_LOOKUP_REGION_CODE=CA
-
-# Optional: free scanned-PDF OCR fallback.
-# The backend server must have the Tesseract OCR command installed.
-LOCAL_OCR_ENABLED=true
-LOCAL_OCR_COMMAND=tesseract
-LOCAL_OCR_LANGUAGE=eng
-LOCAL_OCR_TIMEOUT_SECONDS=25
-PDF_OCR_RENDER_DPI=200
+Do not commit real database URLs, JWT secrets, API keys, passwords, tokens, or production credentials. Frontend `VITE_` variables are visible in browser builds and must not contain secrets.
 
 ---
 
