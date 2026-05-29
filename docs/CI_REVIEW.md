@@ -27,6 +27,7 @@ As of the current docs refresh, frontend tests cover:
 - Analytics summary, trends/insights/alerts display, filter requests, and category drilldown navigation.
 - Import account-required guard, statement preview review, duplicate removal, category approval, and confirm-import behavior.
 - Assistant provider status, saved history, scoped question payloads, answer details/actions/follow-ups, and clear-history behavior.
+- Profile export, email update, password change, community learning toggle, and delete-confirmation guard behavior.
 - Login success and failure behavior.
 - Registration success, mismatch validation, and failure behavior.
 - Forgot-password request success and failure behavior.

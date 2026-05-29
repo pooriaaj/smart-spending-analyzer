@@ -2,6 +2,34 @@
 
 Use this file for safe, non-secret maintenance summaries. Do not record real user data, real secrets, database URLs, access tokens, reset links, private provider logs, or raw exports here.
 
+## 2026-05-28 Profile Safety Test Expansion
+
+Scope: expanded profile frontend tests for email update, anonymous community learning toggle, password change, delete confirmation guarding, and existing data export behavior.
+
+Commit checked before expansion: `e69617971313409db188f0156337896f738056be`
+
+### Safety Boundaries
+
+- No `.env` values were read or printed.
+- No production settings were changed.
+- No backend code was changed.
+- No database migrations were run.
+- No production user data was exported.
+- No real account was deleted; tests use mocked frontend service responses only.
+
+### Verification
+
+- Profile page focused test: `1 file passed`, `5 tests passed`.
+- Frontend tests: `16 files passed`, `48 tests passed`.
+- Frontend lint: passed.
+- Frontend build: passed.
+- Frontend high-severity audit: `0 vulnerabilities`.
+
+### Notes
+
+- Tests use fake profile, password, export, learning, and deletion responses only.
+- Manual QA is still required for live backend validation, real account deletion lifecycle, session cleanup, duplicate email behavior, and production data export contents.
+
 ## 2026-05-28 Assistant Test Expansion
 
 Scope: added focused frontend tests for assistant provider status, saved history, scoped question payloads, response details/actions/follow-ups, and clearing saved conversation history.
