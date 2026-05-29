@@ -2,6 +2,33 @@
 
 Use this file for safe, non-secret maintenance summaries. Do not record real user data, real secrets, database URLs, access tokens, reset links, private provider logs, or raw exports here.
 
+## 2026-05-28 Budget Page Test Expansion
+
+Scope: added focused frontend tests for budget summary display, suggested budgets, budget moves, loading a suggestion into the form, saving a budget, and deleting an existing budget.
+
+Commit checked before expansion: `08e011be7710b6d7b6a775cfd42a5e69b8c2ec9c`
+
+### Safety Boundaries
+
+- No `.env` values were read or printed.
+- No production settings were changed.
+- No backend code was changed.
+- No database migrations were run.
+- No production user data was exported.
+
+### Verification
+
+- Budgets page focused test: `1 file passed`, `3 tests passed`.
+- Frontend tests: `17 files passed`, `51 tests passed`.
+- Frontend lint: passed.
+- Frontend build: passed.
+- Frontend high-severity audit: `0 vulnerabilities`.
+
+### Notes
+
+- Tests use mocked frontend services and fake budget data only.
+- Manual QA is still required for real backend budget calculations, account-scoped budgets, bulk target application, rollover/build-next-month behavior, and production budget data.
+
 ## 2026-05-28 Profile Safety Test Expansion
 
 Scope: expanded profile frontend tests for email update, anonymous community learning toggle, password change, delete confirmation guarding, and existing data export behavior.
