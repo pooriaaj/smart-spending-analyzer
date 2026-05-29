@@ -2,6 +2,34 @@
 
 Use this file for safe, non-secret maintenance summaries. Do not record real user data, real secrets, database URLs, access tokens, reset links, private provider logs, or raw exports here.
 
+## 2026-05-28 Import Review Test Expansion
+
+Scope: added focused frontend tests for import account-required guarding, statement table review, duplicate removal, category approval, and confirm-preview import behavior.
+
+Commit checked before expansion: `1f97003d4fe9fa9944594108b2ca20fff16ddd46`
+
+### Safety Boundaries
+
+- No `.env` values were read or printed.
+- No production settings were changed.
+- No backend code was changed.
+- No database migrations were run.
+- No production user data was exported.
+- No real bank statement files were read; tests use fake in-memory `File` objects only.
+
+### Verification
+
+- Import page focused test: `1 file passed`, `2 tests passed`.
+- Frontend tests: `15 files passed`, `41 tests passed`.
+- Frontend lint: passed.
+- Frontend build: passed.
+- Frontend high-severity audit: `0 vulnerabilities`.
+
+### Notes
+
+- Tests use mocked frontend services, fake preview rows, and fake upload files only.
+- Manual QA is still required for real CSV/PDF parsing, OCR/receipt drafts, multi-file batches, large statements, duplicate matching accuracy, and production backend behavior.
+
 ## 2026-05-28 Analytics Test Expansion
 
 Scope: added focused frontend tests for analytics summary display, trends/insights/alerts/account comparison display, filter request behavior, date presets, and category drilldown navigation.

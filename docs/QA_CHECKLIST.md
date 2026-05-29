@@ -15,7 +15,7 @@ For recurring weekly/monthly maintenance, use `docs/OPERATIONS_CALENDAR.md`.
 - [ ] Confirm GitHub Actions `Security CI` passes for the pushed commit.
 - [ ] Confirm Vercel deployment status is successful for the pushed commit.
 
-Current focused frontend automated coverage includes API auth handling, protected-route auth gates, account selector/account-scope behavior, dashboard summary/recent-filter/manual-add behavior, transaction ledger filter/edit/delete behavior, analytics summary/filter/drilldown behavior, login, registration, forgot/reset password, transaction form create/edit/category suggestion behavior, profile data export, password visibility, and error helpers. Manual QA is still required for full product confidence.
+Current focused frontend automated coverage includes API auth handling, protected-route auth gates, account selector/account-scope behavior, dashboard summary/recent-filter/manual-add behavior, transaction ledger filter/edit/delete behavior, analytics summary/filter/drilldown behavior, import account-gate/table-review/confirm behavior, login, registration, forgot/reset password, transaction form create/edit/category suggestion behavior, profile data export, password visibility, and error helpers. Manual QA is still required for full product confidence.
 
 ## Auth
 
