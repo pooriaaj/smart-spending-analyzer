@@ -2,6 +2,34 @@
 
 Use this file for safe, non-secret maintenance summaries. Do not record real user data, real secrets, database URLs, access tokens, reset links, private provider logs, or raw exports here.
 
+## 2026-05-28 Assistant Test Expansion
+
+Scope: added focused frontend tests for assistant provider status, saved history, scoped question payloads, response details/actions/follow-ups, and clearing saved conversation history.
+
+Commit checked before expansion: `ee953d1ab62a573a158b59d166797b96bd6026a6`
+
+### Safety Boundaries
+
+- No `.env` values were read or printed.
+- No production settings were changed.
+- No backend code was changed.
+- No database migrations were run.
+- No production user data was exported.
+- No real AI provider calls were made; tests use mocked frontend service responses only.
+
+### Verification
+
+- Assistant page focused test: `1 file passed`, `3 tests passed`.
+- Frontend tests: `16 files passed`, `44 tests passed`.
+- Frontend lint: passed.
+- Frontend build: passed.
+- Frontend high-severity audit: `0 vulnerabilities`.
+
+### Notes
+
+- Tests use fake assistant status, history, and response data only.
+- Manual QA is still required for live provider behavior, prompt-injection refusal behavior, real financial-data grounding, and production assistant history.
+
 ## 2026-05-28 Import Review Test Expansion
 
 Scope: added focused frontend tests for import account-required guarding, statement table review, duplicate removal, category approval, and confirm-preview import behavior.
