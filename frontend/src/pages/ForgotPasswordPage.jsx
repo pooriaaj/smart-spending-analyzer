@@ -33,10 +33,33 @@ function ForgotPasswordPage() {
   };
 
   return (
-    <div className="auth-shell">
-      <div className="auth-layout auth-layout-single">
+    <div className="auth-shell auth-shell-recovery">
+      <div className="auth-layout auth-layout-single auth-layout-recovery">
+        <div className="auth-recovery-rail">
+          <p className="auth-eyebrow">{t("common.appName")}</p>
+          <h1>{t("auth.accountRecovery")}</h1>
+
+          <div className="auth-recovery-steps" aria-label={t("auth.accountRecovery")}>
+            <div className="auth-recovery-step active">
+              <span>1</span>
+              <strong>{t("auth.email")}</strong>
+            </div>
+            <div className="auth-recovery-line" aria-hidden="true" />
+            <div className="auth-recovery-step">
+              <span>2</span>
+              <strong>{t("auth.resetPasswordTitle")}</strong>
+            </div>
+            <div className="auth-recovery-line" aria-hidden="true" />
+            <div className="auth-recovery-step">
+              <span>3</span>
+              <strong>{t("auth.login")}</strong>
+            </div>
+          </div>
+        </div>
+
         <div className="auth-panel auth-panel-centered">
-          <div className="auth-card">
+          <div className="auth-card auth-recovery-card">
+            <div className="auth-card-topline" aria-hidden="true" />
             <div className="auth-card-header">
               <p className="auth-card-kicker">{t("auth.accountRecovery")}</p>
               <h2>{t("auth.forgotPasswordTitle")}</h2>
@@ -66,8 +89,10 @@ function ForgotPasswordPage() {
               </button>
             </form>
 
-            {message && <p className="success-text">{message}</p>}
-            {error && <p className="error-text">{error}</p>}
+            <div className="auth-feedback-stack">
+              {message && <p className="success-text">{message}</p>}
+              {error && <p className="error-text">{error}</p>}
+            </div>
 
             {resetUrl && (
               <div className="reset-link-box">

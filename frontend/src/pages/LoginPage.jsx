@@ -43,7 +43,7 @@ function LoginPage() {
   };
 
   return (
-    <div className="auth-shell">
+    <div className="auth-shell auth-shell-login">
       <div className="auth-layout">
         <div className="auth-showcase">
           <div className="auth-showcase-content">
@@ -98,7 +98,8 @@ function LoginPage() {
         </div>
 
         <div className="auth-panel">
-          <div className="auth-card">
+          <div className="auth-card auth-card-login">
+            <div className="auth-card-topline" aria-hidden="true" />
             <div className="auth-card-header">
               <p className="auth-card-kicker">{t("auth.welcomeBack")}</p>
               <h2>{t("auth.login")}</h2>
