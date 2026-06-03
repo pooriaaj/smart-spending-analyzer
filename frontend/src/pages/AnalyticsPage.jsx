@@ -1,8 +1,24 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
+import {
+  Badge,
+  Box,
+  Button,
+  Card,
+  Container,
+  Grid,
+  Group,
+  NativeSelect,
+  Paper,
+  SimpleGrid,
+  Stack,
+  Table,
+  Text,
+  TextInput,
+  Title,
+} from "@mantine/core";
 import api, { handleApiAuthError } from "../services/api";
 import AccountSelector from "../components/AccountSelector";
-import PageHeader from "../components/PageHeader";
 import { ALL_ACCOUNTS_VALUE, getSelectedAccountId } from "../services/accountStorage";
 import { useLanguage } from "../i18n/LanguageContext";
 import { formatAccountName, formatAccountType, formatCategoryLabel } from "../utils/displayLabels";
@@ -244,6 +260,35 @@ function buildSpendingPatternPulse(transactions, t) {
       sixMonthAverage: Number(lastSixAverage.toFixed(2)),
     })),
   };
+}
+
+function OverviewStatCard({ label, value, tone, helper }) {
+  return (
+    <Card className={`overview-stat-card overview-stat-card-${tone}`} radius="lg" p="lg">
+      <Stack gap="md" h="100%" justify="space-between">
+        <Group justify="space-between" align="flex-start" gap="sm">
+          <Text className="overview-stat-label">{label}</Text>
+          <Box className="overview-stat-marker" aria-hidden="true" />
+        </Group>
+        <Box>
+          <Text className="overview-stat-value">{value}</Text>
+          {helper && <Text className="overview-stat-helper">{helper}</Text>}
+        </Box>
+      </Stack>
+    </Card>
+  );
+}
+
+function InsightCard({ label, value, detail, tone = "neutral" }) {
+  return (
+    <Paper className={`overview-insight-card overview-insight-card-${tone}`} radius="lg" p="md">
+      <Stack gap={6}>
+        <Text className="overview-insight-label">{label}</Text>
+        <Text className="overview-insight-value">{value}</Text>
+        {detail && <Text className="overview-insight-detail">{detail}</Text>}
+      </Stack>
+    </Paper>
+  );
 }
 
 function AnalyticsPage() {
@@ -494,445 +539,535 @@ function AnalyticsPage() {
   const accountComparison = dashboardData?.account_comparison || [];
 
   const normalizedTopCategory = mergedCategoryBreakdown[0] || null;
+  const topExpenseCategoryValue = normalizedTopCategory
+    ? `${normalizedTopCategory.category} (${formatMoney(normalizedTopCategory.total)})`
+    : t("analytics.noExpenseData");
 
   return (
-    <div className="page-container dashboard-page">
-      <div className="dashboard-wrapper">
-        <PageHeader
-          icon="$"
-          titleKey="common.analytics"
-          subtitleKey="headers.analyticsSubtitle"
-          actions={(
-            <>
-              <button className="secondary-button" onClick={() => navigate("/import")}>
-                {t("common.uploadStatement")}
-              </button>
-              <button className="secondary-button" onClick={() => navigate("/transactions")}>
-                {t("common.addManualRow")}
-              </button>
-              <button className="secondary-button" onClick={() => navigate("/assistant")}>
-                {t("common.assistant")}
-              </button>
-            </>
-          )}
-        />
+    <Box className="overview-page-shell">
+      <Container size="xl" px={{ base: "md", md: "lg" }} py={{ base: "lg", md: "xl" }}>
+        <Stack gap="lg">
+          <Paper className="overview-hero" radius="xl" p={{ base: "lg", md: "xl" }}>
+            <Group justify="space-between" align="flex-start" gap="xl">
+              <Stack gap="xs" className="overview-hero-copy">
+                <Badge color="teal" variant="light" radius="sm">
+                  {t("common.appName")}
+                </Badge>
+                <Title order={1}>{t("common.analytics")}</Title>
+                <Text size="md">{t("headers.analyticsSubtitle")}</Text>
+              </Stack>
 
-        <div className="filter-card">
-          <div className="section-header">
-            <h2>{t("analytics.filtersTitle")}</h2>
-            <p>{t("analytics.filtersDetail")}</p>
-          </div>
+              <Group className="overview-hero-actions" justify="flex-end" gap="sm">
+                <Button color="teal" radius="md" onClick={() => navigate("/import")}>
+                  {t("common.uploadStatement")}
+                </Button>
+                <Button variant="light" color="teal" radius="md" onClick={() => navigate("/transactions")}>
+                  {t("common.addManualRow")}
+                </Button>
+                <Button variant="outline" color="indigo" radius="md" onClick={() => navigate("/assistant")}>
+                  {t("common.assistant")}
+                </Button>
+              </Group>
+            </Group>
+          </Paper>
 
-          <div className="filter-bar">
-            <AccountSelector
-              value={selectedAccountId}
-              label={t("common.accountScope")}
-              onChange={setSelectedAccountId}
+          <Card className="filter-card overview-filter-card" radius="xl" p={{ base: "md", md: "lg" }}>
+            <Stack gap="md">
+              <Box>
+                <Title order={2} size="h3">{t("analytics.filtersTitle")}</Title>
+                <Text size="sm" c="dimmed">{t("analytics.filtersDetail")}</Text>
+              </Box>
+
+              <Grid gutter="md" align="flex-end">
+                <Grid.Col span={{ base: 12, sm: 6, lg: 4 }}>
+                  <Box className="overview-account-field">
+                    <AccountSelector
+                      value={selectedAccountId}
+                      label={t("common.accountScope")}
+                      onChange={setSelectedAccountId}
+                    />
+                  </Box>
+                </Grid.Col>
+
+                <Grid.Col span={{ base: 12, sm: 6, lg: 2 }}>
+                  <NativeSelect
+                    label={t("common.month")}
+                    value={selectedMonth}
+                    onChange={(e) => setSelectedMonth(e.target.value)}
+                    data={[
+                      { value: "", label: t("common.all") },
+                      ...monthlySummary.map((item) => ({ value: item.month, label: item.month })),
+                    ]}
+                  />
+                </Grid.Col>
+
+                <Grid.Col span={{ base: 12, sm: 6, lg: 2 }}>
+                  <TextInput
+                    type="date"
+                    label={t("common.from")}
+                    value={startDate}
+                    onChange={(e) => setStartDate(e.target.value)}
+                  />
+                </Grid.Col>
+
+                <Grid.Col span={{ base: 12, sm: 6, lg: 2 }}>
+                  <TextInput
+                    type="date"
+                    label={t("common.to")}
+                    value={endDate}
+                    onChange={(e) => setEndDate(e.target.value)}
+                  />
+                </Grid.Col>
+
+                <Grid.Col span={{ base: 12, sm: 6, lg: 2 }}>
+                  <NativeSelect
+                    label={t("common.type")}
+                    value={selectedType}
+                    onChange={(e) => setSelectedType(e.target.value)}
+                    data={[
+                      { value: "", label: t("common.all") },
+                      { value: "income", label: t("common.income") },
+                      { value: "expense", label: t("common.expense") },
+                    ]}
+                  />
+                </Grid.Col>
+
+                <Grid.Col span={{ base: 12, sm: 6, lg: 4 }}>
+                  <NativeSelect
+                    label={t("common.category")}
+                    value={selectedCategory}
+                    onChange={(e) => setSelectedCategory(e.target.value)}
+                    data={[
+                      { value: "", label: t("common.all") },
+                      ...availableCategories.map((category) => ({ value: category, label: category })),
+                    ]}
+                  />
+                </Grid.Col>
+              </Grid>
+
+              <Group justify="space-between" gap="sm" className="overview-filter-actions">
+                <Group gap="xs" className="overview-quick-filters">
+                  <Button type="button" variant="light" color="gray" radius="md" onClick={() => applyDatePreset("week")}>
+                    {t("analytics.last7Days")}
+                  </Button>
+                  <Button type="button" variant="light" color="gray" radius="md" onClick={() => applyDatePreset("30d")}>
+                    {t("analytics.last30Days")}
+                  </Button>
+                  <Button type="button" variant="light" color="gray" radius="md" onClick={() => applyDatePreset("3m")}>
+                    {t("analytics.last3Months")}
+                  </Button>
+                  <Button type="button" variant="light" color="gray" radius="md" onClick={() => applyDatePreset("6m")}>
+                    {t("analytics.last6Months")}
+                  </Button>
+                </Group>
+
+                <Button variant="outline" color="gray" radius="md" onClick={clearFilters}>
+                  {t("common.clearFilters")}
+                </Button>
+              </Group>
+            </Stack>
+          </Card>
+
+          <SimpleGrid cols={{ base: 1, sm: 2, lg: 4 }} spacing="md">
+            <OverviewStatCard
+              tone="income"
+              label={t("analytics.totalIncome")}
+              value={formatMoney(summary.total_income)}
             />
+            <OverviewStatCard
+              tone="expense"
+              label={t("analytics.totalExpenses")}
+              value={formatMoney(summary.total_expenses)}
+            />
+            <OverviewStatCard
+              tone="balance"
+              label={t("common.balance")}
+              value={formatMoney(summary.balance)}
+            />
+            <OverviewStatCard
+              tone="category"
+              label={t("analytics.topExpenseCategory")}
+              value={topExpenseCategoryValue}
+            />
+          </SimpleGrid>
 
-            <div>
-              <label>{t("common.month")}</label>
-              <select
-                value={selectedMonth}
-                onChange={(e) => setSelectedMonth(e.target.value)}
-              >
-                <option value="">{t("common.all")}</option>
-                {monthlySummary.map((item) => (
-                  <option key={item.month} value={item.month}>
-                    {item.month}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label>{t("common.from")}</label>
-              <input
-                type="date"
-                value={startDate}
-                onChange={(e) => setStartDate(e.target.value)}
-              />
-            </div>
-
-            <div>
-              <label>{t("common.to")}</label>
-              <input
-                type="date"
-                value={endDate}
-                onChange={(e) => setEndDate(e.target.value)}
-              />
-            </div>
-
-            <div>
-              <label>{t("common.type")}</label>
-              <select
-                value={selectedType}
-                onChange={(e) => setSelectedType(e.target.value)}
-              >
-                <option value="">{t("common.all")}</option>
-                <option value="income">{t("common.income")}</option>
-                <option value="expense">{t("common.expense")}</option>
-              </select>
-            </div>
-
-            <div>
-              <label>{t("common.category")}</label>
-              <select
-                value={selectedCategory}
-                onChange={(e) => setSelectedCategory(e.target.value)}
-              >
-                <option value="">{t("common.all")}</option>
-                {availableCategories.map((category) => (
-                  <option key={category} value={category}>
-                    {category}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div className="filter-actions">
-              <button className="clear-filter-button" onClick={clearFilters}>
-                {t("common.clearFilters")}
-              </button>
-            </div>
-          </div>
-
-          <div className="analytics-preset-row">
-            <button type="button" className="secondary-button" onClick={() => applyDatePreset("week")}>
-              {t("analytics.last7Days")}
-            </button>
-            <button type="button" className="secondary-button" onClick={() => applyDatePreset("30d")}>
-              {t("analytics.last30Days")}
-            </button>
-            <button type="button" className="secondary-button" onClick={() => applyDatePreset("3m")}>
-              {t("analytics.last3Months")}
-            </button>
-            <button type="button" className="secondary-button" onClick={() => applyDatePreset("6m")}>
-              {t("analytics.last6Months")}
-            </button>
-          </div>
-        </div>
-
-        <div className="summary-grid">
-          <div className="summary-card income-card">
-            <span className="card-label">{t("analytics.totalIncome")}</span>
-            <p>${summary.total_income.toFixed(2)}</p>
-          </div>
-
-          <div className="summary-card expense-card">
-            <span className="card-label">{t("analytics.totalExpenses")}</span>
-            <p>${summary.total_expenses.toFixed(2)}</p>
-          </div>
-
-          <div className="summary-card balance-card">
-            <span className="card-label">{t("common.balance")}</span>
-            <p>${summary.balance.toFixed(2)}</p>
-          </div>
-
-          <div className="summary-card top-card">
-            <span className="card-label">{t("analytics.topExpenseCategory")}</span>
-            <p>
-              {normalizedTopCategory
-                ? `${normalizedTopCategory.category} ($${normalizedTopCategory.total.toFixed(2)})`
-                : t("analytics.noExpenseData")}
-            </p>
-          </div>
-        </div>
-
-        <div className="dashboard-card spending-pattern-card">
-          <div className="section-header">
-            <div>
-              <h2>{t("analytics.spendingPulse")}</h2>
-              <p>{t("analytics.spendingPulseDetail")}</p>
-            </div>
-            <span className={`pattern-status-pill pattern-status-${spendingPatternPulse.tone}`}>
-              {spendingPatternPulse.status}
-            </span>
-          </div>
-
-          <p className="pattern-narrative">{spendingPatternPulse.narrative}</p>
-
-          <div className="pattern-comparison-grid">
-            <div className="pattern-metric-card">
-              <span>{t("analytics.last7DaysShort")}</span>
-              <strong>{formatMoney(spendingPatternPulse.lastSevenTotal)}</strong>
-              <p>
-                {t("analytics.dayAveragePace", {
-                  amount: formatMoney(spendingPatternPulse.lastSevenDailyAverage),
-                  change: formatPercentChange(spendingPatternPulse.sevenVsThirtyChange, t),
-                })}
-              </p>
-            </div>
-
-            <div className="pattern-metric-card">
-              <span>{t("analytics.last30DaysShort")}</span>
-              <strong>{formatMoney(spendingPatternPulse.lastThirtyTotal)}</strong>
-              <p>
-                {t("analytics.last30Comparison", {
-                  change: formatPercentChange(spendingPatternPulse.thirtyVsThreeChange, t),
-                })}
-              </p>
-            </div>
-
-            <div className="pattern-metric-card">
-              <span>{t("analytics.threeVsSix")}</span>
-              <strong>{formatPercentChange(spendingPatternPulse.threeVsSixChange, t)}</strong>
-              <p>
-                {t("analytics.threeSixComparison", {
-                  three: formatMoney(spendingPatternPulse.lastThreeAverage),
-                  six: formatMoney(spendingPatternPulse.lastSixAverage),
-                })}
-              </p>
-            </div>
-          </div>
-
-          {!spendingPatternPulse.hasData ? (
-            <div className="empty-state">
-              <p>{t("analytics.noExpensePattern")}</p>
-            </div>
-          ) : (
-            <ResponsiveContainer width="100%" height={320}>
-              <LineChart data={spendingPatternPulse.chartData}>
-                <CartesianGrid strokeDasharray="3 3" stroke={chartTheme.grid} />
-                <XAxis dataKey="month" tick={{ fill: chartTheme.text, fontSize: 12 }} />
-                <YAxis tick={{ fill: chartTheme.text, fontSize: 12 }} />
-                <Tooltip contentStyle={customTooltipStyle} formatter={(value, name) => [formatMoney(value), name]} />
-                <Legend
-                  verticalAlign="bottom"
-                  height={36}
-                  formatter={(value) => (
-                    <span style={{ color: chartTheme.text }}>{value}</span>
-                  )}
-                />
-                <Line
-                  type="monotone"
-                  dataKey="expenses"
-                  name={t("analytics.monthlyExpenses")}
-                  stroke={chartTheme.patternLine}
-                  strokeWidth={3}
-                  dot={{ r: 5, strokeWidth: 2 }}
-                  activeDot={{ r: 8 }}
-                />
-                <Line
-                  type="monotone"
-                  dataKey="threeMonthAverage"
-                  name={t("analytics.threeMonthAverage")}
-                  stroke={chartTheme.threeMonthLine}
-                  strokeWidth={2}
-                  strokeDasharray="6 5"
-                  dot={false}
-                />
-                <Line
-                  type="monotone"
-                  dataKey="sixMonthAverage"
-                  name={t("analytics.sixMonthAverage")}
-                  stroke={chartTheme.sixMonthLine}
-                  strokeWidth={2}
-                  strokeDasharray="3 5"
-                  dot={false}
-                />
-              </LineChart>
-            </ResponsiveContainer>
-          )}
-        </div>
-
-        {normalizedAccountId === undefined && accountComparison.length > 1 && (
-          <div className="dashboard-card account-comparison-card">
-            <div className="section-header">
-              <h2>{t("analytics.accountsGlance")}</h2>
-              <p>{t("analytics.accountsGlanceDetail")}</p>
-            </div>
-
-            <div className="account-comparison-grid">
-              {accountComparison.map((account, index) => (
-                <div
-                  key={`account-comparison-${account.account_id}`}
-                  className={`account-comparison-item ${index === 0 ? "account-comparison-leading" : ""}`}
+          <Card className="dashboard-card spending-pattern-card overview-section-card" radius="xl" p={{ base: "md", md: "lg" }}>
+            <Stack gap="lg">
+              <Group justify="space-between" align="flex-start" gap="md">
+                <Box>
+                  <Title order={2} size="h3">{t("analytics.spendingPulse")}</Title>
+                  <Text size="sm" c="dimmed">{t("analytics.spendingPulseDetail")}</Text>
+                </Box>
+                <Badge
+                  className={`pattern-status-pill pattern-status-${spendingPatternPulse.tone}`}
+                  color={spendingPatternPulse.tone === "warning" ? "red" : spendingPatternPulse.tone === "positive" ? "teal" : "blue"}
+                  variant="light"
+                  radius="sm"
                 >
-                  <div className="account-comparison-header">
-                    <div>
-                      <h3>{formatAccountName(account.name, t)}</h3>
-                      <p>{formatAccountType(account.type, t)}</p>
-                    </div>
-                    {index === 0 && <span className="account-comparison-badge">{t("analytics.highestSpend")}</span>}
-                  </div>
+                  {spendingPatternPulse.status}
+                </Badge>
+              </Group>
 
-                  <div className="account-comparison-metrics">
-                    <div>
-                      <span>{t("common.income")}</span>
-                      <strong>${account.total_income.toFixed(2)}</strong>
-                    </div>
-                    <div>
-                      <span>{t("common.expenses")}</span>
-                      <strong>${account.total_expenses.toFixed(2)}</strong>
-                    </div>
-                    <div>
-                      <span>{t("common.balance")}</span>
-                      <strong>${account.balance.toFixed(2)}</strong>
-                    </div>
-                  </div>
+              <Text className="pattern-narrative">{spendingPatternPulse.narrative}</Text>
 
-                  <p className="account-comparison-footnote">
-                    {account.top_category
-                      ? `${t("analytics.topCategory")}: ${formatCategoryName(account.top_category, t)} ($${account.top_category_amount.toFixed(2)})`
-                      : t("analytics.noCategorySpending")}
-                  </p>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
+              <SimpleGrid cols={{ base: 1, md: 3 }} spacing="md">
+                <InsightCard
+                  tone="neutral"
+                  label={t("analytics.last7DaysShort")}
+                  value={formatMoney(spendingPatternPulse.lastSevenTotal)}
+                  detail={t("analytics.dayAveragePace", {
+                    amount: formatMoney(spendingPatternPulse.lastSevenDailyAverage),
+                    change: formatPercentChange(spendingPatternPulse.sevenVsThirtyChange, t),
+                  })}
+                />
+                <InsightCard
+                  tone="neutral"
+                  label={t("analytics.last30DaysShort")}
+                  value={formatMoney(spendingPatternPulse.lastThirtyTotal)}
+                  detail={t("analytics.last30Comparison", {
+                    change: formatPercentChange(spendingPatternPulse.thirtyVsThreeChange, t),
+                  })}
+                />
+                <InsightCard
+                  tone="accent"
+                  label={t("analytics.threeVsSix")}
+                  value={formatPercentChange(spendingPatternPulse.threeVsSixChange, t)}
+                  detail={t("analytics.threeSixComparison", {
+                    three: formatMoney(spendingPatternPulse.lastThreeAverage),
+                    six: formatMoney(spendingPatternPulse.lastSixAverage),
+                  })}
+                />
+              </SimpleGrid>
 
-        <div
-          ref={alertsRef}
-          className={`dashboard-card alerts-card ${getSectionHighlightClass("alerts")}`}
-        >
-          <div className="section-header">
-            <h2>{t("analytics.overspendingAlerts")}</h2>
-            <p>{t("analytics.overspendingAlertsDetail")}</p>
-          </div>
+              {!spendingPatternPulse.hasData ? (
+                <Paper className="empty-state" radius="lg" p="md">
+                  <Text>{t("analytics.noExpensePattern")}</Text>
+                </Paper>
+              ) : (
+                <Box className="overview-chart-frame">
+                  <ResponsiveContainer width="100%" height={320}>
+                    <LineChart data={spendingPatternPulse.chartData}>
+                      <CartesianGrid strokeDasharray="3 3" stroke={chartTheme.grid} />
+                      <XAxis dataKey="month" tick={{ fill: chartTheme.text, fontSize: 12 }} />
+                      <YAxis tick={{ fill: chartTheme.text, fontSize: 12 }} />
+                      <Tooltip contentStyle={customTooltipStyle} formatter={(value, name) => [formatMoney(value), name]} />
+                      <Legend
+                        verticalAlign="bottom"
+                        height={36}
+                        formatter={(value) => (
+                          <span style={{ color: chartTheme.text }}>{value}</span>
+                        )}
+                      />
+                      <Line
+                        type="monotone"
+                        dataKey="expenses"
+                        name={t("analytics.monthlyExpenses")}
+                        stroke={chartTheme.patternLine}
+                        strokeWidth={3}
+                        dot={{ r: 5, strokeWidth: 2 }}
+                        activeDot={{ r: 8 }}
+                      />
+                      <Line
+                        type="monotone"
+                        dataKey="threeMonthAverage"
+                        name={t("analytics.threeMonthAverage")}
+                        stroke={chartTheme.threeMonthLine}
+                        strokeWidth={2}
+                        strokeDasharray="6 5"
+                        dot={false}
+                      />
+                      <Line
+                        type="monotone"
+                        dataKey="sixMonthAverage"
+                        name={t("analytics.sixMonthAverage")}
+                        stroke={chartTheme.sixMonthLine}
+                        strokeWidth={2}
+                        strokeDasharray="3 5"
+                        dot={false}
+                      />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </Box>
+              )}
+            </Stack>
+          </Card>
 
-          {!overspendingAlerts || overspendingAlerts.alerts.length === 0 ? (
-            <div className="empty-state">
-              <p>{t("analytics.noAlerts")}</p>
-            </div>
-          ) : (
-            <div className="alerts-list">
-              {overspendingAlerts.alerts.map((alert, index) => (
-                <div
-                  key={`alert-${index}`}
-                  className={`alert-box alert-${alert.level}`}
-                >
-                  <h3>{alert.title}</h3>
-                  <p>{alert.message}</p>
-                </div>
-              ))}
-            </div>
+          <SimpleGrid cols={{ base: 1, md: 3 }} spacing="md">
+            <InsightCard
+              tone="accent"
+              label={t("analytics.categoryTrendComparison")}
+              value={
+                categoryTrends?.top_increases?.[0]
+                  ? formatCategoryName(categoryTrends.top_increases[0].category, t)
+                  : t("analytics.noTrendData")
+              }
+              detail={t("analytics.categoryTrendDetail")}
+            />
+            <InsightCard
+              tone={overspendingAlerts?.alerts?.length ? "warning" : "positive"}
+              label={t("analytics.overspendingAlerts")}
+              value={
+                overspendingAlerts?.alerts?.length
+                  ? String(overspendingAlerts.alerts.length)
+                  : t("analytics.noAlerts")
+              }
+              detail={
+                overspendingAlerts?.alerts?.[0]?.message ||
+                t("analytics.overspendingAlertsDetail")
+              }
+            />
+            <InsightCard
+              tone="positive"
+              label={t("analytics.recommendations")}
+              value={
+                spendingInsights?.recommendations?.length
+                  ? String(spendingInsights.recommendations.length)
+                  : t("analytics.noInsights")
+              }
+              detail={t("analytics.spendingInsightsDetail")}
+            />
+          </SimpleGrid>
+
+          {normalizedAccountId === undefined && accountComparison.length > 1 && (
+            <Card className="dashboard-card account-comparison-card overview-section-card" radius="xl" p={{ base: "md", md: "lg" }}>
+              <Stack gap="md">
+                <Box>
+                  <Title order={2} size="h3">{t("analytics.accountsGlance")}</Title>
+                  <Text size="sm" c="dimmed">{t("analytics.accountsGlanceDetail")}</Text>
+                </Box>
+
+                <SimpleGrid cols={{ base: 1, md: 2 }} spacing="md">
+                  {accountComparison.map((account, index) => (
+                    <Paper
+                      key={`account-comparison-${account.account_id}`}
+                      className={`account-comparison-item ${index === 0 ? "account-comparison-leading" : ""}`}
+                      radius="lg"
+                      p="md"
+                    >
+                      <Stack gap="md">
+                        <Group justify="space-between" align="flex-start" gap="sm">
+                          <Box>
+                            <Title order={3} size="h4">{formatAccountName(account.name, t)}</Title>
+                            <Text size="sm" c="dimmed">{formatAccountType(account.type, t)}</Text>
+                          </Box>
+                          {index === 0 && (
+                            <Badge color="teal" variant="light" radius="sm">
+                              {t("analytics.highestSpend")}
+                            </Badge>
+                          )}
+                        </Group>
+
+                        <SimpleGrid cols={{ base: 1, sm: 3 }} spacing="sm">
+                          <Box>
+                            <Text className="overview-micro-label">{t("common.income")}</Text>
+                            <Text className="overview-micro-value">{formatMoney(account.total_income)}</Text>
+                          </Box>
+                          <Box>
+                            <Text className="overview-micro-label">{t("common.expenses")}</Text>
+                            <Text className="overview-micro-value">{formatMoney(account.total_expenses)}</Text>
+                          </Box>
+                          <Box>
+                            <Text className="overview-micro-label">{t("common.balance")}</Text>
+                            <Text className="overview-micro-value">{formatMoney(account.balance)}</Text>
+                          </Box>
+                        </SimpleGrid>
+
+                        <Text size="sm" c="dimmed">
+                          {account.top_category
+                            ? `${t("analytics.topCategory")}: ${formatCategoryName(account.top_category, t)} (${formatMoney(account.top_category_amount)})`
+                            : t("analytics.noCategorySpending")}
+                        </Text>
+                      </Stack>
+                    </Paper>
+                  ))}
+                </SimpleGrid>
+              </Stack>
+            </Card>
           )}
-        </div>
 
-        <div
-          ref={trendsRef}
-          className={`dashboard-card trends-card ${getSectionHighlightClass("trends")}`}
-        >
-          <div className="section-header">
-            <h2>{t("analytics.categoryTrendComparison")}</h2>
-            <p>{t("analytics.categoryTrendDetail")}</p>
-          </div>
+          <Card
+            ref={alertsRef}
+            className={`dashboard-card alerts-card overview-section-card ${getSectionHighlightClass("alerts")}`}
+            radius="xl"
+            p={{ base: "md", md: "lg" }}
+          >
+            <Stack gap="md">
+              <Box>
+                <Title order={2} size="h3">{t("analytics.overspendingAlerts")}</Title>
+                <Text size="sm" c="dimmed">{t("analytics.overspendingAlertsDetail")}</Text>
+              </Box>
+
+              {!overspendingAlerts || overspendingAlerts.alerts.length === 0 ? (
+                <Paper className="empty-state" radius="lg" p="md">
+                  <Text>{t("analytics.noAlerts")}</Text>
+                </Paper>
+              ) : (
+                <Stack gap="sm">
+                  {overspendingAlerts.alerts.map((alert, index) => (
+                    <Paper
+                      key={`alert-${index}`}
+                      className={`alert-box alert-${alert.level}`}
+                      radius="lg"
+                      p="md"
+                    >
+                      <Stack gap={4}>
+                        <Title order={3} size="h4">{alert.title}</Title>
+                        <Text size="sm">{alert.message}</Text>
+                      </Stack>
+                    </Paper>
+                  ))}
+                </Stack>
+              )}
+            </Stack>
+          </Card>
+
+          <Card
+            ref={trendsRef}
+            className={`dashboard-card trends-card overview-section-card ${getSectionHighlightClass("trends")}`}
+            radius="xl"
+            p={{ base: "md", md: "lg" }}
+          >
+            <Stack gap="md">
+              <Box>
+                <Title order={2} size="h3">{t("analytics.categoryTrendComparison")}</Title>
+                <Text size="sm" c="dimmed">{t("analytics.categoryTrendDetail")}</Text>
+              </Box>
 
           {!categoryTrends ? (
-            <div className="empty-state">
-              <p>{t("analytics.noTrendData")}</p>
-            </div>
+            <Paper className="empty-state" radius="lg" p="md">
+              <Text>{t("analytics.noTrendData")}</Text>
+            </Paper>
           ) : (
             <>
-              <div className="trend-summary-box">
-                {categoryTrends.summary.map((item, index) => (
-                  <p key={`trend-summary-${index}`}>{item}</p>
-                ))}
-              </div>
+              <Paper className="trend-summary-box" radius="lg" p="md">
+                <Stack gap={6}>
+                  {categoryTrends.summary.map((item, index) => (
+                    <Text key={`trend-summary-${index}`} size="sm">{item}</Text>
+                  ))}
+                </Stack>
+              </Paper>
 
-              <div className="trend-grid">
-                <div className="trend-block">
-                  <h3>{t("analytics.topIncreases")}</h3>
+              <SimpleGrid cols={{ base: 1, md: 2 }} spacing="md">
+                <Paper className="trend-block" radius="lg" p="md">
+                  <Stack gap="sm">
+                  <Title order={3} size="h4">{t("analytics.topIncreases")}</Title>
                   {categoryTrends.top_increases.length === 0 ? (
-                    <p className="trend-empty-text">{t("analytics.noIncreases")}</p>
+                    <Text className="trend-empty-text" size="sm">{t("analytics.noIncreases")}</Text>
                   ) : (
-                    <div className="trend-list">
+                    <Stack gap="sm">
                       {categoryTrends.top_increases.map((item) => (
-                        <div key={`increase-${item.category}`} className="trend-item">
-                          <div>
-                            <strong>{formatCategoryName(item.category, t)}</strong>
-                            <p>
+                        <Paper key={`increase-${item.category}`} className="trend-item" radius="md" p="sm">
+                          <Group justify="space-between" align="center" gap="md">
+                          <Box>
+                            <Text fw={700}>{formatCategoryName(item.category, t)}</Text>
+                            <Text size="sm" c="dimmed">
                               {categoryTrends.previous_month}: ${item.previous_amount.toFixed(2)} → {categoryTrends.current_month}: ${item.current_amount.toFixed(2)}
-                            </p>
-                          </div>
-                          <span className="trend-positive">
+                            </Text>
+                          </Box>
+                          <Text className="trend-positive" fw={800}>
                             {renderTrendAmount(item.change_amount)}
-                          </span>
-                        </div>
+                          </Text>
+                          </Group>
+                        </Paper>
                       ))}
-                    </div>
+                    </Stack>
                   )}
-                </div>
+                  </Stack>
+                </Paper>
 
-                <div className="trend-block">
-                  <h3>{t("analytics.topDecreases")}</h3>
+                <Paper className="trend-block" radius="lg" p="md">
+                  <Stack gap="sm">
+                  <Title order={3} size="h4">{t("analytics.topDecreases")}</Title>
                   {categoryTrends.top_decreases.length === 0 ? (
-                    <p className="trend-empty-text">{t("analytics.noDecreases")}</p>
+                    <Text className="trend-empty-text" size="sm">{t("analytics.noDecreases")}</Text>
                   ) : (
-                    <div className="trend-list">
+                    <Stack gap="sm">
                       {categoryTrends.top_decreases.map((item) => (
-                        <div key={`decrease-${item.category}`} className="trend-item">
-                          <div>
-                            <strong>{formatCategoryName(item.category, t)}</strong>
-                            <p>
+                        <Paper key={`decrease-${item.category}`} className="trend-item" radius="md" p="sm">
+                          <Group justify="space-between" align="center" gap="md">
+                          <Box>
+                            <Text fw={700}>{formatCategoryName(item.category, t)}</Text>
+                            <Text size="sm" c="dimmed">
                               {categoryTrends.previous_month}: ${item.previous_amount.toFixed(2)} → {categoryTrends.current_month}: ${item.current_amount.toFixed(2)}
-                            </p>
-                          </div>
-                          <span className="trend-negative">
+                            </Text>
+                          </Box>
+                          <Text className="trend-negative" fw={800}>
                             {renderTrendAmount(item.change_amount)}
-                          </span>
-                        </div>
+                          </Text>
+                          </Group>
+                        </Paper>
                       ))}
-                    </div>
+                    </Stack>
                   )}
-                </div>
-              </div>
+                  </Stack>
+                </Paper>
+              </SimpleGrid>
             </>
           )}
-        </div>
+            </Stack>
+          </Card>
 
-        <div
-          ref={insightsRef}
-          className={`dashboard-card insights-card ${getSectionHighlightClass("insights")}`}
-        >
-          <div className="section-header">
-            <h2>{t("analytics.spendingInsights")}</h2>
-            <p>{t("analytics.spendingInsightsDetail")}</p>
-          </div>
+          <Card
+            ref={insightsRef}
+            className={`dashboard-card insights-card overview-section-card ${getSectionHighlightClass("insights")}`}
+            radius="xl"
+            p={{ base: "md", md: "lg" }}
+          >
+            <Stack gap="md">
+              <Box>
+                <Title order={2} size="h3">{t("analytics.spendingInsights")}</Title>
+                <Text size="sm" c="dimmed">{t("analytics.spendingInsightsDetail")}</Text>
+              </Box>
 
-          {!spendingInsights ? (
-            <div className="empty-state">
-              <p>{t("analytics.noInsights")}</p>
-            </div>
-          ) : (
-            <div className="insights-grid">
-              <div className="insights-block">
-                <h3>{t("analytics.observations")}</h3>
-                <ul className="insights-list">
-                  {spendingInsights.insights.map((item, index) => (
-                    <li key={`insight-${index}`}>{item}</li>
-                  ))}
-                </ul>
-              </div>
+              {!spendingInsights ? (
+                <Paper className="empty-state" radius="lg" p="md">
+                  <Text>{t("analytics.noInsights")}</Text>
+                </Paper>
+              ) : (
+                <SimpleGrid cols={{ base: 1, md: 2 }} spacing="md">
+                  <Paper className="insights-block" radius="lg" p="md">
+                    <Stack gap="sm">
+                      <Title order={3} size="h4">{t("analytics.observations")}</Title>
+                      <Stack component="ul" className="insights-list" gap="xs">
+                        {spendingInsights.insights.map((item, index) => (
+                          <li key={`insight-${index}`}>{item}</li>
+                        ))}
+                      </Stack>
+                    </Stack>
+                  </Paper>
 
-              <div className="insights-block">
-                <h3>{t("analytics.recommendations")}</h3>
-                <ul className="insights-list">
-                  {spendingInsights.recommendations.map((item, index) => (
-                    <li key={`recommendation-${index}`}>{item}</li>
-                  ))}
-                </ul>
-              </div>
-            </div>
-          )}
-        </div>
+                  <Paper className="insights-block" radius="lg" p="md">
+                    <Stack gap="sm">
+                      <Title order={3} size="h4">{t("analytics.recommendations")}</Title>
+                      <Stack component="ul" className="insights-list" gap="xs">
+                        {spendingInsights.recommendations.map((item, index) => (
+                          <li key={`recommendation-${index}`}>{item}</li>
+                        ))}
+                      </Stack>
+                    </Stack>
+                  </Paper>
+                </SimpleGrid>
+              )}
+            </Stack>
+          </Card>
 
-        <div
-          ref={monthlyRef}
-          className={`chart-grid ${getSectionHighlightClass("monthly")}`}
-        >
-          <div className="dashboard-card">
-            <div className="section-header">
-              <h2>{t("analytics.monthlySummary")}</h2>
-              <p>{t("analytics.monthlySummaryDetail")}</p>
-            </div>
+          <Grid
+            ref={monthlyRef}
+            className={`overview-chart-grid ${getSectionHighlightClass("monthly")}`}
+            gutter="md"
+          >
+            <Grid.Col span={{ base: 12, lg: 7 }}>
+              <Card className="dashboard-card overview-section-card" radius="xl" p={{ base: "md", md: "lg" }} h="100%">
+                <Stack gap="md">
+                  <Box>
+                    <Title order={2} size="h3">{t("analytics.monthlySummary")}</Title>
+                    <Text size="sm" c="dimmed">{t("analytics.monthlySummaryDetail")}</Text>
+                  </Box>
 
             {monthlySummary.length === 0 ? (
-              <div className="empty-state">
-                <p>{t("analytics.noMonthlyData")}</p>
-              </div>
+              <Paper className="empty-state" radius="lg" p="md">
+                <Text>{t("analytics.noMonthlyData")}</Text>
+              </Paper>
             ) : (
               <ResponsiveContainer width="100%" height={300}>
                 <BarChart data={monthlySummary}>
@@ -947,11 +1082,11 @@ function AnalyticsPage() {
             )}
 
             {topCategoryPieData.length > 0 && (
-              <div className="analytics-top-pie">
-                <div className="section-header compact-section-header">
-                  <h3>{t("analytics.topFivePieTitle")}</h3>
-                  <p>{t("analytics.topFivePieDetail")}</p>
-                </div>
+              <Box className="analytics-top-pie">
+                <Box className="compact-section-header">
+                  <Title order={3} size="h4">{t("analytics.topFivePieTitle")}</Title>
+                  <Text size="sm" c="dimmed">{t("analytics.topFivePieDetail")}</Text>
+                </Box>
                 <div className="analytics-top-pie-layout">
                   <ResponsiveContainer width="100%" height={260}>
                     <PieChart>
@@ -999,20 +1134,24 @@ function AnalyticsPage() {
                     ))}
                   </div>
                 </div>
-              </div>
+              </Box>
             )}
-          </div>
+                </Stack>
+              </Card>
+            </Grid.Col>
 
-          <div className="dashboard-card">
-            <div className="section-header">
-              <h2>{t("analytics.categoryChartTitle")}</h2>
-              <p>{t("analytics.categoryChartDetail")}</p>
-            </div>
+            <Grid.Col span={{ base: 12, lg: 5 }}>
+              <Card className="dashboard-card overview-section-card" radius="xl" p={{ base: "md", md: "lg" }} h="100%">
+                <Stack gap="md">
+                  <Box>
+                    <Title order={2} size="h3">{t("analytics.categoryChartTitle")}</Title>
+                    <Text size="sm" c="dimmed">{t("analytics.categoryChartDetail")}</Text>
+                  </Box>
 
             {categoryChartData.length === 0 ? (
-              <div className="empty-state">
-                <p>{t("dashboard.noExpenseCategories")}</p>
-              </div>
+              <Paper className="empty-state" radius="lg" p="md">
+                <Text>{t("dashboard.noExpenseCategories")}</Text>
+              </Paper>
             ) : (
               <ResponsiveContainer width="100%" height={categoryChartHeight}>
                 <BarChart
@@ -1052,40 +1191,62 @@ function AnalyticsPage() {
                 </BarChart>
               </ResponsiveContainer>
             )}
-          </div>
-        </div>
+                </Stack>
+              </Card>
+            </Grid.Col>
+          </Grid>
 
-        <div
-          ref={categoriesRef}
-          className={`dashboard-card ${getSectionHighlightClass("categories")}`}
-        >
-          <div className="section-header">
-            <h2>{t("dashboard.expenseCategoriesTitle")}</h2>
-            <p>{t("analytics.expenseCategoriesDetail")}</p>
-          </div>
+          <Card
+            ref={categoriesRef}
+            className={`dashboard-card overview-section-card ${getSectionHighlightClass("categories")}`}
+            radius="xl"
+            p={{ base: "md", md: "lg" }}
+          >
+            <Stack gap="md">
+              <Box>
+                <Title order={2} size="h3">{t("dashboard.expenseCategoriesTitle")}</Title>
+                <Text size="sm" c="dimmed">{t("analytics.expenseCategoriesDetail")}</Text>
+              </Box>
 
-          {mergedCategoryBreakdown.length === 0 ? (
-            <div className="empty-state">
-              <p>{t("dashboard.noExpenseCategories")}</p>
-            </div>
-          ) : (
-            <div className="category-list">
-              {mergedCategoryBreakdown.map((item) => (
-                <button
-                  key={item.category}
-                  type="button"
-                  className="category-item category-drilldown-item"
-                  onClick={() => handleCategoryDrilldown(item.category)}
-                >
-                  <span>{formatCategoryName(item.category, t)}</span>
-                  <strong>{formatMoney(item.total)}</strong>
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
-      </div>
-    </div>
+              {mergedCategoryBreakdown.length === 0 ? (
+                <Paper className="empty-state" radius="lg" p="md">
+                  <Text>{t("dashboard.noExpenseCategories")}</Text>
+                </Paper>
+              ) : (
+                <Box className="overview-table-scroll">
+                  <Table className="overview-category-table" verticalSpacing="sm">
+                    <Table.Thead>
+                      <Table.Tr>
+                        <Table.Th>{t("common.category")}</Table.Th>
+                        <Table.Th ta="right">{t("common.amount")}</Table.Th>
+                      </Table.Tr>
+                    </Table.Thead>
+                    <Table.Tbody>
+                      {mergedCategoryBreakdown.map((item) => (
+                        <Table.Tr key={item.category}>
+                          <Table.Td>
+                            <button
+                              type="button"
+                              className="overview-category-link"
+                              onClick={() => handleCategoryDrilldown(item.category)}
+                            >
+                              {formatCategoryName(item.category, t)}
+                            </button>
+                          </Table.Td>
+                          <Table.Td ta="right">
+                            <Text fw={800}>{formatMoney(item.total)}</Text>
+                          </Table.Td>
+                        </Table.Tr>
+                      ))}
+                    </Table.Tbody>
+                  </Table>
+                </Box>
+              )}
+            </Stack>
+          </Card>
+        </Stack>
+      </Container>
+    </Box>
   );
 }
 

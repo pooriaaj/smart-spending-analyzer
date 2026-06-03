@@ -1,5 +1,6 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { MantineProvider } from '@mantine/core'
 import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -174,17 +175,21 @@ function mockTransactionRequests() {
 function renderTransactionsPage() {
   return render(
     <MemoryRouter initialEntries={['/transactions']}>
-      <LanguageProvider>
-        <TransactionsPage />
-      </LanguageProvider>
+      <MantineProvider>
+        <LanguageProvider>
+          <TransactionsPage />
+        </LanguageProvider>
+      </MantineProvider>
     </MemoryRouter>,
   )
 }
 
 async function waitForLedger() {
-  expect(await screen.findByText('Grocery store')).toBeInTheDocument()
-  expect(screen.getByText('Salary deposit')).toBeInTheDocument()
-  expect(screen.getByText('Bus pass')).toBeInTheDocument()
+  const table = await screen.findByRole('table')
+  expect(within(table).getByText('Grocery store')).toBeInTheDocument()
+  expect(within(table).getByText('Salary deposit')).toBeInTheDocument()
+  expect(within(table).getByText('Bus pass')).toBeInTheDocument()
+  return table
 }
 
 describe('TransactionsPage', () => {
@@ -211,8 +216,9 @@ describe('TransactionsPage', () => {
         params: expect.objectContaining({ type: 'income' }),
       })
     })
-    expect(screen.getByText('Salary deposit')).toBeInTheDocument()
-    expect(screen.queryByText('Grocery store')).not.toBeInTheDocument()
+    let table = screen.getByRole('table')
+    expect(within(table).getByText('Salary deposit')).toBeInTheDocument()
+    expect(within(table).queryByText('Grocery store')).not.toBeInTheDocument()
 
     await user.selectOptions(typeFilter, '')
     await user.selectOptions(monthFilter, '2026-04')
@@ -222,8 +228,9 @@ describe('TransactionsPage', () => {
         params: expect.objectContaining({ month: '2026-04' }),
       })
     })
-    expect(screen.getByText('Bus pass')).toBeInTheDocument()
-    expect(screen.queryByText('Salary deposit')).not.toBeInTheDocument()
+    table = screen.getByRole('table')
+    expect(within(table).getByText('Bus pass')).toBeInTheDocument()
+    expect(within(table).queryByText('Salary deposit')).not.toBeInTheDocument()
   })
 
   it('edits a transaction from the table and refreshes the ledger', async () => {
@@ -232,7 +239,8 @@ describe('TransactionsPage', () => {
 
     await waitForLedger()
 
-    const groceryRow = screen.getByText('Grocery store').closest('tr')
+    const table = screen.getByRole('table')
+    const groceryRow = within(table).getByText('Grocery store').closest('tr')
     await user.click(within(groceryRow).getByRole('button', { name: 'Edit' }))
 
     const amountInput = within(groceryRow).getByDisplayValue('84.25')
@@ -261,8 +269,10 @@ describe('TransactionsPage', () => {
         account_id: 1,
       })
     })
-    expect(await screen.findByText('Lunch meeting')).toBeInTheDocument()
-    expect(screen.queryByText('Grocery store')).not.toBeInTheDocument()
+    await waitFor(() => {
+      expect(within(screen.getByRole('table')).getByText('Lunch meeting')).toBeInTheDocument()
+    })
+    expect(within(screen.getByRole('table')).queryByText('Grocery store')).not.toBeInTheDocument()
   })
 
   it('deletes a transaction from the table and refreshes the ledger', async () => {
@@ -271,15 +281,16 @@ describe('TransactionsPage', () => {
 
     await waitForLedger()
 
-    const busRow = screen.getByText('Bus pass').closest('tr')
+    const table = screen.getByRole('table')
+    const busRow = within(table).getByText('Bus pass').closest('tr')
     await user.click(within(busRow).getByRole('button', { name: 'Delete' }))
 
     await waitFor(() => {
       expect(api.delete).toHaveBeenCalledWith('/transactions/103')
     })
     await waitFor(() => {
-      expect(screen.queryByText('Bus pass')).not.toBeInTheDocument()
+      expect(within(screen.getByRole('table')).queryByText('Bus pass')).not.toBeInTheDocument()
     })
-    expect(screen.getByText('Grocery store')).toBeInTheDocument()
+    expect(within(screen.getByRole('table')).getByText('Grocery store')).toBeInTheDocument()
   })
 })

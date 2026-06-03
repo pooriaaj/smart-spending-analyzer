@@ -1,5 +1,6 @@
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { MantineProvider } from '@mantine/core'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { LanguageProvider } from '../i18n/LanguageContext'
@@ -36,9 +37,11 @@ vi.mock('./AccountSelector', () => ({
 
 function renderTransactionForm(props = {}) {
   return render(
-    <LanguageProvider>
-      <TransactionForm {...props} />
-    </LanguageProvider>,
+    <MantineProvider>
+      <LanguageProvider>
+        <TransactionForm {...props} />
+      </LanguageProvider>
+    </MantineProvider>,
   )
 }
 

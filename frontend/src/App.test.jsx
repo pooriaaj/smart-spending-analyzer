@@ -1,4 +1,5 @@
 import { render, screen, waitFor } from '@testing-library/react'
+import { MantineProvider } from '@mantine/core'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import App from './App'
@@ -52,7 +53,11 @@ vi.mock('./pages/BudgetsPage', () => ({
 
 function renderAt(path) {
   window.history.pushState({}, '', path)
-  return render(<App />)
+  return render(
+    <MantineProvider>
+      <App />
+    </MantineProvider>,
+  )
 }
 
 describe('App auth routing', () => {

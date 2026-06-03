@@ -1,4 +1,18 @@
 import { useEffect, useState } from "react";
+import {
+  Alert,
+  Badge,
+  Box,
+  Button,
+  Card,
+  Group,
+  NativeSelect,
+  SimpleGrid,
+  Stack,
+  Text,
+  TextInput,
+  Title,
+} from "@mantine/core";
 import api from "../services/api";
 import AccountSelector from "./AccountSelector";
 import { getSelectedAccountId } from "../services/accountStorage";
@@ -116,97 +130,134 @@ function TransactionForm({ onTransactionCreated, editingTransaction, onCancelEdi
   };
 
   return (
-    <div className="dashboard-card">
-      <h2>{editingTransaction ? t("transactionForm.editTitle") : t("transactionForm.addTitle")}</h2>
+    <Card className="dashboard-card transaction-form-card" radius="xl" p={{ base: "md", md: "lg" }}>
+      <Stack gap="md">
+        <Group justify="space-between" align="flex-start" gap="md">
+          <Box>
+            <Title order={2} size="h3">
+              {editingTransaction ? t("transactionForm.editTitle") : t("transactionForm.addTitle")}
+            </Title>
+            <Text size="sm" c="dimmed">
+              {editingTransaction ? t("common.edit") : t("transactions.addToday")}
+            </Text>
+          </Box>
+          <Badge color={type === "income" ? "teal" : "rose"} variant="light" radius="sm">
+            {type === "income" ? t("common.income") : t("common.expense")}
+          </Badge>
+        </Group>
 
-      <form onSubmit={handleSubmit} className="transaction-form">
-        <AccountSelector
-          value={accountId}
-          onChange={setAccountId}
-          allowAll={false}
-          label={t("common.targetAccount")}
-        />
+        <form onSubmit={handleSubmit} className="transaction-form transaction-form-mantine">
+          <SimpleGrid cols={{ base: 1, md: 2 }} spacing="md">
+            <Box className="transaction-form-account-field">
+              <AccountSelector
+                value={accountId}
+                onChange={setAccountId}
+                allowAll={false}
+                label={t("common.targetAccount")}
+              />
+            </Box>
 
-        <input
-          type="number"
-          step="0.01"
-          placeholder={t("common.amount")}
-          value={amount}
-          onChange={(e) => setAmount(e.target.value)}
-          required
-        />
+            <TextInput
+              type="number"
+              step="0.01"
+              label={t("common.amount")}
+              placeholder={t("common.amount")}
+              value={amount}
+              onChange={(e) => setAmount(e.target.value)}
+              required
+            />
 
-        <input
-          type="text"
-          placeholder={t("common.category")}
-          value={category}
-          onChange={(e) => setCategory(e.target.value)}
-          required
-        />
+            <TextInput
+              type="text"
+              label={t("common.category")}
+              placeholder={t("common.category")}
+              value={category}
+              onChange={(e) => setCategory(e.target.value)}
+              required
+            />
 
-        <input
-          type="text"
-          placeholder={t("common.description")}
-          value={description}
-          onChange={(e) => setDescription(e.target.value)}
-          required
-        />
+            <TextInput
+              type="text"
+              label={t("common.description")}
+              placeholder={t("common.description")}
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              required
+            />
 
-        <input
-          type="date"
-          value={date}
-          onChange={(e) => setDate(e.target.value)}
-          required
-        />
+            <TextInput
+              type="date"
+              label={t("common.date")}
+              value={date}
+              onChange={(e) => setDate(e.target.value)}
+              required
+            />
 
-        <select value={type} onChange={(e) => setType(e.target.value)}>
-          <option value="expense">{t("common.expense")}</option>
-          <option value="income">{t("common.income")}</option>
-        </select>
+            <NativeSelect
+              label={t("common.type")}
+              value={type}
+              onChange={(e) => setType(e.target.value)}
+              data={[
+                { value: "expense", label: t("common.expense") },
+                { value: "income", label: t("common.income") },
+              ]}
+            />
+          </SimpleGrid>
 
-        <button
-          type="button"
-          className="suggest-button"
-          onClick={handleSuggestCategory}
-          disabled={suggestionLoading}
-        >
-          {suggestionLoading ? t("transactionForm.suggesting") : t("transactionForm.suggestCategory")}
-        </button>
+          <Group gap="sm" className="transaction-form-actions">
+            <Button
+              type="button"
+              color="indigo"
+              variant="light"
+              radius="md"
+              onClick={handleSuggestCategory}
+              disabled={suggestionLoading}
+            >
+              {suggestionLoading ? t("transactionForm.suggesting") : t("transactionForm.suggestCategory")}
+            </Button>
 
-        <button type="submit">
-          {editingTransaction ? t("transactionForm.update") : t("transactionForm.add")}
-        </button>
+            <Button type="submit" color="teal" radius="md">
+              {editingTransaction ? t("transactionForm.update") : t("transactionForm.add")}
+            </Button>
 
-        {editingTransaction && (
-          <button
-            type="button"
-            className="cancel-button"
-            onClick={() => {
-              resetForm();
-              onCancelEdit();
-            }}
-          >
-            {t("transactionForm.cancel")}
-          </button>
+            {editingTransaction && (
+              <Button
+                type="button"
+                color="gray"
+                variant="outline"
+                radius="md"
+                onClick={() => {
+                  resetForm();
+                  onCancelEdit();
+                }}
+              >
+                {t("transactionForm.cancel")}
+              </Button>
+            )}
+          </Group>
+        </form>
+
+        {suggestion && (
+          <Alert className="suggestion-box" color="indigo" radius="lg" variant="light">
+            <Stack gap={6}>
+              <Title order={3} size="h4">{t("transactionForm.suggestedCategory")}</Title>
+              <Text fw={800}>{suggestion.suggested_category}</Text>
+              <Text size="sm">{t("transactionForm.confidence")}: {(suggestion.confidence * 100).toFixed(0)}%</Text>
+              <Text size="sm">{suggestion.reason}</Text>
+              {suggestion.matched_keyword && (
+                <Text size="sm">{t("transactionForm.matchedKeyword")}: {suggestion.matched_keyword}</Text>
+              )}
+            </Stack>
+          </Alert>
         )}
-      </form>
 
-      {suggestion && (
-        <div className="suggestion-box">
-          <h3>{t("transactionForm.suggestedCategory")}</h3>
-          <p>
-            <strong>{suggestion.suggested_category}</strong>
-          </p>
-          <p>{t("transactionForm.confidence")}: {(suggestion.confidence * 100).toFixed(0)}%</p>
-          <p>{suggestion.reason}</p>
-          {suggestion.matched_keyword && (
-            <p>{t("transactionForm.matchedKeyword")}: {suggestion.matched_keyword}</p>
-          )}
-        </div>
-      )}
-
-      {error && <p className="error-text">{error}</p>}
-    </div>
+        {error && (
+          <Alert color="red" radius="lg" variant="light">
+            {error}
+          </Alert>
+        )}
+      </Stack>
+    </Card>
   );
 }
 

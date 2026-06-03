@@ -6281,6 +6281,1791 @@ textarea {
   }
 }
 
+/* Final EOF cascade guard: these rules intentionally win over page-specific sections. */
+.app-shell-main {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.72), rgba(244, 247, 251, 0.98)),
+    var(--fintech-page);
+  overflow-x: hidden;
+}
+
+.app-shell-main .page-container {
+  padding: 28px 24px 48px;
+}
+
+.app-shell-main .dashboard-hero,
+.app-shell-main .dashboard-card,
+.app-shell-main .filter-card,
+.app-shell-main .status-card,
+.app-shell-main .overview-hero,
+.app-shell-main .overview-section-card,
+.app-shell-main .overview-filter-card,
+.app-shell-main .overview-stat-card,
+.app-shell-main .transaction-form-card,
+.app-shell-main .transaction-filter-card,
+.app-shell-main .transaction-ledger-card,
+.app-shell-main .transaction-mobile-card,
+.app-shell-main .receipt-result-card,
+.app-shell-main .receipt-draft-card {
+  border: 1px solid var(--fintech-border);
+  border-radius: 20px;
+  background: var(--fintech-card);
+  box-shadow: var(--fintech-shadow-soft);
+}
+
+.app-shell-main .dashboard-card:hover,
+.app-shell-main .filter-card:hover,
+.app-shell-main .overview-section-card:hover,
+.app-shell-main .overview-filter-card:hover,
+.app-shell-main .overview-stat-card:hover,
+.app-shell-main .transaction-form-card:hover,
+.app-shell-main .transaction-filter-card:hover,
+.app-shell-main .transaction-ledger-card:hover {
+  transform: none;
+  box-shadow: var(--fintech-shadow);
+}
+
+.app-shell-main h1,
+.app-shell-main .overview-hero-copy h1,
+.app-shell-main .dashboard-hero h1 {
+  color: var(--fintech-navy);
+  font-size: 38px;
+  line-height: 1.12;
+  letter-spacing: 0;
+}
+
+.app-shell-main h2,
+.app-shell-main h3,
+.app-shell-main .mantine-Title-root {
+  color: var(--fintech-navy);
+  letter-spacing: 0;
+}
+
+.app-shell-main .overview-stat-value {
+  color: var(--fintech-navy);
+  font-size: 32px;
+  line-height: 1.12;
+  overflow-wrap: anywhere;
+}
+
+.app-shell-main .income-text,
+.app-shell-main .overview-stat-card-income .overview-stat-value,
+.app-shell-main .income-card strong {
+  color: var(--fintech-emerald);
+}
+
+.app-shell-main .expense-text,
+.app-shell-main .overview-stat-card-expense .overview-stat-value,
+.app-shell-main .expense-card strong {
+  color: var(--fintech-danger);
+}
+
+.app-shell-main .secondary-button,
+.app-shell-main .smart-action-button,
+.app-shell-main .smart-apply-button,
+.app-shell-main .delete-button,
+.app-shell-main .edit-button,
+.app-shell-main .cancel-button,
+.app-shell-main .suggest-button,
+.app-shell-main .export-button,
+.app-shell-main .clear-filter-button,
+.app-shell-main .import-upload-button,
+.app-shell-main .assistant-ask-button,
+.app-shell-main .auth-submit-button,
+.app-shell-main form button[type="submit"],
+.app-shell-main .mantine-Button-root {
+  min-height: 42px;
+  border-radius: 12px;
+  font-weight: 800;
+  letter-spacing: 0;
+}
+
+.app-shell-main input:not([type="checkbox"]):not([type="radio"]),
+.app-shell-main select,
+.app-shell-main textarea,
+.app-shell-main .mantine-Input-input,
+.app-shell-main .assistant-input {
+  border-color: #d7e0ea;
+  border-radius: 12px;
+  color: #102033;
+}
+
+.app-shell-main .empty-state,
+.app-shell-main .status-card,
+.app-shell-main .error-text,
+.app-shell-main .bulk-message-box,
+.app-shell-main .import-info-box,
+.app-shell-main .import-success,
+.app-shell-main .import-error,
+.app-shell-main .suggestion-box,
+.app-shell-main .assistant-answer-box,
+.app-shell-main .assistant-loading-message {
+  border-radius: 16px;
+}
+
+@media (max-width: 900px) {
+  .app-shell-main .page-container {
+    padding: 22px 18px 42px;
+  }
+
+  .app-shell-main h1,
+  .app-shell-main .overview-hero-copy h1,
+  .app-shell-main .dashboard-hero h1 {
+    font-size: 32px;
+  }
+}
+
+@media (max-width: 760px) {
+  .app-shell-main .page-container,
+  .overview-page-shell .mantine-Container-root {
+    padding: 16px 14px 34px;
+  }
+
+  .app-shell-main h1,
+  .app-shell-main .overview-hero-copy h1,
+  .app-shell-main .dashboard-hero h1 {
+    font-size: 30px;
+  }
+
+  .app-shell-main .overview-hero-actions .mantine-Button-root,
+  .app-shell-main .header-actions > *,
+  .app-shell-main .professional-header-actions > *,
+  .app-shell-main .transaction-form-actions .mantine-Button-root,
+  .app-shell-main .recurring-filter-actions .mantine-Button-root,
+  .app-shell-main .smart-action-button,
+  .app-shell-main .smart-apply-button,
+  .app-shell-main .secondary-button,
+  .app-shell-main .delete-button,
+  .app-shell-main .import-upload-button,
+  .app-shell-main .assistant-ask-button {
+    width: 100%;
+  }
+}
+
+:root[data-theme="dark"] .app-shell-main {
+  background:
+    linear-gradient(180deg, rgba(11, 18, 32, 0.96), rgba(15, 23, 42, 0.98)),
+    #0b1220;
+}
+
+:root[data-theme="dark"] .app-shell-main .dashboard-hero,
+:root[data-theme="dark"] .app-shell-main .dashboard-card,
+:root[data-theme="dark"] .app-shell-main .filter-card,
+:root[data-theme="dark"] .app-shell-main .status-card,
+:root[data-theme="dark"] .app-shell-main .overview-hero,
+:root[data-theme="dark"] .app-shell-main .overview-section-card,
+:root[data-theme="dark"] .app-shell-main .overview-filter-card,
+:root[data-theme="dark"] .app-shell-main .overview-stat-card,
+:root[data-theme="dark"] .app-shell-main .transaction-form-card,
+:root[data-theme="dark"] .app-shell-main .transaction-filter-card,
+:root[data-theme="dark"] .app-shell-main .transaction-ledger-card,
+:root[data-theme="dark"] .app-shell-main .transaction-mobile-card {
+  border-color: rgba(148, 163, 184, 0.16);
+  background: rgba(15, 23, 42, 0.94);
+}
+
+:root[data-theme="dark"] .app-shell-main h1,
+:root[data-theme="dark"] .app-shell-main h2,
+:root[data-theme="dark"] .app-shell-main h3,
+:root[data-theme="dark"] .app-shell-main .mantine-Title-root,
+:root[data-theme="dark"] .app-shell-main .overview-stat-value {
+  color: #f8fafc;
+}
+
+/* Final cascade guard: keep the polished app frame consistent after page sections. */
+.app-shell-main {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.72), rgba(244, 247, 251, 0.98)),
+    var(--fintech-page);
+  overflow-x: hidden;
+}
+
+.app-shell-main .page-container {
+  padding: 28px 24px 48px;
+}
+
+.app-shell-main .dashboard-hero,
+.app-shell-main .dashboard-card,
+.app-shell-main .filter-card,
+.app-shell-main .status-card,
+.app-shell-main .overview-hero,
+.app-shell-main .overview-section-card,
+.app-shell-main .overview-filter-card,
+.app-shell-main .overview-stat-card,
+.app-shell-main .transaction-form-card,
+.app-shell-main .transaction-filter-card,
+.app-shell-main .transaction-ledger-card,
+.app-shell-main .transaction-mobile-card,
+.app-shell-main .receipt-result-card,
+.app-shell-main .receipt-draft-card {
+  border: 1px solid var(--fintech-border);
+  border-radius: 20px;
+  background: var(--fintech-card);
+  box-shadow: var(--fintech-shadow-soft);
+}
+
+.app-shell-main .dashboard-card:hover,
+.app-shell-main .filter-card:hover,
+.app-shell-main .overview-section-card:hover,
+.app-shell-main .overview-filter-card:hover,
+.app-shell-main .overview-stat-card:hover,
+.app-shell-main .transaction-form-card:hover,
+.app-shell-main .transaction-filter-card:hover,
+.app-shell-main .transaction-ledger-card:hover {
+  transform: none;
+  box-shadow: var(--fintech-shadow);
+}
+
+.app-shell-main h1,
+.app-shell-main .overview-hero-copy h1,
+.app-shell-main .dashboard-hero h1 {
+  color: var(--fintech-navy);
+  font-size: 38px;
+  line-height: 1.12;
+  letter-spacing: 0;
+}
+
+.app-shell-main h2,
+.app-shell-main h3,
+.app-shell-main .mantine-Title-root {
+  color: var(--fintech-navy);
+  letter-spacing: 0;
+}
+
+.app-shell-main .overview-stat-value {
+  color: var(--fintech-navy);
+  font-size: 32px;
+  line-height: 1.12;
+  overflow-wrap: anywhere;
+}
+
+.app-shell-main .income-text,
+.app-shell-main .overview-stat-card-income .overview-stat-value,
+.app-shell-main .income-card strong {
+  color: var(--fintech-emerald);
+}
+
+.app-shell-main .expense-text,
+.app-shell-main .overview-stat-card-expense .overview-stat-value,
+.app-shell-main .expense-card strong {
+  color: var(--fintech-danger);
+}
+
+.app-shell-main .secondary-button,
+.app-shell-main .smart-action-button,
+.app-shell-main .smart-apply-button,
+.app-shell-main .delete-button,
+.app-shell-main .edit-button,
+.app-shell-main .cancel-button,
+.app-shell-main .suggest-button,
+.app-shell-main .export-button,
+.app-shell-main .clear-filter-button,
+.app-shell-main .import-upload-button,
+.app-shell-main .assistant-ask-button,
+.app-shell-main .auth-submit-button,
+.app-shell-main form button[type="submit"],
+.app-shell-main .mantine-Button-root {
+  min-height: 42px;
+  border-radius: 12px;
+  font-weight: 800;
+  letter-spacing: 0;
+}
+
+.app-shell-main input:not([type="checkbox"]):not([type="radio"]),
+.app-shell-main select,
+.app-shell-main textarea,
+.app-shell-main .mantine-Input-input,
+.app-shell-main .assistant-input {
+  border-color: #d7e0ea;
+  border-radius: 12px;
+  color: #102033;
+}
+
+.app-shell-main .empty-state,
+.app-shell-main .status-card,
+.app-shell-main .error-text,
+.app-shell-main .bulk-message-box,
+.app-shell-main .import-info-box,
+.app-shell-main .import-success,
+.app-shell-main .import-error,
+.app-shell-main .suggestion-box,
+.app-shell-main .assistant-answer-box,
+.app-shell-main .assistant-loading-message {
+  border-radius: 16px;
+}
+
+@media (max-width: 900px) {
+  .app-shell-main .page-container {
+    padding: 22px 18px 42px;
+  }
+
+  .app-shell-main h1,
+  .app-shell-main .overview-hero-copy h1,
+  .app-shell-main .dashboard-hero h1 {
+    font-size: 32px;
+  }
+}
+
+@media (max-width: 760px) {
+  .app-shell-main .page-container,
+  .overview-page-shell .mantine-Container-root {
+    padding: 16px 14px 34px;
+  }
+
+  .app-shell-main h1,
+  .app-shell-main .overview-hero-copy h1,
+  .app-shell-main .dashboard-hero h1 {
+    font-size: 30px;
+  }
+
+  .app-shell-main .overview-hero-actions .mantine-Button-root,
+  .app-shell-main .header-actions > *,
+  .app-shell-main .professional-header-actions > *,
+  .app-shell-main .transaction-form-actions .mantine-Button-root,
+  .app-shell-main .recurring-filter-actions .mantine-Button-root,
+  .app-shell-main .smart-action-button,
+  .app-shell-main .smart-apply-button,
+  .app-shell-main .secondary-button,
+  .app-shell-main .delete-button,
+  .app-shell-main .import-upload-button,
+  .app-shell-main .assistant-ask-button {
+    width: 100%;
+  }
+}
+
+:root[data-theme="dark"] .app-shell-main {
+  background:
+    linear-gradient(180deg, rgba(11, 18, 32, 0.96), rgba(15, 23, 42, 0.98)),
+    #0b1220;
+}
+
+:root[data-theme="dark"] .app-shell-main .dashboard-hero,
+:root[data-theme="dark"] .app-shell-main .dashboard-card,
+:root[data-theme="dark"] .app-shell-main .filter-card,
+:root[data-theme="dark"] .app-shell-main .status-card,
+:root[data-theme="dark"] .app-shell-main .overview-hero,
+:root[data-theme="dark"] .app-shell-main .overview-section-card,
+:root[data-theme="dark"] .app-shell-main .overview-filter-card,
+:root[data-theme="dark"] .app-shell-main .overview-stat-card,
+:root[data-theme="dark"] .app-shell-main .transaction-form-card,
+:root[data-theme="dark"] .app-shell-main .transaction-filter-card,
+:root[data-theme="dark"] .app-shell-main .transaction-ledger-card,
+:root[data-theme="dark"] .app-shell-main .transaction-mobile-card {
+  border-color: rgba(148, 163, 184, 0.16);
+  background: rgba(15, 23, 42, 0.94);
+}
+
+:root[data-theme="dark"] .app-shell-main h1,
+:root[data-theme="dark"] .app-shell-main h2,
+:root[data-theme="dark"] .app-shell-main h3,
+:root[data-theme="dark"] .app-shell-main .mantine-Title-root,
+:root[data-theme="dark"] .app-shell-main .overview-stat-value {
+  color: #f8fafc;
+}
+
+/* Final UI polish: shared fintech SaaS finish. */
+:root {
+  --fintech-navy: #102033;
+  --fintech-navy-soft: #1f2f46;
+  --fintech-card: #ffffff;
+  --fintech-page: #f4f7fb;
+  --fintech-muted: #f8fafc;
+  --fintech-border: #dfe7ef;
+  --fintech-text-muted: #64748b;
+  --fintech-emerald: #059669;
+  --fintech-teal: #0f766e;
+  --fintech-danger: #dc2626;
+  --fintech-shadow: 0 18px 44px rgba(15, 23, 42, 0.08);
+  --fintech-shadow-soft: 0 10px 28px rgba(15, 23, 42, 0.06);
+}
+
+html,
+body,
+#root {
+  width: 100%;
+  min-width: 0;
+}
+
+body {
+  overflow-x: hidden;
+}
+
+button,
+.mantine-Button-root,
+.mantine-NavLink-root,
+.mantine-Badge-root,
+.mantine-Input-input {
+  letter-spacing: 0;
+}
+
+.app-shell-main,
+.app-shell-main .page-container,
+.app-shell-main .dashboard-wrapper,
+.app-shell-main .overview-page-shell,
+.app-shell-main .mantine-Container-root,
+.app-shell-main .mantine-Grid-inner,
+.app-shell-main .mantine-Grid-col {
+  min-width: 0;
+}
+
+.app-shell-main {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.7), rgba(244, 247, 251, 0.96)),
+    var(--fintech-page);
+  overflow-x: hidden;
+}
+
+.app-shell-main .page-container {
+  padding: 28px 24px 48px;
+}
+
+.app-shell-main .dashboard-wrapper {
+  max-width: 1240px;
+}
+
+.app-shell-header {
+  border-bottom: 1px solid rgba(15, 23, 42, 0.08);
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: 0 10px 28px rgba(15, 23, 42, 0.05);
+}
+
+.app-shell-navbar {
+  border-right: 1px solid rgba(15, 23, 42, 0.08);
+  background: #ffffff;
+}
+
+.app-shell-brand-row {
+  min-width: 0;
+}
+
+.app-shell-brand-copy {
+  min-width: 0;
+}
+
+.app-shell-brand-copy h2,
+.app-shell-nav-brand h2 {
+  color: var(--fintech-navy);
+  font-size: 18px;
+  font-weight: 850;
+  line-height: 1.15;
+}
+
+.app-shell-brand-copy p {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app-shell-logo {
+  border-radius: 16px;
+  box-shadow: 0 16px 34px rgba(15, 118, 110, 0.22);
+}
+
+.app-shell-nav-link {
+  min-height: 46px;
+  border-radius: 14px;
+}
+
+.app-shell-nav-link .mantine-NavLink-label {
+  font-size: 14px;
+  font-weight: 750;
+}
+
+.app-shell-nav-link[data-active] {
+  box-shadow: inset 0 0 0 1px rgba(15, 118, 110, 0.14);
+}
+
+.app-shell-header-actions {
+  flex: 0 0 auto;
+}
+
+.app-shell-header-actions .mantine-Button-root,
+.app-shell-navbar .mantine-Button-root {
+  min-height: 42px;
+  border-radius: 12px;
+  font-weight: 800;
+}
+
+.app-shell-main .dashboard-hero,
+.app-shell-main .dashboard-card,
+.app-shell-main .filter-card,
+.app-shell-main .status-card,
+.app-shell-main .overview-hero,
+.app-shell-main .overview-section-card,
+.app-shell-main .overview-filter-card,
+.app-shell-main .overview-stat-card,
+.app-shell-main .transaction-form-card,
+.app-shell-main .transaction-filter-card,
+.app-shell-main .transaction-ledger-card,
+.app-shell-main .transaction-mobile-card,
+.app-shell-main .receipt-result-card,
+.app-shell-main .receipt-draft-card {
+  border: 1px solid var(--fintech-border);
+  border-radius: 20px;
+  background: var(--fintech-card);
+  box-shadow: var(--fintech-shadow-soft);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+.app-shell-main .dashboard-card::after,
+.app-shell-main .filter-card::after,
+.app-shell-main .auth-card::after,
+.app-shell-main .overview-section-card::after,
+.app-shell-main .overview-filter-card::after,
+.app-shell-main .overview-stat-card::after,
+.app-shell-main .transaction-form-card::after,
+.app-shell-main .transaction-filter-card::after,
+.app-shell-main .transaction-ledger-card::after {
+  content: none;
+  display: none;
+}
+
+.app-shell-main .dashboard-card:hover,
+.app-shell-main .filter-card:hover,
+.app-shell-main .overview-section-card:hover,
+.app-shell-main .overview-filter-card:hover,
+.app-shell-main .overview-stat-card:hover,
+.app-shell-main .transaction-form-card:hover,
+.app-shell-main .transaction-filter-card:hover,
+.app-shell-main .transaction-ledger-card:hover {
+  transform: none;
+  box-shadow: var(--fintech-shadow);
+}
+
+.app-shell-main .dashboard-hero,
+.app-shell-main .overview-hero {
+  background:
+    linear-gradient(135deg, #ffffff 0%, #f8fbfd 62%, #eef7f4 100%);
+}
+
+.app-shell-main h1,
+.app-shell-main h2,
+.app-shell-main h3,
+.app-shell-main .mantine-Title-root {
+  color: var(--fintech-navy);
+  letter-spacing: 0;
+}
+
+.app-shell-main h1,
+.app-shell-main .overview-hero-copy h1,
+.app-shell-main .dashboard-hero h1 {
+  font-size: 38px;
+  line-height: 1.12;
+  font-weight: 850;
+}
+
+.app-shell-main h2,
+.app-shell-main .mantine-Title-root[data-order="2"] {
+  line-height: 1.2;
+  font-weight: 820;
+}
+
+.app-shell-main p,
+.app-shell-main .hero-subtitle,
+.app-shell-main .overview-hero-copy p,
+.app-shell-main .mantine-Text-root[data-mantine-color="dimmed"] {
+  color: var(--fintech-text-muted);
+}
+
+.app-shell-main .eyebrow-text,
+.app-shell-main .transaction-page-kicker,
+.app-shell-main .overview-stat-label,
+.app-shell-main .overview-insight-label,
+.app-shell-main .overview-micro-label,
+.app-shell-main .card-label {
+  color: var(--fintech-teal);
+  font-size: 12px;
+  font-weight: 850;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.app-shell-main .overview-stat-card {
+  min-height: 156px;
+}
+
+.app-shell-main .overview-stat-value,
+.app-shell-main .overview-insight-value,
+.app-shell-main .overview-micro-value,
+.app-shell-main .summary-card strong {
+  color: var(--fintech-navy);
+  font-weight: 900;
+  line-height: 1.12;
+  overflow-wrap: anywhere;
+}
+
+.app-shell-main .overview-stat-value {
+  font-size: 32px;
+}
+
+.app-shell-main .income-text,
+.app-shell-main .overview-stat-card-income .overview-stat-value,
+.app-shell-main .income-card strong {
+  color: var(--fintech-emerald);
+}
+
+.app-shell-main .expense-text,
+.app-shell-main .overview-stat-card-expense .overview-stat-value,
+.app-shell-main .expense-card strong {
+  color: var(--fintech-danger);
+}
+
+.app-shell-main .balance-text,
+.app-shell-main .overview-stat-card-balance .overview-stat-value,
+.app-shell-main .balance-card strong {
+  color: #1d4ed8;
+}
+
+.app-shell-main .overview-stat-marker {
+  border-radius: 999px;
+  opacity: 0.92;
+}
+
+.app-shell-main .overview-chart-frame,
+.app-shell-main .overview-table-scroll,
+.app-shell-main .transactions-table-wrapper,
+.app-shell-main .transaction-table-toolbar,
+.app-shell-main .trend-summary-box,
+.app-shell-main .trend-block,
+.app-shell-main .trend-item,
+.app-shell-main .insights-block,
+.app-shell-main .account-comparison-item,
+.app-shell-main .learning-health-card,
+.app-shell-main .bulk-suggestion-card,
+.app-shell-main .simulator-metric-card,
+.app-shell-main .simulator-chart-card,
+.app-shell-main .budget-card {
+  border: 1px solid var(--fintech-border);
+  border-radius: 16px;
+  background: var(--fintech-muted);
+  box-shadow: none;
+}
+
+.app-shell-main .overview-table-scroll,
+.app-shell-main .transactions-table-wrapper {
+  overflow-x: auto;
+}
+
+.app-shell-main .transactions-table th,
+.app-shell-main .overview-category-table th {
+  color: #475569;
+  font-size: 12px;
+  font-weight: 850;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.app-shell-main .transactions-table td,
+.app-shell-main .overview-category-table td {
+  color: #102033;
+  border-color: rgba(15, 23, 42, 0.06);
+}
+
+.app-shell-main .transaction-description {
+  max-width: 320px;
+}
+
+.app-shell-main input:not([type="checkbox"]):not([type="radio"]),
+.app-shell-main select,
+.app-shell-main textarea,
+.app-shell-main .mantine-Input-input,
+.app-shell-main .assistant-input {
+  min-height: 42px;
+  border-color: #d7e0ea;
+  border-radius: 12px;
+  background-color: #ffffff;
+  color: #102033;
+  box-shadow: none;
+}
+
+.app-shell-main textarea,
+.app-shell-main .assistant-input {
+  min-height: 112px;
+}
+
+.app-shell-main input:not([type="checkbox"]):not([type="radio"]):focus,
+.app-shell-main select:focus,
+.app-shell-main textarea:focus,
+.app-shell-main .mantine-Input-input:focus,
+.app-shell-main .assistant-input:focus {
+  border-color: rgba(15, 118, 110, 0.72);
+  box-shadow: 0 0 0 3px rgba(15, 118, 110, 0.12);
+  outline: none;
+}
+
+.app-shell-main label,
+.app-shell-main .mantine-InputWrapper-label {
+  color: #334155;
+  font-size: 13px;
+  font-weight: 780;
+  margin-bottom: 6px;
+}
+
+.app-shell-main .secondary-button,
+.app-shell-main .smart-action-button,
+.app-shell-main .smart-apply-button,
+.app-shell-main .delete-button,
+.app-shell-main .edit-button,
+.app-shell-main .cancel-button,
+.app-shell-main .suggest-button,
+.app-shell-main .export-button,
+.app-shell-main .clear-filter-button,
+.app-shell-main .import-upload-button,
+.app-shell-main .assistant-ask-button,
+.app-shell-main .auth-submit-button,
+.app-shell-main form button[type="submit"],
+.app-shell-main .mantine-Button-root {
+  min-height: 42px;
+  border-radius: 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-weight: 800;
+  line-height: 1.1;
+  white-space: nowrap;
+}
+
+.app-shell-main .secondary-button,
+.app-shell-main .export-button,
+.app-shell-main .clear-filter-button,
+.app-shell-main .cancel-button,
+.app-shell-main .suggest-button {
+  border: 1px solid #cbd8e6;
+  background: #ffffff;
+  color: #23364f;
+}
+
+.app-shell-main .secondary-button:hover,
+.app-shell-main .export-button:hover,
+.app-shell-main .clear-filter-button:hover,
+.app-shell-main .cancel-button:hover,
+.app-shell-main .suggest-button:hover {
+  border-color: rgba(15, 118, 110, 0.42);
+  background: #f0fdfa;
+  color: #0f766e;
+}
+
+.app-shell-main .smart-action-button,
+.app-shell-main .smart-apply-button,
+.app-shell-main .import-upload-button,
+.app-shell-main .assistant-ask-button,
+.app-shell-main .auth-submit-button,
+.app-shell-main form button[type="submit"] {
+  border: 0;
+  background: linear-gradient(135deg, #0f766e, #059669);
+  color: #ffffff;
+  box-shadow: 0 12px 26px rgba(15, 118, 110, 0.18);
+}
+
+.app-shell-main .delete-button {
+  border: 1px solid rgba(220, 38, 38, 0.18);
+  background: #fff5f5;
+  color: #b91c1c;
+}
+
+.app-shell-main .delete-button:hover {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.app-shell-main button:disabled,
+.app-shell-main .mantine-Button-root:disabled {
+  cursor: not-allowed;
+  opacity: 0.68;
+  transform: none;
+}
+
+.app-shell-main .pagination-button {
+  min-width: 38px;
+  min-height: 38px;
+  border-radius: 12px;
+  border-color: #d7e0ea;
+}
+
+.app-shell-main .pagination-button-active {
+  background: #0f766e;
+  color: #ffffff;
+  border-color: #0f766e;
+}
+
+.app-shell-main .empty-state,
+.app-shell-main .status-card,
+.app-shell-main .error-text,
+.app-shell-main .bulk-message-box,
+.app-shell-main .import-info-box,
+.app-shell-main .import-success,
+.app-shell-main .import-error,
+.app-shell-main .suggestion-box,
+.app-shell-main .assistant-answer-box,
+.app-shell-main .assistant-loading-message {
+  border-radius: 16px;
+  border: 1px solid var(--fintech-border);
+  background: #f8fafc;
+}
+
+.app-shell-main .empty-state {
+  padding: 18px;
+  color: var(--fintech-text-muted);
+}
+
+.app-shell-main .status-card {
+  padding: 24px;
+  max-width: 720px;
+  margin: 0 auto;
+}
+
+.app-shell-main .status-card h2 {
+  margin-top: 0;
+}
+
+.app-shell-main .error-text,
+.app-shell-main .import-error {
+  border-color: rgba(220, 38, 38, 0.18);
+  background: #fff5f5;
+  color: #b91c1c;
+}
+
+.app-shell-main .import-success {
+  border-color: rgba(5, 150, 105, 0.2);
+  background: #ecfdf5;
+  color: #047857;
+}
+
+.app-shell-main .mantine-Badge-root {
+  font-weight: 800;
+  text-transform: none;
+}
+
+.auth-page .auth-card,
+.auth-shell .auth-card {
+  border: 1px solid var(--fintech-border);
+  border-radius: 22px;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: var(--fintech-shadow);
+}
+
+.auth-card input:not([type="checkbox"]):not([type="radio"]) {
+  min-height: 44px;
+  border-radius: 12px;
+}
+
+@media (max-width: 900px) {
+  .app-shell-main .page-container {
+    padding: 22px 18px 42px;
+  }
+
+  .app-shell-main .dashboard-hero,
+  .app-shell-main .overview-hero {
+    padding: 22px;
+  }
+
+  .app-shell-main h1,
+  .app-shell-main .overview-hero-copy h1,
+  .app-shell-main .dashboard-hero h1 {
+    font-size: 32px;
+  }
+
+  .app-shell-main .overview-stat-value {
+    font-size: 28px;
+  }
+}
+
+@media (max-width: 760px) {
+  .app-shell-header {
+    min-width: 0;
+  }
+
+  .app-shell-header .mantine-Group-root {
+    min-width: 0;
+  }
+
+  .app-shell-logo {
+    width: 40px;
+    height: 40px;
+    font-size: 17px;
+  }
+
+  .app-shell-brand-copy h2 {
+    max-width: 52vw;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .app-shell-main .page-container,
+  .overview-page-shell .mantine-Container-root {
+    padding: 16px 14px 34px;
+  }
+
+  .app-shell-main .dashboard-hero,
+  .app-shell-main .overview-hero,
+  .app-shell-main .dashboard-card,
+  .app-shell-main .filter-card,
+  .app-shell-main .overview-section-card,
+  .app-shell-main .overview-filter-card,
+  .app-shell-main .overview-stat-card,
+  .app-shell-main .transaction-form-card,
+  .app-shell-main .transaction-filter-card,
+  .app-shell-main .transaction-ledger-card {
+    border-radius: 18px;
+  }
+
+  .app-shell-main .dashboard-hero,
+  .app-shell-main .overview-hero {
+    padding: 18px;
+  }
+
+  .app-shell-main h1,
+  .app-shell-main .overview-hero-copy h1,
+  .app-shell-main .dashboard-hero h1 {
+    font-size: 30px;
+  }
+
+  .app-shell-main .overview-hero-actions,
+  .app-shell-main .header-actions,
+  .app-shell-main .professional-header-actions,
+  .app-shell-main .transaction-form-actions,
+  .app-shell-main .recurring-filter-actions,
+  .app-shell-main .transaction-table-toolbar {
+    width: 100%;
+    align-items: stretch;
+    justify-content: flex-start;
+  }
+
+  .app-shell-main .overview-hero-actions .mantine-Button-root,
+  .app-shell-main .header-actions > *,
+  .app-shell-main .professional-header-actions > *,
+  .app-shell-main .transaction-form-actions .mantine-Button-root,
+  .app-shell-main .recurring-filter-actions .mantine-Button-root,
+  .app-shell-main .smart-action-button,
+  .app-shell-main .smart-apply-button,
+  .app-shell-main .secondary-button,
+  .app-shell-main .delete-button,
+  .app-shell-main .import-upload-button,
+  .app-shell-main .assistant-ask-button {
+    width: 100%;
+  }
+
+  .app-shell-main .filter-bar,
+  .app-shell-main .compact-filter-bar,
+  .app-shell-main .receipt-meta-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .app-shell-main .transaction-mobile-card .mantine-Group-root {
+    align-items: flex-start;
+  }
+
+  .app-shell-main .transaction-mobile-card .mantine-Button-root {
+    flex: 1 1 0;
+  }
+
+  .app-shell-main .transaction-description {
+    max-width: 100%;
+    white-space: normal;
+  }
+
+  .app-floating-controls {
+    max-width: calc(100vw - 20px);
+  }
+}
+
+@media (max-width: 520px) {
+  .app-shell-brand-copy p {
+    display: none;
+  }
+
+  .app-shell-main .overview-stat-card {
+    min-height: 136px;
+  }
+
+  .app-shell-main .overview-stat-value {
+    font-size: 26px;
+  }
+
+  .app-shell-main .transactions-mobile-list .mantine-Group-root {
+    gap: 8px;
+  }
+
+  .app-shell-main .pagination-button {
+    min-width: 34px;
+    min-height: 34px;
+  }
+}
+
+:root[data-theme="dark"] .app-shell-main {
+  background:
+    linear-gradient(180deg, rgba(11, 18, 32, 0.96), rgba(15, 23, 42, 0.98)),
+    #0b1220;
+}
+
+:root[data-theme="dark"] .app-shell-header,
+:root[data-theme="dark"] .app-shell-navbar {
+  border-color: rgba(148, 163, 184, 0.14);
+  background: rgba(15, 23, 42, 0.94);
+}
+
+:root[data-theme="dark"] .app-shell-brand-copy h2,
+:root[data-theme="dark"] .app-shell-nav-brand h2,
+:root[data-theme="dark"] .app-shell-main h1,
+:root[data-theme="dark"] .app-shell-main h2,
+:root[data-theme="dark"] .app-shell-main h3,
+:root[data-theme="dark"] .app-shell-main .mantine-Title-root,
+:root[data-theme="dark"] .app-shell-main .overview-stat-value,
+:root[data-theme="dark"] .app-shell-main .overview-insight-value,
+:root[data-theme="dark"] .app-shell-main .overview-micro-value,
+:root[data-theme="dark"] .app-shell-main .summary-card strong {
+  color: #f8fafc;
+}
+
+:root[data-theme="dark"] .app-shell-main .dashboard-hero,
+:root[data-theme="dark"] .app-shell-main .dashboard-card,
+:root[data-theme="dark"] .app-shell-main .filter-card,
+:root[data-theme="dark"] .app-shell-main .status-card,
+:root[data-theme="dark"] .app-shell-main .overview-hero,
+:root[data-theme="dark"] .app-shell-main .overview-section-card,
+:root[data-theme="dark"] .app-shell-main .overview-filter-card,
+:root[data-theme="dark"] .app-shell-main .overview-stat-card,
+:root[data-theme="dark"] .app-shell-main .transaction-form-card,
+:root[data-theme="dark"] .app-shell-main .transaction-filter-card,
+:root[data-theme="dark"] .app-shell-main .transaction-ledger-card,
+:root[data-theme="dark"] .app-shell-main .transaction-mobile-card,
+:root[data-theme="dark"] .app-shell-main .receipt-result-card,
+:root[data-theme="dark"] .app-shell-main .receipt-draft-card,
+:root[data-theme="dark"] .auth-page .auth-card,
+:root[data-theme="dark"] .auth-shell .auth-card {
+  border-color: rgba(148, 163, 184, 0.16);
+  background: rgba(15, 23, 42, 0.94);
+  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.24);
+}
+
+:root[data-theme="dark"] .app-shell-main .overview-chart-frame,
+:root[data-theme="dark"] .app-shell-main .overview-table-scroll,
+:root[data-theme="dark"] .app-shell-main .transactions-table-wrapper,
+:root[data-theme="dark"] .app-shell-main .transaction-table-toolbar,
+:root[data-theme="dark"] .app-shell-main .trend-summary-box,
+:root[data-theme="dark"] .app-shell-main .trend-block,
+:root[data-theme="dark"] .app-shell-main .trend-item,
+:root[data-theme="dark"] .app-shell-main .insights-block,
+:root[data-theme="dark"] .app-shell-main .account-comparison-item,
+:root[data-theme="dark"] .app-shell-main .learning-health-card,
+:root[data-theme="dark"] .app-shell-main .bulk-suggestion-card,
+:root[data-theme="dark"] .app-shell-main .simulator-metric-card,
+:root[data-theme="dark"] .app-shell-main .simulator-chart-card,
+:root[data-theme="dark"] .app-shell-main .budget-card,
+:root[data-theme="dark"] .app-shell-main .empty-state,
+:root[data-theme="dark"] .app-shell-main .status-card,
+:root[data-theme="dark"] .app-shell-main .bulk-message-box,
+:root[data-theme="dark"] .app-shell-main .import-info-box,
+:root[data-theme="dark"] .app-shell-main .suggestion-box,
+:root[data-theme="dark"] .app-shell-main .assistant-answer-box,
+:root[data-theme="dark"] .app-shell-main .assistant-loading-message {
+  border-color: rgba(148, 163, 184, 0.16);
+  background: rgba(30, 41, 59, 0.72);
+}
+
+:root[data-theme="dark"] .app-shell-main input:not([type="checkbox"]):not([type="radio"]),
+:root[data-theme="dark"] .app-shell-main select,
+:root[data-theme="dark"] .app-shell-main textarea,
+:root[data-theme="dark"] .app-shell-main .mantine-Input-input,
+:root[data-theme="dark"] .app-shell-main .assistant-input {
+  border-color: rgba(148, 163, 184, 0.2);
+  background-color: #111827;
+  color: #f8fafc;
+}
+
+:root[data-theme="dark"] .app-shell-main p,
+:root[data-theme="dark"] .app-shell-main .hero-subtitle,
+:root[data-theme="dark"] .app-shell-main .overview-hero-copy p,
+:root[data-theme="dark"] .app-shell-main .mantine-Text-root[data-mantine-color="dimmed"],
+:root[data-theme="dark"] .app-shell-main .transactions-table td,
+:root[data-theme="dark"] .app-shell-main .overview-category-table td {
+  color: #cbd5e1;
+}
+
+:root[data-theme="dark"] .app-shell-main .secondary-button,
+:root[data-theme="dark"] .app-shell-main .export-button,
+:root[data-theme="dark"] .app-shell-main .clear-filter-button,
+:root[data-theme="dark"] .app-shell-main .cancel-button,
+:root[data-theme="dark"] .app-shell-main .suggest-button {
+  border-color: rgba(148, 163, 184, 0.22);
+  background: rgba(15, 23, 42, 0.92);
+  color: #e2e8f0;
+}
+
+/* ===== Mantine Overview dashboard refresh ===== */
+
+.overview-page-shell {
+  min-height: 100vh;
+  background: #f4f7fb;
+  color: #0f172a;
+}
+
+.overview-page-shell .mantine-Title-root {
+  color: #0f172a;
+  letter-spacing: 0;
+}
+
+.overview-page-shell .mantine-Text-root {
+  letter-spacing: 0;
+}
+
+.overview-hero,
+.overview-page-shell .overview-section-card,
+.overview-page-shell .overview-filter-card,
+.overview-stat-card {
+  background: #ffffff;
+  border: 1px solid #e5eaf1;
+  box-shadow: 0 18px 44px rgba(15, 23, 42, 0.07);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+.overview-page-shell .overview-section-card::after,
+.overview-page-shell .overview-filter-card::after,
+.overview-stat-card::after {
+  content: none;
+}
+
+.overview-page-shell .overview-section-card:hover,
+.overview-page-shell .overview-filter-card:hover,
+.overview-stat-card:hover {
+  transform: none;
+  box-shadow: 0 18px 44px rgba(15, 23, 42, 0.07);
+}
+
+.overview-hero {
+  position: relative;
+  overflow: hidden;
+}
+
+.overview-hero::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto;
+  height: 5px;
+  background: linear-gradient(90deg, #064e3b 0%, #10b981 42%, #1e3a8a 100%);
+}
+
+.overview-hero-copy {
+  max-width: 680px;
+}
+
+.overview-hero-copy h1 {
+  font-size: clamp(30px, 4vw, 42px);
+  line-height: 1.08;
+}
+
+.overview-hero-copy p {
+  max-width: 640px;
+  color: #475569;
+  line-height: 1.65;
+}
+
+.overview-hero-actions {
+  min-width: min(100%, 420px);
+}
+
+.overview-filter-card {
+  overflow: visible;
+}
+
+.overview-page-shell .mantine-InputWrapper-label,
+.overview-account-field label {
+  margin-bottom: 7px;
+  color: #334155;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.overview-account-field .account-selector-block {
+  max-width: none;
+  width: 100%;
+}
+
+.overview-account-field select,
+.overview-page-shell .mantine-Input-input {
+  min-height: 44px;
+  border: 1px solid #d8e0ea;
+  border-radius: 12px;
+  background: #ffffff;
+  color: #0f172a;
+}
+
+.overview-page-shell .mantine-Input-input:focus,
+.overview-account-field select:focus {
+  border-color: #10b981;
+  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.14);
+}
+
+.overview-filter-actions,
+.overview-quick-filters,
+.overview-hero-actions {
+  flex-wrap: wrap;
+}
+
+.overview-stat-card {
+  min-height: 156px;
+}
+
+.overview-stat-label,
+.overview-insight-label,
+.overview-micro-label {
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 850;
+  text-transform: uppercase;
+}
+
+.overview-stat-value {
+  color: #0f172a;
+  font-size: clamp(24px, 2.2vw, 32px);
+  font-weight: 850;
+  line-height: 1.16;
+}
+
+.overview-stat-helper,
+.overview-insight-detail {
+  color: #64748b;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.overview-stat-marker {
+  width: 34px;
+  height: 4px;
+  border-radius: 999px;
+  background: #64748b;
+}
+
+.overview-stat-card-income .overview-stat-marker {
+  background: #10b981;
+}
+
+.overview-stat-card-expense .overview-stat-marker {
+  background: #e11d48;
+}
+
+.overview-stat-card-balance .overview-stat-marker {
+  background: #1e3a8a;
+}
+
+.overview-stat-card-category .overview-stat-marker,
+.overview-insight-card-accent {
+  background: #eef2ff;
+}
+
+.overview-stat-card-income {
+  border-color: rgba(16, 185, 129, 0.22);
+}
+
+.overview-stat-card-expense {
+  border-color: rgba(225, 29, 72, 0.2);
+}
+
+.overview-stat-card-balance {
+  border-color: rgba(30, 58, 138, 0.18);
+}
+
+.overview-stat-card-category {
+  border-color: rgba(79, 70, 229, 0.16);
+}
+
+.overview-insight-card {
+  min-height: 142px;
+  border: 1px solid #e5eaf1;
+  background: #ffffff;
+}
+
+.overview-insight-card-positive {
+  border-color: rgba(16, 185, 129, 0.24);
+  background: #f0fdf9;
+}
+
+.overview-insight-card-warning {
+  border-color: rgba(225, 29, 72, 0.2);
+  background: #fff1f2;
+}
+
+.overview-insight-card-accent {
+  border-color: rgba(79, 70, 229, 0.18);
+}
+
+.overview-insight-value,
+.overview-micro-value {
+  color: #0f172a;
+  font-size: 17px;
+  font-weight: 850;
+  line-height: 1.35;
+}
+
+.overview-chart-frame,
+.overview-chart-grid,
+.overview-page-shell .recharts-responsive-container {
+  min-width: 0;
+}
+
+.overview-page-shell .empty-state {
+  border: 1px solid #e5eaf1;
+  background: #f8fafc;
+  color: #475569;
+}
+
+.overview-page-shell .trend-summary-box,
+.overview-page-shell .trend-block,
+.overview-page-shell .trend-item,
+.overview-page-shell .insights-block,
+.overview-page-shell .account-comparison-item {
+  border: 1px solid #e5eaf1;
+  background: #ffffff;
+}
+
+.overview-page-shell .account-comparison-leading {
+  border-color: rgba(16, 185, 129, 0.28);
+  background: #f0fdf9;
+}
+
+.overview-page-shell .trend-positive {
+  color: #047857;
+}
+
+.overview-page-shell .trend-negative {
+  color: #be123c;
+}
+
+.overview-table-scroll {
+  overflow-x: auto;
+}
+
+.overview-category-table {
+  min-width: 520px;
+}
+
+.overview-category-table th {
+  color: #475569;
+  font-size: 12px;
+  text-transform: uppercase;
+}
+
+.overview-category-link {
+  border: 0;
+  background: transparent;
+  color: #1e3a8a;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 800;
+  padding: 0;
+  text-align: left;
+}
+
+.overview-category-link:hover {
+  color: #047857;
+  text-decoration: underline;
+}
+
+.overview-page-shell .analytics-top-pie {
+  border-top: 1px solid #e5eaf1;
+}
+
+@media (max-width: 900px) {
+  .overview-hero-actions,
+  .overview-filter-actions {
+    justify-content: flex-start;
+    width: 100%;
+  }
+
+  .overview-hero-actions .mantine-Button-root {
+    flex: 1 1 160px;
+  }
+}
+
+@media (max-width: 640px) {
+  .overview-hero,
+  .overview-page-shell .overview-section-card,
+  .overview-page-shell .overview-filter-card {
+    border-radius: 18px;
+  }
+
+  .overview-quick-filters,
+  .overview-quick-filters .mantine-Button-root,
+  .overview-filter-actions .mantine-Button-root {
+    width: 100%;
+  }
+
+  .overview-stat-card {
+    min-height: 132px;
+  }
+}
+
+/* ===== Mantine application shell navigation ===== */
+
+.app-shell {
+  background: #f4f7fb;
+}
+
+.app-shell-header {
+  border-bottom: 1px solid #e5eaf1;
+  background: rgba(255, 255, 255, 0.96);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+}
+
+.app-shell-navbar {
+  border-right: 1px solid #e5eaf1;
+  background: #ffffff;
+}
+
+.app-shell-main {
+  min-width: 0;
+  background: #f4f7fb;
+  overflow-x: hidden;
+}
+
+.app-shell-main .page-container {
+  min-height: calc(100vh - 68px);
+  padding: 28px 22px 44px;
+}
+
+.app-shell-main .dashboard-wrapper {
+  max-width: 1220px;
+}
+
+.app-shell-main .overview-page-shell {
+  min-height: calc(100vh - 68px);
+}
+
+.app-shell-logo {
+  width: 42px;
+  height: 42px;
+  border-radius: 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #ffffff;
+  font-size: 18px;
+  font-weight: 900;
+  background: linear-gradient(135deg, #064e3b 0%, #10b981 54%, #1e3a8a 100%);
+  box-shadow: 0 14px 30px rgba(16, 185, 129, 0.2);
+}
+
+.app-shell-brand-copy h2,
+.app-shell-nav-brand h2 {
+  color: #0f172a;
+  letter-spacing: 0;
+}
+
+.app-shell-brand-copy p {
+  margin-top: 1px;
+}
+
+.app-shell-nav-brand {
+  padding: 8px 8px 4px;
+}
+
+.app-shell-nav-kicker {
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.app-shell-nav-link {
+  min-height: 46px;
+  border-radius: 13px;
+  color: #334155;
+  font-weight: 800;
+}
+
+.app-shell-nav-link:hover {
+  background: #f1f5f9;
+}
+
+.app-shell-nav-link[data-active] {
+  color: #065f46;
+  background: linear-gradient(135deg, rgba(16, 185, 129, 0.13), rgba(30, 58, 138, 0.08));
+  border: 1px solid rgba(16, 185, 129, 0.24);
+}
+
+.app-shell-header-actions .theme-toggle {
+  position: static;
+  min-height: 40px;
+  border: 1px solid #e5eaf1;
+  background: #ffffff;
+  color: #0f172a;
+  box-shadow: none;
+}
+
+:root[data-theme="dark"] .app-shell,
+:root[data-theme="dark"] .app-shell-main,
+:root[data-theme="dark"] .app-shell-main .overview-page-shell {
+  background: #020617;
+}
+
+:root[data-theme="dark"] .app-shell-header,
+:root[data-theme="dark"] .app-shell-navbar {
+  background: rgba(15, 23, 42, 0.96);
+  border-color: rgba(148, 163, 184, 0.14);
+}
+
+:root[data-theme="dark"] .app-shell-brand-copy h2,
+:root[data-theme="dark"] .app-shell-nav-brand h2 {
+  color: #f8fafc;
+}
+
+:root[data-theme="dark"] .app-shell-nav-link {
+  color: #cbd5e1;
+}
+
+:root[data-theme="dark"] .app-shell-nav-link:hover {
+  background: rgba(30, 41, 59, 0.84);
+}
+
+:root[data-theme="dark"] .app-shell-nav-link[data-active] {
+  color: #5eead4;
+  background: rgba(20, 184, 166, 0.12);
+  border-color: rgba(94, 234, 212, 0.2);
+}
+
+:root[data-theme="dark"] .app-shell-header-actions .theme-toggle {
+  background: rgba(15, 23, 42, 0.94);
+  border-color: rgba(148, 163, 184, 0.18);
+  color: #e2e8f0;
+}
+
+@media (max-width: 768px) {
+  .app-shell-brand-copy h2 {
+    font-size: 17px;
+  }
+
+  .app-shell-brand-copy p {
+    display: none;
+  }
+
+  .app-shell-main .page-container {
+    padding: 18px 12px 34px;
+  }
+
+  .app-shell-main .overview-page-shell .mantine-Container-root {
+    padding-left: 12px;
+    padding-right: 12px;
+  }
+}
+
+@media (max-width: 520px) {
+  .app-shell-logo {
+    width: 38px;
+    height: 38px;
+    border-radius: 12px;
+  }
+
+  .app-shell-header-actions .theme-toggle-text {
+    display: none;
+  }
+
+  .app-shell-header-actions .mantine-Button-root {
+    display: none;
+  }
+}
+
+/* ===== Mantine transaction ledger and form refresh ===== */
+
+.transaction-form-card,
+.transaction-filter-card,
+.transaction-ledger-card {
+  background: #ffffff;
+  border: 1px solid #e5eaf1;
+  box-shadow: 0 18px 44px rgba(15, 23, 42, 0.07);
+}
+
+.transaction-form-card::after,
+.transaction-filter-card::after,
+.transaction-ledger-card::after {
+  content: none;
+}
+
+.transaction-form-card:hover,
+.transaction-filter-card:hover,
+.transaction-ledger-card:hover {
+  transform: none;
+  box-shadow: 0 18px 44px rgba(15, 23, 42, 0.07);
+}
+
+.transaction-form-mantine {
+  display: grid;
+  gap: 16px;
+}
+
+.transaction-form-account-field .account-selector-block {
+  max-width: none;
+  width: 100%;
+}
+
+.transaction-form-account-field label,
+.transaction-form-card .mantine-InputWrapper-label,
+.transaction-filter-card .mantine-InputWrapper-label {
+  margin-bottom: 7px;
+  color: #334155;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.transaction-form-account-field select,
+.transaction-form-card .mantine-Input-input,
+.transaction-filter-card .mantine-Input-input,
+.transactions-table .mantine-Input-input {
+  min-height: 42px;
+  border: 1px solid #d8e0ea;
+  border-radius: 12px;
+  background: #ffffff;
+  color: #0f172a;
+}
+
+.transaction-form-account-field select:focus,
+.transaction-form-card .mantine-Input-input:focus,
+.transaction-filter-card .mantine-Input-input:focus,
+.transactions-table .mantine-Input-input:focus {
+  border-color: #10b981;
+  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.14);
+}
+
+.transaction-form-actions {
+  flex-wrap: wrap;
+}
+
+.transaction-table-panel {
+  display: grid;
+  gap: 16px;
+}
+
+.transaction-table-toolbar {
+  padding: 12px 14px;
+  border: 1px solid #e5eaf1;
+  border-radius: 18px;
+  background: #f8fafc;
+}
+
+.transactions-table-wrapper {
+  overflow-x: auto;
+  border: 1px solid #e5eaf1;
+  border-radius: 18px;
+  background: #ffffff;
+}
+
+.transactions-table {
+  min-width: 980px;
+}
+
+.transactions-table th {
+  color: #475569;
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.transactions-table td {
+  color: #0f172a;
+  vertical-align: middle;
+}
+
+.transactions-table tbody tr:hover {
+  background: #f8fafc;
+}
+
+.transaction-page-kicker {
+  color: #1e3a8a;
+  font-size: 12px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.transaction-page-summary {
+  margin: 3px 0 0;
+}
+
+.transaction-description {
+  max-width: 280px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.transaction-actions-inline {
+  min-width: max-content;
+}
+
+.transactions-mobile-list {
+  display: none;
+}
+
+.transaction-mobile-card {
+  border: 1px solid #e5eaf1;
+  background: #ffffff;
+}
+
+.transaction-empty-state {
+  border: 1px solid #e5eaf1;
+  background: #f8fafc;
+}
+
+.transaction-filter-card .recurring-filter-actions {
+  align-items: center;
+}
+
+:root[data-theme="dark"] .transaction-form-card,
+:root[data-theme="dark"] .transaction-filter-card,
+:root[data-theme="dark"] .transaction-ledger-card,
+:root[data-theme="dark"] .transactions-table-wrapper,
+:root[data-theme="dark"] .transaction-mobile-card {
+  background: rgba(15, 23, 42, 0.92);
+  border-color: rgba(148, 163, 184, 0.14);
+}
+
+:root[data-theme="dark"] .transaction-table-toolbar,
+:root[data-theme="dark"] .transaction-empty-state {
+  background: rgba(30, 41, 59, 0.82);
+  border-color: rgba(148, 163, 184, 0.14);
+}
+
+:root[data-theme="dark"] .transactions-table td,
+:root[data-theme="dark"] .transaction-form-card .mantine-Title-root,
+:root[data-theme="dark"] .transaction-filter-card .mantine-Title-root,
+:root[data-theme="dark"] .transaction-ledger-card .mantine-Title-root {
+  color: #f8fafc;
+}
+
+:root[data-theme="dark"] .transactions-table tbody tr:hover {
+  background: rgba(30, 41, 59, 0.7);
+}
+
+@media (max-width: 760px) {
+  .transactions-table-desktop {
+    display: none;
+  }
+
+  .transactions-mobile-list {
+    display: grid;
+  }
+
+  .transaction-table-toolbar {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .transaction-table-toolbar .transaction-pagination {
+    width: 100%;
+  }
+
+  .transaction-form-actions .mantine-Button-root,
+  .transaction-filter-card .recurring-filter-actions .mantine-Button-root {
+    width: 100%;
+  }
+}
+
 .app-floating-controls {
   position: fixed;
   top: 18px;
@@ -6411,4 +8196,195 @@ textarea {
   .receipt-meta-grid {
     grid-template-columns: 1fr;
   }
+}
+
+/* Final EOF cascade guard: these rules intentionally win over page-specific sections. */
+.app-shell-main {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.72), rgba(244, 247, 251, 0.98)),
+    var(--fintech-page);
+  overflow-x: hidden;
+}
+
+.app-shell-main .page-container {
+  padding: 28px 24px 48px;
+}
+
+.app-shell-main .dashboard-hero,
+.app-shell-main .dashboard-card,
+.app-shell-main .filter-card,
+.app-shell-main .status-card,
+.app-shell-main .overview-hero,
+.app-shell-main .overview-section-card,
+.app-shell-main .overview-filter-card,
+.app-shell-main .overview-stat-card,
+.app-shell-main .transaction-form-card,
+.app-shell-main .transaction-filter-card,
+.app-shell-main .transaction-ledger-card,
+.app-shell-main .transaction-mobile-card,
+.app-shell-main .receipt-result-card,
+.app-shell-main .receipt-draft-card {
+  border: 1px solid var(--fintech-border);
+  border-radius: 20px;
+  background: var(--fintech-card);
+  box-shadow: var(--fintech-shadow-soft);
+}
+
+.app-shell-main .dashboard-card:hover,
+.app-shell-main .filter-card:hover,
+.app-shell-main .overview-section-card:hover,
+.app-shell-main .overview-filter-card:hover,
+.app-shell-main .overview-stat-card:hover,
+.app-shell-main .transaction-form-card:hover,
+.app-shell-main .transaction-filter-card:hover,
+.app-shell-main .transaction-ledger-card:hover {
+  transform: none;
+  box-shadow: var(--fintech-shadow);
+}
+
+.app-shell-main h1,
+.app-shell-main .overview-hero-copy h1,
+.app-shell-main .dashboard-hero h1 {
+  color: var(--fintech-navy);
+  font-size: 38px;
+  line-height: 1.12;
+  letter-spacing: 0;
+}
+
+.app-shell-main h2,
+.app-shell-main h3,
+.app-shell-main .mantine-Title-root {
+  color: var(--fintech-navy);
+  letter-spacing: 0;
+}
+
+.app-shell-main .overview-stat-value {
+  color: var(--fintech-navy);
+  font-size: 32px;
+  line-height: 1.12;
+  overflow-wrap: anywhere;
+}
+
+.app-shell-main .income-text,
+.app-shell-main .overview-stat-card-income .overview-stat-value,
+.app-shell-main .income-card strong {
+  color: var(--fintech-emerald);
+}
+
+.app-shell-main .expense-text,
+.app-shell-main .overview-stat-card-expense .overview-stat-value,
+.app-shell-main .expense-card strong {
+  color: var(--fintech-danger);
+}
+
+.app-shell-main .secondary-button,
+.app-shell-main .smart-action-button,
+.app-shell-main .smart-apply-button,
+.app-shell-main .delete-button,
+.app-shell-main .edit-button,
+.app-shell-main .cancel-button,
+.app-shell-main .suggest-button,
+.app-shell-main .export-button,
+.app-shell-main .clear-filter-button,
+.app-shell-main .import-upload-button,
+.app-shell-main .assistant-ask-button,
+.app-shell-main .auth-submit-button,
+.app-shell-main form button[type="submit"],
+.app-shell-main .mantine-Button-root {
+  min-height: 42px;
+  border-radius: 12px;
+  font-weight: 800;
+  letter-spacing: 0;
+}
+
+.app-shell-main input:not([type="checkbox"]):not([type="radio"]),
+.app-shell-main select,
+.app-shell-main textarea,
+.app-shell-main .mantine-Input-input,
+.app-shell-main .assistant-input {
+  border-color: #d7e0ea;
+  border-radius: 12px;
+  color: #102033;
+}
+
+.app-shell-main .empty-state,
+.app-shell-main .status-card,
+.app-shell-main .error-text,
+.app-shell-main .bulk-message-box,
+.app-shell-main .import-info-box,
+.app-shell-main .import-success,
+.app-shell-main .import-error,
+.app-shell-main .suggestion-box,
+.app-shell-main .assistant-answer-box,
+.app-shell-main .assistant-loading-message {
+  border-radius: 16px;
+}
+
+@media (max-width: 900px) {
+  .app-shell-main .page-container {
+    padding: 22px 18px 42px;
+  }
+
+  .app-shell-main h1,
+  .app-shell-main .overview-hero-copy h1,
+  .app-shell-main .dashboard-hero h1 {
+    font-size: 32px;
+  }
+}
+
+@media (max-width: 760px) {
+  .app-shell-main .page-container,
+  .overview-page-shell .mantine-Container-root {
+    padding: 16px 14px 34px;
+  }
+
+  .app-shell-main h1,
+  .app-shell-main .overview-hero-copy h1,
+  .app-shell-main .dashboard-hero h1 {
+    font-size: 30px;
+  }
+
+  .app-shell-main .overview-hero-actions .mantine-Button-root,
+  .app-shell-main .header-actions > *,
+  .app-shell-main .professional-header-actions > *,
+  .app-shell-main .transaction-form-actions .mantine-Button-root,
+  .app-shell-main .recurring-filter-actions .mantine-Button-root,
+  .app-shell-main .smart-action-button,
+  .app-shell-main .smart-apply-button,
+  .app-shell-main .secondary-button,
+  .app-shell-main .delete-button,
+  .app-shell-main .import-upload-button,
+  .app-shell-main .assistant-ask-button {
+    width: 100%;
+  }
+}
+
+:root[data-theme="dark"] .app-shell-main {
+  background:
+    linear-gradient(180deg, rgba(11, 18, 32, 0.96), rgba(15, 23, 42, 0.98)),
+    #0b1220;
+}
+
+:root[data-theme="dark"] .app-shell-main .dashboard-hero,
+:root[data-theme="dark"] .app-shell-main .dashboard-card,
+:root[data-theme="dark"] .app-shell-main .filter-card,
+:root[data-theme="dark"] .app-shell-main .status-card,
+:root[data-theme="dark"] .app-shell-main .overview-hero,
+:root[data-theme="dark"] .app-shell-main .overview-section-card,
+:root[data-theme="dark"] .app-shell-main .overview-filter-card,
+:root[data-theme="dark"] .app-shell-main .overview-stat-card,
+:root[data-theme="dark"] .app-shell-main .transaction-form-card,
+:root[data-theme="dark"] .app-shell-main .transaction-filter-card,
+:root[data-theme="dark"] .app-shell-main .transaction-ledger-card,
+:root[data-theme="dark"] .app-shell-main .transaction-mobile-card {
+  border-color: rgba(148, 163, 184, 0.16);
+  background: rgba(15, 23, 42, 0.94);
+}
+
+:root[data-theme="dark"] .app-shell-main h1,
+:root[data-theme="dark"] .app-shell-main h2,
+:root[data-theme="dark"] .app-shell-main h3,
+:root[data-theme="dark"] .app-shell-main .mantine-Title-root,
+:root[data-theme="dark"] .app-shell-main .overview-stat-value {
+  color: #f8fafc;
 }

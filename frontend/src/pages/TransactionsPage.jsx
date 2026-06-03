@@ -1,5 +1,20 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
+import {
+  Badge,
+  Box,
+  Button,
+  Card,
+  Group,
+  NativeSelect,
+  Paper,
+  SimpleGrid,
+  Stack,
+  Table,
+  Text,
+  TextInput,
+  Title,
+} from "@mantine/core";
 import api, { handleApiAuthError } from "../services/api";
 import AccountSelector from "../components/AccountSelector";
 import PageHeader from "../components/PageHeader";
@@ -85,6 +100,31 @@ const getLearningCandidateKey = (candidate) => {
       ? "all"
       : Number(candidate.representative_amount).toFixed(2);
   return `${candidate?.merchant_key || ""}:${candidate?.type || ""}:${amountKey}`;
+};
+
+const formatTransactionDate = (dateValue) => {
+  const parsed = new Date(`${dateValue}T00:00:00`);
+  if (Number.isNaN(parsed.getTime())) return dateValue;
+  return parsed.toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+};
+
+const formatTransactionAmount = (transaction) => {
+  const amount = Number(transaction.amount || 0).toFixed(2);
+  return `${transaction.type === "income" ? "+" : "-"}$${amount}`;
+};
+
+const getTransactionAccountLabel = (transaction, t) => {
+  return (
+    transaction.account_name ||
+    transaction.account_label ||
+    transaction.account?.name ||
+    transaction.account_id ||
+    t("common.unassigned")
+  );
 };
 
 function TransactionsPage() {
@@ -1110,240 +1150,304 @@ function TransactionsPage() {
           )}
         </div>
 
-        <div className="filter-card">
-          <div className="section-header">
-            <h2>{t("transactions.transactionFilters")}</h2>
-            <p>
-              {t("transactions.showingTransactions", {
-                filtered: filteredTransactionTotal,
-                total: scopeTransactionTotal,
-                plural: scopeTransactionTotal === 1 ? "" : "s",
-              })}
-            </p>
-          </div>
+        <Card className="filter-card transaction-filter-card" radius="xl" p={{ base: "md", md: "lg" }}>
+          <Stack gap="md">
+            <Box>
+              <Title order={2} size="h3">{t("transactions.transactionFilters")}</Title>
+              <Text size="sm" c="dimmed">
+                {t("transactions.showingTransactions", {
+                  filtered: filteredTransactionTotal,
+                  total: scopeTransactionTotal,
+                  plural: scopeTransactionTotal === 1 ? "" : "s",
+                })}
+              </Text>
+            </Box>
 
-          <div className="filter-bar">
-            <div>
-              <label>{t("common.type")}</label>
-              <select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)}>
-                <option value="">{t("common.all")}</option>
-                <option value="income">{t("common.income")}</option>
-                <option value="expense">{t("common.expense")}</option>
-              </select>
-            </div>
+            <SimpleGrid cols={{ base: 1, sm: 2, lg: 5 }} spacing="md">
+              <NativeSelect
+                label={t("common.type")}
+                value={typeFilter}
+                onChange={(e) => setTypeFilter(e.target.value)}
+                data={[
+                  { value: "", label: t("common.all") },
+                  { value: "income", label: t("common.income") },
+                  { value: "expense", label: t("common.expense") },
+                ]}
+              />
 
-            <div>
-              <label>{t("common.month")}</label>
-              <select value={monthFilter} onChange={(e) => setMonthFilter(e.target.value)}>
-                <option value="">{t("common.all")}</option>
-                {availableMonths.map((month) => (
-                  <option key={month} value={month}>{month}</option>
-                ))}
-              </select>
-            </div>
+              <NativeSelect
+                label={t("common.month")}
+                value={monthFilter}
+                onChange={(e) => setMonthFilter(e.target.value)}
+                data={[
+                  { value: "", label: t("common.all") },
+                  ...availableMonths.map((month) => ({ value: month, label: month })),
+                ]}
+              />
 
-            <div>
-              <label>{t("common.category")}</label>
-              <select value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)}>
-                <option value="">{t("common.all")}</option>
-                {availableCategories.map((category) => (
-                  <option key={category} value={category}>{formatCategoryLabel(category, t)}</option>
-                ))}
-              </select>
-            </div>
+              <NativeSelect
+                label={t("common.category")}
+                value={categoryFilter}
+                onChange={(e) => setCategoryFilter(e.target.value)}
+                data={[
+                  { value: "", label: t("common.all") },
+                  ...availableCategories.map((category) => ({
+                    value: category,
+                    label: formatCategoryLabel(category, t),
+                  })),
+                ]}
+              />
 
-            <div>
-              <label>{t("transactions.amountRange")}</label>
-              <select
+              <NativeSelect
+                label={t("transactions.amountRange")}
                 value={amountRangeFilter}
                 onChange={(e) => setAmountRangeFilter(e.target.value)}
-              >
-                <option value="">{t("transactions.allAmounts")}</option>
-                {AMOUNT_RANGE_OPTIONS.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.labelKey ? t(option.labelKey, { amount: option.amount }) : option.label}
-                  </option>
-                ))}
-              </select>
-            </div>
+                data={[
+                  { value: "", label: t("transactions.allAmounts") },
+                  ...AMOUNT_RANGE_OPTIONS.map((option) => ({
+                    value: option.value,
+                    label: option.labelKey ? t(option.labelKey, { amount: option.amount }) : option.label,
+                  })),
+                ]}
+              />
 
-            <div>
-              <label>{t("common.description")}</label>
-              <input
+              <TextInput
+                label={t("common.description")}
                 type="text"
                 value={searchFilter}
                 onChange={(e) => setSearchFilter(e.target.value)}
                 placeholder={t("transactions.descriptionSearch")}
               />
-            </div>
-          </div>
+            </SimpleGrid>
 
-          <div className="smart-actions-row recurring-filter-actions">
-            {(typeFilter ||
-              monthFilter ||
-              categoryFilter ||
-              amountRangeFilter ||
-              searchFilter) && (
-              <button type="button" className="secondary-button" onClick={clearFilters}>
-                {t("common.clearFilters")}
-              </button>
-            )}
-          </div>
-
-          {searchFilter && (
-            <p className="budget-inline-note recurring-filter-note">
-              {t("transactions.descriptionFilterNote", { term: searchFilter })}
-            </p>
-          )}
-        </div>
-
-        <div className="dashboard-card">
-          <div className="section-header">
-            <h2>{t("transactions.transactionTable")}</h2>
-            <p>{t("transactions.tableDetail")}</p>
-          </div>
-
-          {filteredTransactionTotal === 0 ? (
-            <div className="empty-state">
-              <p>
-                {scopeTransactionTotal === 0
-                  ? t("transactions.noTransactions")
-                  : t("transactions.filtersHidingTransactions")}
-              </p>
-              {scopeTransactionTotal === 0 ? (
-                <button className="secondary-button" onClick={() => document.getElementById("add-transaction")?.scrollIntoView({ behavior: "smooth" })}>
-                  {t("transactions.addToday")}
-                </button>
-              ) : (
-                <button className="secondary-button" onClick={clearFilters}>
-                  {t("common.clearFilters")}
-                </button>
+            <Group className="recurring-filter-actions" justify="space-between" gap="sm">
+              {searchFilter && (
+                <Text className="budget-inline-note recurring-filter-note" size="sm">
+                  {t("transactions.descriptionFilterNote", { term: searchFilter })}
+                </Text>
               )}
-            </div>
-          ) : (
-            <div className="transaction-table-panel">
-              <div className="transaction-table-toolbar">
-                <div>
-                  <span className="transaction-page-kicker">
-                    {totalPages > 1
-                      ? t("common.pageOf", { page: activePage, total: totalPages })
-                      : t("common.allTransactions")}
-                  </span>
-                  <p className="transaction-page-summary">
-                    {t("transactions.pageSummary", {
-                      start: pageStartIndex + 1,
-                      end: pageEndIndex,
-                      total: filteredTransactionTotal,
-                      plural: filteredTransactionTotal === 1 ? "" : "s",
-                    })}
-                  </p>
-                </div>
 
-                {renderTransactionPagination("transaction-pagination-top")}
-              </div>
+              {(typeFilter ||
+                monthFilter ||
+                categoryFilter ||
+                amountRangeFilter ||
+                searchFilter) && (
+                <Button type="button" variant="outline" color="gray" radius="md" onClick={clearFilters}>
+                  {t("common.clearFilters")}
+                </Button>
+              )}
+            </Group>
+          </Stack>
+        </Card>
 
-              <div className="transactions-table-wrapper">
-                <table className="transactions-table">
-                  <thead>
-                    <tr>
-                      <th>{t("common.date")}</th>
-                      <th>{t("common.type")}</th>
-                      <th>{t("common.category")}</th>
-                      <th>{t("common.description")}</th>
-                      <th>{t("common.amount")}</th>
-                      <th>{t("common.account")}</th>
-                      <th>{t("common.actions")}</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {paginatedTransactions.map((transaction) => {
-                      const isEditing = editingId === transaction.id;
+        <Card className="dashboard-card transaction-ledger-card" radius="xl" p={{ base: "md", md: "lg" }}>
+          <Stack gap="md">
+            <Box>
+              <Title order={2} size="h3">{t("transactions.transactionTable")}</Title>
+              <Text size="sm" c="dimmed">{t("transactions.tableDetail")}</Text>
+            </Box>
 
-                      return (
-                        <tr key={transaction.id}>
-                          <td>
-                            {isEditing ? (
-                              <input type="date" value={editForm.date} onChange={(e) => setEditForm({ ...editForm, date: e.target.value })} />
-                            ) : transaction.date}
-                          </td>
+            {filteredTransactionTotal === 0 ? (
+              <Paper className="empty-state transaction-empty-state" radius="lg" p="lg">
+                <Stack gap="sm" align="flex-start">
+                  <Text>
+                    {scopeTransactionTotal === 0
+                      ? t("transactions.noTransactions")
+                      : t("transactions.filtersHidingTransactions")}
+                  </Text>
+                  {scopeTransactionTotal === 0 ? (
+                    <Button variant="light" color="teal" radius="md" onClick={() => document.getElementById("add-transaction")?.scrollIntoView({ behavior: "smooth" })}>
+                      {t("transactions.addToday")}
+                    </Button>
+                  ) : (
+                    <Button variant="outline" color="gray" radius="md" onClick={clearFilters}>
+                      {t("common.clearFilters")}
+                    </Button>
+                  )}
+                </Stack>
+              </Paper>
+            ) : (
+              <Box className="transaction-table-panel">
+                <Group className="transaction-table-toolbar" justify="space-between" align="center" gap="md">
+                  <Box>
+                    <Text className="transaction-page-kicker">
+                      {totalPages > 1
+                        ? t("common.pageOf", { page: activePage, total: totalPages })
+                        : t("common.allTransactions")}
+                    </Text>
+                    <Text className="transaction-page-summary" size="sm" c="dimmed">
+                      {t("transactions.pageSummary", {
+                        start: pageStartIndex + 1,
+                        end: pageEndIndex,
+                        total: filteredTransactionTotal,
+                        plural: filteredTransactionTotal === 1 ? "" : "s",
+                      })}
+                    </Text>
+                  </Box>
 
-                          <td>
-                            {isEditing ? (
-                              <select value={editForm.type} onChange={(e) => setEditForm({ ...editForm, type: e.target.value })}>
-                                <option value="income">{t("common.income")}</option>
-                                <option value="expense">{t("common.expense")}</option>
-                              </select>
-                            ) : transaction.type}
-                          </td>
+                  {renderTransactionPagination("transaction-pagination-top")}
+                </Group>
 
-                          <td>
-                            {isEditing ? (
-                              <input type="text" value={editForm.category} onChange={(e) => setEditForm({ ...editForm, category: e.target.value })} />
-                            ) : formatCategoryLabel(transaction.category, t)}
-                          </td>
+                <Box className="transactions-table-wrapper transactions-table-desktop">
+                  <Table className="transactions-table" verticalSpacing="sm" highlightOnHover>
+                    <Table.Thead>
+                      <Table.Tr>
+                        <Table.Th>{t("common.date")}</Table.Th>
+                        <Table.Th>{t("common.type")}</Table.Th>
+                        <Table.Th>{t("common.category")}</Table.Th>
+                        <Table.Th>{t("common.description")}</Table.Th>
+                        <Table.Th>{t("common.amount")}</Table.Th>
+                        <Table.Th>{t("common.account")}</Table.Th>
+                        <Table.Th>{t("common.actions")}</Table.Th>
+                      </Table.Tr>
+                    </Table.Thead>
+                    <Table.Tbody>
+                      {paginatedTransactions.map((transaction) => {
+                        const isEditing = editingId === transaction.id;
 
-                          <td>
-                            {isEditing ? (
-                              <input
-                                type="text"
-                                value={editForm.description}
-                                onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
-                              />
-                            ) : transaction.description}
-                          </td>
-
-                          <td className={!isEditing ? (transaction.type === "income" ? "income-text" : "expense-text") : ""}>
-                            {isEditing ? (
-                              <input type="number" step="0.01" value={editForm.amount} onChange={(e) => setEditForm({ ...editForm, amount: e.target.value })} />
-                            ) : (
-                              <>{transaction.type === "income" ? "+" : "-"}${transaction.amount.toFixed(2)}</>
-                            )}
-                          </td>
-
-                          <td>
-                            {isEditing ? (
-                              <input
-                                type="number"
-                                value={editForm.account_id}
-                                onChange={(e) => setEditForm({ ...editForm, account_id: e.target.value })}
-                              />
-                            ) : transaction.account_id || t("common.unassigned")}
-                          </td>
-
-                          <td>
-                            <div className="transaction-actions-inline">
+                        return (
+                          <Table.Tr key={transaction.id}>
+                            <Table.Td>
                               {isEditing ? (
-                                <>
-                                  <button className="edit-button" onClick={() => saveEdit(transaction.id)}>
-                                    {t("common.save")}
-                                  </button>
-                                  <button className="secondary-button" onClick={cancelEdit}>
-                                    {t("common.cancel")}
-                                  </button>
-                                </>
+                                <TextInput type="date" value={editForm.date} onChange={(e) => setEditForm({ ...editForm, date: e.target.value })} />
                               ) : (
-                                <>
-                                  <button className="edit-button" onClick={() => startEdit(transaction)}>
-                                    {t("common.edit")}
-                                  </button>
-                                  <button className="delete-button" onClick={() => handleDelete(transaction.id)}>
-                                    {t("common.delete")}
-                                  </button>
-                                </>
+                                <Text fw={700}>{formatTransactionDate(transaction.date)}</Text>
                               )}
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
+                            </Table.Td>
 
-              {renderTransactionPagination("transaction-pagination-bottom")}
-            </div>
-          )}
-        </div>
+                            <Table.Td>
+                              {isEditing ? (
+                                <NativeSelect
+                                  value={editForm.type}
+                                  onChange={(e) => setEditForm({ ...editForm, type: e.target.value })}
+                                  data={[
+                                    { value: "income", label: t("common.income") },
+                                    { value: "expense", label: t("common.expense") },
+                                  ]}
+                                />
+                              ) : (
+                                <Badge color={transaction.type === "income" ? "teal" : "rose"} variant="light" radius="sm">
+                                  {transaction.type === "income" ? t("common.income") : t("common.expense")}
+                                </Badge>
+                              )}
+                            </Table.Td>
+
+                            <Table.Td>
+                              {isEditing ? (
+                                <TextInput type="text" value={editForm.category} onChange={(e) => setEditForm({ ...editForm, category: e.target.value })} />
+                              ) : (
+                                <Badge color="indigo" variant="light" radius="sm">
+                                  {formatCategoryLabel(transaction.category, t)}
+                                </Badge>
+                              )}
+                            </Table.Td>
+
+                            <Table.Td>
+                              {isEditing ? (
+                                <TextInput
+                                  type="text"
+                                  value={editForm.description}
+                                  onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
+                                />
+                              ) : (
+                                <Text className="transaction-description" fw={700}>{transaction.description}</Text>
+                              )}
+                            </Table.Td>
+
+                            <Table.Td className={!isEditing ? (transaction.type === "income" ? "income-text" : "expense-text") : ""}>
+                              {isEditing ? (
+                                <TextInput type="number" step="0.01" value={editForm.amount} onChange={(e) => setEditForm({ ...editForm, amount: e.target.value })} />
+                              ) : (
+                                <Text fw={900}>{formatTransactionAmount(transaction)}</Text>
+                              )}
+                            </Table.Td>
+
+                            <Table.Td>
+                              {isEditing ? (
+                                <TextInput
+                                  type="number"
+                                  value={editForm.account_id}
+                                  onChange={(e) => setEditForm({ ...editForm, account_id: e.target.value })}
+                                />
+                              ) : (
+                                <Text size="sm" c="dimmed">{getTransactionAccountLabel(transaction, t)}</Text>
+                              )}
+                            </Table.Td>
+
+                            <Table.Td>
+                              <Group className="transaction-actions-inline" gap="xs" wrap="nowrap">
+                                {isEditing ? (
+                                  <>
+                                    <Button size="xs" color="teal" radius="md" onClick={() => saveEdit(transaction.id)}>
+                                      {t("common.save")}
+                                    </Button>
+                                    <Button size="xs" color="gray" variant="outline" radius="md" onClick={cancelEdit}>
+                                      {t("common.cancel")}
+                                    </Button>
+                                  </>
+                                ) : (
+                                  <>
+                                    <Button size="xs" color="blue" variant="light" radius="md" onClick={() => startEdit(transaction)}>
+                                      {t("common.edit")}
+                                    </Button>
+                                    <Button size="xs" color="red" variant="light" radius="md" onClick={() => handleDelete(transaction.id)}>
+                                      {t("common.delete")}
+                                    </Button>
+                                  </>
+                                )}
+                              </Group>
+                            </Table.Td>
+                          </Table.Tr>
+                        );
+                      })}
+                    </Table.Tbody>
+                  </Table>
+                </Box>
+
+                <Stack className="transactions-mobile-list" gap="sm">
+                  {paginatedTransactions.map((transaction) => (
+                    <Paper key={`mobile-${transaction.id}`} className="transaction-mobile-card" radius="lg" p="md">
+                      <Stack gap="sm">
+                        <Group justify="space-between" align="flex-start" gap="md">
+                          <Box>
+                            <Text fw={850}>{transaction.description}</Text>
+                            <Text size="sm" c="dimmed">{formatTransactionDate(transaction.date)}</Text>
+                          </Box>
+                          <Text className={transaction.type === "income" ? "income-text" : "expense-text"} fw={900}>
+                            {formatTransactionAmount(transaction)}
+                          </Text>
+                        </Group>
+
+                        <Group gap="xs">
+                          <Badge color={transaction.type === "income" ? "teal" : "rose"} variant="light" radius="sm">
+                            {transaction.type === "income" ? t("common.income") : t("common.expense")}
+                          </Badge>
+                          <Badge color="indigo" variant="light" radius="sm">
+                            {formatCategoryLabel(transaction.category, t)}
+                          </Badge>
+                          <Badge color="gray" variant="light" radius="sm">
+                            {getTransactionAccountLabel(transaction, t)}
+                          </Badge>
+                        </Group>
+
+                        <Group gap="xs">
+                          <Button size="xs" color="blue" variant="light" radius="md" onClick={() => startEdit(transaction)}>
+                            {t("common.edit")}
+                          </Button>
+                          <Button size="xs" color="red" variant="light" radius="md" onClick={() => handleDelete(transaction.id)}>
+                            {t("common.delete")}
+                          </Button>
+                        </Group>
+                      </Stack>
+                    </Paper>
+                  ))}
+                </Stack>
+
+                {renderTransactionPagination("transaction-pagination-bottom")}
+              </Box>
+            )}
+          </Stack>
+        </Card>
       </div>
     </div>
   );

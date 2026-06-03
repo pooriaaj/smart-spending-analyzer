@@ -1,5 +1,6 @@
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { MantineProvider } from '@mantine/core'
 import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -176,9 +177,11 @@ function mockAnalyticsRequests() {
 function renderAnalyticsPage() {
   return render(
     <MemoryRouter initialEntries={['/analytics']}>
-      <LanguageProvider>
-        <AnalyticsPage />
-      </LanguageProvider>
+      <MantineProvider>
+        <LanguageProvider>
+          <AnalyticsPage />
+        </LanguageProvider>
+      </MantineProvider>
     </MemoryRouter>,
   )
 }

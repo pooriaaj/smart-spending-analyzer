@@ -1,5 +1,17 @@
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate, useLocation, useNavigate } from "react-router-dom";
 import { Suspense, lazy, useEffect, useState } from "react";
+import {
+  AppShell,
+  Box,
+  Burger,
+  Button,
+  Group,
+  NavLink,
+  Stack,
+  Text,
+  Title,
+} from "@mantine/core";
+import { useDisclosure } from "@mantine/hooks";
 import ThemeToggle from "./components/ThemeToggle";
 import { LanguageProvider, useLanguage } from "./i18n/LanguageContext";
 import api from "./services/api";
@@ -14,6 +26,15 @@ const ForgotPasswordPage = lazy(() => import("./pages/ForgotPasswordPage"));
 const ResetPasswordPage = lazy(() => import("./pages/ResetPasswordPage"));
 const ImportPage = lazy(() => import("./pages/ImportPage"));
 const BudgetsPage = lazy(() => import("./pages/BudgetsPage"));
+
+const APP_NAV_ITEMS = [
+  { labelKey: "common.analytics", path: "/analytics", matchPaths: ["/analytics", "/dashboard"] },
+  { labelKey: "common.smartImport", path: "/import", matchPaths: ["/import"] },
+  { labelKey: "common.transactions", path: "/transactions", matchPaths: ["/transactions"] },
+  { labelKey: "common.budgets", path: "/budgets", matchPaths: ["/budgets", "/simulator"] },
+  { labelKey: "common.assistant", path: "/assistant", matchPaths: ["/assistant"] },
+  { labelKey: "common.profileSettings", path: "/profile", matchPaths: ["/profile", "/accounts"] },
+];
 
 function ProtectedRoute({ children }) {
   const [authState, setAuthState] = useState("checking");
@@ -78,6 +99,121 @@ function PublicHomeRoute() {
   return authState === "authenticated" ? <Navigate to="/analytics" replace /> : <LoginPage />;
 }
 
+function AuthenticatedLayout({ children, theme, onThemeToggle }) {
+  const [opened, { toggle, close }] = useDisclosure(false);
+  const { t } = useLanguage();
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  const handleNavigate = (path) => {
+    close();
+    navigate(path);
+  };
+
+  const handleLogout = async () => {
+    await api.post("/auth/logout").catch(() => {});
+    close();
+    navigate("/", { replace: true });
+  };
+
+  const activeItem = APP_NAV_ITEMS.find((item) =>
+    item.matchPaths.some((path) => location.pathname === path)
+  );
+
+  return (
+    <AppShell
+      className="app-shell"
+      header={{ height: 68 }}
+      navbar={{
+        width: 286,
+        breakpoint: "sm",
+        collapsed: { mobile: !opened },
+      }}
+      padding={0}
+    >
+      <AppShell.Header className="app-shell-header">
+        <Group h="100%" px="md" justify="space-between" wrap="nowrap">
+          <Group gap="sm" wrap="nowrap" className="app-shell-brand-row">
+            <Burger
+              opened={opened}
+              onClick={toggle}
+              hiddenFrom="sm"
+              size="sm"
+              aria-label={t("common.appMenu")}
+            />
+            <Box className="app-shell-logo" aria-hidden="true">
+              $
+            </Box>
+            <Box className="app-shell-brand-copy">
+              <Title order={2} size="h4">{t("common.appName")}</Title>
+              <Text size="xs" c="dimmed">
+                {activeItem ? t(activeItem.labelKey) : t("common.dashboard")}
+              </Text>
+            </Box>
+          </Group>
+
+          <Group gap="sm" wrap="nowrap" className="app-shell-header-actions">
+            <ThemeToggle
+              theme={theme}
+              onToggle={onThemeToggle}
+            />
+            <Button
+              type="button"
+              color="dark"
+              radius="md"
+              variant="filled"
+              visibleFrom="sm"
+              onClick={handleLogout}
+            >
+              {t("common.logout")}
+            </Button>
+          </Group>
+        </Group>
+      </AppShell.Header>
+
+      <AppShell.Navbar className="app-shell-navbar" p="md">
+        <Stack h="100%" justify="space-between" gap="lg">
+          <Stack gap="lg">
+            <Box className="app-shell-nav-brand">
+              <Text className="app-shell-nav-kicker">{t("common.appName")}</Text>
+              <Title order={2} size="h3">{t("common.dashboard")}</Title>
+            </Box>
+
+            <Stack gap={6}>
+              {APP_NAV_ITEMS.map((item) => (
+                <NavLink
+                  key={item.path}
+                  className="app-shell-nav-link"
+                  active={item.matchPaths.some((path) => location.pathname === path)}
+                  label={t(item.labelKey)}
+                  onClick={() => handleNavigate(item.path)}
+                  variant="light"
+                />
+              ))}
+            </Stack>
+          </Stack>
+
+          <Stack gap="sm">
+            <Button
+              type="button"
+              radius="md"
+              color="dark"
+              fullWidth
+              onClick={handleLogout}
+            >
+              {t("common.logout")}
+            </Button>
+          </Stack>
+        </Stack>
+      </AppShell.Navbar>
+
+      <AppShell.Main className="app-shell-main">
+        {children}
+      </AppShell.Main>
+    </AppShell>
+  );
+}
+
 function AppRoutes() {
   const [theme, setTheme] = useState(localStorage.getItem("theme") || "light");
 
@@ -86,15 +222,17 @@ function AppRoutes() {
     localStorage.setItem("theme", theme);
   }, [theme]);
 
+  const toggleTheme = () => setTheme((prev) => (prev === "light" ? "dark" : "light"));
+  const protectedPage = (page) => (
+    <ProtectedRoute>
+      <AuthenticatedLayout theme={theme} onThemeToggle={toggleTheme}>
+        {page}
+      </AuthenticatedLayout>
+    </ProtectedRoute>
+  );
+
   return (
     <BrowserRouter>
-      <div className="app-floating-controls">
-        <ThemeToggle
-          theme={theme}
-          onToggle={() => setTheme((prev) => (prev === "light" ? "dark" : "light"))}
-        />
-      </div>
-
       <Suspense fallback={<RouteLoader />}>
         <Routes>
           <Route path="/" element={<PublicHomeRoute />} />
@@ -103,14 +241,14 @@ function AppRoutes() {
           <Route path="/reset-password" element={<ResetPasswordPage />} />
 
           <Route path="/dashboard" element={<ProtectedRoute><Navigate to="/analytics" replace /></ProtectedRoute>} />
-          <Route path="/transactions" element={<ProtectedRoute><TransactionsPage /></ProtectedRoute>} />
-          <Route path="/analytics" element={<ProtectedRoute><AnalyticsPage /></ProtectedRoute>} />
-          <Route path="/assistant" element={<ProtectedRoute><AssistantPage /></ProtectedRoute>} />
-          <Route path="/profile" element={<ProtectedRoute><ProfilePage /></ProtectedRoute>} />
+          <Route path="/transactions" element={protectedPage(<TransactionsPage />)} />
+          <Route path="/analytics" element={protectedPage(<AnalyticsPage />)} />
+          <Route path="/assistant" element={protectedPage(<AssistantPage />)} />
+          <Route path="/profile" element={protectedPage(<ProfilePage />)} />
           <Route path="/accounts" element={<ProtectedRoute><Navigate to="/profile" replace /></ProtectedRoute>} />
-          <Route path="/import" element={<ProtectedRoute><ImportPage /></ProtectedRoute>} />
+          <Route path="/import" element={protectedPage(<ImportPage />)} />
           <Route path="/money-map" element={<ProtectedRoute><Navigate to="/analytics" replace /></ProtectedRoute>} />
-          <Route path="/budgets" element={<ProtectedRoute><BudgetsPage /></ProtectedRoute>} />
+          <Route path="/budgets" element={protectedPage(<BudgetsPage />)} />
           <Route path="/simulator" element={<ProtectedRoute><Navigate to="/budgets" replace /></ProtectedRoute>} />
         </Routes>
       </Suspense>

@@ -1,14 +1,4 @@
-import { useNavigate } from "react-router-dom";
 import { useLanguage } from "../i18n/LanguageContext";
-
-const APP_DESTINATIONS = [
-  { labelKey: "common.analytics", path: "/analytics" },
-  { labelKey: "common.smartImport", path: "/import" },
-  { labelKey: "common.transactions", path: "/transactions" },
-  { labelKey: "common.budgets", path: "/budgets" },
-  { labelKey: "common.assistant", path: "/assistant" },
-  { labelKey: "common.profileSettings", path: "/profile" },
-];
 
 function PageHeader({
   icon = "$",
@@ -20,7 +10,6 @@ function PageHeader({
   subtitleKey,
   actions,
 }) {
-  const navigate = useNavigate();
   const { t } = useLanguage();
   const resolvedTitle = titleKey ? t(titleKey) : title;
   const resolvedSubtitle = subtitleKey ? t(subtitleKey) : subtitle;
@@ -29,15 +18,6 @@ function PageHeader({
     : eyebrow === "Smart Spending Analyzer"
     ? t("common.appName")
     : eyebrow;
-  const navId = `nav-${String(resolvedTitle || "page").replace(/\s+/g, "-").toLowerCase()}`;
-
-  const handleDestinationChange = (event) => {
-    const nextPath = event.target.value;
-    if (nextPath) {
-      navigate(nextPath);
-      event.target.value = "";
-    }
-  };
 
   return (
     <div className="dashboard-hero app-page-header">
@@ -53,28 +33,11 @@ function PageHeader({
         </div>
       </div>
 
-      <div className="header-actions professional-header-actions">
-        <label className="nav-dropdown-label" htmlFor={navId}>
-          {t("common.appMenu")}
-        </label>
-        <select
-          id={navId}
-          className="nav-dropdown"
-          defaultValue=""
-          onChange={handleDestinationChange}
-        >
-          <option value="" disabled>
-            {t("common.openPage")}
-          </option>
-          {APP_DESTINATIONS.map((item) => (
-            <option key={item.path} value={item.path}>
-              {t(item.labelKey)}
-            </option>
-          ))}
-        </select>
-
-        {actions}
-      </div>
+      {actions && (
+        <div className="header-actions professional-header-actions">
+          {actions}
+        </div>
+      )}
     </div>
   );
 }
