@@ -13,7 +13,11 @@ logger = logging.getLogger(__name__)
 
 POSTGRES_COMPATIBILITY_STATEMENTS = (
     # create_all() does not add columns to existing production tables.
+    "ALTER TABLE category_learning_events ADD COLUMN IF NOT EXISTS signal_source VARCHAR(40) DEFAULT 'manual'",
+    "ALTER TABLE category_learning_events ADD COLUMN IF NOT EXISTS confidence DOUBLE PRECISION DEFAULT 1",
+    "ALTER TABLE category_learning_events ADD COLUMN IF NOT EXISTS affected_count INTEGER DEFAULT 1",
     "ALTER TABLE category_learning_events ADD COLUMN IF NOT EXISTS amount_bucket VARCHAR(20)",
+    "ALTER TABLE category_learning_events ADD COLUMN IF NOT EXISTS account_id INTEGER",
     "ALTER TABLE transactions ADD COLUMN IF NOT EXISTS entry_source VARCHAR(40) DEFAULT 'manual'",
     "ALTER TABLE transactions ADD COLUMN IF NOT EXISTS category_confidence DOUBLE PRECISION DEFAULT 0",
     "ALTER TABLE transactions ADD COLUMN IF NOT EXISTS category_source VARCHAR(80)",
@@ -21,6 +25,16 @@ POSTGRES_COMPATIBILITY_STATEMENTS = (
     "ALTER TABLE transactions ADD COLUMN IF NOT EXISTS import_file_name VARCHAR(255)",
     "ALTER TABLE transactions ADD COLUMN IF NOT EXISTS import_file_type VARCHAR(40)",
     "ALTER TABLE transactions ADD COLUMN IF NOT EXISTS imported_at TIMESTAMP WITH TIME ZONE",
+    "ALTER TABLE merchant_category_profiles ADD COLUMN IF NOT EXISTS confidence DOUBLE PRECISION DEFAULT 0.9",
+    "ALTER TABLE merchant_category_profiles ADD COLUMN IF NOT EXISTS confirmation_count INTEGER DEFAULT 1",
+    "ALTER TABLE merchant_category_profiles ADD COLUMN IF NOT EXISTS last_amount DOUBLE PRECISION",
+    "ALTER TABLE merchant_category_profiles ADD COLUMN IF NOT EXISTS created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP",
+    "ALTER TABLE merchant_category_profiles ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP",
+    "ALTER TABLE merchant_lookup_cache ADD COLUMN IF NOT EXISTS confidence DOUBLE PRECISION DEFAULT 0.78",
+    "ALTER TABLE merchant_lookup_cache ADD COLUMN IF NOT EXISTS matched_signal VARCHAR(160)",
+    "ALTER TABLE merchant_lookup_cache ADD COLUMN IF NOT EXISTS provider VARCHAR(40) DEFAULT 'semantic'",
+    "ALTER TABLE merchant_lookup_cache ADD COLUMN IF NOT EXISTS created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP",
+    "ALTER TABLE merchant_lookup_cache ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP",
     "ALTER TABLE users ADD COLUMN IF NOT EXISTS password_changed_at TIMESTAMP WITH TIME ZONE",
 )
 

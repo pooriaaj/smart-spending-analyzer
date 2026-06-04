@@ -5,10 +5,36 @@ from sqlalchemy.pool import StaticPool
 
 from app import models  # noqa: F401
 from app.database import Base
-from app.services.database_maintenance_service import ensure_runtime_database_shape
+from app.services.database_maintenance_service import (
+    POSTGRES_COMPATIBILITY_STATEMENTS,
+    ensure_runtime_database_shape,
+)
 
 
 class DatabaseMaintenanceServiceTest(unittest.TestCase):
+    def test_postgres_compatibility_covers_import_learning_columns(self) -> None:
+        statements = "\n".join(POSTGRES_COMPATIBILITY_STATEMENTS)
+        expected_fragments = (
+            "category_learning_events ADD COLUMN IF NOT EXISTS signal_source",
+            "category_learning_events ADD COLUMN IF NOT EXISTS confidence",
+            "category_learning_events ADD COLUMN IF NOT EXISTS affected_count",
+            "category_learning_events ADD COLUMN IF NOT EXISTS amount_bucket",
+            "category_learning_events ADD COLUMN IF NOT EXISTS account_id",
+            "merchant_category_profiles ADD COLUMN IF NOT EXISTS confidence",
+            "merchant_category_profiles ADD COLUMN IF NOT EXISTS confirmation_count",
+            "merchant_category_profiles ADD COLUMN IF NOT EXISTS last_amount",
+            "merchant_category_profiles ADD COLUMN IF NOT EXISTS created_at",
+            "merchant_category_profiles ADD COLUMN IF NOT EXISTS updated_at",
+            "merchant_lookup_cache ADD COLUMN IF NOT EXISTS confidence",
+            "merchant_lookup_cache ADD COLUMN IF NOT EXISTS matched_signal",
+            "merchant_lookup_cache ADD COLUMN IF NOT EXISTS provider",
+            "merchant_lookup_cache ADD COLUMN IF NOT EXISTS created_at",
+            "merchant_lookup_cache ADD COLUMN IF NOT EXISTS updated_at",
+        )
+
+        for fragment in expected_fragments:
+            self.assertIn(fragment, statements)
+
     def test_runtime_database_shape_creates_expected_indexes(self) -> None:
         engine = create_engine(
             "sqlite://",
