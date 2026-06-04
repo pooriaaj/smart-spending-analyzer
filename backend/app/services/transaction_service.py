@@ -102,8 +102,10 @@ HEADER_ALIASES = {
     "debit": {"debit", "withdrawal", "money_out"},
     "credit": {"credit", "deposit", "money_in"},
     "type": {"type", "transaction_type"},
-    "category": {"category"},
+    "category": {"category", "expense", "expense_category"},
 }
+CSV_ROW_NUMBER_KEY = "__csv_row_number"
+TRACKER_EXPENSE_HEADER_ALIASES = {"expense", "expense_category"}
 
 CATEGORY_RULES = {
     "salary": [
@@ -2191,12 +2193,11 @@ def sniff_csv_dialect(text: str) -> csv.Dialect:
 
 
 def resolve_header_mapping(fieldnames: list[str]) -> dict[str, str]:
-    normalized = [normalize_header(name) for name in fieldnames]
     mapping: dict[str, str] = {}
 
     for canonical, aliases in HEADER_ALIASES.items():
-        for header in normalized:
-            if header in aliases:
+        for header in fieldnames:
+            if csv_header_base_name(header) in aliases:
                 mapping[canonical] = header
                 break
 
@@ -2210,25 +2211,69 @@ def resolve_header_mapping(fieldnames: list[str]) -> dict[str, str]:
     ):
         raise ValueError("Statement must include amount, or debit/credit columns.")
 
+    category_key = mapping.get("category")
+    if (
+        category_key
+        and csv_header_base_name(category_key) in TRACKER_EXPENSE_HEADER_ALIASES
+        and mapping.get("amount")
+        and not mapping.get("type")
+    ):
+        mapping["default_type"] = "expense"
+
     return mapping
+
+
+def csv_header_base_name(header: str) -> str:
+    return re.sub(r"__dup\d+$", "", header)
+
+
+def normalize_csv_headers(fieldnames: list[str]) -> list[str]:
+    counts: dict[str, int] = {}
+    normalized_headers: list[str] = []
+
+    for index, fieldname in enumerate(fieldnames, start=1):
+        base_header = normalize_header(fieldname) or f"column_{index}"
+        counts[base_header] = counts.get(base_header, 0) + 1
+        if counts[base_header] == 1:
+            normalized_headers.append(base_header)
+        else:
+            normalized_headers.append(f"{base_header}__dup{counts[base_header]}")
+
+    return normalized_headers
+
+
+def find_csv_header_row(raw_rows: list[list[str]]) -> tuple[int, list[str], dict[str, str]]:
+    for row_index, row in enumerate(raw_rows):
+        normalized_headers = normalize_csv_headers(row)
+        try:
+            header_mapping = resolve_header_mapping(normalized_headers)
+        except ValueError:
+            continue
+        return row_index, normalized_headers, header_mapping
+
+    raise ValueError("Statement must include at least date and description columns.")
 
 
 def read_csv_rows(text: str) -> tuple[list[dict], dict[str, str]]:
     dialect = sniff_csv_dialect(text)
-    reader = csv.DictReader(io.StringIO(text), dialect=dialect)
+    raw_rows = list(csv.reader(io.StringIO(text), dialect=dialect))
 
-    if not reader.fieldnames:
+    if not raw_rows:
         raise ValueError("CSV file is missing headers.")
 
-    normalized_headers = [normalize_header(field) for field in reader.fieldnames]
-    reader.fieldnames = normalized_headers
-    header_mapping = resolve_header_mapping(normalized_headers)
+    header_index, normalized_headers, header_mapping = find_csv_header_row(raw_rows)
 
     rows = []
-    for index, row in enumerate(reader, start=1):
+    for index, raw_row in enumerate(raw_rows[header_index + 1 :], start=1):
         if index > max_csv_rows():
             raise ValueError(f"CSV row limit exceeded. Maximum is {max_csv_rows()} rows per file.")
-        normalized_row = {normalize_header(k): sanitize_import_text(v) for k, v in row.items()}
+
+        padded_row = [*raw_row, *[""] * max(0, len(normalized_headers) - len(raw_row))]
+        normalized_row = {
+            header: sanitize_import_text(value)
+            for header, value in zip(normalized_headers, padded_row[: len(normalized_headers)])
+        }
+        normalized_row[CSV_ROW_NUMBER_KEY] = str(header_index + index + 1)
         rows.append(normalized_row)
 
     return rows, header_mapping
@@ -2245,6 +2290,10 @@ def infer_type_and_amount(row: dict, header_mapping: dict[str, str]) -> tuple[st
         if type_key and row.get(type_key):
             tx_type = normalize_type(row[type_key])
             return tx_type, abs(amount)
+
+        default_type = header_mapping.get("default_type")
+        if default_type in {"expense", "income"}:
+            return default_type, abs(amount)
 
         if amount < 0:
             return "expense", abs(amount)
@@ -2269,6 +2318,63 @@ def normalize_description(value: str) -> str:
     text = re.sub(r"\bpos\b|\bpurchase\b|\bpayment\b|\bdebit\b|\bcredit\b", "", text, flags=re.IGNORECASE)
     text = re.sub(r"\s+", " ", text).strip(" -")
     return text or sanitize_import_text(value)
+
+
+def get_import_row_description_value(row: dict, header_mapping: dict[str, str]) -> str:
+    description_key = header_mapping["description"]
+    raw_description = row.get(description_key, "")
+    if raw_description.strip():
+        return raw_description
+
+    category_key = header_mapping.get("category")
+    if category_key and row.get(category_key, "").strip():
+        return row[category_key]
+
+    return raw_description
+
+
+def csv_transaction_field_values(row: dict, header_mapping: dict[str, str]) -> list[str]:
+    keys = [
+        header_mapping.get("date"),
+        header_mapping.get("description"),
+        header_mapping.get("category"),
+        header_mapping.get("amount"),
+        header_mapping.get("debit"),
+        header_mapping.get("credit"),
+        header_mapping.get("type"),
+    ]
+    return [row.get(key, "").strip() for key in keys if key]
+
+
+def is_structural_csv_row(row: dict, header_mapping: dict[str, str]) -> bool:
+    values = csv_transaction_field_values(row, header_mapping)
+    if not any(values):
+        return True
+
+    date_key = header_mapping["date"]
+    amount_key = header_mapping.get("amount")
+
+    normalized_date_value = normalize_header(row.get(date_key, ""))
+    normalized_amount_value = normalize_header(row.get(amount_key, "")) if amount_key else ""
+
+    if normalized_date_value == csv_header_base_name(date_key):
+        return True
+    if amount_key and normalized_amount_value == csv_header_base_name(amount_key):
+        return True
+
+    has_money_value = any(
+        row.get(key, "").strip()
+        for key in (
+            header_mapping.get("amount"),
+            header_mapping.get("debit"),
+            header_mapping.get("credit"),
+        )
+        if key
+    )
+    if not row.get(date_key, "").strip() and not has_money_value:
+        return True
+
+    return False
 
 
 def normalize_repeating_description(value: str) -> str:
@@ -3167,7 +3273,7 @@ def import_transactions_from_csv(
     for row in rows:
         try:
             tx_date = parse_date(row[header_mapping["date"]])
-            raw_description = row[header_mapping["description"]]
+            raw_description = get_import_row_description_value(row, header_mapping)
             description = normalize_description(raw_description)
 
             tx_type, amount = infer_type_and_amount(row, header_mapping)
@@ -3277,10 +3383,11 @@ def parse_csv_statement_preview(
     preview_rows: list[StatementPreviewRow] = []
     invalid_rows_skipped = 0
 
-    for row_number, row in enumerate(rows, start=2):
+    for fallback_row_number, row in enumerate(rows, start=2):
         try:
+            row_number = int(row.get(CSV_ROW_NUMBER_KEY, fallback_row_number))
             tx_date = parse_date(row[header_mapping["date"]])
-            raw_description = row[header_mapping["description"]]
+            raw_description = get_import_row_description_value(row, header_mapping)
             description = normalize_description(raw_description)
             tx_type, amount = infer_type_and_amount(row, header_mapping)
 

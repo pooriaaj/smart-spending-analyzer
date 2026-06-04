@@ -2131,6 +2131,39 @@ class SmartImportRouteTest(unittest.TestCase):
         self.assertEqual(confirm_response.status_code, 200, confirm_response.text)
         self.assertEqual(confirm_response.json()["imported"], 2)
 
+    def test_import_file_parses_monthly_expense_tracker_csv(self) -> None:
+        tracker_csv = (
+            ",Monthly Expense Tracker,,,,,,Budget vs Actual Table,,,,\n"
+            ",January 2026,,,,,,January 2026,,,,\n"
+            ",Date,Expense,Description,Payment Method,Amount,,Expense,,Budget,Actual,Rating\n"
+            ",2026-01-01,Parking,,Debit,$2.50,,Rent,,$2350.00,$2350.00,\n"
+            ",2026-01-02,Subscriptions,apple,Debit,$14.94,,Internet,,$100.00,$90.00,\n"
+            ",,,,,,,,,,,\n"
+            ",Date,Expense,Description,Payment Method,Amount,,Expense,,Budget,Actual,Rating\n"
+            ",2026-02-02,Bank fees,,Debit,$16.95,,Rent,,$2350.00,$2350.00,\n"
+        ).encode("utf-8")
+
+        response = self.client.post(
+            "/transactions/import/file",
+            data={"account_id": str(self.account_id)},
+            files={"file": ("monthly-expense-tracker.csv", tracker_csv, "text/csv")},
+        )
+
+        self.assertEqual(response.status_code, 200, response.text)
+        payload = response.json()
+        preview_rows = payload["preview_rows"]
+
+        self.assertEqual(payload["status"], "table_review")
+        self.assertEqual(len(preview_rows), 3)
+        self.assertEqual([row["type"] for row in preview_rows], ["expense", "expense", "expense"])
+        self.assertEqual(preview_rows[0]["description"], "Parking")
+        self.assertEqual(preview_rows[0]["category"], "parking")
+        self.assertEqual(preview_rows[0]["source_line"], "monthly-expense-tracker.csv: CSV row 4: Parking")
+        self.assertEqual(preview_rows[1]["description"], "apple")
+        self.assertEqual(preview_rows[1]["category"], "subscriptions")
+        self.assertEqual(preview_rows[2]["description"], "Bank fees")
+        self.assertEqual(preview_rows[2]["source_line"], "monthly-expense-tracker.csv: CSV row 8: Bank fees")
+
     def test_batch_statement_import_combines_pdf_preview_rows(self) -> None:
         first_pdf = build_text_pdf(
             [
