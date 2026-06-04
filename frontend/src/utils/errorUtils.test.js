@@ -37,12 +37,13 @@ describe('errorUtils', () => {
         data: {
           detail: 'Smart import failed. Please try a different file.',
           request_id: 'import-debug-123',
+          stage: 'pdf_statement_parse',
         },
       },
     })
 
     expect(message).toBe(
-      'Smart import failed. Please try a different file. Request ID: import-debug-123',
+      'Smart import failed. Please try a different file. Request ID: import-debug-123 Stage: pdf_statement_parse',
     )
   })
 

@@ -25,6 +25,19 @@ CSV_EXTENSIONS = {".csv"}
 PDF_EXTENSIONS = {".pdf"}
 
 
+class SmartImportProcessingError(RuntimeError):
+    def __init__(self, stage: str, original_error: Exception):
+        super().__init__(f"Smart import failed during {stage}")
+        self.stage = stage
+        self.original_error = original_error
+
+
+def raise_stage_error(stage: str, error: Exception) -> None:
+    if isinstance(error, ValueError):
+        raise error
+    raise SmartImportProcessingError(stage, error) from error
+
+
 def annotate_preview_rows_for_duplicates(
     db: Session,
     owner_id: int,
@@ -164,21 +177,29 @@ def process_smart_import(
     detected_type = detect_import_type(filename, content_type)
 
     if detected_type == "csv_statement":
-        result = parse_csv_statement_preview(
-            db=db,
-            owner_id=owner_id,
-            file_bytes=file_bytes,
-        )
-        preview_rows = annotate_preview_rows_for_duplicates(
-            db=db,
-            owner_id=owner_id,
-            account_id=account_id,
-            preview_rows=add_file_context_to_preview_rows(
-                result.get("preview_rows", []),
-                filename,
-                detected_type,
-            ),
-        )
+        try:
+            result = parse_csv_statement_preview(
+                db=db,
+                owner_id=owner_id,
+                file_bytes=file_bytes,
+            )
+        except Exception as exc:
+            raise_stage_error("csv_statement_parse", exc)
+
+        try:
+            preview_rows = annotate_preview_rows_for_duplicates(
+                db=db,
+                owner_id=owner_id,
+                account_id=account_id,
+                preview_rows=add_file_context_to_preview_rows(
+                    result.get("preview_rows", []),
+                    filename,
+                    detected_type,
+                ),
+            )
+        except Exception as exc:
+            raise_stage_error("duplicate_reconciliation", exc)
+
         return {
             "detected_type": "csv_statement",
             "status": "table_review",
@@ -195,13 +216,17 @@ def process_smart_import(
         }
 
     if detected_type == "receipt_image":
-        result = scan_receipt_file(
-            db=db,
-            owner_id=owner_id,
-            file_bytes=file_bytes,
-            filename=filename,
-            content_type=content_type,
-        )
+        try:
+            result = scan_receipt_file(
+                db=db,
+                owner_id=owner_id,
+                file_bytes=file_bytes,
+                filename=filename,
+                content_type=content_type,
+            )
+        except Exception as exc:
+            raise_stage_error("receipt_image_scan", exc)
+
         return {
             "detected_type": "receipt_image",
             "status": "draft_review",
@@ -220,21 +245,29 @@ def process_smart_import(
         }
 
     if detected_type == "pdf_statement":
-        result = parse_pdf_statement_preview(
-            db=db,
-            owner_id=owner_id,
-            file_bytes=file_bytes,
-        )
-        preview_rows = annotate_preview_rows_for_duplicates(
-            db=db,
-            owner_id=owner_id,
-            account_id=account_id,
-            preview_rows=add_file_context_to_preview_rows(
-                result.get("preview_rows", []),
-                filename,
-                detected_type,
-            ),
-        )
+        try:
+            result = parse_pdf_statement_preview(
+                db=db,
+                owner_id=owner_id,
+                file_bytes=file_bytes,
+            )
+        except Exception as exc:
+            raise_stage_error("pdf_statement_parse", exc)
+
+        try:
+            preview_rows = annotate_preview_rows_for_duplicates(
+                db=db,
+                owner_id=owner_id,
+                account_id=account_id,
+                preview_rows=add_file_context_to_preview_rows(
+                    result.get("preview_rows", []),
+                    filename,
+                    detected_type,
+                ),
+            )
+        except Exception as exc:
+            raise_stage_error("duplicate_reconciliation", exc)
+
         return {
             "detected_type": "pdf_statement",
             "status": "table_review",

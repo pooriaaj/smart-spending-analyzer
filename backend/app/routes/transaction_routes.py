@@ -599,6 +599,7 @@ async def smart_import_file(
             content={
                 "detail": "Smart import failed. Please try a different file.",
                 "request_id": request_id,
+                "stage": getattr(exc, "stage", "smart_import_processing"),
             },
         )
 
@@ -645,6 +646,7 @@ async def smart_import_files(
             content={
                 "detail": "Smart batch import failed. Please review the files and try again.",
                 "request_id": request_id,
+                "stage": getattr(exc, "stage", "smart_batch_import_processing"),
             },
         )
 

@@ -967,13 +967,13 @@ class SmartImportRouteTest(unittest.TestCase):
 
     def test_import_file_server_error_returns_request_id_without_exception_text(self) -> None:
         with patch(
-            "app.routes.transaction_routes.process_smart_import",
+            "app.services.unified_import_service.parse_pdf_statement_preview",
             side_effect=RuntimeError("database password leaked"),
         ):
             response = self.client.post(
                 "/transactions/import/file",
                 data={"account_id": str(self.account_id)},
-                files={"file": ("statement.csv", b"date,description,amount\n", "text/csv")},
+                files={"file": ("statement.pdf", b"%PDF-1.4\n%%EOF", "application/pdf")},
                 headers={"x-request-id": "import-debug-123"},
             )
 
@@ -981,6 +981,7 @@ class SmartImportRouteTest(unittest.TestCase):
         payload = response.json()
         self.assertEqual(payload["detail"], "Smart import failed. Please try a different file.")
         self.assertEqual(payload["request_id"], "import-debug-123")
+        self.assertEqual(payload["stage"], "pdf_statement_parse")
         self.assertEqual(response.headers["X-Request-ID"], "import-debug-123")
         self.assertNotIn("database password", response.text)
 

@@ -18,6 +18,11 @@ const readRequestId = (response) => {
   return isReadableString(value) ? value.trim() : "";
 };
 
+const readStage = (response) => {
+  const value = response?.data?.stage || response?.data?.import_stage;
+  return isReadableString(value) ? value.trim() : "";
+};
+
 function readMessage(value, depth = 0) {
   if (depth > 4 || value == null) {
     return "";
@@ -65,8 +70,18 @@ export function getApiErrorMessage(error, fallbackMessage = DEFAULT_ERROR_MESSAG
 
   if (responseMessage) {
     const status = Number(error?.response?.status || 0);
-    const requestId = status >= 500 ? readRequestId(error.response) : "";
-    return requestId ? `${responseMessage} Request ID: ${requestId}` : responseMessage;
+    if (status < 500) {
+      return responseMessage;
+    }
+
+    const diagnostics = [
+      readRequestId(error.response) ? `Request ID: ${readRequestId(error.response)}` : "",
+      readStage(error.response) ? `Stage: ${readStage(error.response)}` : "",
+    ].filter(Boolean);
+
+    return diagnostics.length
+      ? `${responseMessage} ${diagnostics.join(" ")}`
+      : responseMessage;
   }
 
   if (!error.response && (error.request || error.message === "Network Error")) {
