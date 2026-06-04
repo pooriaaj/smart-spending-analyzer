@@ -4,7 +4,8 @@ import logging
 from datetime import date, datetime, timezone
 from typing import get_args
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile
+from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
 from app.dependencies import get_current_user, get_db
@@ -561,6 +562,7 @@ def apply_duplicate_cleanup_route(
 
 @router.post("/import/file", response_model=SmartImportResponse)
 async def smart_import_file(
+    request: Request,
     file: UploadFile = File(...),
     account_id: int = Form(...),
     db: Session = Depends(get_db),
@@ -585,12 +587,25 @@ async def smart_import_file(
         raise HTTPException(status_code=400, detail=str(exc))
     except Exception as exc:
         db.rollback()
-        logger.exception("Smart import failed for user_id=%s account_id=%s", current_user.id, account_id)
-        raise HTTPException(status_code=500, detail="Smart import failed. Please try a different file.")
+        request_id = getattr(request.state, "request_id", None)
+        logger.exception(
+            "Smart import failed for user_id=%s account_id=%s request_id=%s",
+            current_user.id,
+            account_id,
+            request_id,
+        )
+        return JSONResponse(
+            status_code=500,
+            content={
+                "detail": "Smart import failed. Please try a different file.",
+                "request_id": request_id,
+            },
+        )
 
 
 @router.post("/import/files", response_model=SmartImportResponse)
 async def smart_import_files(
+    request: Request,
     files: list[UploadFile] = File(...),
     account_id: int = Form(...),
     db: Session = Depends(get_db),
@@ -618,8 +633,20 @@ async def smart_import_files(
         raise HTTPException(status_code=400, detail=str(exc))
     except Exception as exc:
         db.rollback()
-        logger.exception("Smart batch import failed for user_id=%s account_id=%s", current_user.id, account_id)
-        raise HTTPException(status_code=500, detail="Smart batch import failed. Please review the files and try again.")
+        request_id = getattr(request.state, "request_id", None)
+        logger.exception(
+            "Smart batch import failed for user_id=%s account_id=%s request_id=%s",
+            current_user.id,
+            account_id,
+            request_id,
+        )
+        return JSONResponse(
+            status_code=500,
+            content={
+                "detail": "Smart batch import failed. Please review the files and try again.",
+                "request_id": request_id,
+            },
+        )
 
 
 @router.post("/import/confirm-preview")

@@ -8,6 +8,16 @@ const isReadableString = (value) =>
 const uniqueMessages = (messages) =>
   Array.from(new Set(messages.map((message) => message.trim()).filter(Boolean)));
 
+const readRequestId = (response) => {
+  const value =
+    response?.data?.request_id ||
+    response?.data?.requestId ||
+    response?.headers?.["x-request-id"] ||
+    response?.headers?.["X-Request-ID"];
+
+  return isReadableString(value) ? value.trim() : "";
+};
+
 function readMessage(value, depth = 0) {
   if (depth > 4 || value == null) {
     return "";
@@ -54,7 +64,9 @@ export function getApiErrorMessage(error, fallbackMessage = DEFAULT_ERROR_MESSAG
     readMessage(responseData);
 
   if (responseMessage) {
-    return responseMessage;
+    const status = Number(error?.response?.status || 0);
+    const requestId = status >= 500 ? readRequestId(error.response) : "";
+    return requestId ? `${responseMessage} Request ID: ${requestId}` : responseMessage;
   }
 
   if (!error.response && (error.request || error.message === "Network Error")) {

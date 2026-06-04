@@ -24,6 +24,7 @@ from app.models import (
     UserLearningPreference,
 )
 from app.routes.transaction_routes import router as transaction_router
+from app.security import RequestIdMiddleware
 from app.services import pdf_statement_service
 from app.services.transaction_service import CategoryDecision, rebuild_community_merchant_profile_cache
 
@@ -108,6 +109,7 @@ class SmartImportRouteTest(unittest.TestCase):
             cls.account_id = account.id
 
         app = FastAPI()
+        app.add_middleware(RequestIdMiddleware)
         app.include_router(transaction_router)
 
         def override_get_db() -> Generator[Session, None, None]:
@@ -962,6 +964,25 @@ class SmartImportRouteTest(unittest.TestCase):
         self.assertIn("review_reason", payload["preview_rows"][0])
         self.assertEqual(payload["preview_rows"][1]["date"], "2025-01-02")
         self.assertEqual(payload["preview_rows"][1]["type"], "income")
+
+    def test_import_file_server_error_returns_request_id_without_exception_text(self) -> None:
+        with patch(
+            "app.routes.transaction_routes.process_smart_import",
+            side_effect=RuntimeError("database password leaked"),
+        ):
+            response = self.client.post(
+                "/transactions/import/file",
+                data={"account_id": str(self.account_id)},
+                files={"file": ("statement.csv", b"date,description,amount\n", "text/csv")},
+                headers={"x-request-id": "import-debug-123"},
+            )
+
+        self.assertEqual(response.status_code, 500, response.text)
+        payload = response.json()
+        self.assertEqual(payload["detail"], "Smart import failed. Please try a different file.")
+        self.assertEqual(payload["request_id"], "import-debug-123")
+        self.assertEqual(response.headers["X-Request-ID"], "import-debug-123")
+        self.assertNotIn("database password", response.text)
 
     def test_import_file_does_not_merge_reference_code_digits_into_amounts(self) -> None:
         pdf_bytes = build_text_pdf(

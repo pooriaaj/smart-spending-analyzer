@@ -30,6 +30,22 @@ describe('errorUtils', () => {
     )
   })
 
+  it('includes request ids for server errors when available', () => {
+    const message = getApiErrorMessage({
+      response: {
+        status: 500,
+        data: {
+          detail: 'Smart import failed. Please try a different file.',
+          request_id: 'import-debug-123',
+        },
+      },
+    })
+
+    expect(message).toBe(
+      'Smart import failed. Please try a different file. Request ID: import-debug-123',
+    )
+  })
+
   it('reads success messages from API response data', () => {
     expect(getApiSuccessMessage({ message: 'Saved successfully' })).toBe(
       'Saved successfully',
