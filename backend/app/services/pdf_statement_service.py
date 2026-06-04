@@ -1825,6 +1825,48 @@ def safe_pdf_category_decision(
         )
 
 
+def append_note_once(notes: list[str], note: str) -> None:
+    if note not in notes:
+        notes.append(note)
+
+
+def finalize_pending_transaction_safely(
+    *,
+    db: Session,
+    owner_id: int,
+    current_date: date | None,
+    description_parts: list[str],
+    trailing_amounts: list[str],
+    preview_rows: list[StatementPreviewRow],
+    notes: list[str],
+    previous_balance: float | None = None,
+    profile: StatementProfile | None = None,
+) -> float | None:
+    try:
+        return finalize_pending_transaction(
+            db=db,
+            owner_id=owner_id,
+            current_date=current_date,
+            description_parts=description_parts,
+            trailing_amounts=trailing_amounts,
+            preview_rows=preview_rows,
+            previous_balance=previous_balance,
+            profile=profile,
+        )
+    except Exception:
+        db.rollback()
+        logger.warning(
+            "PDF statement row skipped after parser conversion failure for owner_id=%s",
+            owner_id,
+            exc_info=True,
+        )
+        append_note_once(
+            notes,
+            "One statement row could not be safely converted and was skipped. Review the original statement and add it manually if needed.",
+        )
+        return previous_balance
+
+
 def parse_rbc_statement_preview(
     db: Session,
     owner_id: int,
@@ -1900,13 +1942,14 @@ def parse_rbc_statement_preview(
             if body:
                 description_parts.append(body)
 
-            next_balance = finalize_pending_transaction(
+            next_balance = finalize_pending_transaction_safely(
                 db=db,
                 owner_id=owner_id,
                 current_date=current_date,
                 description_parts=description_parts,
                 trailing_amounts=trailing_amounts,
                 preview_rows=preview_rows,
+                notes=notes,
                 previous_balance=running_balance,
                 profile=profile,
             )
@@ -2043,13 +2086,14 @@ def parse_pdf_statement_preview(
             if body:
                 description_parts.append(body)
 
-            next_balance = finalize_pending_transaction(
+            next_balance = finalize_pending_transaction_safely(
                 db=db,
                 owner_id=owner_id,
                 current_date=current_date,
                 description_parts=description_parts,
                 trailing_amounts=trailing_amounts,
                 preview_rows=preview_rows,
+                notes=notes,
                 previous_balance=running_balance,
                 profile=profile,
             )

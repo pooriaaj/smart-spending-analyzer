@@ -386,6 +386,49 @@ From December 15, 2024 to January 15, 2025
         self.assertIn("Category lookup failed", preview_row.category_reason)
         self.db.rollback.assert_called()
 
+    def test_parse_pdf_statement_preview_skips_one_row_when_conversion_fails(self) -> None:
+        text = """
+Royal Bank of Canada
+Details of your account activity
+From December 15, 2024 to January 15, 2025
+15 Dec COFFEE SHOP $5.25 $1,200.00
+16 Dec BOOK STORE $12.34 $1,187.66
+        """.strip()
+        original_finalize = service.finalize_pending_transaction
+        call_count = {"value": 0}
+
+        def fail_first_row(**kwargs):
+            call_count["value"] += 1
+            if call_count["value"] == 1:
+                raise RuntimeError("database password leaked")
+            return original_finalize(**kwargs)
+
+        with (
+            patch.object(
+                service,
+                "extract_pdf_text_result",
+                return_value=self.extraction_result(text),
+            ),
+            patch.object(service, "categorize_transaction_details", side_effect=self.categorize),
+            patch.object(service, "finalize_pending_transaction", side_effect=fail_first_row),
+        ):
+            result = service.parse_pdf_statement_preview(
+                db=self.db,
+                owner_id=123,
+                file_bytes=b"fake-pdf",
+            )
+
+        preview_rows = result["preview_rows"]
+        self.assertEqual(len(preview_rows), 1)
+        self.assertEqual(preview_rows[0].description, "BOOK STORE")
+        self.assertTrue(
+            any(
+                note.startswith("One statement row could not be safely converted and was skipped.")
+                for note in result["notes"]
+            )
+        )
+        self.db.rollback.assert_called()
+
     def test_parse_pdf_statement_preview_uses_generic_parser_with_shared_date_logic(self) -> None:
         text = """
 Account Statement
