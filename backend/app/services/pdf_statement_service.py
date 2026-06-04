@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import io
+import logging
 import os
 import re
 import unicodedata
@@ -16,6 +17,7 @@ from app.services.category_taxonomy import strip_payment_processor_prefixes
 from app.services.import_quality_service import suggest_reference_code_amount_values
 from app.services.local_ocr_service import is_local_ocr_enabled, run_local_ocr_image
 from app.services.transaction_service import (
+    CategoryDecision,
     build_category_review_metadata,
     categorize_transaction_details,
 )
@@ -464,6 +466,7 @@ DEFAULT_NO_TRANSACTIONS_ERROR = (
 PDF_OCR_MAX_PAGES = 8
 PDF_OCR_RENDER_DPI_DEFAULT = 200
 PDF_TEXT_MAX_PAGES_DEFAULT = 40
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -1731,7 +1734,7 @@ def finalize_pending_transaction(
         description=raw_description,
         tx_type=tx_type,
     )
-    category_decision = categorize_transaction_details(
+    category_decision = safe_pdf_category_decision(
         db=db,
         owner_id=owner_id,
         description=description,
@@ -1788,6 +1791,38 @@ def finalize_pending_transaction(
     )
 
     return balance_amount
+
+
+def safe_pdf_category_decision(
+    db: Session,
+    owner_id: int,
+    description: str,
+    tx_type: str,
+    amount: float,
+) -> CategoryDecision:
+    try:
+        return categorize_transaction_details(
+            db=db,
+            owner_id=owner_id,
+            description=description,
+            tx_type=tx_type,
+            amount=amount,
+        )
+    except Exception:
+        db.rollback()
+        logger.warning(
+            "PDF category lookup failed; falling back to review-required category for owner_id=%s tx_type=%s",
+            owner_id,
+            tx_type,
+            exc_info=True,
+        )
+        return CategoryDecision(
+            category="other",
+            confidence=0.0,
+            matched_keyword=None,
+            reason="Category lookup failed while preparing this preview row. Review and choose the category before importing.",
+            source="fallback",
+        )
 
 
 def parse_rbc_statement_preview(

@@ -351,6 +351,41 @@ Purchases & Fees 20.99%
         self.assertEqual(preview_rows[2].type, "expense")
         self.assertEqual(preview_rows[2].amount, 39.61)
 
+    def test_parse_pdf_statement_preview_keeps_rows_when_category_lookup_fails(self) -> None:
+        text = """
+Royal Bank of Canada
+Details of your account activity
+From December 15, 2024 to January 15, 2025
+15 Dec COFFEE SHOP $5.25 $1,200.00
+        """.strip()
+
+        with (
+            patch.object(
+                service,
+                "extract_pdf_text_result",
+                return_value=self.extraction_result(text),
+            ),
+            patch.object(
+                service,
+                "categorize_transaction_details",
+                side_effect=RuntimeError("database password leaked"),
+            ),
+        ):
+            result = service.parse_pdf_statement_preview(
+                db=self.db,
+                owner_id=123,
+                file_bytes=b"fake-pdf",
+            )
+
+        preview_row = result["preview_rows"][0]
+        self.assertEqual(preview_row.description, "COFFEE SHOP")
+        self.assertEqual(preview_row.category, "other")
+        self.assertEqual(preview_row.category_source, "fallback")
+        self.assertEqual(preview_row.category_confidence, 0.0)
+        self.assertTrue(preview_row.category_review_required)
+        self.assertIn("Category lookup failed", preview_row.category_reason)
+        self.db.rollback.assert_called()
+
     def test_parse_pdf_statement_preview_uses_generic_parser_with_shared_date_logic(self) -> None:
         text = """
 Account Statement
