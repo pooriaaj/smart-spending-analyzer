@@ -37,6 +37,32 @@ describe('api service', () => {
     })
   })
 
+  it('uses the first-party API proxy on deployed HTTPS frontends backed by Render', async () => {
+    vi.stubEnv('VITE_API_BASE_URL', 'https://smart-spending-analyzer.onrender.com')
+
+    const { resolveApiBaseURL } = await import('./api')
+
+    const baseURL = resolveApiBaseURL('https://smart-spending-analyzer.onrender.com', {
+      protocol: 'https:',
+      hostname: 'www.zero2asset.com',
+      origin: 'https://www.zero2asset.com',
+    })
+
+    expect(baseURL).toBe('/api')
+  })
+
+  it('keeps explicit non-Render API URLs for deployed frontends', async () => {
+    const { resolveApiBaseURL } = await import('./api')
+
+    const baseURL = resolveApiBaseURL('https://api.zero2asset.com', {
+      protocol: 'https:',
+      hostname: 'www.zero2asset.com',
+      origin: 'https://www.zero2asset.com',
+    })
+
+    expect(baseURL).toBe('https://api.zero2asset.com')
+  })
+
   it('falls back to the local backend URL when no Vite API base URL is set', async () => {
     await import('./api')
 
