@@ -32,7 +32,8 @@ Observed note: the README mentions PyMuPDF for rendering scanned PDFs before OCR
 ## 3. Current Deployment Structure
 
 - `frontend/vercel.json` defines frontend security headers and SPA rewrites to `index.html`.
-- `render.yaml` defines a Docker web service named `smart-spending-analyzer` with `backend/Dockerfile`, Docker context `backend`, automatic deploys, and health check path `/ready`.
+- Primary production frontend domain is `https://www.zero2asset.com`; the Vercel URL remains a fallback for rollback/testing.
+- `render.yaml` defines a Docker web service named `smart-spending-analyzer` with `backend/Dockerfile`, Docker context `backend`, automatic deploys, health check path `/ready`, and public domain/cookie environment values for the current production frontend.
 - `backend/Dockerfile` installs Python dependencies and the Tesseract system package, then runs `python run.py`.
 - `backend/run.py` reads host, port, worker, proxy, and timeout settings from environment variable names.
 - Backend health endpoints in `backend/app/main.py` include `/live`, `/ready`, and `/health`; `/ready` checks database connectivity.

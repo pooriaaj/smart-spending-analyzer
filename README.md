@@ -6,8 +6,9 @@
 A full-stack financial intelligence web application that helps users track, analyze, and improve their spending behavior.
 
 Live Demo:
-Frontend: https://smart-spending-analyzer.vercel.app  
+Frontend: https://www.zero2asset.com
 Backend API: https://smart-spending-analyzer.onrender.com
+Vercel fallback: https://smart-spending-analyzer.vercel.app
 
 GitHub:
 Repository: https://github.com/pooriaaj/smart-spending-analyzer

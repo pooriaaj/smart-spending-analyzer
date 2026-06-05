@@ -2353,6 +2353,8 @@ def is_structural_csv_row(row: dict, header_mapping: dict[str, str]) -> bool:
 
     date_key = header_mapping["date"]
     amount_key = header_mapping.get("amount")
+    description_key = header_mapping["description"]
+    category_key = header_mapping.get("category")
 
     normalized_date_value = normalize_header(row.get(date_key, ""))
     normalized_amount_value = normalize_header(row.get(amount_key, "")) if amount_key else ""
@@ -2372,6 +2374,13 @@ def is_structural_csv_row(row: dict, header_mapping: dict[str, str]) -> bool:
         if key
     )
     if not row.get(date_key, "").strip() and not has_money_value:
+        return True
+
+    if (
+        not has_money_value
+        and not row.get(description_key, "").strip()
+        and not (category_key and row.get(category_key, "").strip())
+    ):
         return True
 
     return False
@@ -3271,6 +3280,9 @@ def import_transactions_from_csv(
     invalid_rows_skipped = 0
 
     for row in rows:
+        if is_structural_csv_row(row, header_mapping):
+            continue
+
         try:
             tx_date = parse_date(row[header_mapping["date"]])
             raw_description = get_import_row_description_value(row, header_mapping)
@@ -3384,6 +3396,9 @@ def parse_csv_statement_preview(
     invalid_rows_skipped = 0
 
     for fallback_row_number, row in enumerate(rows, start=2):
+        if is_structural_csv_row(row, header_mapping):
+            continue
+
         try:
             row_number = int(row.get(CSV_ROW_NUMBER_KEY, fallback_row_number))
             tx_date = parse_date(row[header_mapping["date"]])

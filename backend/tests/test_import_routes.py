@@ -2141,6 +2141,12 @@ class SmartImportRouteTest(unittest.TestCase):
             ",,,,,,,,,,,\n"
             ",Date,Expense,Description,Payment Method,Amount,,Expense,,Budget,Actual,Rating\n"
             ",2026-02-02,Bank fees,,Debit,$16.95,,Rent,,$2350.00,$2350.00,\n"
+            ",May 2026,,,,,,,,,,,\n"
+            ",Date,Expense,Description,Payment Method,Amount,,Expense,,Budget,Actual,Rating\n"
+            ",2026-05-05,Groceries,,Debit,$25.25,,Groceries,,$400.00,$300.00,\n"
+            ",June 2026,,,,,,,,,,,\n"
+            ",Date,Expense,Description,Payment Method,Amount,,Expense,,Budget,Actual,Rating\n"
+            ",2026-06-04,Coffee Shops,,Debit,$6.75,,Coffee Shops,,$40.00,$20.00,\n"
         ).encode("utf-8")
 
         response = self.client.post(
@@ -2154,8 +2160,9 @@ class SmartImportRouteTest(unittest.TestCase):
         preview_rows = payload["preview_rows"]
 
         self.assertEqual(payload["status"], "table_review")
-        self.assertEqual(len(preview_rows), 3)
-        self.assertEqual([row["type"] for row in preview_rows], ["expense", "expense", "expense"])
+        self.assertEqual(payload["import_summary"]["invalid_rows_skipped"], 0)
+        self.assertEqual(len(preview_rows), 5)
+        self.assertEqual([row["type"] for row in preview_rows], ["expense"] * 5)
         self.assertEqual(preview_rows[0]["description"], "Parking")
         self.assertEqual(preview_rows[0]["category"], "parking")
         self.assertEqual(preview_rows[0]["source_line"], "monthly-expense-tracker.csv: CSV row 4: Parking")
@@ -2163,6 +2170,31 @@ class SmartImportRouteTest(unittest.TestCase):
         self.assertEqual(preview_rows[1]["category"], "subscriptions")
         self.assertEqual(preview_rows[2]["description"], "Bank fees")
         self.assertEqual(preview_rows[2]["source_line"], "monthly-expense-tracker.csv: CSV row 8: Bank fees")
+        self.assertEqual(preview_rows[3]["description"], "Groceries")
+        self.assertEqual(preview_rows[3]["source_line"], "monthly-expense-tracker.csv: CSV row 11: Groceries")
+        self.assertEqual(preview_rows[4]["description"], "Coffee Shops")
+        self.assertEqual(preview_rows[4]["source_line"], "monthly-expense-tracker.csv: CSV row 14: Coffee Shops")
+
+        confirm_response = self.client.post(
+            "/transactions/import/confirm-preview",
+            json={
+                "account_id": self.account_id,
+                "rows": preview_rows,
+            },
+        )
+
+        self.assertEqual(confirm_response.status_code, 200, confirm_response.text)
+        self.assertEqual(confirm_response.json()["imported"], 5)
+
+        with self.session_local() as session:
+            imported_months = {
+                transaction.date.isoformat()[:7]
+                for transaction in session.query(Transaction)
+                .filter(Transaction.owner_id == self.user_id)
+                .all()
+            }
+
+        self.assertEqual(imported_months, {"2026-01", "2026-02", "2026-05", "2026-06"})
 
     def test_batch_statement_import_combines_pdf_preview_rows(self) -> None:
         first_pdf = build_text_pdf(

@@ -1207,6 +1207,31 @@ class BackendResilienceTest(unittest.TestCase):
         self.assertIn("app.example.com", hosts)
         self.assertIn("*.onrender.com", hosts)
 
+    def test_allowed_origins_include_zero2asset_custom_domain(self) -> None:
+        with patch.dict(
+            "os.environ",
+            {
+                "ENVIRONMENT": "production",
+                "FRONTEND_URL": "https://www.zero2asset.com",
+                "ALLOWED_ORIGINS": (
+                    "https://www.zero2asset.com,"
+                    "https://zero2asset.com,"
+                    "https://smart-spending-analyzer.vercel.app"
+                ),
+            },
+            clear=False,
+        ):
+            origins = get_allowed_origins()
+
+        self.assertEqual(
+            origins,
+            [
+                "https://www.zero2asset.com",
+                "https://zero2asset.com",
+                "https://smart-spending-analyzer.vercel.app",
+            ],
+        )
+
 
 class ValidationErrorSafetyTest(unittest.TestCase):
     def test_validation_error_response_removes_raw_input_and_context(self) -> None:

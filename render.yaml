@@ -6,3 +6,18 @@ services:
     dockerContext: backend
     healthCheckPath: /ready
     autoDeploy: true
+    envVars:
+      - key: ENVIRONMENT
+        value: production
+      - key: FRONTEND_URL
+        value: https://www.zero2asset.com
+      - key: BACKEND_URL
+        value: https://smart-spending-analyzer.onrender.com
+      - key: ALLOWED_ORIGINS
+        value: https://www.zero2asset.com,https://zero2asset.com,https://smart-spending-analyzer.vercel.app
+      - key: ALLOWED_HOSTS
+        value: smart-spending-analyzer.onrender.com,www.zero2asset.com,zero2asset.com
+      - key: AUTH_COOKIE_SECURE
+        value: "true"
+      - key: AUTH_COOKIE_SAMESITE
+        value: none

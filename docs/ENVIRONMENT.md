@@ -55,6 +55,14 @@ Origins and hosts:
 - `ALLOWED_ORIGINS`
 - `ALLOWED_HOSTS`
 
+Production domain notes:
+
+- `FRONTEND_URL` should be the primary user-facing frontend domain.
+- `ALLOWED_ORIGINS` may include more than one trusted frontend origin, separated by commas.
+- For the current production custom domain, include `https://www.zero2asset.com`.
+- If the apex domain redirects to `www`, it is still safe to include `https://zero2asset.com` as an allowed origin.
+- `BACKEND_URL` should remain the Render backend URL unless a custom backend/API domain is configured.
+
 Request limits, rate limits, and imports:
 
 - `RATE_LIMIT_MAX_TRACKED_KEYS`

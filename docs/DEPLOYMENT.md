@@ -13,6 +13,12 @@ For pre-production testing, see `docs/STAGING.md`.
 - Configure `VITE_API_BASE_URL` in Vercel environment settings.
 - Remember: `VITE_` variables are visible in browser builds and must not contain secrets.
 
+Production custom domain:
+
+- Primary frontend URL: `https://www.zero2asset.com`.
+- Keep the Vercel fallback URL available for rollback/testing: `https://smart-spending-analyzer.vercel.app`.
+- Vercel `VITE_API_BASE_URL` should point to the Render backend URL, not to the frontend domain.
+
 ## Backend On Render
 
 - `render.yaml` defines a Docker web service named `smart-spending-analyzer`.
@@ -21,6 +27,17 @@ For pre-production testing, see `docs/STAGING.md`.
 - Render health check path is `/ready`.
 - Runtime settings and secrets should be configured in Render environment variables.
 - `backend/run.py` reads Render's `PORT` and production runtime settings from environment variable names.
+
+For the `zero2asset.com` production frontend, Render should use these public domain values:
+
+- `FRONTEND_URL`: `https://www.zero2asset.com`
+- `BACKEND_URL`: `https://smart-spending-analyzer.onrender.com`
+- `ALLOWED_ORIGINS`: include `https://www.zero2asset.com`, `https://zero2asset.com`, and the Vercel fallback URL.
+- `ALLOWED_HOSTS`: include the Render backend host. Include custom backend hosts only if they are actually pointed at Render.
+- `AUTH_COOKIE_SECURE`: `true`
+- `AUTH_COOKIE_SAMESITE`: `none`
+
+Do not change `DATABASE_URL`, `SECRET_KEY`, API keys, passwords, or tokens while updating domain settings.
 
 ## Database On Render PostgreSQL
 
