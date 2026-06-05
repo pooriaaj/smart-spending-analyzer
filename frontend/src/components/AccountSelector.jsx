@@ -12,6 +12,22 @@ function normalizeSelection(value, allowAll) {
   return allowAll || value !== ALL_ACCOUNTS_VALUE ? String(value || "") : "";
 }
 
+function getAccountsFromResponse(data) {
+  if (Array.isArray(data)) {
+    return data;
+  }
+
+  if (Array.isArray(data?.accounts)) {
+    return data.accounts;
+  }
+
+  if (Array.isArray(data?.items)) {
+    return data.items;
+  }
+
+  return [];
+}
+
 function AccountSelector({
   onChange,
   allowAll = true,
@@ -25,14 +41,20 @@ function AccountSelector({
     normalizeSelection(value ?? getSelectedAccountId(), allowAll)
   );
 
+  const safeAccounts = Array.isArray(accounts) ? accounts : [];
+
   const requestedSelected =
     value === undefined ? internalSelected : normalizeSelection(value, allowAll);
-  const accountIds = accounts.map((account) => String(account.id));
+
+  const accountIds = safeAccounts.map((account) => String(account.id));
+
   const canUseAllAccounts = allowAll && requestedSelected === ALL_ACCOUNTS_VALUE;
+
   const canUseSelectedAccount =
     requestedSelected && accountIds.includes(String(requestedSelected));
+
   const selected =
-    accounts.length > 0 && !canUseAllAccounts && !canUseSelectedAccount
+    safeAccounts.length > 0 && !canUseAllAccounts && !canUseSelectedAccount
       ? accountIds[0]
       : requestedSelected;
 
@@ -42,9 +64,12 @@ function AccountSelector({
         const response = await api.get("/accounts/", {
           params: { include_stats: false },
         });
-        setAccounts(response.data || []);
+
+        const accountsData = getAccountsFromResponse(response.data);
+        setAccounts(accountsData);
       } catch (error) {
         console.error("Failed to load accounts:", error);
+        setAccounts([]);
       }
     };
 
@@ -59,12 +84,14 @@ function AccountSelector({
     if (persistSelection) {
       persistSelectedAccountId(selected);
     }
+
     onChange?.(selected);
   }, [selected, onChange, persistSelection]);
 
   const handleSelectionChange = (event) => {
     const nextSelected = event.target.value;
     setInternalSelected(nextSelected);
+
     if (value !== undefined) {
       onChange?.(nextSelected);
     }
@@ -73,14 +100,25 @@ function AccountSelector({
   return (
     <div className="account-selector-block">
       <label htmlFor="account-selector">{label || t("common.account")}</label>
+
       <select
         id="account-selector"
         value={selected}
         onChange={handleSelectionChange}
       >
-        {allowAll && <option value={ALL_ACCOUNTS_VALUE}>{t("common.allAccounts")}</option>}
-        {!allowAll && !accounts.length && <option value="">{t("common.loadingAccounts")}</option>}
-        {accounts.map((account) => (
+        {allowAll && (
+          <option value={ALL_ACCOUNTS_VALUE}>
+            {t("common.allAccounts")}
+          </option>
+        )}
+
+        {!allowAll && !safeAccounts.length && (
+          <option value="">
+            {t("common.loadingAccounts")}
+          </option>
+        )}
+
+        {safeAccounts.map((account) => (
           <option key={account.id} value={String(account.id)}>
             {formatAccountLabel(account, t)}
           </option>
