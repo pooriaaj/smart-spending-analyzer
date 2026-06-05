@@ -84,7 +84,9 @@ function DashboardPage() {
 
   const fetchData = useCallback(async () => {
     try {
-      const accountsRes = await api.get("/accounts/");
+      const accountsRes = await api.get("/accounts/", {
+        params: { include_stats: false },
+      });
       const loadedAccounts = accountsRes.data || [];
       setAccounts(loadedAccounts);
 

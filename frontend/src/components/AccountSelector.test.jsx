@@ -39,7 +39,9 @@ describe('AccountSelector', () => {
     expect(screen.getByRole('combobox', { name: 'Account scope' })).toHaveValue('all')
     expect(await screen.findByRole('option', { name: 'Everyday (Chequing)' })).toBeInTheDocument()
     expect(screen.getByRole('option', { name: 'Savings Bucket (Savings)' })).toBeInTheDocument()
-    expect(api.get).toHaveBeenCalledWith('/accounts/')
+    expect(api.get).toHaveBeenCalledWith('/accounts/', {
+      params: { include_stats: false },
+    })
     expect(localStorage.getItem('selectedAccountId')).toBe('all')
     expect(onChange).toHaveBeenCalledWith('all')
   })

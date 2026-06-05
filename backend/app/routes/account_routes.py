@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from app.dependencies import get_current_user, get_db
@@ -21,10 +21,14 @@ router = APIRouter(prefix="/accounts", tags=["Accounts"])
 
 @router.get("/", response_model=list[AccountSummaryResponse])
 def list_accounts(
+    include_stats: bool = Query(default=True),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     ensure_default_account(db, current_user)
+    if not include_stats:
+        return get_user_accounts(db, current_user.id)
+
     return get_user_accounts_with_stats(db, current_user.id)
 
 

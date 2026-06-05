@@ -131,6 +131,34 @@ class AccountRouteTest(unittest.TestCase):
         self.assertEqual(savings["total_expenses"], 0.0)
         self.assertEqual(savings["balance"], 0.0)
 
+    def test_list_accounts_can_skip_financial_stats_for_selectors(self) -> None:
+        with self.session_local() as session:
+            session.add(
+                Transaction(
+                    amount=2000.0,
+                    category="Salary",
+                    description="Payroll",
+                    date=date(2026, 1, 2),
+                    type="income",
+                    owner_id=self.user_id,
+                    account_id=self.chequing_account_id,
+                )
+            )
+            session.commit()
+
+        response = self.client.get("/accounts/", params={"include_stats": "false"})
+
+        self.assertEqual(response.status_code, 200, response.text)
+        payload = response.json()
+
+        chequing = next(item for item in payload if item["id"] == self.chequing_account_id)
+
+        self.assertEqual(chequing["name"], "Daily Spending")
+        self.assertEqual(chequing["type"], "chequing")
+        self.assertEqual(chequing["total_income"], 0.0)
+        self.assertEqual(chequing["total_expenses"], 0.0)
+        self.assertEqual(chequing["balance"], 0.0)
+
 
 if __name__ == "__main__":
     unittest.main()

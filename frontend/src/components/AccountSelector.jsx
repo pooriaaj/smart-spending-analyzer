@@ -39,7 +39,9 @@ function AccountSelector({
   useEffect(() => {
     const loadAccounts = async () => {
       try {
-        const response = await api.get("/accounts/");
+        const response = await api.get("/accounts/", {
+          params: { include_stats: false },
+        });
         setAccounts(response.data || []);
       } catch (error) {
         console.error("Failed to load accounts:", error);

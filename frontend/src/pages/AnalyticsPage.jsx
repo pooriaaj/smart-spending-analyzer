@@ -339,41 +339,62 @@ function AnalyticsPage() {
   }, [searchParams, t]);
 
   useEffect(() => {
+    let active = true;
+
     const fetchDashboardAnalytics = async () => {
       try {
         setLoading(true);
+        setTransactions([]);
 
-        const [response, transactionsResponse] = await Promise.all([
-          api.get("/analytics/dashboard", {
-            params: {
-              account_id: normalizedAccountId,
-              month: selectedMonth || undefined,
-              start_date: startDate || undefined,
-              end_date: endDate || undefined,
-              transaction_type: selectedType || undefined,
-              category: selectedCategory || undefined,
-            },
-          }),
-          api.get("/transactions/", {
+        const response = await api.get("/analytics/dashboard", {
+          params: {
+            account_id: normalizedAccountId,
+            month: selectedMonth || undefined,
+            start_date: startDate || undefined,
+            end_date: endDate || undefined,
+            transaction_type: selectedType || undefined,
+            category: selectedCategory || undefined,
+          },
+        });
+
+        if (!active) return;
+
+        setDashboardData(response.data);
+        setLoading(false);
+
+        api
+          .get("/transactions/", {
             params: {
               account_id: normalizedAccountId,
               limit: 1000,
             },
-          }),
-        ]);
-
-        setDashboardData(response.data);
-        setTransactions(transactionsResponse.data || []);
+          })
+          .then((transactionsResponse) => {
+            if (active) {
+              setTransactions(transactionsResponse.data || []);
+            }
+          })
+          .catch((error) => {
+            if (active) {
+              console.error("Failed to load spending pulse transactions:", error);
+              handleApiAuthError(error, navigate);
+            }
+          });
       } catch (error) {
         console.error("Failed to load analytics data:", error);
 
         handleApiAuthError(error, navigate);
-      } finally {
-        setLoading(false);
+        if (active) {
+          setLoading(false);
+        }
       }
     };
 
     fetchDashboardAnalytics();
+
+    return () => {
+      active = false;
+    };
   }, [navigate, normalizedAccountId, selectedMonth, startDate, endDate, selectedType, selectedCategory]);
 
   useEffect(() => {

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import {
   Badge,
@@ -173,6 +173,7 @@ function TransactionsPage() {
 
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
+  const insightsRequestIdRef = useRef(0);
 
   const normalizedAccountId =
     selectedAccountId === ALL_ACCOUNTS_VALUE ? undefined : Number(selectedAccountId);
@@ -229,46 +230,26 @@ function TransactionsPage() {
           amountRangeFilter
       );
 
-      let [transactionsResponse, amountRepairsResponse, learningSummaryResponse] = await Promise.all([
-        api.get("/transactions/page", {
-          params: transactionParams,
-        }),
-        api
-          .get("/transactions/amount-repairs/preview", {
-            params: {
-              account_id: normalizedAccountId,
-            },
-          })
-          .catch(() => null),
-        api
-          .get("/transactions/categorize/learning-summary", {
-            params: {
-              account_id: normalizedAccountId,
-            },
-          })
-          .catch(() => null),
-      ]);
+      let transactionsResponse = await api.get("/transactions/page", {
+        params: transactionParams,
+      });
+      let insightsAccountId = normalizedAccountId;
 
       if (
         normalizedAccountId &&
         !hasActiveFilters &&
         Number(transactionsResponse.data?.scope_total || 0) === 0
       ) {
-        const [allTransactionsResponse, allAmountRepairsResponse, allLearningSummaryResponse] = await Promise.all([
-          api.get("/transactions/page", {
-            params: {
-              page: currentPage,
-              page_size: TRANSACTIONS_PER_PAGE,
-            },
-          }),
-          api.get("/transactions/amount-repairs/preview").catch(() => null),
-          api.get("/transactions/categorize/learning-summary").catch(() => null),
-        ]);
+        const allTransactionsResponse = await api.get("/transactions/page", {
+          params: {
+            page: currentPage,
+            page_size: TRANSACTIONS_PER_PAGE,
+          },
+        });
 
         if (Number(allTransactionsResponse.data?.scope_total || 0) > 0) {
           transactionsResponse = allTransactionsResponse;
-          amountRepairsResponse = allAmountRepairsResponse;
-          learningSummaryResponse = allLearningSummaryResponse;
+          insightsAccountId = undefined;
           persistSelectedAccountId(ALL_ACCOUNTS_VALUE);
           setSelectedAccountId(ALL_ACCOUNTS_VALUE);
           setScopeNotice(t("transactions.switchedAllAccountsNotice"));
@@ -293,8 +274,44 @@ function TransactionsPage() {
       if (pagePayload.page && Number(pagePayload.page) !== currentPage) {
         setCurrentPage(Number(pagePayload.page));
       }
-      setAmountRepairCandidates(amountRepairsResponse?.data?.candidates || []);
-      setLearningSummary(learningSummaryResponse?.data || null);
+      setLoading(false);
+
+      const insightsRequestId = insightsRequestIdRef.current + 1;
+      insightsRequestIdRef.current = insightsRequestId;
+      setAmountRepairLoading(true);
+      setLearningLoading(true);
+      Promise.all([
+        api
+          .get("/transactions/amount-repairs/preview", {
+            params: {
+              account_id: insightsAccountId,
+            },
+          })
+          .catch(() => null),
+        api
+          .get("/transactions/categorize/learning-summary", {
+            params: {
+              account_id: insightsAccountId,
+            },
+          })
+          .catch(() => null),
+      ])
+        .then(([amountRepairsResponse, learningSummaryResponse]) => {
+          if (insightsRequestIdRef.current !== insightsRequestId) {
+            return;
+          }
+
+          setAmountRepairCandidates(amountRepairsResponse?.data?.candidates || []);
+          setLearningSummary(learningSummaryResponse?.data || null);
+        })
+        .finally(() => {
+          if (insightsRequestIdRef.current !== insightsRequestId) {
+            return;
+          }
+
+          setAmountRepairLoading(false);
+          setLearningLoading(false);
+        });
     } catch (error) {
       handleApiAuthError(error, navigate);
     } finally {
