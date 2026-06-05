@@ -2196,6 +2196,62 @@ class SmartImportRouteTest(unittest.TestCase):
 
         self.assertEqual(imported_months, {"2026-01", "2026-02", "2026-05", "2026-06"})
 
+    def test_import_file_uses_month_sections_for_day_only_tracker_dates(self) -> None:
+        tracker_csv = (
+            ",Monthly Expense Tracker,,,,\n"
+            ",April 2026,,,,\n"
+            ",Date,Expense,Description,Payment Method,Amount\n"
+            ",2026-04-02,Parking,,Debit,$2.50\n"
+            ",May 2026,,,,\n"
+            ",Date,Expense,Description,Payment Method,Amount\n"
+            ",5,Groceries,,Debit,$25.25\n"
+            ",June 2026,,,,\n"
+            ",Date,Expense,Description,Payment Method,Amount\n"
+            ",Jun 4,Coffee Shops,,Debit,$6.75\n"
+        ).encode("utf-8")
+
+        response = self.client.post(
+            "/transactions/import/file",
+            data={"account_id": str(self.account_id)},
+            files={"file": ("day-only-monthly-tracker.csv", tracker_csv, "text/csv")},
+        )
+
+        self.assertEqual(response.status_code, 200, response.text)
+        payload = response.json()
+        preview_rows = payload["preview_rows"]
+
+        self.assertEqual(payload["import_summary"]["invalid_rows_skipped"], 0)
+        self.assertEqual(
+            [(row["date"], row["description"]) for row in preview_rows],
+            [
+                ("2026-04-02", "Parking"),
+                ("2026-05-05", "Groceries"),
+                ("2026-06-04", "Coffee Shops"),
+            ],
+        )
+
+    def test_import_file_returns_csv_invalid_row_diagnostics(self) -> None:
+        tracker_csv = (
+            ",Monthly Expense Tracker,,,,\n"
+            ",May 2026,,,,\n"
+            ",Date,Expense,Description,Payment Method,Amount\n"
+            ",not-a-date,Groceries,,Debit,$25.25\n"
+            ",7,Coffee Shops,,Debit,\n"
+        ).encode("utf-8")
+
+        response = self.client.post(
+            "/transactions/import/file",
+            data={"account_id": str(self.account_id)},
+            files={"file": ("broken-monthly-tracker.csv", tracker_csv, "text/csv")},
+        )
+
+        self.assertEqual(response.status_code, 400, response.text)
+        detail = response.json()["detail"]
+        self.assertIn("No transaction rows were recognized", detail)
+        self.assertIn("Skipped 2 invalid rows", detail)
+        self.assertIn("CSV row 4: date is missing or uses an unsupported format.", detail)
+        self.assertIn("CSV row 5: amount is missing or not a number.", detail)
+
     def test_batch_statement_import_combines_pdf_preview_rows(self) -> None:
         first_pdf = build_text_pdf(
             [

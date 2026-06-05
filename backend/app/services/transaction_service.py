@@ -105,7 +105,34 @@ HEADER_ALIASES = {
     "category": {"category", "expense", "expense_category"},
 }
 CSV_ROW_NUMBER_KEY = "__csv_row_number"
+CSV_MONTH_CONTEXT_KEY = "__csv_month_context"
 TRACKER_EXPENSE_HEADER_ALIASES = {"expense", "expense_category"}
+MONTH_NAME_TO_NUMBER = {
+    "jan": 1,
+    "january": 1,
+    "feb": 2,
+    "february": 2,
+    "mar": 3,
+    "march": 3,
+    "apr": 4,
+    "april": 4,
+    "may": 5,
+    "jun": 6,
+    "june": 6,
+    "jul": 7,
+    "july": 7,
+    "aug": 8,
+    "august": 8,
+    "sep": 9,
+    "sept": 9,
+    "september": 9,
+    "oct": 10,
+    "october": 10,
+    "nov": 11,
+    "november": 11,
+    "dec": 12,
+    "december": 12,
+}
 
 CATEGORY_RULES = {
     "salary": [
@@ -609,7 +636,77 @@ def normalize_header(value: str) -> str:
 
 
 def parse_date(value: str) -> date:
+    return parse_date_with_context(value)
+
+
+def parse_csv_month_context_label(value: str | None) -> str | None:
+    text = sanitize_import_text(value or "").strip()
+    if not text:
+        return None
+
+    month_names = "|".join(MONTH_NAME_TO_NUMBER)
+    match = re.fullmatch(rf"({month_names})[\s,/-]+(\d{{4}})", text, flags=re.IGNORECASE)
+    if match:
+        month_number = MONTH_NAME_TO_NUMBER[match.group(1).lower()]
+        year = int(match.group(2))
+        return f"{year:04d}-{month_number:02d}"
+
+    match = re.fullmatch(r"(\d{4})[-/](\d{1,2})", text)
+    if match:
+        year = int(match.group(1))
+        month_number = int(match.group(2))
+        if 1 <= month_number <= 12:
+            return f"{year:04d}-{month_number:02d}"
+
+    return None
+
+
+def detect_csv_month_context(raw_row: list[str]) -> str | None:
+    non_empty_values = [
+        sanitize_import_text(value).strip()
+        for value in raw_row
+        if sanitize_import_text(value).strip()
+    ]
+    if len(non_empty_values) > 2:
+        return None
+
+    for value in non_empty_values:
+        month_context = parse_csv_month_context_label(value)
+        if month_context:
+            return month_context
+    return None
+
+
+def parse_date_with_context(value: str, month_context: str | None = None) -> date:
     value = value.strip()
+
+    if month_context:
+        year_text, month_text = month_context.split("-", 1)
+        context_year = int(year_text)
+        context_month = int(month_text)
+
+        day_match = re.fullmatch(r"\d{1,2}", value)
+        if day_match:
+            return date(context_year, context_month, int(value))
+
+        month_names = "|".join(MONTH_NAME_TO_NUMBER)
+        month_day_match = re.fullmatch(
+            rf"({month_names})[\s.-]+(\d{{1,2}})",
+            value,
+            flags=re.IGNORECASE,
+        )
+        if month_day_match:
+            month_number = MONTH_NAME_TO_NUMBER[month_day_match.group(1).lower()]
+            return date(context_year, month_number, int(month_day_match.group(2)))
+
+        day_month_match = re.fullmatch(
+            rf"(\d{{1,2}})[\s.-]+({month_names})",
+            value,
+            flags=re.IGNORECASE,
+        )
+        if day_month_match:
+            month_number = MONTH_NAME_TO_NUMBER[day_month_match.group(2).lower()]
+            return date(context_year, month_number, int(day_month_match.group(1)))
 
     date_formats = [
         "%Y-%m-%d",
@@ -619,6 +716,7 @@ def parse_date(value: str) -> date:
         "%m-%d-%Y",
         "%d-%m-%Y",
         "%b %d, %Y",
+        "%B %d, %Y",
     ]
 
     for fmt in date_formats:
@@ -2257,10 +2355,19 @@ def read_csv_rows(text: str) -> tuple[list[dict], dict[str, str]]:
 
     header_index, normalized_headers, header_mapping = find_csv_header_row(raw_rows)
 
+    current_month_context = None
+    for raw_row in raw_rows[:header_index]:
+        current_month_context = detect_csv_month_context(raw_row) or current_month_context
+
     rows = []
     for index, raw_row in enumerate(raw_rows[header_index + 1 :], start=1):
         if index > max_csv_rows():
             raise ValueError(f"CSV row limit exceeded. Maximum is {max_csv_rows()} rows per file.")
+
+        detected_month_context = detect_csv_month_context(raw_row)
+        if detected_month_context:
+            current_month_context = detected_month_context
+            continue
 
         padded_row = [*raw_row, *[""] * max(0, len(normalized_headers) - len(raw_row))]
         normalized_row = {
@@ -2268,6 +2375,7 @@ def read_csv_rows(text: str) -> tuple[list[dict], dict[str, str]]:
             for header, value in zip(normalized_headers, padded_row[: len(normalized_headers)])
         }
         normalized_row[CSV_ROW_NUMBER_KEY] = str(header_index + index + 1)
+        normalized_row[CSV_MONTH_CONTEXT_KEY] = current_month_context or ""
         rows.append(normalized_row)
 
     return rows, header_mapping
@@ -2378,6 +2486,36 @@ def is_structural_csv_row(row: dict, header_mapping: dict[str, str]) -> bool:
         return True
 
     return False
+
+
+def parse_import_csv_row_date(row: dict, header_mapping: dict[str, str]) -> date:
+    return parse_date_with_context(
+        row[header_mapping["date"]],
+        row.get(CSV_MONTH_CONTEXT_KEY) or None,
+    )
+
+
+def csv_row_error_summary(error: Exception) -> str:
+    message = str(error)
+    if "Invalid date format" in message or isinstance(error, ValueError) and "day is out of range" in message:
+        return "date is missing or uses an unsupported format"
+    if "Could not infer transaction amount/type" in message:
+        return "amount or transaction type is missing"
+    if "could not convert string to float" in message:
+        return "amount is missing or not a number"
+    if "Invalid transaction type" in message:
+        return "transaction type must be income, expense, credit, debit, deposit, or withdrawal"
+    if "Description and category are required" in message:
+        return "description or category is missing"
+    return "row could not be parsed"
+
+
+def build_invalid_csv_row_detail(row: dict, fallback_row_number: int, error: Exception) -> str:
+    try:
+        row_number = int(row.get(CSV_ROW_NUMBER_KEY, fallback_row_number))
+    except (TypeError, ValueError):
+        row_number = fallback_row_number
+    return f"CSV row {row_number}: {csv_row_error_summary(error)}."
 
 
 def normalize_repeating_description(value: str) -> str:
@@ -3272,13 +3410,14 @@ def import_transactions_from_csv(
     imported = 0
     duplicates_skipped = 0
     invalid_rows_skipped = 0
+    invalid_row_details: list[str] = []
 
-    for row in rows:
+    for fallback_row_number, row in enumerate(rows, start=2):
         if is_structural_csv_row(row, header_mapping):
             continue
 
         try:
-            tx_date = parse_date(row[header_mapping["date"]])
+            tx_date = parse_import_csv_row_date(row, header_mapping)
             raw_description = get_import_row_description_value(row, header_mapping)
             description = normalize_description(raw_description)
 
@@ -3363,8 +3502,12 @@ def import_transactions_from_csv(
             )
             imported += 1
 
-        except Exception:
+        except Exception as exc:
             invalid_rows_skipped += 1
+            if len(invalid_row_details) < 10:
+                invalid_row_details.append(
+                    build_invalid_csv_row_detail(row, fallback_row_number, exc)
+                )
 
     if to_insert:
         db.bulk_save_objects(to_insert)
@@ -3375,6 +3518,7 @@ def import_transactions_from_csv(
         "imported": imported,
         "duplicates_skipped": duplicates_skipped,
         "invalid_rows_skipped": invalid_rows_skipped,
+        "invalid_row_details": invalid_row_details,
     }
 
 
@@ -3388,6 +3532,7 @@ def parse_csv_statement_preview(
 
     preview_rows: list[StatementPreviewRow] = []
     invalid_rows_skipped = 0
+    invalid_row_details: list[str] = []
 
     for fallback_row_number, row in enumerate(rows, start=2):
         if is_structural_csv_row(row, header_mapping):
@@ -3395,7 +3540,7 @@ def parse_csv_statement_preview(
 
         try:
             row_number = int(row.get(CSV_ROW_NUMBER_KEY, fallback_row_number))
-            tx_date = parse_date(row[header_mapping["date"]])
+            tx_date = parse_import_csv_row_date(row, header_mapping)
             raw_description = get_import_row_description_value(row, header_mapping)
             description = normalize_description(raw_description)
             tx_type, amount = infer_type_and_amount(row, header_mapping)
@@ -3456,15 +3601,28 @@ def parse_csv_statement_preview(
                     category_review_reason=category_review_reason,
                 )
             )
-        except Exception:
+        except Exception as exc:
             invalid_rows_skipped += 1
+            if len(invalid_row_details) < 10:
+                invalid_row_details.append(
+                    build_invalid_csv_row_detail(row, fallback_row_number, exc)
+                )
 
     if not preview_rows:
-        raise ValueError("No transaction rows were recognized in this CSV statement.")
+        detail = "No transaction rows were recognized in this CSV statement."
+        if invalid_rows_skipped:
+            examples = " ".join(invalid_row_details[:3])
+            detail = (
+                f"{detail} Skipped {invalid_rows_skipped} invalid row"
+                f"{'' if invalid_rows_skipped == 1 else 's'}."
+                f"{f' Examples: {examples}' if examples else ''}"
+            )
+        raise ValueError(detail)
 
     return {
         "preview_rows": preview_rows,
         "invalid_rows_skipped": invalid_rows_skipped,
+        "invalid_row_details": invalid_row_details,
     }
 
 

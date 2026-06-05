@@ -184,4 +184,58 @@ describe('ImportPage', () => {
     expect(screen.getByText('Imported')).toBeInTheDocument()
     expect(screen.getByText('2')).toBeInTheDocument()
   })
+
+  it('logs sanitized upload diagnostics when import fails', async () => {
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    api.post.mockImplementation((path) => {
+      if (path === '/transactions/import/file') {
+        return Promise.reject({
+          response: {
+            status: 500,
+            data: {
+              detail: 'Smart import failed.',
+              request_id: 'request-123',
+              stage: 'csv_statement_parse',
+            },
+            headers: {
+              'x-request-id': 'request-123',
+            },
+          },
+        })
+      }
+      return Promise.reject(new Error(`Unexpected POST ${path}`))
+    })
+
+    const user = userEvent.setup()
+    const { container } = renderImportPage()
+
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Target Account' }), '7')
+    const file = new File(['fake csv bytes'], 'personal-statement.csv', {
+      type: 'text/csv',
+    })
+    fireEvent.change(getFileInput(container), {
+      target: { files: [file] },
+    })
+
+    expect(await screen.findByText(/Smart import failed/)).toBeInTheDocument()
+    expect(consoleSpy).toHaveBeenCalledWith(
+      'Import upload failed',
+      expect.objectContaining({
+        uploadPath: '/transactions/import/file',
+        status: 500,
+        requestId: 'request-123',
+        stage: 'csv_statement_parse',
+        fileCount: 1,
+        files: [
+          expect.objectContaining({
+            extension: 'csv',
+            type: 'text/csv',
+            size: expect.any(Number),
+          }),
+        ],
+      }),
+    )
+    expect(JSON.stringify(consoleSpy.mock.calls)).not.toContain('personal-statement.csv')
+    consoleSpy.mockRestore()
+  })
 })

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 from datetime import date, datetime, timezone
+from pathlib import Path
 from typing import get_args
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile
@@ -88,6 +89,10 @@ from app.services.unified_import_service import process_smart_import, process_sm
 router = APIRouter(prefix="/transactions", tags=["Transactions"])
 logger = logging.getLogger(__name__)
 VALID_ENTRY_SOURCES = set(get_args(TransactionEntrySource))
+
+
+def safe_upload_extension(filename: str | None) -> str:
+    return Path(filename or "").suffix.lower() or "unknown"
 
 
 def validate_transaction_category(category: str) -> None:
@@ -581,9 +586,29 @@ async def smart_import_file(
             content_type=safe_content_type,
         )
         commit_pending_side_effects_safely(db)
+        logger.info(
+            "Smart import completed user_id=%s account_id=%s request_id=%s extension=%s content_type=%s size_bytes=%s detected_type=%s status=%s preview_rows=%s invalid_rows=%s",
+            current_user.id,
+            account_id,
+            getattr(request.state, "request_id", None),
+            safe_upload_extension(safe_filename),
+            safe_content_type or "unknown",
+            len(file_bytes),
+            result.get("detected_type"),
+            result.get("status"),
+            len(result.get("preview_rows", [])),
+            (result.get("import_summary") or {}).get("invalid_rows_skipped", 0),
+        )
         return result
     except ValueError as exc:
         db.rollback()
+        logger.warning(
+            "Smart import rejected user_id=%s account_id=%s request_id=%s error=%s",
+            current_user.id,
+            account_id,
+            getattr(request.state, "request_id", None),
+            str(exc)[:300],
+        )
         raise HTTPException(status_code=400, detail=str(exc))
     except Exception as exc:
         db.rollback()
@@ -628,9 +653,28 @@ async def smart_import_files(
             files=file_payloads,
         )
         commit_pending_side_effects_safely(db)
+        logger.info(
+            "Smart batch import completed user_id=%s account_id=%s request_id=%s file_count=%s total_size_bytes=%s detected_type=%s status=%s preview_rows=%s invalid_rows=%s",
+            current_user.id,
+            account_id,
+            getattr(request.state, "request_id", None),
+            len(file_payloads),
+            sum(len(file_bytes) for file_bytes, _, _ in file_payloads),
+            result.get("detected_type"),
+            result.get("status"),
+            len(result.get("preview_rows", [])),
+            (result.get("import_summary") or {}).get("invalid_rows_skipped", 0),
+        )
         return result
     except ValueError as exc:
         db.rollback()
+        logger.warning(
+            "Smart batch import rejected user_id=%s account_id=%s request_id=%s error=%s",
+            current_user.id,
+            account_id,
+            getattr(request.state, "request_id", None),
+            str(exc)[:300],
+        )
         raise HTTPException(status_code=400, detail=str(exc))
     except Exception as exc:
         db.rollback()

@@ -208,10 +208,12 @@ def process_smart_import(
                 "imported": 0,
                 "duplicates_skipped": 0,
                 "invalid_rows_skipped": result.get("invalid_rows_skipped", 0),
+                "invalid_row_details": result.get("invalid_row_details", []),
             },
             "preview_rows": preview_rows,
             "notes": [
-                "Matched rows are already in your app. Missing rows can be imported after review."
+                "Matched rows are already in your app. Missing rows can be imported after review.",
+                *result.get("invalid_row_details", []),
             ],
         }
 
@@ -321,6 +323,7 @@ def process_smart_import_batch(
     duplicates_skipped = 0
     invalid_rows_skipped = 0
     notes: list[str] = []
+    invalid_row_details: list[str] = []
     preview_rows: list[StatementPreviewRow] = []
     processed_count = 0
 
@@ -336,12 +339,18 @@ def process_smart_import_batch(
             )
             file_invalid = result.get("invalid_rows_skipped", 0)
             invalid_rows_skipped += file_invalid
+            file_invalid_details = [
+                f"{filename}: {detail}"
+                for detail in result.get("invalid_row_details", [])
+            ]
+            invalid_row_details.extend(file_invalid_details)
             file_rows = result.get("preview_rows", [])
             preview_rows.extend(add_file_context_to_preview_rows(file_rows, filename, detected_type))
             notes.append(
                 f"{filename}: detected {len(file_rows)} row{'' if len(file_rows) == 1 else 's'} for reconciliation, skipped {file_invalid} invalid row"
                 f"{'' if file_invalid == 1 else 's'}."
             )
+            notes.extend(file_invalid_details[:5])
             continue
 
         if detected_type == "pdf_statement":
@@ -378,6 +387,7 @@ def process_smart_import_batch(
                 "imported": imported,
                 "duplicates_skipped": duplicates_skipped,
                 "invalid_rows_skipped": invalid_rows_skipped,
+                "invalid_row_details": invalid_row_details[:20],
             },
             "preview_rows": preview_rows,
             "notes": notes,
@@ -394,6 +404,7 @@ def process_smart_import_batch(
             "imported": imported,
             "duplicates_skipped": duplicates_skipped,
             "invalid_rows_skipped": invalid_rows_skipped,
+            "invalid_row_details": invalid_row_details[:20],
         },
         "notes": notes,
     }

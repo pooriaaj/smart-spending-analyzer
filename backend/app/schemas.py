@@ -1007,6 +1007,7 @@ class ImportSummary(BaseModel):
     imported: int = 0
     duplicates_skipped: int = 0
     invalid_rows_skipped: int = 0
+    invalid_row_details: list[str] = Field(default_factory=list, max_length=20)
 
 
 class DraftTransaction(BaseModel):

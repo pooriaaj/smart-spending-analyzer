@@ -279,6 +279,27 @@ const formatSelectedFilesLabel = (files, t) => {
   });
 };
 
+const buildSafeUploadDiagnostics = (error, files, uploadPath) => ({
+  uploadPath,
+  status: error?.response?.status || null,
+  requestId:
+    error?.response?.data?.request_id ||
+    error?.response?.headers?.["x-request-id"] ||
+    error?.response?.headers?.["X-Request-ID"] ||
+    null,
+  stage: error?.response?.data?.stage || null,
+  fileCount: files.length,
+  files: files.map((file) => ({
+    extension: getFileExtension(file.name) || "unknown",
+    type: file.type || "unknown",
+    size: file.size,
+  })),
+});
+
+const logImportUploadError = (error, files, uploadPath) => {
+  console.error("Import upload failed", buildSafeUploadDiagnostics(error, files, uploadPath));
+};
+
 function ImportPage() {
   const navigate = useNavigate();
   const { t } = useLanguage();
@@ -571,6 +592,7 @@ function ImportPage() {
       }
     } catch (uploadError) {
       if (!handleApiAuthError(uploadError, navigate)) {
+        logImportUploadError(uploadError, selectedFiles, uploadPath);
         setError(getApiErrorMessage(uploadError, t("import.importFallbackFailed")));
       }
     } finally {
