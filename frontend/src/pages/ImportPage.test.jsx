@@ -185,6 +185,42 @@ describe('ImportPage', () => {
     expect(screen.getByText('2')).toBeInTheDocument()
   })
 
+  it('shows skipped source row diagnostics during statement review', async () => {
+    api.post.mockImplementation((path) => {
+      if (path === '/transactions/import/file') {
+        return Promise.resolve({
+          data: {
+            status: 'table_review',
+            detected_type: 'csv_statement',
+            preview_rows: [previewRows[0]],
+            import_summary: {
+              imported: 0,
+              duplicates_skipped: 0,
+              invalid_rows_skipped: 1,
+              invalid_row_details: ['CSV row 356: amount is missing or not a number.'],
+            },
+            notes: ['Matched rows are already in your app. Missing rows can be imported after review.'],
+          },
+        })
+      }
+      return Promise.reject(new Error(`Unexpected POST ${path}`))
+    })
+
+    const user = userEvent.setup()
+    const { container } = renderImportPage()
+
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Target Account' }), '7')
+    uploadStatement(container)
+
+    expect(await screen.findByText('1 source row skipped')).toBeInTheDocument()
+    expect(
+      screen.getByText(
+        'Rows with missing dates, descriptions, or amounts are not imported. Review the row numbers in your source file if the count looks wrong.',
+      ),
+    ).toBeInTheDocument()
+    expect(screen.getByText('CSV row 356: amount is missing or not a number.')).toBeInTheDocument()
+  })
+
   it('logs sanitized upload diagnostics when import fails', async () => {
     const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
     api.post.mockImplementation((path) => {

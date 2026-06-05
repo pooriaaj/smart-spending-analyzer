@@ -627,6 +627,9 @@ const translations = {
       alreadyWrittenRows: "Already Written ({count})",
       repeatingRows: "Repeating ({count})",
       confidenceCheckRows: "Confidence Check ({count})",
+      sourceRowsSkipped: "{count} source row{plural} skipped",
+      sourceRowsSkippedDetail:
+        "Rows with missing dates, descriptions, or amounts are not imported. Review the row numbers in your source file if the count looks wrong.",
       rowsNeedFixes: "{count} row{plural} need fixes",
       reviewHighlightedFields:
         "Review the highlighted fields before confirming import. Invalid rows are blocked on the client now.",
@@ -2023,6 +2026,9 @@ const translations = {
       alreadyWrittenRows: "Déjà écrites ({count})",
       repeatingRows: "Récurrentes ({count})",
       confidenceCheckRows: "Vérification confiance ({count})",
+      sourceRowsSkipped: "{count} ligne{plural} source ignorée{plural}",
+      sourceRowsSkippedDetail:
+        "Les lignes sans date, description ou montant ne sont pas importées. Vérifiez les numéros de ligne dans le fichier source si le total semble incorrect.",
       rowsNeedFixes: "{count} ligne{plural} à corriger",
       reviewHighlightedFields:
         "Vérifiez les champs surlignés avant de confirmer l'importation. Les lignes invalides sont bloquées côté client.",

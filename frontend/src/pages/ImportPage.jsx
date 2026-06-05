@@ -376,6 +376,8 @@ function ImportPage() {
 
     return null;
   })();
+  const skippedImportRowCount = importResult?.import_summary?.invalid_rows_skipped ?? 0;
+  const skippedImportRowDetails = importResult?.import_summary?.invalid_row_details || [];
   const detectedPreviewRows = importResult?.status === "table_review" ? importResult.preview_rows || [] : [];
   const removedPreviewCount = Math.max(detectedPreviewRows.length - previewRows.length, 0);
   const previewRowValidations = previewRows.map((row) => validatePreviewRow(row, t));
@@ -1236,6 +1238,25 @@ function ImportPage() {
                 {t("import.confidenceCheckRows", { count: confidencePreviewRowCount })}
               </button>
             </div>
+
+            {skippedImportRowCount > 0 && (
+              <div className="import-validation-box">
+                <strong>
+                  {t("import.sourceRowsSkipped", {
+                    count: skippedImportRowCount,
+                    plural: skippedImportRowCount === 1 ? "" : "s",
+                  })}
+                </strong>
+                <p>{t("import.sourceRowsSkippedDetail")}</p>
+                {skippedImportRowDetails.length > 0 && (
+                  <ul className="assistant-list import-skipped-row-list">
+                    {skippedImportRowDetails.map((item, index) => (
+                      <li key={`skipped-import-row-${index}`}>{item}</li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            )}
 
             {invalidPreviewRowCount > 0 && (
               <div className="import-validation-box">
