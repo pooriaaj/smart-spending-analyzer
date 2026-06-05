@@ -22,6 +22,7 @@ const TransactionsPage = lazy(() => import("./pages/TransactionsPage"));
 const AnalyticsPage = lazy(() => import("./pages/AnalyticsPage"));
 const AssistantPage = lazy(() => import("./pages/AssistantPage"));
 const ProfilePage = lazy(() => import("./pages/ProfilePage"));
+const AccountsPage = lazy(() => import("./pages/AccountsPage"));
 const ForgotPasswordPage = lazy(() => import("./pages/ForgotPasswordPage"));
 const ResetPasswordPage = lazy(() => import("./pages/ResetPasswordPage"));
 const ImportPage = lazy(() => import("./pages/ImportPage"));
@@ -33,7 +34,8 @@ const APP_NAV_ITEMS = [
   { labelKey: "common.transactions", path: "/transactions", matchPaths: ["/transactions"] },
   { labelKey: "common.budgets", path: "/budgets", matchPaths: ["/budgets", "/simulator"] },
   { labelKey: "common.assistant", path: "/assistant", matchPaths: ["/assistant"] },
-  { labelKey: "common.profileSettings", path: "/profile", matchPaths: ["/profile", "/accounts"] },
+  { labelKey: "common.accounts", path: "/accounts", matchPaths: ["/accounts"] },
+  { labelKey: "common.profileSettings", path: "/profile", matchPaths: ["/profile"] },
 ];
 
 function ProtectedRoute({ children }) {
@@ -245,7 +247,7 @@ function AppRoutes() {
           <Route path="/analytics" element={protectedPage(<AnalyticsPage />)} />
           <Route path="/assistant" element={protectedPage(<AssistantPage />)} />
           <Route path="/profile" element={protectedPage(<ProfilePage />)} />
-          <Route path="/accounts" element={<ProtectedRoute><Navigate to="/profile" replace /></ProtectedRoute>} />
+          <Route path="/accounts" element={protectedPage(<AccountsPage />)} />
           <Route path="/import" element={protectedPage(<ImportPage />)} />
           <Route path="/money-map" element={<ProtectedRoute><Navigate to="/analytics" replace /></ProtectedRoute>} />
           <Route path="/budgets" element={protectedPage(<BudgetsPage />)} />
