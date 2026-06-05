@@ -84,6 +84,26 @@ const CASHFLOW_NEUTRAL_DESCRIPTION_MARKERS = [
 ];
 const CATEGORY_PIE_COLORS = ["#60a5fa", "#34d399", "#f87171", "#fbbf24", "#a78bfa"];
 
+function toArray(value) {
+  return Array.isArray(value) ? value : [];
+}
+
+function getItemsFromResponse(data) {
+  if (Array.isArray(data)) {
+    return data;
+  }
+
+  if (Array.isArray(data?.items)) {
+    return data.items;
+  }
+
+  if (Array.isArray(data?.transactions)) {
+    return data.transactions;
+  }
+
+  return [];
+}
+
 function formatCategoryName(category, t) {
   if (!category || typeof category !== "string") return formatCategoryLabel("other", t);
   const normalized = category.trim().toLowerCase();
@@ -93,7 +113,7 @@ function formatCategoryName(category, t) {
 function mergeCategoryBreakdown(items, t) {
   const mergedMap = new Map();
 
-  (items || []).forEach((item) => {
+  toArray(items).forEach((item) => {
     const displayCategory = formatCategoryName(item.category, t);
     const currentTotal = mergedMap.get(displayCategory) || 0;
     mergedMap.set(displayCategory, currentTotal + Number(item.total || 0));
@@ -149,7 +169,7 @@ const buildRecentMonthKeys = (monthCount) => {
 };
 
 const getExpenseTransactions = (transactions) =>
-  (transactions || [])
+  toArray(transactions)
     .map((transaction) => ({
       ...transaction,
       amount: Number(transaction.amount || 0),
@@ -371,7 +391,7 @@ function AnalyticsPage() {
           })
           .then((transactionsResponse) => {
             if (active) {
-              setTransactions(transactionsResponse.data || []);
+              setTransactions(getItemsFromResponse(transactionsResponse.data));
             }
           })
           .catch((error) => {
@@ -437,7 +457,7 @@ function AnalyticsPage() {
   }, [themeMode]);
 
   const rawCategoryBreakdown = useMemo(
-    () => dashboardData?.category_breakdown || [],
+    () => toArray(dashboardData?.category_breakdown),
     [dashboardData?.category_breakdown]
   );
 
@@ -509,8 +529,9 @@ function AnalyticsPage() {
   };
 
   const renderTrendAmount = (value) => {
-    const prefix = value > 0 ? "+" : "";
-    return `${prefix}$${value.toFixed(2)}`;
+    const numberValue = Number(value || 0);
+    const prefix = numberValue > 0 ? "+" : "";
+    return `${prefix}${formatMoney(numberValue)}`;
   };
 
   const getSectionHighlightClass = (sectionName) => {
@@ -553,11 +574,17 @@ function AnalyticsPage() {
     total_expenses: 0,
     balance: 0,
   };
-  const monthlySummary = dashboardData?.monthly_summary || [];
+  const monthlySummary = toArray(dashboardData?.monthly_summary);
   const spendingInsights = dashboardData?.spending_insights;
+  const spendingInsightItems = toArray(spendingInsights?.insights);
+  const recommendationItems = toArray(spendingInsights?.recommendations);
   const overspendingAlerts = dashboardData?.overspending_alerts;
+  const overspendingAlertItems = toArray(overspendingAlerts?.alerts);
   const categoryTrends = dashboardData?.category_trends;
-  const accountComparison = dashboardData?.account_comparison || [];
+  const categoryTrendSummaryItems = toArray(categoryTrends?.summary);
+  const topIncreaseItems = toArray(categoryTrends?.top_increases);
+  const topDecreaseItems = toArray(categoryTrends?.top_decreases);
+  const accountComparison = toArray(dashboardData?.account_comparison);
 
   const normalizedTopCategory = mergedCategoryBreakdown[0] || null;
   const topExpenseCategoryValue = normalizedTopCategory
@@ -818,22 +845,22 @@ function AnalyticsPage() {
               tone="accent"
               label={t("analytics.categoryTrendComparison")}
               value={
-                categoryTrends?.top_increases?.[0]
-                  ? formatCategoryName(categoryTrends.top_increases[0].category, t)
+                topIncreaseItems[0]
+                  ? formatCategoryName(topIncreaseItems[0].category, t)
                   : t("analytics.noTrendData")
               }
               detail={t("analytics.categoryTrendDetail")}
             />
             <InsightCard
-              tone={overspendingAlerts?.alerts?.length ? "warning" : "positive"}
+              tone={overspendingAlertItems.length ? "warning" : "positive"}
               label={t("analytics.overspendingAlerts")}
               value={
-                overspendingAlerts?.alerts?.length
-                  ? String(overspendingAlerts.alerts.length)
+                overspendingAlertItems.length
+                  ? String(overspendingAlertItems.length)
                   : t("analytics.noAlerts")
               }
               detail={
-                overspendingAlerts?.alerts?.[0]?.message ||
+                overspendingAlertItems[0]?.message ||
                 t("analytics.overspendingAlertsDetail")
               }
             />
@@ -841,8 +868,8 @@ function AnalyticsPage() {
               tone="positive"
               label={t("analytics.recommendations")}
               value={
-                spendingInsights?.recommendations?.length
-                  ? String(spendingInsights.recommendations.length)
+                recommendationItems.length
+                  ? String(recommendationItems.length)
                   : t("analytics.noInsights")
               }
               detail={t("analytics.spendingInsightsDetail")}
@@ -918,13 +945,13 @@ function AnalyticsPage() {
                 <Text size="sm" c="dimmed">{t("analytics.overspendingAlertsDetail")}</Text>
               </Box>
 
-              {!overspendingAlerts || overspendingAlerts.alerts.length === 0 ? (
+              {!overspendingAlerts || overspendingAlertItems.length === 0 ? (
                 <Paper className="empty-state" radius="lg" p="md">
                   <Text>{t("analytics.noAlerts")}</Text>
                 </Paper>
               ) : (
                 <Stack gap="sm">
-                  {overspendingAlerts.alerts.map((alert, index) => (
+                  {overspendingAlertItems.map((alert, index) => (
                     <Paper
                       key={`alert-${index}`}
                       className={`alert-box alert-${alert.level}`}
@@ -962,7 +989,7 @@ function AnalyticsPage() {
             <>
               <Paper className="trend-summary-box" radius="lg" p="md">
                 <Stack gap={6}>
-                  {categoryTrends.summary.map((item, index) => (
+                  {categoryTrendSummaryItems.map((item, index) => (
                     <Text key={`trend-summary-${index}`} size="sm">{item}</Text>
                   ))}
                 </Stack>
@@ -972,17 +999,17 @@ function AnalyticsPage() {
                 <Paper className="trend-block" radius="lg" p="md">
                   <Stack gap="sm">
                   <Title order={3} size="h4">{t("analytics.topIncreases")}</Title>
-                  {categoryTrends.top_increases.length === 0 ? (
+                  {topIncreaseItems.length === 0 ? (
                     <Text className="trend-empty-text" size="sm">{t("analytics.noIncreases")}</Text>
                   ) : (
                     <Stack gap="sm">
-                      {categoryTrends.top_increases.map((item) => (
+                      {topIncreaseItems.map((item) => (
                         <Paper key={`increase-${item.category}`} className="trend-item" radius="md" p="sm">
                           <Group justify="space-between" align="center" gap="md">
                           <Box>
                             <Text fw={700}>{formatCategoryName(item.category, t)}</Text>
                             <Text size="sm" c="dimmed">
-                              {categoryTrends.previous_month}: ${item.previous_amount.toFixed(2)} → {categoryTrends.current_month}: ${item.current_amount.toFixed(2)}
+                              {categoryTrends.previous_month}: {formatMoney(item.previous_amount)} → {categoryTrends.current_month}: {formatMoney(item.current_amount)}
                             </Text>
                           </Box>
                           <Text className="trend-positive" fw={800}>
@@ -999,17 +1026,17 @@ function AnalyticsPage() {
                 <Paper className="trend-block" radius="lg" p="md">
                   <Stack gap="sm">
                   <Title order={3} size="h4">{t("analytics.topDecreases")}</Title>
-                  {categoryTrends.top_decreases.length === 0 ? (
+                  {topDecreaseItems.length === 0 ? (
                     <Text className="trend-empty-text" size="sm">{t("analytics.noDecreases")}</Text>
                   ) : (
                     <Stack gap="sm">
-                      {categoryTrends.top_decreases.map((item) => (
+                      {topDecreaseItems.map((item) => (
                         <Paper key={`decrease-${item.category}`} className="trend-item" radius="md" p="sm">
                           <Group justify="space-between" align="center" gap="md">
                           <Box>
                             <Text fw={700}>{formatCategoryName(item.category, t)}</Text>
                             <Text size="sm" c="dimmed">
-                              {categoryTrends.previous_month}: ${item.previous_amount.toFixed(2)} → {categoryTrends.current_month}: ${item.current_amount.toFixed(2)}
+                              {categoryTrends.previous_month}: {formatMoney(item.previous_amount)} → {categoryTrends.current_month}: {formatMoney(item.current_amount)}
                             </Text>
                           </Box>
                           <Text className="trend-negative" fw={800}>
@@ -1050,7 +1077,7 @@ function AnalyticsPage() {
                     <Stack gap="sm">
                       <Title order={3} size="h4">{t("analytics.observations")}</Title>
                       <Stack component="ul" className="insights-list" gap="xs">
-                        {spendingInsights.insights.map((item, index) => (
+                        {spendingInsightItems.map((item, index) => (
                           <li key={`insight-${index}`}>{item}</li>
                         ))}
                       </Stack>
@@ -1061,7 +1088,7 @@ function AnalyticsPage() {
                     <Stack gap="sm">
                       <Title order={3} size="h4">{t("analytics.recommendations")}</Title>
                       <Stack component="ul" className="insights-list" gap="xs">
-                        {spendingInsights.recommendations.map((item, index) => (
+                        {recommendationItems.map((item, index) => (
                           <li key={`recommendation-${index}`}>{item}</li>
                         ))}
                       </Stack>
