@@ -17,7 +17,10 @@ from app.services.budget_metrics import (
     get_default_budget_month,
 )
 from app.services.saved_scenario_service import list_saved_scenarios
-from app.services.transaction_service import get_transaction_data_quality_report
+from app.services.transaction_service import (
+    get_fast_transaction_quality_summary,
+    get_transaction_data_quality_report,
+)
 
 
 CASHFLOW_NEUTRAL_CATEGORIES = {
@@ -489,20 +492,82 @@ def get_account_comparison_snapshot(
         .all()
     )
 
+    if not accounts:
+        return []
+
+    account_ids = [account.id for account in accounts]
+    total_rows = (
+        db.query(
+            Transaction.account_id.label("account_id"),
+            func.coalesce(func.sum(income_amount_expression()), 0.0).label("total_income"),
+            func.coalesce(func.sum(expense_amount_expression()), 0.0).label("total_expenses"),
+        )
+        .filter(
+            Transaction.owner_id == user_id,
+            Transaction.account_id.in_(account_ids),
+            ~cashflow_neutral_filter(),
+        )
+        .group_by(Transaction.account_id)
+        .all()
+    )
+    totals_by_account = {
+        int(row.account_id): {
+            "total_income": float(row.total_income or 0.0),
+            "total_expenses": float(row.total_expenses or 0.0),
+        }
+        for row in total_rows
+        if row.account_id is not None
+    }
+
+    category_rows = (
+        db.query(
+            Transaction.account_id.label("account_id"),
+            Transaction.category.label("category"),
+            func.coalesce(func.sum(transaction_amount_magnitude_expression()), 0.0).label("total"),
+        )
+        .filter(
+            Transaction.owner_id == user_id,
+            Transaction.account_id.in_(account_ids),
+            Transaction.type == "expense",
+            ~cashflow_neutral_filter(),
+        )
+        .group_by(Transaction.account_id, Transaction.category)
+        .all()
+    )
+    category_totals_by_account: dict[int, dict[str, float]] = {}
+    for row in category_rows:
+        if row.account_id is None:
+            continue
+        category = canonical_analytics_category(row.category)
+        account_totals = category_totals_by_account.setdefault(int(row.account_id), {})
+        account_totals[category] = account_totals.get(category, 0.0) + float(row.total or 0.0)
+
     comparison: list[dict[str, Any]] = []
     for account in accounts:
-        summary = get_summary(db, user_id, account_id=account.id)
-        top_category = get_top_expense_category(db, user_id, account_id=account.id)
+        totals = totals_by_account.get(
+            int(account.id),
+            {"total_income": 0.0, "total_expenses": 0.0},
+        )
+        total_income = totals["total_income"]
+        total_expenses = totals["total_expenses"]
+        category_totals = category_totals_by_account.get(int(account.id), {})
+        top_category_name = None
+        top_category_amount = 0.0
+        if category_totals:
+            top_category_name, top_category_amount = max(
+                category_totals.items(),
+                key=lambda item: item[1],
+            )
         comparison.append(
             {
                 "account_id": account.id,
                 "name": account.name,
                 "type": account.type,
-                "total_income": float(summary["total_income"]),
-                "total_expenses": float(summary["total_expenses"]),
-                "balance": float(summary["balance"]),
-                "top_category": top_category["category"] if top_category else None,
-                "top_category_amount": float(top_category["total"]) if top_category else 0.0,
+                "total_income": total_income,
+                "total_expenses": total_expenses,
+                "balance": total_income - total_expenses,
+                "top_category": top_category_name,
+                "top_category_amount": round(top_category_amount, 2),
             }
         )
 
@@ -669,7 +734,14 @@ def build_financial_snapshot(
     summary = get_summary(db, user_id, account_id=account_id)
     monthly_summary = get_monthly_summary(db, user_id, account_id=account_id)
     top_category = get_top_expense_category(db, user_id, account_id=account_id)
+    return build_financial_snapshot_from_aggregates(summary, monthly_summary, top_category)
 
+
+def build_financial_snapshot_from_aggregates(
+    summary: dict[str, Any],
+    monthly_summary: list[dict[str, Any]],
+    top_category: dict[str, Any] | None,
+) -> dict[str, Any]:
     total_income = float(summary["total_income"])
     total_expenses = float(summary["total_expenses"])
     balance = float(summary["balance"])
@@ -1145,7 +1217,10 @@ def get_spending_insights(
     account_id: int | None = None,
 ) -> dict[str, Any]:
     snapshot = build_financial_snapshot(db, user_id, account_id=account_id)
+    return build_spending_insights_from_snapshot(snapshot)
 
+
+def build_spending_insights_from_snapshot(snapshot: dict[str, Any]) -> dict[str, Any]:
     total_expenses = snapshot["total_expenses"]
     top_category = snapshot["top_category"]
     top_category_amount = snapshot["top_category_amount"]
@@ -1235,16 +1310,23 @@ def get_overspending_alerts(
     account_id: int | None = None,
 ) -> dict[str, Any]:
     monthly_summary = get_monthly_summary(db, user_id, account_id=account_id)
-    monthly_breakdowns = {
-        item["month"]: get_category_breakdown(
-            db,
-            user_id,
-            month=item["month"],
-            account_id=account_id,
-        )
-        for item in monthly_summary
-    }
+    if not monthly_summary:
+        return {"current_month": None, "alerts": []}
 
+    current_month = monthly_summary[-1]["month"]
+    current_categories = get_category_breakdown(
+        db,
+        user_id,
+        month=current_month,
+        account_id=account_id,
+    )
+    return build_overspending_alerts_from_aggregates(monthly_summary, current_categories)
+
+
+def build_overspending_alerts_from_aggregates(
+    monthly_summary: list[dict[str, Any]],
+    current_categories: list[dict[str, Any]],
+) -> dict[str, Any]:
     if not monthly_summary:
         return {"current_month": None, "alerts": []}
 
@@ -1278,7 +1360,6 @@ def get_overspending_alerts(
                     }
                 )
 
-    current_categories = monthly_breakdowns.get(current_month, [])
     current_total_expenses = sum(item["total"] for item in current_categories)
 
     if current_total_expenses > 0:
@@ -1320,7 +1401,35 @@ def get_category_trends(
     account_id: int | None = None,
 ) -> dict[str, Any]:
     monthly_summary = get_monthly_summary(db, user_id, account_id=account_id)
+    if len(monthly_summary) < 2:
+        return build_category_trends_from_aggregates(monthly_summary, [], [])
 
+    previous_month = monthly_summary[-2]["month"]
+    current_month = monthly_summary[-1]["month"]
+    previous_categories = get_category_breakdown(
+        db,
+        user_id,
+        month=previous_month,
+        account_id=account_id,
+    )
+    current_categories = get_category_breakdown(
+        db,
+        user_id,
+        month=current_month,
+        account_id=account_id,
+    )
+    return build_category_trends_from_aggregates(
+        monthly_summary,
+        previous_categories,
+        current_categories,
+    )
+
+
+def build_category_trends_from_aggregates(
+    monthly_summary: list[dict[str, Any]],
+    previous_category_breakdown: list[dict[str, Any]],
+    current_category_breakdown: list[dict[str, Any]],
+) -> dict[str, Any]:
     if not monthly_summary:
         return {
             "current_month": None,
@@ -1344,21 +1453,11 @@ def get_category_trends(
 
     previous_categories = {
         item["category"]: item["total"]
-        for item in get_category_breakdown(
-            db,
-            user_id,
-            month=previous_month,
-            account_id=account_id,
-        )
+        for item in previous_category_breakdown
     }
     current_categories = {
         item["category"]: item["total"]
-        for item in get_category_breakdown(
-            db,
-            user_id,
-            month=current_month,
-            account_id=account_id,
-        )
+        for item in current_category_breakdown
     }
 
     all_categories = sorted(set(previous_categories.keys()) | set(current_categories.keys()))
@@ -1971,69 +2070,111 @@ def get_dashboard_payload(
     category: str | None = None,
     account_id: int | None = None,
 ) -> dict[str, Any]:
+    summary = get_summary(
+        db,
+        user_id,
+        month=month,
+        start_date=start_date,
+        end_date=end_date,
+        transaction_type=transaction_type,
+        category=category,
+        account_id=account_id,
+    )
+    category_breakdown = get_category_breakdown(
+        db,
+        user_id,
+        month=month,
+        start_date=start_date,
+        end_date=end_date,
+        transaction_type=transaction_type,
+        category=category,
+        account_id=account_id,
+    )
+    top_category = category_breakdown[0] if category_breakdown else None
+    monthly_summary = get_monthly_summary(
+        db,
+        user_id,
+        start_date=start_date,
+        end_date=end_date,
+        transaction_type=transaction_type,
+        category=category,
+        account_id=account_id,
+    )
+    recent_transactions = get_recent_transactions(
+        db,
+        user_id,
+        month=month,
+        start_date=start_date,
+        end_date=end_date,
+        transaction_type=transaction_type,
+        category=category,
+        account_id=account_id,
+    )
+
+    has_dashboard_filters = any(
+        value is not None
+        for value in (month, start_date, end_date, transaction_type, category)
+    )
+    if has_dashboard_filters:
+        insight_summary = get_summary(db, user_id, account_id=account_id)
+        insight_category_breakdown = get_category_breakdown(db, user_id, account_id=account_id)
+        insight_monthly_summary = (
+            monthly_summary
+            if not any(value is not None for value in (start_date, end_date, transaction_type, category))
+            else get_monthly_summary(db, user_id, account_id=account_id)
+        )
+    else:
+        insight_summary = summary
+        insight_category_breakdown = category_breakdown
+        insight_monthly_summary = monthly_summary
+
+    insight_top_category = (
+        insight_category_breakdown[0] if insight_category_breakdown else None
+    )
+    financial_snapshot = build_financial_snapshot_from_aggregates(
+        insight_summary,
+        insight_monthly_summary,
+        insight_top_category,
+    )
+    current_month_breakdown: list[dict[str, Any]] = []
+    previous_month_breakdown: list[dict[str, Any]] = []
+    if insight_monthly_summary:
+        current_month_breakdown = get_category_breakdown(
+            db,
+            user_id,
+            month=insight_monthly_summary[-1]["month"],
+            account_id=account_id,
+        )
+    if len(insight_monthly_summary) >= 2:
+        previous_month_breakdown = get_category_breakdown(
+            db,
+            user_id,
+            month=insight_monthly_summary[-2]["month"],
+            account_id=account_id,
+        )
+
     return {
-        "summary": get_summary(
-            db,
-            user_id,
-            month=month,
-            start_date=start_date,
-            end_date=end_date,
-            transaction_type=transaction_type,
-            category=category,
-            account_id=account_id,
+        "summary": summary,
+        "top_category": top_category,
+        "category_breakdown": category_breakdown,
+        "monthly_summary": monthly_summary,
+        "recent_transactions": recent_transactions,
+        "spending_insights": build_spending_insights_from_snapshot(financial_snapshot),
+        "overspending_alerts": build_overspending_alerts_from_aggregates(
+            insight_monthly_summary,
+            current_month_breakdown,
         ),
-        "top_category": get_top_expense_category(
-            db,
-            user_id,
-            month=month,
-            start_date=start_date,
-            end_date=end_date,
-            transaction_type=transaction_type,
-            category=category,
-            account_id=account_id,
+        "category_trends": build_category_trends_from_aggregates(
+            insight_monthly_summary,
+            previous_month_breakdown,
+            current_month_breakdown,
         ),
-        "category_breakdown": get_category_breakdown(
-            db,
-            user_id,
-            month=month,
-            start_date=start_date,
-            end_date=end_date,
-            transaction_type=transaction_type,
-            category=category,
-            account_id=account_id,
-        ),
-        "monthly_summary": get_monthly_summary(
-            db,
-            user_id,
-            start_date=start_date,
-            end_date=end_date,
-            transaction_type=transaction_type,
-            category=category,
-            account_id=account_id,
-        ),
-        "recent_transactions": get_recent_transactions(
-            db,
-            user_id,
-            month=month,
-            start_date=start_date,
-            end_date=end_date,
-            transaction_type=transaction_type,
-            category=category,
-            account_id=account_id,
-        ),
-        "spending_insights": get_spending_insights(db, user_id, account_id=account_id),
-        "overspending_alerts": get_overspending_alerts(
-            db,
-            user_id,
-            account_id=account_id,
-        ),
-        "category_trends": get_category_trends(db, user_id, account_id=account_id),
         "account_comparison": (
             get_account_comparison_snapshot(db, user_id)
             if account_id is None
             else []
         ),
-        "data_quality": get_transaction_data_quality_report(
+        "data_quality": get_fast_transaction_quality_summary(
             db,
             user_id,
             account_id=account_id,

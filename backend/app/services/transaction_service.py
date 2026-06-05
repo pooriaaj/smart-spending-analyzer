@@ -1658,13 +1658,7 @@ def get_category_learning_summary(
         .filter(MerchantCategoryProfile.owner_id == owner_id)
         .count()
     )
-    learning_candidates = get_category_learning_candidates(
-        db=db,
-        owner_id=owner_id,
-        account_id=account_id,
-        limit=50,
-    )
-    learning_candidate_count = len(learning_candidates)
+    learning_candidate_count = min(int(uncategorized_count or 0), 50)
     community_learning_enabled = user_allows_community_learning(db, owner_id)
     community_pattern_count = (
         db.query(MerchantLookupCache)
@@ -3530,19 +3524,26 @@ def apply_transaction_filters(
     return query
 
 
+def transaction_month_bucket_expression(db: Session):
+    dialect = getattr(getattr(db, "bind", None), "dialect", None)
+    if getattr(dialect, "name", None) == "sqlite":
+        return func.strftime("%Y-%m", Transaction.date)
+    return func.to_char(Transaction.date, "YYYY-MM")
+
+
 def get_transaction_filter_options(db: Session, owner_id: int, account_id: int | None = None) -> dict:
     scope_query = build_transaction_scope_query(db, owner_id, account_id=account_id)
-    date_rows = scope_query.with_entities(Transaction.date).distinct().all()
+    month_expr = transaction_month_bucket_expression(db)
+    month_rows = (
+        scope_query.with_entities(month_expr.label("month"))
+        .filter(Transaction.date.is_not(None))
+        .distinct()
+        .order_by(month_expr.desc())
+        .all()
+    )
     category_rows = scope_query.with_entities(Transaction.category).distinct().all()
 
-    months = sorted(
-        {
-            row[0].isoformat()[:7]
-            for row in date_rows
-            if row[0] is not None
-        },
-        reverse=True,
-    )
+    months = [str(row[0]) for row in month_rows if row[0]]
     categories = sorted(
         {
             normalize_category_name(row[0])
@@ -3664,6 +3665,103 @@ def get_transaction_source_summary(
         "imported_file_count": imported_file_count,
         "latest_imported_at": latest_imported_at,
         "sources": sources,
+    }
+
+
+def get_fast_transaction_quality_summary(
+    db: Session,
+    owner_id: int,
+    account_id: int | None = None,
+) -> dict:
+    source_summary = get_transaction_source_summary(db, owner_id, account_id=account_id)
+    transaction_count = int(source_summary["total_transactions"])
+    manual_count = int(source_summary["manual_count"])
+    imported_count = int(source_summary["imported_count"])
+
+    if transaction_count == 0:
+        return {
+            "transaction_count": 0,
+            "manual_count": 0,
+            "imported_count": 0,
+            "uncategorized_count": 0,
+            "category_review_count": 0,
+            "learning_candidate_count": 0,
+            "suspicious_amount_count": 0,
+            "likely_duplicate_count": 0,
+            "quality_level": "empty",
+            "quality_score": 0.0,
+            "message": "No transaction data yet. Start with daily entries or import a statement.",
+            "actions": [
+                {
+                    "key": "start_tracking",
+                    "label": "Add or import transactions",
+                    "detail": "Add daily transactions or import a statement before analytics can become useful.",
+                    "severity": "high",
+                    "count": 0,
+                }
+            ],
+            "source_summary": source_summary,
+        }
+
+    scope_query = build_transaction_scope_query(db, owner_id, account_id=account_id)
+    uncategorized_count = int(
+        scope_query.filter(func.lower(Transaction.category).in_(tuple(UNCATEGORIZED_VALUES))).count()
+    )
+    learning_candidate_count = min(uncategorized_count, 50)
+
+    actions: list[dict] = []
+    if uncategorized_count:
+        actions.append(
+            {
+                "key": "review_uncategorized",
+                "label": "Review uncategorized transactions",
+                "detail": "Reducing Other/uncategorized rows makes charts and budgets more trustworthy.",
+                "severity": "medium",
+                "count": uncategorized_count,
+            }
+        )
+    if imported_count > 0 and manual_count == 0:
+        actions.append(
+            {
+                "key": "add_manual_entries",
+                "label": "Add daily written entries",
+                "detail": "Manual entries let the app reconcile bank statements against what you remembered to write.",
+                "severity": "info",
+                "count": imported_count,
+            }
+        )
+
+    uncategorized_share = uncategorized_count / transaction_count
+    learning_penalty = min(0.12, learning_candidate_count * 0.015)
+    score = 0.92
+    score -= min(0.42, uncategorized_share * 0.55)
+    score -= learning_penalty
+    score = round(max(0.05, min(0.98, score)), 2)
+
+    if score >= 0.82 and not actions:
+        quality_level = "high"
+        message = "Transaction data looks clean enough for reliable analytics and budget guidance."
+    elif score >= 0.62:
+        quality_level = "medium"
+        message = "Transaction data is usable, but a few review items can improve accuracy."
+    else:
+        quality_level = "low"
+        message = "Review transaction quality before trusting analytics, budgets, or simulator output."
+
+    return {
+        "transaction_count": transaction_count,
+        "manual_count": manual_count,
+        "imported_count": imported_count,
+        "uncategorized_count": uncategorized_count,
+        "category_review_count": 0,
+        "learning_candidate_count": learning_candidate_count,
+        "suspicious_amount_count": 0,
+        "likely_duplicate_count": 0,
+        "quality_level": quality_level,
+        "quality_score": score,
+        "message": message,
+        "actions": actions,
+        "source_summary": source_summary,
     }
 
 
