@@ -2131,6 +2131,134 @@ class SmartImportRouteTest(unittest.TestCase):
         self.assertEqual(confirm_response.status_code, 200, confirm_response.text)
         self.assertEqual(confirm_response.json()["imported"], 2)
 
+    def test_import_file_handles_common_csv_layout_variants(self) -> None:
+        cases = [
+            (
+                "plural-withdrawals-deposits.csv",
+                (
+                    "Date,Description,Withdrawals,Deposits\n"
+                    "2026-05-01,Coffee,6.50,\n"
+                    "2026-05-02,Payroll,,2500.00\n"
+                ),
+                [
+                    ("2026-05-01", "Coffee", 6.5, "expense"),
+                    ("2026-05-02", "Payroll", 2500.0, "income"),
+                ],
+            ),
+            (
+                "signed-amount.csv",
+                (
+                    "Transaction Date,Transaction Description,Transaction Amount\n"
+                    "2026-05-03,Parking,-4.25\n"
+                    "2026-05-04,Refund,18.00\n"
+                ),
+                [
+                    ("2026-05-03", "Parking", 4.25, "expense"),
+                    ("2026-05-04", "Refund", 18.0, "income"),
+                ],
+            ),
+            (
+                "semicolon-dmy.csv",
+                (
+                    "Date;Memo;Amount;Type\n"
+                    "13/05/2026;Transit;4.25;debit\n"
+                    "01/05/2026;Coffee;6.50;debit\n"
+                ),
+                [
+                    ("2026-05-13", "Transit", 4.25, "expense"),
+                    ("2026-05-01", "Coffee", 6.5, "expense"),
+                ],
+            ),
+            (
+                "blank-columns.csv",
+                (
+                    ",Posting Date,,Payee,,Net Amount,,Type\n"
+                    ",2026-05-05,,Coffee downtown,,-6.50,,debit\n"
+                    ",2026-05-06,,Salary,,2500.00,,credit\n"
+                ),
+                [
+                    ("2026-05-05", "Coffee downtown", 6.5, "expense"),
+                    ("2026-05-06", "Salary", 2500.0, "income"),
+                ],
+            ),
+        ]
+
+        for filename, csv_text, expected_rows in cases:
+            with self.subTest(filename=filename):
+                response = self.client.post(
+                    "/transactions/import/file",
+                    data={"account_id": str(self.account_id)},
+                    files={"file": (filename, csv_text.encode("utf-8"), "text/csv")},
+                )
+
+                self.assertEqual(response.status_code, 200, response.text)
+                payload = response.json()
+                self.assertEqual(payload["status"], "table_review")
+                self.assertEqual(payload["import_summary"]["invalid_rows_skipped"], 0)
+                self.assertEqual(
+                    [
+                        (row["date"], row["description"], row["amount"], row["type"])
+                        for row in payload["preview_rows"]
+                    ],
+                    expected_rows,
+                )
+
+    def test_import_file_flags_fully_ambiguous_numeric_csv_dates_for_review(self) -> None:
+        csv_text = (
+            "Date,Description,Amount,Type\n"
+            "01/05/2026,Coffee,6.50,expense\n"
+            "02/05/2026,Parking,4.25,expense\n"
+        ).encode("utf-8")
+
+        response = self.client.post(
+            "/transactions/import/file",
+            data={"account_id": str(self.account_id)},
+            files={"file": ("ambiguous-dates.csv", csv_text, "text/csv")},
+        )
+
+        self.assertEqual(response.status_code, 200, response.text)
+        payload = response.json()
+        preview_rows = payload["preview_rows"]
+
+        self.assertEqual(len(preview_rows), 2)
+        for row in preview_rows:
+            self.assertEqual(
+                row["review_reason"],
+                "Date uses an ambiguous numeric format. Verify month/day before importing.",
+            )
+            self.assertLess(row["confidence"], 0.9)
+
+    def test_batch_statement_import_combines_csv_and_pdf_preview_rows(self) -> None:
+        csv_bytes = (
+            "Date,Description,Withdrawals,Deposits\n"
+            "2026-05-01,Coffee,6.50,\n"
+        ).encode("utf-8")
+        pdf_bytes = build_text_pdf(
+            [
+                "Account Statement",
+                "From May 1, 2026 to May 31, 2026",
+                "02 May BOOK STORE ($12.34)",
+            ]
+        )
+
+        response = self.client.post(
+            "/transactions/import/files",
+            data={"account_id": str(self.account_id)},
+            files=[
+                ("files", ("synthetic.csv", csv_bytes, "text/csv")),
+                ("files", ("synthetic.pdf", pdf_bytes, "application/pdf")),
+            ],
+        )
+
+        self.assertEqual(response.status_code, 200, response.text)
+        payload = response.json()
+
+        self.assertEqual(payload["status"], "table_review")
+        self.assertEqual(len(payload["preview_rows"]), 2)
+        self.assertEqual(payload["import_summary"]["invalid_rows_skipped"], 0)
+        self.assertTrue(any(row["source_file_type"] == "csv_statement" for row in payload["preview_rows"]))
+        self.assertTrue(any(row["source_file_type"] == "pdf_statement" for row in payload["preview_rows"]))
+
     def test_import_file_parses_monthly_expense_tracker_csv(self) -> None:
         tracker_csv = (
             ",Monthly Expense Tracker,,,,,,Budget vs Actual Table,,,,\n"

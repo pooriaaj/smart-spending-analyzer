@@ -96,16 +96,26 @@ def max_review_scan_transactions() -> int:
     )
 
 HEADER_ALIASES = {
-    "date": {"date", "transaction_date", "posted_date"},
-    "description": {"description", "details", "memo", "merchant", "transaction_description"},
-    "amount": {"amount", "transaction_amount"},
-    "debit": {"debit", "withdrawal", "money_out"},
-    "credit": {"credit", "deposit", "money_in"},
+    "date": {"date", "transaction_date", "posted_date", "posting_date", "effective_date"},
+    "description": {
+        "description",
+        "details",
+        "memo",
+        "merchant",
+        "transaction_description",
+        "transaction_details",
+        "payee",
+        "name",
+    },
+    "amount": {"amount", "transaction_amount", "net_amount"},
+    "debit": {"debit", "debits", "withdrawal", "withdrawals", "money_out", "outflow", "paid_out"},
+    "credit": {"credit", "credits", "deposit", "deposits", "money_in", "inflow", "paid_in"},
     "type": {"type", "transaction_type"},
     "category": {"category", "expense", "expense_category"},
 }
 CSV_ROW_NUMBER_KEY = "__csv_row_number"
 CSV_MONTH_CONTEXT_KEY = "__csv_month_context"
+CSV_DATE_ORDER_CONTEXT_KEY = "__csv_date_order"
 TRACKER_EXPENSE_HEADER_ALIASES = {"expense", "expense_category"}
 MONTH_NAME_TO_NUMBER = {
     "jan": 1,
@@ -639,6 +649,44 @@ def parse_date(value: str) -> date:
     return parse_date_with_context(value)
 
 
+def parse_numeric_year_end_date_parts(value: str | None) -> tuple[int, int, int] | None:
+    text = sanitize_import_text(value or "").strip()
+    match = re.fullmatch(r"(\d{1,2})[/-](\d{1,2})[/-](\d{4})", text)
+    if not match:
+        return None
+    return int(match.group(1)), int(match.group(2)), int(match.group(3))
+
+
+def is_ambiguous_numeric_year_end_date(value: str | None) -> bool:
+    parts = parse_numeric_year_end_date_parts(value)
+    if not parts:
+        return False
+    first, second, _ = parts
+    return 1 <= first <= 12 and 1 <= second <= 12
+
+
+def infer_csv_date_order(rows: list[dict], date_key: str) -> str | None:
+    dmy_evidence = 0
+    mdy_evidence = 0
+
+    for row in rows:
+        parts = parse_numeric_year_end_date_parts(row.get(date_key, ""))
+        if not parts:
+            continue
+
+        first, second, _ = parts
+        if first > 12 and 1 <= second <= 12:
+            dmy_evidence += 1
+        elif second > 12 and 1 <= first <= 12:
+            mdy_evidence += 1
+
+    if dmy_evidence and not mdy_evidence:
+        return "dmy"
+    if mdy_evidence and not dmy_evidence:
+        return "mdy"
+    return None
+
+
 def parse_csv_month_context_label(value: str | None) -> str | None:
     text = sanitize_import_text(value or "").strip()
     if not text:
@@ -677,7 +725,11 @@ def detect_csv_month_context(raw_row: list[str]) -> str | None:
     return None
 
 
-def parse_date_with_context(value: str, month_context: str | None = None) -> date:
+def parse_date_with_context(
+    value: str,
+    month_context: str | None = None,
+    date_order: str | None = None,
+) -> date:
     value = value.strip()
 
     if month_context:
@@ -707,6 +759,13 @@ def parse_date_with_context(value: str, month_context: str | None = None) -> dat
         if day_month_match:
             month_number = MONTH_NAME_TO_NUMBER[day_month_match.group(2).lower()]
             return date(context_year, month_number, int(day_month_match.group(1)))
+
+    numeric_parts = parse_numeric_year_end_date_parts(value)
+    if numeric_parts and date_order in {"dmy", "mdy"}:
+        first, second, year = numeric_parts
+        if date_order == "dmy":
+            return date(year, second, first)
+        return date(year, first, second)
 
     date_formats = [
         "%Y-%m-%d",
@@ -2378,6 +2437,10 @@ def read_csv_rows(text: str) -> tuple[list[dict], dict[str, str]]:
         normalized_row[CSV_MONTH_CONTEXT_KEY] = current_month_context or ""
         rows.append(normalized_row)
 
+    date_order = infer_csv_date_order(rows, header_mapping["date"])
+    for row in rows:
+        row[CSV_DATE_ORDER_CONTEXT_KEY] = date_order or ""
+
     return rows, header_mapping
 
 
@@ -2492,7 +2555,15 @@ def parse_import_csv_row_date(row: dict, header_mapping: dict[str, str]) -> date
     return parse_date_with_context(
         row[header_mapping["date"]],
         row.get(CSV_MONTH_CONTEXT_KEY) or None,
+        row.get(CSV_DATE_ORDER_CONTEXT_KEY) or None,
     )
+
+
+def build_csv_date_review_reason(row: dict, header_mapping: dict[str, str]) -> str | None:
+    date_value = row.get(header_mapping["date"], "")
+    if is_ambiguous_numeric_year_end_date(date_value) and not row.get(CSV_DATE_ORDER_CONTEXT_KEY):
+        return "Date uses an ambiguous numeric format. Verify month/day before importing."
+    return None
 
 
 def csv_row_error_summary(error: Exception) -> str:
@@ -3541,6 +3612,7 @@ def parse_csv_statement_preview(
         try:
             row_number = int(row.get(CSV_ROW_NUMBER_KEY, fallback_row_number))
             tx_date = parse_import_csv_row_date(row, header_mapping)
+            date_review_reason = build_csv_date_review_reason(row, header_mapping)
             raw_description = get_import_row_description_value(row, header_mapping)
             description = normalize_description(raw_description)
             tx_type, amount = infer_type_and_amount(row, header_mapping)
@@ -3592,8 +3664,8 @@ def parse_csv_statement_preview(
                     type=tx_type,
                     category=category,
                     source_line=f"CSV row {row_number}: {raw_description}",
-                    confidence=0.94,
-                    review_reason=None,
+                    confidence=0.82 if date_review_reason else 0.94,
+                    review_reason=date_review_reason,
                     category_confidence=category_confidence,
                     category_source=category_source,
                     category_reason=category_reason,

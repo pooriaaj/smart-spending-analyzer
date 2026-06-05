@@ -32,12 +32,14 @@ Use this file to control past, current, and future bugs without storing secrets,
 | 2026-06-04 | Custom domain auth | Phone login appeared successful, then returned to login. | Cross-site cookie behavior between `www.zero2asset.com` and Render backend. | Fixed by frontend first-party `/api` proxy rewrite. |
 | 2026-06-04 | Large-history performance | Overview and transactions felt slow after adding a large account history. | Dashboard and helper endpoints repeated expensive scans. | Improved by backend aggregate reuse and cheaper helper summaries. |
 | 2026-06-05 | Tracker CSV import | Later month sections could be skipped when dates were day-only values under `May 2026`/`June 2026` headings. | Parser did not carry month-section context into row date parsing. | Fixed with month-context parsing and row diagnostics. |
+| 2026-06-05 | CSV import | Synthetic import audit found plural `Withdrawals`/`Deposits` headers were not accepted and fully ambiguous slash dates looked too confident. | Header aliases were narrow, and slash date parsing did not infer or flag date-order uncertainty. | Fixed with broader aliases, date-order inference, ambiguity review flags, and regression tests. |
 
 ## Open Watch Items
 
 - Large imports may still be slow if a file is very large or contains many unusual rows.
 - Browser uploads routed through Vercel `/api` should be tested with typical statement sizes after each deploy.
 - PDF parsing depends on each bank layout; every new failed PDF shape should become a regression test.
+- Fully ambiguous numeric dates such as `01/05/2026` still need user review unless the same file contains date-order evidence.
 - Scanned image/PDF OCR needs production dependency verification after Docker/Render changes.
 - Overview can still be improved with deeper query timing if large-history accounts remain slow.
 
