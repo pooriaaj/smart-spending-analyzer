@@ -5,6 +5,9 @@
 
 A full-stack financial intelligence web application that helps users track, analyze, and improve their spending behavior.
 
+Legal notice:
+This repository is publicly viewable for portfolio, review, and evaluation purposes, but it is not open-source. Smart Spending Analyzer(TM) / Zero2Asset(TM) is proprietary software. No permission is granted to copy, modify, distribute, host, sell, rebrand, or claim ownership of this code without prior written permission from the owner. See `LICENSE`, `NOTICE`, and `docs/LEGAL_PROTECTION.md`.
+
 Live Demo:
 Frontend: https://www.zero2asset.com
 Backend API: https://smart-spending-analyzer.onrender.com
@@ -207,6 +210,7 @@ Key docs:
 - `docs/CI_REVIEW.md` for GitHub Actions review from the browser or optional GitHub CLI.
 - `docs/SECURITY_CHECKLIST.md` for secret, GitHub, provider, user data, backup, and Codex safety.
 - `docs/QA_CHECKLIST.md` for manual product checks.
+- `docs/LEGAL_PROTECTION.md` for proprietary license, public GitHub, copyright, and trademark handling.
 
 ---
 

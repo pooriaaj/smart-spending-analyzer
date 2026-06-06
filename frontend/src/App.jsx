@@ -211,6 +211,11 @@ function AuthenticatedLayout({ children, theme, onThemeToggle }) {
 
       <AppShell.Main className="app-shell-main">
         {children}
+        <Box component="footer" className="app-legal-footer">
+          <Text size="xs" c="dimmed">
+            {t("common.legalFooter")}
+          </Text>
+        </Box>
       </AppShell.Main>
     </AppShell>
   );

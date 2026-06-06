@@ -4418,6 +4418,12 @@ body {
   line-height: 1.6;
 }
 
+.auth-footer .legal-footer-text {
+  margin-top: 10px;
+  font-size: 12px;
+  line-height: 1.55;
+}
+
 .auth-footer a {
   color: var(--brand);
   font-weight: 700;
@@ -4426,6 +4432,19 @@ body {
 
 .auth-footer a:hover {
   text-decoration: underline;
+}
+
+.app-legal-footer {
+  width: min(1120px, calc(100% - 32px));
+  margin: 0 auto;
+  padding: 4px 0 28px;
+  text-align: center;
+}
+
+.app-legal-footer p {
+  margin: 0;
+  color: var(--text-soft);
+  line-height: 1.55;
 }
 
 .password-input-wrapper {
@@ -4680,6 +4699,7 @@ textarea {
 :root[data-theme="dark"] .auth-card-header p,
 :root[data-theme="dark"] .auth-feature-item p,
 :root[data-theme="dark"] .auth-footer p,
+:root[data-theme="dark"] .app-legal-footer p,
 :root[data-theme="dark"] .import-helper-text {
   color: #94a3b8;
 }

@@ -123,6 +123,7 @@ function RegisterPage() {
               <p>
                 {t("auth.alreadyHaveAccount")} <Link to="/">{t("auth.login")}</Link>
               </p>
+              <p className="legal-footer-text">{t("common.legalFooter")}</p>
             </div>
           </div>
         </div>

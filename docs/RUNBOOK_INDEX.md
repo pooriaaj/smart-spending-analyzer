@@ -12,6 +12,7 @@ Keep this file free of secrets, real user data, provider logs, database URLs, ac
 - `docs/DEPLOYMENT.md`: deploy, smoke-test, rollback, and production database warnings.
 - `docs/SECURITY_CHECKLIST.md`: recurring security checks before sharing, deploying, rotating keys, or using Codex on sensitive areas.
 - `docs/QA_CHECKLIST.md`: manual product checks for auth, transactions, dashboard, analytics, imports, mobile, errors, and production smoke testing.
+- `docs/LEGAL_PROTECTION.md`: proprietary license, public GitHub, copyright, trademark, and copycat-response guidance.
 
 ## Release And Operations
 
@@ -38,6 +39,14 @@ Database rule of thumb: local/test inspection is normal; production migrations, 
 - `docs/RETENTION.md`: draft retention expectations and open decisions.
 
 User data rule of thumb: use disposable test accounts for QA, keep exports outside git, and never paste real financial data into AI prompts or issue threads.
+
+## Legal And Ownership
+
+- `LICENSE`: proprietary all-rights-reserved source license.
+- `NOTICE`: ownership, trademark, and third-party dependency notice.
+- `docs/LEGAL_PROTECTION.md`: practical legal protection checklist and copycat-response steps.
+
+Legal rule of thumb: use `(TM)` or `™` for claimed marks, and use `(R)` or `®` only after an actual trademark registration is confirmed.
 
 ## Incidents
 

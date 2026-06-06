@@ -19,6 +19,7 @@ Smart Spending Analyzer is a full-stack personal finance web app. It helps users
 - Monitoring: `docs/MONITORING.md` and `.github/workflows/production-smoke.yml` provide a free-first smoke-check and incident runbook.
 - CI review: `docs/CI_REVIEW.md` documents browser-first and optional GitHub CLI review steps for GitHub Actions.
 - GitHub: repository is `pooriaaj/smart-spending-analyzer`; default branch is `main`.
+- Legal/source availability: the public repository is portfolio-visible but proprietary, with `LICENSE`, `NOTICE`, and `docs/LEGAL_PROTECTION.md`; do not add a permissive open-source license without explicit owner approval.
 - Incident response: `docs/INCIDENT_RESPONSE.md` documents outage, leaked-secret, data-exposure, database, dependency, and AI/Codex incident handling.
 - Runbooks: `docs/RUNBOOK_INDEX.md` is the starting map for operational docs and safety rules.
 - Release process: `docs/RELEASE_PROCESS.md` documents release types, pre-release checks, direct-push versus branch releases, production smoke tests, rollback basics, and post-release notes.
@@ -60,6 +61,7 @@ Observed note: the README mentions PyMuPDF for rendering scanned PDFs before OCR
 - `frontend/src/components/`: shared controls and form components.
 - `frontend/src/utils/`: display and error helpers.
 - `frontend/src/i18n/`: language context.
+- Authenticated and public auth pages show a short copyright/trademark footer notice.
 - Frontend tests now use Vitest, jsdom, and Testing Library for focused component/service/unit coverage, including API auth handling, protected-route auth gates, account selector/account-scope behavior, dashboard summary/recent-filter/manual-add behavior, transaction ledger filter/edit/delete behavior, analytics summary/filter/drilldown behavior, import account-gate/table-review/confirm behavior, assistant status/history/scoped-question behavior, budget summary/suggestion/save/delete behavior, transaction form create/edit/category suggestion behavior, profile export/update/password/learning/delete-guard behavior, login/register success and failure behavior, and forgot/reset password flows.
 
 ## 6. Current Database Approach
@@ -138,6 +140,7 @@ Known limitation: the in-process rate limiter is fine for a small single-instanc
 ## 11. Files That Should Not Be Changed Without Confirmation
 
 - `.env`, `backend/.env`, and any `.env.*` file containing local or deployed settings.
+- `LICENSE`, `NOTICE`, and `docs/LEGAL_PROTECTION.md`
 - Render and Vercel dashboard environment variables.
 - `backend/app/models.py`
 - `backend/app/database.py`

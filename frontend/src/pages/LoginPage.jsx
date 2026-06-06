@@ -147,6 +147,7 @@ function LoginPage() {
               <p>
                 {t("auth.noAccount")} <Link to="/register">{t("auth.createOne")}</Link>
               </p>
+              <p className="legal-footer-text">{t("common.legalFooter")}</p>
             </div>
           </div>
         </div>

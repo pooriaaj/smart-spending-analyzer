@@ -126,6 +126,7 @@ function ResetPasswordPage() {
               <p>
                 {t("auth.backTo")} <Link to="/">{t("auth.login")}</Link>
               </p>
+              <p className="legal-footer-text">{t("common.legalFooter")}</p>
             </div>
           </div>
         </div>
