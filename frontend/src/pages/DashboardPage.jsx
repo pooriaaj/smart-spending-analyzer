@@ -6,6 +6,7 @@ import PageHeader from "../components/PageHeader";
 import { ALL_ACCOUNTS_VALUE, getSelectedAccountId, setSelectedAccountId as persistSelectedAccountId } from "../services/accountStorage";
 import { buildBudgetForecastSummary } from "../utils/budgetDisplay";
 import { useLanguage } from "../i18n/LanguageContext";
+import { getAccountsFromResponse } from "../utils/accountResponses";
 import { formatAccountLabel, formatCategoryLabel } from "../utils/displayLabels";
 import { getApiErrorMessage } from "../utils/errorUtils";
 
@@ -87,7 +88,7 @@ function DashboardPage() {
       const accountsRes = await api.get("/accounts/", {
         params: { include_stats: false },
       });
-      const loadedAccounts = accountsRes.data || [];
+      const loadedAccounts = getAccountsFromResponse(accountsRes.data);
       setAccounts(loadedAccounts);
 
       const selectedAccountExists = loadedAccounts.some(

@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import api, { handleApiAuthError } from "../services/api";
 import { setSelectedAccountId } from "../services/accountStorage";
 import { useLanguage } from "../i18n/LanguageContext";
+import { getAccountsFromResponse } from "../utils/accountResponses";
 import { formatAccountName, formatAccountType, formatCategoryLabel } from "../utils/displayLabels";
 import { getApiErrorMessage } from "../utils/errorUtils";
 
@@ -17,7 +18,7 @@ function AccountsPage() {
   const fetchAccounts = async () => {
     try {
       const response = await api.get("/accounts/");
-      setAccounts(response.data || []);
+      setAccounts(getAccountsFromResponse(response.data));
     } catch (error) {
       handleApiAuthError(error, navigate);
     }
@@ -27,7 +28,7 @@ function AccountsPage() {
     const loadAccounts = async () => {
       try {
         const response = await api.get("/accounts/");
-        setAccounts(response.data || []);
+        setAccounts(getAccountsFromResponse(response.data));
       } catch (error) {
         handleApiAuthError(error, navigate);
       }
@@ -67,6 +68,8 @@ function AccountsPage() {
     setSelectedAccountId(String(accountId));
     navigate("/dashboard");
   };
+
+  const visibleAccounts = Array.isArray(accounts) ? accounts : [];
 
   return (
     <div className="page-container dashboard-page">
@@ -120,11 +123,11 @@ function AccountsPage() {
             <h2>{t("accounts.yourAccounts")}</h2>
           </div>
 
-          {accounts.length === 0 ? (
+          {visibleAccounts.length === 0 ? (
             <div className="empty-state"><p>{t("accounts.noAccounts")}</p></div>
           ) : (
             <div className="account-summary-list">
-              {accounts.map((account) => (
+              {visibleAccounts.map((account) => (
                 <div key={account.id} className="account-summary-item">
                   <div className="account-summary-top">
                     <div>

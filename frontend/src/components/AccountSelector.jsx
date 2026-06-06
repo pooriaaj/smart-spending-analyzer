@@ -6,26 +6,11 @@ import {
   setSelectedAccountId as persistSelectedAccountId,
 } from "../services/accountStorage";
 import { useLanguage } from "../i18n/LanguageContext";
+import { getAccountsFromResponse } from "../utils/accountResponses";
 import { formatAccountLabel } from "../utils/displayLabels";
 
 function normalizeSelection(value, allowAll) {
   return allowAll || value !== ALL_ACCOUNTS_VALUE ? String(value || "") : "";
-}
-
-function getAccountsFromResponse(data) {
-  if (Array.isArray(data)) {
-    return data;
-  }
-
-  if (Array.isArray(data?.accounts)) {
-    return data.accounts;
-  }
-
-  if (Array.isArray(data?.items)) {
-    return data.items;
-  }
-
-  return [];
 }
 
 function AccountSelector({
