@@ -7,20 +7,41 @@ import { getAccountsFromResponse } from "../utils/accountResponses";
 import { formatAccountName, formatAccountType, formatCategoryLabel } from "../utils/displayLabels";
 import { getApiErrorMessage } from "../utils/errorUtils";
 
+const ACCOUNT_TYPE_OPTIONS = [
+  "chequing",
+  "savings",
+  "credit_card",
+  "cash",
+  "business",
+  "other",
+];
+
+function makeAccountDraft(account) {
+  return {
+    name: account?.name || "",
+    type: account?.type || "other",
+  };
+}
+
 function AccountsPage() {
   const navigate = useNavigate();
   const { t } = useLanguage();
   const [accounts, setAccounts] = useState([]);
   const [name, setName] = useState("");
   const [type, setType] = useState("chequing");
+  const [editingAccounts, setEditingAccounts] = useState({});
+  const [savingAccountId, setSavingAccountId] = useState(null);
   const [error, setError] = useState("");
+  const [status, setStatus] = useState("");
 
   const fetchAccounts = async () => {
     try {
       const response = await api.get("/accounts/");
       setAccounts(getAccountsFromResponse(response.data));
     } catch (error) {
-      handleApiAuthError(error, navigate);
+      if (!handleApiAuthError(error, navigate)) {
+        setError(getApiErrorMessage(error, t("accounts.loadFailed")));
+      }
     }
   };
 
@@ -30,22 +51,32 @@ function AccountsPage() {
         const response = await api.get("/accounts/");
         setAccounts(getAccountsFromResponse(response.data));
       } catch (error) {
-        handleApiAuthError(error, navigate);
+        if (!handleApiAuthError(error, navigate)) {
+          setError(getApiErrorMessage(error, t("accounts.loadFailed")));
+        }
       }
     };
 
     loadAccounts();
-  }, [navigate]);
+  }, [navigate, t]);
 
   const handleCreate = async (e) => {
     e.preventDefault();
     setError("");
+    setStatus("");
+
+    const trimmedName = name.trim();
+    if (!trimmedName) {
+      setError(t("accounts.nameRequired"));
+      return;
+    }
 
     try {
-      await api.post("/accounts/", { name, type });
+      await api.post("/accounts/", { name: trimmedName, type });
       setName("");
       setType("chequing");
       await fetchAccounts();
+      setStatus(t("accounts.createSuccess"));
     } catch (error) {
       if (!handleApiAuthError(error, navigate)) {
         setError(getApiErrorMessage(error, t("accounts.createFailed")));
@@ -54,6 +85,9 @@ function AccountsPage() {
   };
 
   const handleDelete = async (accountId) => {
+    setError("");
+    setStatus("");
+
     try {
       await api.delete(`/accounts/${accountId}`);
       await fetchAccounts();
@@ -67,6 +101,63 @@ function AccountsPage() {
   const handleReviewAccount = (accountId) => {
     setSelectedAccountId(String(accountId));
     navigate("/dashboard");
+  };
+
+  const handleEditAccount = (account) => {
+    setError("");
+    setStatus("");
+    setEditingAccounts((current) => ({
+      ...current,
+      [account.id]: makeAccountDraft(account),
+    }));
+  };
+
+  const handleCancelEdit = (accountId) => {
+    setEditingAccounts((current) => {
+      const next = { ...current };
+      delete next[accountId];
+      return next;
+    });
+  };
+
+  const handleEditChange = (accountId, field, value) => {
+    setEditingAccounts((current) => ({
+      ...current,
+      [accountId]: {
+        ...(current[accountId] || {}),
+        [field]: value,
+      },
+    }));
+  };
+
+  const handleUpdateAccount = async (account) => {
+    const draft = editingAccounts[account.id] || makeAccountDraft(account);
+    const trimmedName = draft.name.trim();
+
+    setError("");
+    setStatus("");
+
+    if (!trimmedName) {
+      setError(t("accounts.nameRequired"));
+      return;
+    }
+
+    try {
+      setSavingAccountId(account.id);
+      await api.put(`/accounts/${account.id}`, {
+        name: trimmedName,
+        type: draft.type || "other",
+      });
+      handleCancelEdit(account.id);
+      await fetchAccounts();
+      setStatus(t("accounts.updateSuccess"));
+    } catch (error) {
+      if (!handleApiAuthError(error, navigate)) {
+        setError(getApiErrorMessage(error, t("accounts.updateFailed")));
+      }
+    } finally {
+      setSavingAccountId(null);
+    }
   };
 
   const visibleAccounts = Array.isArray(accounts) ? accounts : [];
@@ -104,18 +195,18 @@ function AccountsPage() {
             />
 
             <select value={type} onChange={(e) => setType(e.target.value)}>
-              <option value="chequing">{t("accounts.chequing")}</option>
-              <option value="savings">{t("accounts.savings")}</option>
-              <option value="credit_card">{t("accounts.creditCard")}</option>
-              <option value="cash">{t("accounts.cash")}</option>
-              <option value="business">{t("accounts.business")}</option>
-              <option value="other">{t("accounts.other")}</option>
+              {ACCOUNT_TYPE_OPTIONS.map((accountType) => (
+                <option key={accountType} value={accountType}>
+                  {formatAccountType(accountType, t)}
+                </option>
+              ))}
             </select>
 
             <button type="submit">{t("accounts.createAccount")}</button>
           </form>
 
           {error && <p className="error-text">{error}</p>}
+          {status && <p className="success-text">{status}</p>}
         </div>
 
         <div className="dashboard-card">
@@ -130,24 +221,84 @@ function AccountsPage() {
               {visibleAccounts.map((account) => (
                 <div key={account.id} className="account-summary-item">
                   <div className="account-summary-top">
-                    <div>
-                      <strong>{formatAccountName(account.name, t)}</strong>
-                      <p>{formatAccountType(account.type, t)}</p>
-                    </div>
+                    {editingAccounts[account.id] ? (
+                      <div className="account-edit-form">
+                        <label>
+                          <span>{t("accounts.accountName")}</span>
+                          <input
+                            type="text"
+                            value={editingAccounts[account.id].name}
+                            onChange={(e) =>
+                              handleEditChange(account.id, "name", e.target.value)
+                            }
+                            required
+                          />
+                        </label>
+                        <label>
+                          <span>{t("accounts.accountType")}</span>
+                          <select
+                            value={editingAccounts[account.id].type}
+                            onChange={(e) =>
+                              handleEditChange(account.id, "type", e.target.value)
+                            }
+                          >
+                            {ACCOUNT_TYPE_OPTIONS.map((accountType) => (
+                              <option key={accountType} value={accountType}>
+                                {formatAccountType(accountType, t)}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                      </div>
+                    ) : (
+                      <div>
+                        <strong>{formatAccountName(account.name, t)}</strong>
+                        <p>{formatAccountType(account.type, t)}</p>
+                      </div>
+                    )}
 
                     <div className="transaction-actions-inline">
-                      <button
-                        className="secondary-button"
-                        onClick={() => handleReviewAccount(account.id)}
-                      >
-                        {t("accounts.review")}
-                      </button>
-                      <button
-                        className="delete-button"
-                        onClick={() => handleDelete(account.id)}
-                      >
-                        {t("accounts.delete")}
-                      </button>
+                      {editingAccounts[account.id] ? (
+                        <>
+                          <button
+                            className="secondary-button"
+                            onClick={() => handleUpdateAccount(account)}
+                            disabled={savingAccountId === account.id}
+                          >
+                            {savingAccountId === account.id
+                              ? t("common.saving")
+                              : t("accounts.saveAccount")}
+                          </button>
+                          <button
+                            className="secondary-button"
+                            onClick={() => handleCancelEdit(account.id)}
+                            disabled={savingAccountId === account.id}
+                          >
+                            {t("common.cancel")}
+                          </button>
+                        </>
+                      ) : (
+                        <>
+                          <button
+                            className="secondary-button"
+                            onClick={() => handleReviewAccount(account.id)}
+                          >
+                            {t("accounts.review")}
+                          </button>
+                          <button
+                            className="edit-button"
+                            onClick={() => handleEditAccount(account)}
+                          >
+                            {t("accounts.editAccount")}
+                          </button>
+                          <button
+                            className="delete-button"
+                            onClick={() => handleDelete(account.id)}
+                          >
+                            {t("accounts.delete")}
+                          </button>
+                        </>
+                      )}
                     </div>
                   </div>
 

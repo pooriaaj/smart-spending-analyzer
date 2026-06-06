@@ -313,14 +313,18 @@ function InsightCard({ label, value, detail, tone = "neutral" }) {
 
 function AnalyticsPage() {
   const { t } = useLanguage();
+  const [searchParams] = useSearchParams();
   const [dashboardData, setDashboardData] = useState(null);
   const [transactions, setTransactions] = useState([]);
   const [selectedAccountId, setSelectedAccountId] = useState(getSelectedAccountId());
-  const [selectedMonth, setSelectedMonth] = useState("");
+  const [selectedMonth, setSelectedMonth] = useState(() => searchParams.get("month") || "");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [selectedType, setSelectedType] = useState("");
-  const [selectedCategory, setSelectedCategory] = useState("");
+  const [selectedCategory, setSelectedCategory] = useState(() => {
+    const urlCategory = searchParams.get("category") || "";
+    return urlCategory ? formatCategoryName(urlCategory, t) : "";
+  });
   const [loading, setLoading] = useState(true);
   const [themeMode, setThemeMode] = useState(
     document.documentElement.getAttribute("data-theme") || "light"
@@ -333,7 +337,6 @@ function AnalyticsPage() {
   const categoriesRef = useRef(null);
 
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
   const normalizedAccountId =
     selectedAccountId === ALL_ACCOUNTS_VALUE ? undefined : Number(selectedAccountId);
 
@@ -349,14 +352,6 @@ function AnalyticsPage() {
 
     return () => observer.disconnect();
   }, []);
-
-  useEffect(() => {
-    const urlMonth = searchParams.get("month") || "";
-    const urlCategory = searchParams.get("category") || "";
-
-    if (urlMonth) setSelectedMonth(urlMonth);
-    if (urlCategory) setSelectedCategory(formatCategoryName(urlCategory, t));
-  }, [searchParams, t]);
 
   useEffect(() => {
     let active = true;

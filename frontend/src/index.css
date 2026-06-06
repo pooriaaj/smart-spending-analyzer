@@ -2409,6 +2409,44 @@ textarea:focus,
   text-transform: capitalize;
 }
 
+.account-edit-form {
+  display: grid;
+  grid-template-columns: minmax(220px, 1.6fr) minmax(180px, 1fr);
+  gap: 12px;
+  flex: 1;
+  min-width: 0;
+}
+
+.account-edit-form label {
+  display: grid;
+  gap: 6px;
+  color: var(--text-faint);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.account-edit-form input,
+.account-edit-form select {
+  width: 100%;
+  min-height: 44px;
+  border: 1px solid rgba(148, 163, 184, 0.42);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.94);
+  color: var(--text);
+  font-size: 15px;
+  font-weight: 700;
+  padding: 0 12px;
+}
+
+.account-edit-form input:focus,
+.account-edit-form select:focus {
+  border-color: rgba(16, 185, 129, 0.72);
+  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.14);
+  outline: none;
+}
+
 .account-summary-metrics {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -3242,6 +3280,13 @@ textarea:focus,
 :root[data-theme="dark"] .account-summary-item {
   background: rgba(15, 23, 42, 0.82);
   border-color: rgba(148, 163, 184, 0.14);
+}
+
+:root[data-theme="dark"] .account-edit-form input,
+:root[data-theme="dark"] .account-edit-form select {
+  background: rgba(15, 23, 42, 0.92);
+  border-color: rgba(148, 163, 184, 0.24);
+  color: #f8fafc;
 }
 
 :root[data-theme="dark"] .budget-card {
@@ -6290,6 +6335,11 @@ textarea {
 
   .account-summary-top {
     flex-direction: column;
+  }
+
+  .account-edit-form {
+    width: 100%;
+    grid-template-columns: 1fr;
   }
 
   .account-summary-metrics {

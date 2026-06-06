@@ -16,6 +16,18 @@ describe("getAccountsFromResponse", () => {
     expect(getAccountsFromResponse({ data: accounts })).toEqual(accounts);
   });
 
+  it("accepts nested wrapped account response shapes", () => {
+    expect(getAccountsFromResponse({ data: { accounts } })).toEqual(accounts);
+    expect(getAccountsFromResponse({ accounts: { items: accounts } })).toEqual(accounts);
+    expect(getAccountsFromResponse({ results: { data: accounts } })).toEqual(accounts);
+  });
+
+  it("accepts a single account object", () => {
+    expect(getAccountsFromResponse({ id: 2, name: "Savings", type: "savings" })).toEqual([
+      { id: 2, name: "Savings", type: "savings" },
+    ]);
+  });
+
   it("falls back to an empty array for unexpected responses", () => {
     expect(getAccountsFromResponse(null)).toEqual([]);
     expect(getAccountsFromResponse({ accounts: { id: 1 } })).toEqual([]);
