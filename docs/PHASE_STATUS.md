@@ -13,7 +13,7 @@ This page summarizes the current backend and frontend phase state. Keep it factu
 | Backup and restore | Documented | `docs/BACKUP_RESTORE.md` documents safe backup/restore basics. | Perform a real test backup/restore drill on non-production data. |
 | Import pipeline | Active hardening | CSV, PDF, batch statement import, duplicate reconciliation, category learning, OCR fallback, and import preview review exist. | Keep adding regression tests for every real failed file shape. |
 | Analytics performance | Improved | Dashboard response now reuses aggregates and avoids deep quality scans on normal page load. | Add query timing/log review if large-history accounts still feel slow. |
-| Monitoring and smoke tests | Started | Health endpoints and a production smoke workflow exist. Render/Vercel logs remain the primary free observability tools. | Add recurring review of request IDs, import failures, and smoke results. |
+| Monitoring and smoke tests | Improved | Health endpoints, a no-secret public smoke script, and a production smoke workflow exist. Render/Vercel logs remain the primary free observability tools. | Add recurring review of request IDs, import failures, and smoke results. |
 | Privacy/data lifecycle | Documented and partially implemented | Data export, account deletion tests, privacy docs, and retention draft exist. | Review public privacy language before broader beta use. |
 
 ## Frontend Phases

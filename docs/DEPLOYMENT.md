@@ -70,6 +70,13 @@ Backend:
 - `GET /ready` should return healthy only when the database is reachable.
 - `GET /health` mirrors readiness for compatibility.
 - GitHub Actions also includes `Production Smoke Check`, which can be run manually after deploys.
+- Local no-secret public endpoint check:
+
+```bash
+python scripts/production_smoke_check.py
+```
+
+This checks the primary frontend domain, fallback Vercel frontend, and backend `/live`, `/ready`, and `/health`.
 
 Frontend:
 

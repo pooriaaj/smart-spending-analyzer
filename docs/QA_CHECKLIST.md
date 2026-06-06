@@ -11,6 +11,7 @@ For recurring weekly/monthly maintenance, use `docs/OPERATIONS_CALENDAR.md`.
 - [ ] For frontend changes, run `npm run build` from `frontend`.
 - [ ] For backend changes, run focused backend tests for the changed area.
 - [ ] Before risky backend releases, run the full backend test suite.
+- [ ] For production endpoint changes, run `python scripts/production_smoke_check.py` from the repo root.
 - [ ] Run `git diff --check` before committing.
 - [ ] Confirm GitHub Actions `Security CI` passes for the pushed commit.
 - [ ] Confirm Vercel deployment status is successful for the pushed commit.
@@ -119,8 +120,12 @@ Current focused frontend automated coverage includes API auth handling, protecte
 ## Production Smoke Test
 
 - [ ] Vercel frontend loads.
+- [ ] Primary custom domain `https://www.zero2asset.com` loads.
+- [ ] Vercel fallback frontend still loads.
 - [ ] Render `/live` responds.
 - [ ] Render `/ready` responds with database readiness.
+- [ ] Render `/health` responds.
+- [ ] `python scripts/production_smoke_check.py` passes, or any failure has a clear deploy/warm-up explanation.
 - [ ] Vercel deploy status is successful for the commit under test.
 - [ ] GitHub Actions `Production Smoke Check` passes or has a clear known reason for failure.
 - [ ] GitHub Actions `Security CI` passes or has a clear known reason for failure.
