@@ -243,6 +243,12 @@ describe('ImportPage', () => {
     })
 
     const user = userEvent.setup()
+    const writeText = vi.fn().mockResolvedValue(undefined)
+    Object.defineProperty(navigator, 'clipboard', {
+      value: { writeText },
+      configurable: true,
+    })
+
     const { container } = renderImportPage()
 
     await user.selectOptions(screen.getByRole('combobox', { name: 'Target Account' }), '7')
@@ -254,6 +260,24 @@ describe('ImportPage', () => {
     })
 
     expect(await screen.findByText(/Smart import failed/)).toBeInTheDocument()
+    expect(screen.getByText('Safe diagnostics')).toBeInTheDocument()
+    expect(screen.getByText('500')).toBeInTheDocument()
+    expect(screen.getByText('request-123')).toBeInTheDocument()
+    expect(screen.getByText('csv_statement_parse')).toBeInTheDocument()
+    expect(
+      screen.getByText((content) => content.includes('CSV') && content.includes('text/csv')),
+    ).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Copy diagnostics' }))
+
+    await waitFor(() => {
+      expect(writeText).toHaveBeenCalledTimes(1)
+    })
+    expect(writeText.mock.calls[0][0]).toContain('Request ID: request-123')
+    expect(writeText.mock.calls[0][0]).toContain('Import stage: csv_statement_parse')
+    expect(writeText.mock.calls[0][0]).not.toContain('personal-statement.csv')
+    expect(screen.getByRole('button', { name: 'Copied' })).toBeInTheDocument()
+
     expect(consoleSpy).toHaveBeenCalledWith(
       'Import upload failed',
       expect.objectContaining({

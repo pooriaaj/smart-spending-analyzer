@@ -734,6 +734,66 @@ textarea:focus,
   margin-bottom: 8px;
 }
 
+.import-error-diagnostics {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid rgba(248, 113, 113, 0.22);
+}
+
+.import-error-diagnostics p {
+  margin: 4px 0 0;
+  color: inherit;
+  opacity: 0.82;
+}
+
+.import-diagnostics-copy-button {
+  color: var(--red-dark);
+  white-space: nowrap;
+}
+
+.import-diagnostics-grid {
+  margin: 12px 0 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.import-diagnostics-grid div {
+  min-width: 0;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.65);
+}
+
+.import-diagnostics-grid dt,
+.import-diagnostics-files span {
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+  color: rgba(127, 29, 29, 0.72);
+}
+
+.import-diagnostics-grid dd {
+  margin: 4px 0 0;
+  overflow-wrap: anywhere;
+  color: var(--red-dark);
+  font-weight: 650;
+}
+
+.import-diagnostics-files {
+  margin-top: 12px;
+}
+
+.import-diagnostics-files ul {
+  margin: 8px 0 0;
+  padding-left: 18px;
+}
+
+.import-diagnostics-files li {
+  margin-top: 4px;
+  overflow-wrap: anywhere;
+}
+
 .import-message-header {
   display: flex;
   justify-content: space-between;
@@ -3460,6 +3520,23 @@ textarea:focus,
   border-top-color: rgba(248, 113, 113, 0.22);
 }
 
+:root[data-theme="dark"] .import-error-diagnostics {
+  border-top-color: rgba(248, 113, 113, 0.22);
+}
+
+:root[data-theme="dark"] .import-diagnostics-grid div {
+  background: rgba(127, 29, 29, 0.2);
+}
+
+:root[data-theme="dark"] .import-diagnostics-grid dt,
+:root[data-theme="dark"] .import-diagnostics-files span {
+  color: #fecaca;
+}
+
+:root[data-theme="dark"] .import-diagnostics-grid dd {
+  color: #fee2e2;
+}
+
 :root[data-theme="dark"] .import-row-status-warning,
 :root[data-theme="dark"] .import-row-issues {
   color: #fbbf24;
@@ -3975,6 +4052,14 @@ canvas {
   .transaction-item {
     flex-direction: column;
     align-items: stretch;
+  }
+
+  .import-diagnostics-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .import-diagnostics-copy-button {
+    width: 100%;
   }
 
   .header-actions,

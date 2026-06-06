@@ -296,8 +296,51 @@ const buildSafeUploadDiagnostics = (error, files, uploadPath) => ({
   })),
 });
 
-const logImportUploadError = (error, files, uploadPath) => {
-  console.error("Import upload failed", buildSafeUploadDiagnostics(error, files, uploadPath));
+const formatDiagnosticFileSize = (size) => {
+  const numericSize = Number(size);
+  if (!Number.isFinite(numericSize) || numericSize < 0) {
+    return "unknown size";
+  }
+
+  if (numericSize < 1024) {
+    return `${numericSize} B`;
+  }
+
+  return `${(numericSize / 1024).toFixed(1)} KB`;
+};
+
+const formatDiagnosticValue = (value, t) => {
+  if (value === null || value === undefined || value === "") {
+    return t("import.diagnosticUnknown");
+  }
+
+  return String(value);
+};
+
+const formatDiagnosticFile = (file, index) =>
+  `${index + 1}. ${String(file.extension || "unknown").toUpperCase()} · ${
+    file.type || "unknown type"
+  } · ${formatDiagnosticFileSize(file.size)}`;
+
+const buildSafeUploadDiagnosticsText = (diagnostics) => {
+  if (!diagnostics) {
+    return "";
+  }
+
+  return [
+    "Smart Spending Analyzer import diagnostics",
+    `Upload path: ${diagnostics.uploadPath || "unknown"}`,
+    `HTTP status: ${diagnostics.status || "unknown"}`,
+    `Request ID: ${diagnostics.requestId || "unknown"}`,
+    `Import stage: ${diagnostics.stage || "unknown"}`,
+    `File count: ${diagnostics.fileCount || 0}`,
+    "Files:",
+    ...(diagnostics.files || []).map(formatDiagnosticFile),
+  ].join("\n");
+};
+
+const logImportUploadError = (diagnostics) => {
+  console.error("Import upload failed", diagnostics);
 };
 
 function ImportPage() {
@@ -311,6 +354,8 @@ function ImportPage() {
   const [previewRows, setPreviewRows] = useState([]);
   const [receiptDraft, setReceiptDraft] = useState(null);
   const [error, setError] = useState("");
+  const [uploadDiagnostics, setUploadDiagnostics] = useState(null);
+  const [diagnosticsCopied, setDiagnosticsCopied] = useState(false);
   const [loading, setLoading] = useState(false);
   const [confirmingPreview, setConfirmingPreview] = useState(false);
   const [savingDraft, setSavingDraft] = useState(false);
@@ -526,6 +571,8 @@ function ImportPage() {
     setPreviewGroupCategoryDrafts({});
     setReceiptDraft(null);
     setError("");
+    setUploadDiagnostics(null);
+    setDiagnosticsCopied(false);
     setPreviewFilter("all");
   };
 
@@ -539,6 +586,8 @@ function ImportPage() {
 
     if (!normalizedAccountId) {
       setError(t("import.accountRequired"));
+      setUploadDiagnostics(null);
+      setDiagnosticsCopied(false);
       event.target.value = "";
       return;
     }
@@ -549,6 +598,8 @@ function ImportPage() {
       setPreviewRows([]);
       setReceiptDraft(null);
       setError(t("import.receiptBatchError"));
+      setUploadDiagnostics(null);
+      setDiagnosticsCopied(false);
       event.target.value = "";
       return;
     }
@@ -559,6 +610,8 @@ function ImportPage() {
     setPreviewGroupCategoryDrafts({});
     setReceiptDraft(null);
     setError("");
+    setUploadDiagnostics(null);
+    setDiagnosticsCopied(false);
     setLoading(true);
 
     const formData = new FormData();
@@ -583,6 +636,8 @@ function ImportPage() {
 
       const data = response.data;
       setImportResult(data);
+      setUploadDiagnostics(null);
+      setDiagnosticsCopied(false);
 
       if (data.status === "table_review") {
         setPreviewRows(data.preview_rows || []);
@@ -594,7 +649,10 @@ function ImportPage() {
       }
     } catch (uploadError) {
       if (!handleApiAuthError(uploadError, navigate)) {
-        logImportUploadError(uploadError, selectedFiles, uploadPath);
+        const diagnostics = buildSafeUploadDiagnostics(uploadError, selectedFiles, uploadPath);
+        logImportUploadError(diagnostics);
+        setUploadDiagnostics(diagnostics);
+        setDiagnosticsCopied(false);
         setError(getApiErrorMessage(uploadError, t("import.importFallbackFailed")));
       }
     } finally {
@@ -638,6 +696,19 @@ function ImportPage() {
         };
       });
     });
+  };
+
+  const handleCopyUploadDiagnostics = async () => {
+    if (!uploadDiagnostics || !navigator.clipboard?.writeText) {
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(buildSafeUploadDiagnosticsText(uploadDiagnostics));
+      setDiagnosticsCopied(true);
+    } catch {
+      setDiagnosticsCopied(false);
+    }
   };
 
   const handleApprovePreviewCategory = (index) => {
@@ -909,6 +980,56 @@ function ImportPage() {
                         <li key={`import-error-guidance-${index}`}>{item}</li>
                       ))}
                     </ul>
+                  </div>
+                )}
+
+                {uploadDiagnostics && (
+                  <div className="import-error-diagnostics">
+                    <div className="import-message-header">
+                      <div>
+                        <strong>{t("import.diagnosticTitle")}</strong>
+                        <p>{t("import.diagnosticDetail")}</p>
+                      </div>
+                      <button
+                        type="button"
+                        className="dismiss-message-button import-diagnostics-copy-button"
+                        onClick={handleCopyUploadDiagnostics}
+                      >
+                        {diagnosticsCopied
+                          ? t("import.diagnosticCopied")
+                          : t("import.diagnosticCopy")}
+                      </button>
+                    </div>
+
+                    <dl className="import-diagnostics-grid">
+                      <div>
+                        <dt>{t("import.diagnosticStatus")}</dt>
+                        <dd>{formatDiagnosticValue(uploadDiagnostics.status, t)}</dd>
+                      </div>
+                      <div>
+                        <dt>{t("import.diagnosticRequestId")}</dt>
+                        <dd>{formatDiagnosticValue(uploadDiagnostics.requestId, t)}</dd>
+                      </div>
+                      <div>
+                        <dt>{t("import.diagnosticStage")}</dt>
+                        <dd>{formatDiagnosticValue(uploadDiagnostics.stage, t)}</dd>
+                      </div>
+                      <div>
+                        <dt>{t("import.diagnosticUploadPath")}</dt>
+                        <dd>{formatDiagnosticValue(uploadDiagnostics.uploadPath, t)}</dd>
+                      </div>
+                    </dl>
+
+                    <div className="import-diagnostics-files">
+                      <span>{t("import.diagnosticFiles")}</span>
+                      <ul>
+                        {uploadDiagnostics.files.map((file, index) => (
+                          <li key={`upload-diagnostic-file-${index}`}>
+                            {formatDiagnosticFile(file, index)}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
                   </div>
                 )}
               </div>

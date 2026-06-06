@@ -72,6 +72,8 @@ Current focused frontend automated coverage includes API auth handling, protecte
 - [ ] Import preview rows can be reviewed before confirmation.
 - [ ] Duplicate detection or warnings are visible when expected.
 - [ ] Confirmed import creates transactions with sensible categories and amounts.
+- [ ] Failed imports show safe diagnostics with status, request ID, stage, upload path, and file type/size only.
+- [ ] Import diagnostics copy text does not include filenames, statement contents, cookies, tokens, or secrets.
 
 ## Assistant
 
@@ -116,6 +118,7 @@ Current focused frontend automated coverage includes API auth handling, protecte
 - [ ] Forms do not crash when the API returns validation errors.
 - [ ] Global error boundary catches unexpected frontend crashes.
 - [ ] Browser console has no repeated uncaught errors in normal flows.
+- [ ] Any new frontend crash gets a regression test before inviting another tester.
 
 ## Production Smoke Test
 

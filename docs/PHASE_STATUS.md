@@ -1,6 +1,6 @@
 # Smart Spending Analyzer Phase Status
 
-Last updated: 2026-06-05.
+Last updated: 2026-06-06.
 
 This page summarizes the current backend and frontend phase state. Keep it factual and free of secret values.
 
@@ -24,9 +24,9 @@ This page summarizes the current backend and frontend phase state. Keep it factu
 | Auth UX | Improved | Login/register/forgot/reset pages are redesigned and covered by tests. Deployed API calls use a first-party `/api` proxy for mobile cookie reliability. | Test phone login after every auth/deploy change. |
 | Overview/analytics | Active performance watch | Overview remains the combined dashboard/analytics page. Frontend no longer blocks on some noncritical requests. | Add frontend timing diagnostics if backend improvements are not enough. |
 | Transactions | Improved | Table/card layouts, mobile behavior, and paginated loading are improved. | Keep helper endpoints cheap for large accounts. |
-| Import UX | Active hardening | Account gate, statement preview, duplicate review, category review, and confirm flow exist. | Improve upload diagnostics and add tests for every file format bug. |
+| Import UX | Active hardening | Account gate, statement preview, duplicate review, category review, confirm flow, sanitized console diagnostics, and on-page safe diagnostics copy exist. | Add tests for every real failed file shape and verify typical statement sizes after deploys. |
 | Frontend tests | Started | Vitest and Testing Library cover auth, protected routes, import, analytics, transactions, budgets, assistant, profile, and utilities. | Add more import edge cases and at least one browser-level smoke path later. |
-| Error visibility | Started | Error boundary and API error helpers exist. Upload flow now logs sanitized diagnostics in the browser console. | Consider a free/low-cost error reporting service only after privacy review. |
+| Error visibility | Improved | Error boundary, API error helpers, request IDs, sanitized upload console logs, and user-copyable import diagnostics exist. | Consider a free/low-cost error reporting service only after privacy review. |
 
 ## Release Rule
 
