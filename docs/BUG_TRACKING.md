@@ -36,6 +36,7 @@ Use this file to control past, current, and future bugs without storing secrets,
 | 2026-06-05 | CSV import | Synthetic import audit found plural `Withdrawals`/`Deposits` headers were not accepted and fully ambiguous slash dates looked too confident. | Header aliases were narrow, and slash date parsing did not infer or flag date-order uncertainty. | Fixed with broader aliases, date-order inference, ambiguity review flags, and regression tests. |
 | 2026-06-06 | Accounts page | `/accounts` opened the global error screen with `TypeError: map is not a function`. | Frontend assumed the account response was always a raw array, but production could return a wrapped account object. | Fixed in `03d3a05` with shared account response normalization and regression tests. |
 | 2026-06-06 | Render deploys | Render timed out deploying frontend-only commit `03d3a05`. | Backend auto-deploy was still triggered by non-backend repo changes; dashboard also showed a native Python service while repo config expects Docker. | Mitigated with Render backend build filter and deployment docs. Confirm dashboard service matches Docker blueprint. |
+| 2026-06-06 | Vercel API proxy | Accounts create/load returned `405` or false empty accounts on `/api/accounts/`. | Vercel served trailing-slash API paths like `/api/accounts/`, `/api/transactions/`, and `/api/budgets/` as frontend HTML instead of proxying them to Render. | Fixed with a trailing-slash API rewrite before the SPA fallback and a Vercel config regression test. |
 
 ## Open Watch Items
 
@@ -47,6 +48,7 @@ Use this file to control past, current, and future bugs without storing secrets,
 - Scanned image/PDF OCR needs production dependency verification after Docker/Render changes.
 - Overview can still be improved with deeper query timing if large-history accounts remain slow.
 - Render should not rebuild the backend for frontend-only commits. If it does, re-check build filters and whether the dashboard service is synced to the Docker blueprint.
+- First-party `/api` proxy paths must be tested with and without trailing slashes after Vercel rewrite changes.
 
 ## Bug Intake Template
 

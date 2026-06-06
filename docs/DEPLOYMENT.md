@@ -10,6 +10,7 @@ For pre-production testing, see `docs/STAGING.md`.
 - Build command should run the Vite build script.
 - Build output is `dist`.
 - `frontend/vercel.json` provides SPA rewrites and security headers.
+- `frontend/vercel.json` must proxy both normal and trailing-slash `/api` paths before the SPA fallback.
 - Configure `VITE_API_BASE_URL` in Vercel environment settings.
 - Remember: `VITE_` variables are visible in browser builds and must not contain secrets.
 
@@ -99,6 +100,8 @@ Frontend:
 - Login/register pages should render.
 - Protected pages should redirect unauthenticated users.
 - Authenticated pages should load after login.
+- `GET /api/users/me` should reach Render and return JSON.
+- `GET /api/accounts/` should reach Render and return JSON, not `index.html`.
 
 Production smoke test after deploy:
 
