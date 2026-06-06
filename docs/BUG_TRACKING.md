@@ -35,6 +35,7 @@ Use this file to control past, current, and future bugs without storing secrets,
 | 2026-06-05 | Tracker CSV import | Later month sections could be skipped when dates were day-only values under `May 2026`/`June 2026` headings. | Parser did not carry month-section context into row date parsing. | Fixed with month-context parsing and row diagnostics. |
 | 2026-06-05 | CSV import | Synthetic import audit found plural `Withdrawals`/`Deposits` headers were not accepted and fully ambiguous slash dates looked too confident. | Header aliases were narrow, and slash date parsing did not infer or flag date-order uncertainty. | Fixed with broader aliases, date-order inference, ambiguity review flags, and regression tests. |
 | 2026-06-06 | Accounts page | `/accounts` opened the global error screen with `TypeError: map is not a function`. | Frontend assumed the account response was always a raw array, but production could return a wrapped account object. | Fixed in `03d3a05` with shared account response normalization and regression tests. |
+| 2026-06-06 | Render deploys | Render timed out deploying frontend-only commit `03d3a05`. | Backend auto-deploy was still triggered by non-backend repo changes; dashboard also showed a native Python service while repo config expects Docker. | Mitigated with Render backend build filter and deployment docs. Confirm dashboard service matches Docker blueprint. |
 
 ## Open Watch Items
 
@@ -45,6 +46,7 @@ Use this file to control past, current, and future bugs without storing secrets,
 - Fully ambiguous numeric dates such as `01/05/2026` still need user review unless the same file contains date-order evidence.
 - Scanned image/PDF OCR needs production dependency verification after Docker/Render changes.
 - Overview can still be improved with deeper query timing if large-history accounts remain slow.
+- Render should not rebuild the backend for frontend-only commits. If it does, re-check build filters and whether the dashboard service is synced to the Docker blueprint.
 
 ## Bug Intake Template
 

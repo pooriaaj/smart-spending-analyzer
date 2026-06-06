@@ -6,6 +6,9 @@ services:
     dockerContext: backend
     healthCheckPath: /ready
     autoDeploy: true
+    buildFilter:
+      paths:
+        - backend/**
     envVars:
       - key: ENVIRONMENT
         value: production

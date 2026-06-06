@@ -16,6 +16,11 @@ Minimum checks:
 - `git diff --check`
 - Secret-oriented review of changed docs.
 
+Expected provider behavior:
+
+- Vercel may build if the repo push reaches the frontend project.
+- Render should not rebuild unless `backend/**` or backend deployment config changed.
+
 ### Frontend Release
 
 Examples: pages, components, API client behavior, UI copy, styles.
@@ -27,6 +32,11 @@ Minimum checks:
 - Frontend build.
 - Manual QA for changed flows when practical.
 
+Expected provider behavior:
+
+- Vercel should deploy the frontend.
+- Render should not deploy for frontend-only commits. If it does, check Render build filters and dashboard service settings.
+
 ### Backend Release
 
 Examples: routes, services, auth, imports, exports, analytics, database access.
@@ -36,6 +46,11 @@ Minimum checks:
 - Focused backend tests for changed behavior.
 - Full backend tests before broad beta releases or risky backend changes.
 - Manual API or browser smoke test for changed user workflows.
+
+Expected provider behavior:
+
+- Render should deploy the backend when files under `backend/**` changed.
+- Vercel does not need a meaningful redeploy unless frontend files also changed.
 
 ### Database Or Migration Release
 

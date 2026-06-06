@@ -25,8 +25,23 @@ Production custom domain:
 - Dockerfile path is `backend/Dockerfile`.
 - Docker context is `backend`.
 - Render health check path is `/ready`.
+- Render build filters should only trigger backend builds for `backend/**` changes.
 - Runtime settings and secrets should be configured in Render environment variables.
 - `backend/run.py` reads Render's `PORT` and production runtime settings from environment variable names.
+
+Important Render dashboard check:
+
+- The backend service should match the Docker setup in `render.yaml`.
+- If the Render dashboard shows a native `Python 3` service instead of Docker settings, the dashboard service is not fully aligned with the repo blueprint.
+- In that case, sync the Blueprint or recreate/update the service so it uses `backend/Dockerfile` with `backend` as the Docker context.
+- Do not move secret values while doing this. Only confirm variable names and provider settings.
+
+Expected deploy scope:
+
+- Frontend-only changes should deploy on Vercel.
+- Backend changes under `backend/**` should deploy on Render.
+- Docs-only changes should not require a backend deploy unless `render.yaml` or backend runtime settings changed.
+- If Render starts building after a frontend-only commit, check Render build filters before debugging backend code.
 
 For the `zero2asset.com` production frontend, Render should use these public domain values:
 

@@ -137,8 +137,9 @@ Runtime scaling knobs:
 
 Render setup for free OCR:
 - The repository includes `render.yaml` with `runtime: docker`, `dockerfilePath: backend/Dockerfile`, and `dockerContext: backend`.
+- `render.yaml` also scopes Render auto-deploys to `backend/**`, so frontend-only commits should deploy on Vercel without rebuilding the backend.
 - If your existing Render service still says Tesseract was not found, the service is still using the native Python runtime.
-- In Render, switch/sync the backend service to Docker using the repository blueprint, or create a new Docker web service from this repo with Root Directory set to `backend`.
+- If the Render dashboard shows a native `Python 3` service, switch/sync the backend service to Docker using the repository blueprint, or create/update a Docker web service from this repo using `backend/Dockerfile` and `backend` as the Docker context.
 - Keep your existing backend environment variables, especially `DATABASE_URL`, `SECRET_KEY`, `FRONTEND_URL`, and auth settings.
 
 ---
