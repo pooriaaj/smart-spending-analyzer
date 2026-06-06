@@ -44,8 +44,16 @@
   ],
   "rewrites": [
     {
-      "source": "^/api/(.+)/$",
-      "destination": "https://smart-spending-analyzer.onrender.com/$1/"
+      "source": "/api/accounts/",
+      "destination": "https://smart-spending-analyzer.onrender.com/accounts/"
+    },
+    {
+      "source": "/api/transactions/",
+      "destination": "https://smart-spending-analyzer.onrender.com/transactions/"
+    },
+    {
+      "source": "/api/budgets/",
+      "destination": "https://smart-spending-analyzer.onrender.com/budgets/"
     },
     {
       "source": "/api/:path*",
