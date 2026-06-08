@@ -376,9 +376,23 @@ const translations = {
       repeatingPatterns: "Repeating Money Patterns",
       repeatingPatternsDetail:
         "Repeated expenses and income detected from your written transaction history in this scope.",
-      smartCategorization: "Smart Categorization",
+      smartCategorization: "Category Intelligence Center",
       smartCategorizationDetail:
-        "Analyze uncategorized rows and clean up legacy category labels so future suggestions stay consistent.",
+        "Review category confidence, teach recurring merchants, and keep imported statement rows clean.",
+      reviewQueue: "Review queue",
+      reviewQueueDetail: "items waiting",
+      reviewUncategorizedTitle: "Uncategorized review",
+      reviewUncategorizedDetail:
+        "Scan rows that still need a category, then apply the suggestions you confirm.",
+      merchantMemoryTitle: "Merchant memory",
+      merchantMemoryDetail:
+        "Group similar merchants so one correction can train future category suggestions.",
+      categoryCleanupTitle: "Category cleanup",
+      categoryCleanupDetail:
+        "Normalize old labels so reports, filters, and budgets stay consistent.",
+      amountRepairTitle: "Statement amount checks",
+      amountRepairDetail:
+        "Look for legacy import rows where a statement amount may need review.",
       learningHealthTitle: "Learning health",
       learningHealthDetail:
         "This shows how ready the app is to make category decisions from your confirmed transactions and shared anonymous merchant patterns.",
@@ -557,19 +571,21 @@ const translations = {
       highestSpend: "Highest spend",
       topCategory: "Top category",
       noCategorySpending: "No category spending recorded yet.",
-      overspendingAlerts: "Overspending Alerts",
+      overspendingAlerts: "Spending Risk Signals",
       overspendingAlertsDetail:
-        "Warnings based on unusual monthly or category-level spending increases.",
-      noAlerts: "No alerts available.",
-      categoryTrendComparison: "Category Trend Comparison",
-      categoryTrendDetail: "See which categories increased or decreased the most month over month.",
-      noTrendData: "No trend data available.",
+        "Items that changed enough to deserve a quick review. These are signals, not judgments.",
+      reviewSignal: "Review signal",
+      reviewTransactions: "Review transactions",
+      noAlerts: "No category requires urgent review right now.",
+      categoryTrendComparison: "Month-over-Month Category Changes",
+      categoryTrendDetail: "Compare categories by actual movement between the two most recent months.",
+      noTrendData: "Not enough month-over-month data yet.",
       topIncreases: "Top Increases",
       topDecreases: "Top Decreases",
-      noIncreases: "No increases detected.",
-      noDecreases: "No decreases detected.",
-      spendingInsights: "Spending Insights",
-      spendingInsightsDetail: "Simple observations and recommendations based on your spending data.",
+      noIncreases: "No meaningful increases detected.",
+      noDecreases: "No meaningful decreases detected.",
+      spendingInsights: "Financial Brief",
+      spendingInsightsDetail: "Plain-language takeaways from the current account scope.",
       noInsights: "No insights available yet.",
       observations: "Observations",
       recommendations: "Recommendations",
@@ -1798,6 +1814,20 @@ const translations = {
       smartCategorization: "Catégorisation intelligente",
       smartCategorizationDetail:
         "Analysez les lignes non catégorisées et nettoyez les anciennes étiquettes pour garder les futures suggestions cohérentes.",
+      reviewQueue: "File de verification",
+      reviewQueueDetail: "elements en attente",
+      reviewUncategorizedTitle: "Verification non categorisee",
+      reviewUncategorizedDetail:
+        "Scannez les lignes qui ont encore besoin d'une categorie, puis appliquez les suggestions confirmees.",
+      merchantMemoryTitle: "Memoire marchand",
+      merchantMemoryDetail:
+        "Regroupez les marchands similaires pour qu'une correction entraine les prochaines suggestions.",
+      categoryCleanupTitle: "Nettoyage des categories",
+      categoryCleanupDetail:
+        "Normalisez les anciennes etiquettes pour garder les rapports, filtres et budgets coherents.",
+      amountRepairTitle: "Verification des montants",
+      amountRepairDetail:
+        "Cherchez les anciennes lignes importees dont le montant du releve pourrait demander une verification.",
       learningHealthTitle: "Sante de l'apprentissage",
       learningHealthDetail:
         "Cette zone montre si l'application est prete a categoriser avec vos transactions confirmees et les habitudes anonymes partagees.",
@@ -1979,7 +2009,9 @@ const translations = {
       overspendingAlerts: "Alertes de dépassement",
       overspendingAlertsDetail:
         "Avertissements basés sur les hausses inhabituelles de dépenses mensuelles ou par catégorie.",
-      noAlerts: "Aucune alerte disponible.",
+      reviewSignal: "Signal a verifier",
+      reviewTransactions: "Verifier les transactions",
+      noAlerts: "Aucune categorie ne demande une revue urgente.",
       categoryTrendComparison: "Comparaison des tendances par catégorie",
       categoryTrendDetail: "Voyez quelles catégories ont le plus augmenté ou diminué mois sur mois.",
       noTrendData: "Aucune donnée de tendance disponible.",

@@ -367,6 +367,8 @@ function TransactionsPage() {
       import_review: t("transactions.learningSourceImportReview"),
       learning_apply: t("transactions.learningSourceGroupApply"),
     }[source] || t("transactions.learningSourceConfirmed"));
+  const smartReviewCount =
+    bulkSuggestions.length + learningCandidates.length + amountRepairCandidates.length;
 
   useEffect(() => {
     setCurrentPage(1);
@@ -749,33 +751,6 @@ function TransactionsPage() {
           <TransactionForm onTransactionCreated={fetchTransactions} />
         </div>
 
-        <div className="dashboard-card product-guide-card">
-          <div className="section-header">
-            <h2>{t("transactions.howTitle")}</h2>
-            <p>{t("transactions.howDetail")}</p>
-          </div>
-
-          <div className="feature-guide-grid">
-            <div className="feature-guide-item">
-              <span className="feature-step">{t("transactions.daily")}</span>
-              <h3>{t("transactions.dailyTitle")}</h3>
-              <p>{t("transactions.dailyDetail")}</p>
-            </div>
-
-            <div className="feature-guide-item">
-              <span className="feature-step">{t("transactions.month")}</span>
-              <h3>{t("transactions.monthTitle")}</h3>
-              <p>{t("transactions.monthDetail")}</p>
-            </div>
-
-            <div className="feature-guide-item">
-              <span className="feature-step">{t("transactions.learn")}</span>
-              <h3>{t("transactions.learnTitle")}</h3>
-              <p>{t("transactions.learnDetail")}</p>
-            </div>
-          </div>
-        </div>
-
         <div className="filter-card">
           <div className="section-header">
             <h2>{t("dashboard.accountView")}</h2>
@@ -842,10 +817,17 @@ function TransactionsPage() {
           {freshStartError && <p className="error-text">{freshStartError}</p>}
         </div>
 
-        <div className="filter-card">
-          <div className="section-header">
-            <h2>{t("transactions.smartCategorization")}</h2>
-            <p>{t("transactions.smartCategorizationDetail")}</p>
+        <div className="filter-card smart-category-card">
+          <div className="smart-category-header">
+            <div className="section-header">
+              <h2>{t("transactions.smartCategorization")}</h2>
+              <p>{t("transactions.smartCategorizationDetail")}</p>
+            </div>
+            <div className="smart-category-status">
+              <span>{t("transactions.reviewQueue")}</span>
+              <strong>{smartReviewCount}</strong>
+              <small>{t("transactions.reviewQueueDetail")}</small>
+            </div>
           </div>
 
           {learningSummary && (
@@ -935,68 +917,86 @@ function TransactionsPage() {
             </div>
           )}
 
-          <div className="smart-actions-row">
-            <button
-              type="button"
-              className="smart-action-button"
-              onClick={handleBulkAnalyze}
-              disabled={bulkLoading}
-            >
-              {bulkLoading ? t("transactions.analyzing") : t("transactions.analyzeUncategorized")}
-            </button>
+          <div className="smart-action-workbench">
+            <div className="smart-action-tile smart-action-tile-primary">
+              <span>{t("transactions.reviewUncategorizedTitle")}</span>
+              <p>{t("transactions.reviewUncategorizedDetail")}</p>
+              <div className="smart-action-tile-buttons">
+                <button
+                  type="button"
+                  className="smart-action-button"
+                  onClick={handleBulkAnalyze}
+                  disabled={bulkLoading}
+                >
+                  {bulkLoading ? t("transactions.analyzing") : t("transactions.analyzeUncategorized")}
+                </button>
+                <button
+                  type="button"
+                  className="smart-apply-button"
+                  onClick={handleBulkApply}
+                  disabled={bulkApplying || bulkSuggestions.length === 0}
+                >
+                  {bulkApplying ? t("transactions.applying") : t("transactions.applySuggestedCategories")}
+                </button>
+              </div>
+            </div>
 
-            <button
-              type="button"
-              className="secondary-button"
-              onClick={handleFindLearningCandidates}
-              disabled={learningLoading}
-            >
-              {learningLoading
-                ? t("transactions.findingLearningGroups")
-                : t("transactions.findLearningGroups")}
-            </button>
+            <div className="smart-action-tile">
+              <span>{t("transactions.merchantMemoryTitle")}</span>
+              <p>{t("transactions.merchantMemoryDetail")}</p>
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={handleFindLearningCandidates}
+                disabled={learningLoading}
+              >
+                {learningLoading
+                  ? t("transactions.findingLearningGroups")
+                  : t("transactions.findLearningGroups")}
+              </button>
+            </div>
 
-            <button
-              type="button"
-              className="smart-apply-button"
-              onClick={handleBulkApply}
-              disabled={bulkApplying || bulkSuggestions.length === 0}
-            >
-              {bulkApplying ? t("transactions.applying") : t("transactions.applySuggestedCategories")}
-            </button>
+            <div className="smart-action-tile">
+              <span>{t("transactions.categoryCleanupTitle")}</span>
+              <p>{t("transactions.categoryCleanupDetail")}</p>
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={handleNormalizeCategories}
+                disabled={normalizingCategories}
+              >
+                {normalizingCategories
+                  ? t("transactions.normalizing")
+                  : t("transactions.normalizeExistingCategories")}
+              </button>
+            </div>
 
-            <button
-              type="button"
-              className="secondary-button"
-              onClick={handleNormalizeCategories}
-              disabled={normalizingCategories}
-            >
-              {normalizingCategories
-                ? t("transactions.normalizing")
-                : t("transactions.normalizeExistingCategories")}
-            </button>
-
-            <button
-              type="button"
-              className="secondary-button"
-              onClick={handleFindAmountRepairs}
-              disabled={amountRepairLoading}
-            >
-              {amountRepairLoading
-                ? t("transactions.checkingAmounts")
-                : t("transactions.findSuspiciousAmounts")}
-            </button>
-
-            <button
-              type="button"
-              className="smart-apply-button"
-              onClick={handleApplyAmountRepairs}
-              disabled={amountRepairApplying || amountRepairCandidates.length === 0}
-            >
-              {amountRepairApplying
-                ? t("transactions.repairingAmounts")
-                : t("transactions.applyAmountRepairs")}
-            </button>
+            <div className="smart-action-tile">
+              <span>{t("transactions.amountRepairTitle")}</span>
+              <p>{t("transactions.amountRepairDetail")}</p>
+              <div className="smart-action-tile-buttons">
+                <button
+                  type="button"
+                  className="secondary-button"
+                  onClick={handleFindAmountRepairs}
+                  disabled={amountRepairLoading}
+                >
+                  {amountRepairLoading
+                    ? t("transactions.checkingAmounts")
+                    : t("transactions.findSuspiciousAmounts")}
+                </button>
+                <button
+                  type="button"
+                  className="smart-apply-button"
+                  onClick={handleApplyAmountRepairs}
+                  disabled={amountRepairApplying || amountRepairCandidates.length === 0}
+                >
+                  {amountRepairApplying
+                    ? t("transactions.repairingAmounts")
+                    : t("transactions.applyAmountRepairs")}
+                </button>
+              </div>
+            </div>
           </div>
 
           {bulkMessage && <div className="bulk-message-box">{bulkMessage}</div>}

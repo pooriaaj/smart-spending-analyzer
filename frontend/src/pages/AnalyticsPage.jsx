@@ -143,7 +143,16 @@ const formatShortMonth = (monthKey) => {
   return parsed.toLocaleDateString(undefined, { month: "short", year: "2-digit" });
 };
 
-const formatMoney = (value) => `$${Number(value || 0).toFixed(2)}`;
+const formatMoney = (value) => {
+  const numberValue = Number(value || 0);
+  const amount = Math.abs(numberValue).toFixed(2);
+  return numberValue < 0 ? `-$${amount}` : `$${amount}`;
+};
+
+const sentenceCaseText = (value) => {
+  const text = String(value || "").trim();
+  return text ? `${text.charAt(0).toUpperCase()}${text.slice(1)}` : "";
+};
 
 const calculateChangePercent = (currentValue, baselineValue) => {
   if (!baselineValue || baselineValue <= 0) return null;
@@ -525,8 +534,8 @@ function AnalyticsPage() {
 
   const renderTrendAmount = (value) => {
     const numberValue = Number(value || 0);
-    const prefix = numberValue > 0 ? "+" : "";
-    return `${prefix}${formatMoney(numberValue)}`;
+    if (numberValue > 0) return `+${formatMoney(numberValue)}`;
+    return formatMoney(numberValue);
   };
 
   const getSectionHighlightClass = (sectionName) => {
@@ -835,42 +844,6 @@ function AnalyticsPage() {
             </Stack>
           </Card>
 
-          <SimpleGrid cols={{ base: 1, md: 3 }} spacing="md">
-            <InsightCard
-              tone="accent"
-              label={t("analytics.categoryTrendComparison")}
-              value={
-                topIncreaseItems[0]
-                  ? formatCategoryName(topIncreaseItems[0].category, t)
-                  : t("analytics.noTrendData")
-              }
-              detail={t("analytics.categoryTrendDetail")}
-            />
-            <InsightCard
-              tone={overspendingAlertItems.length ? "warning" : "positive"}
-              label={t("analytics.overspendingAlerts")}
-              value={
-                overspendingAlertItems.length
-                  ? String(overspendingAlertItems.length)
-                  : t("analytics.noAlerts")
-              }
-              detail={
-                overspendingAlertItems[0]?.message ||
-                t("analytics.overspendingAlertsDetail")
-              }
-            />
-            <InsightCard
-              tone="positive"
-              label={t("analytics.recommendations")}
-              value={
-                recommendationItems.length
-                  ? String(recommendationItems.length)
-                  : t("analytics.noInsights")
-              }
-              detail={t("analytics.spendingInsightsDetail")}
-            />
-          </SimpleGrid>
-
           {normalizedAccountId === undefined && accountComparison.length > 1 && (
             <Card className="dashboard-card account-comparison-card overview-section-card" radius="xl" p={{ base: "md", md: "lg" }}>
               <Stack gap="md">
@@ -949,13 +922,25 @@ function AnalyticsPage() {
                   {overspendingAlertItems.map((alert, index) => (
                     <Paper
                       key={`alert-${index}`}
-                      className={`alert-box alert-${alert.level}`}
+                      className={`alert-box alert-box-pro alert-${alert.level}`}
                       radius="lg"
                       p="md"
                     >
-                      <Stack gap={4}>
-                        <Title order={3} size="h4">{alert.title}</Title>
-                        <Text size="sm">{alert.message}</Text>
+                      <Stack gap="sm">
+                        <Group justify="space-between" align="flex-start" gap="sm">
+                          <Box>
+                            <Badge color={alert.level === "high" ? "red" : "orange"} variant="light" radius="sm">
+                              {t("analytics.reviewSignal")}
+                            </Badge>
+                            <Title className="alert-title-text" order={3} size="h4">
+                              {sentenceCaseText(alert.title)}
+                            </Title>
+                          </Box>
+                          <Button variant="light" color="red" size="xs" radius="md" onClick={() => navigate("/transactions")}>
+                            {t("analytics.reviewTransactions")}
+                          </Button>
+                        </Group>
+                        <Text size="sm">{sentenceCaseText(alert.message)}</Text>
                       </Stack>
                     </Paper>
                   ))}
@@ -982,29 +967,31 @@ function AnalyticsPage() {
             </Paper>
           ) : (
             <>
-              <Paper className="trend-summary-box" radius="lg" p="md">
+              <Paper className="trend-summary-box trend-summary-box-pro" radius="lg" p="md">
                 <Stack gap={6}>
                   {categoryTrendSummaryItems.map((item, index) => (
-                    <Text key={`trend-summary-${index}`} size="sm">{item}</Text>
+                    <Text key={`trend-summary-${index}`} size="sm">{sentenceCaseText(item)}</Text>
                   ))}
                 </Stack>
               </Paper>
 
-              <SimpleGrid cols={{ base: 1, md: 2 }} spacing="md">
-                <Paper className="trend-block" radius="lg" p="md">
+              <SimpleGrid className="professional-trend-grid" cols={{ base: 1, md: 2 }} spacing="md">
+                <Paper className="trend-block trend-block-positive" radius="lg" p="md">
                   <Stack gap="sm">
                   <Title order={3} size="h4">{t("analytics.topIncreases")}</Title>
                   {topIncreaseItems.length === 0 ? (
-                    <Text className="trend-empty-text" size="sm">{t("analytics.noIncreases")}</Text>
+                    <Paper className="trend-empty-card" radius="md" p="sm">
+                      <Text size="sm">{t("analytics.noIncreases")}</Text>
+                    </Paper>
                   ) : (
                     <Stack gap="sm">
                       {topIncreaseItems.map((item) => (
-                        <Paper key={`increase-${item.category}`} className="trend-item" radius="md" p="sm">
+                        <Paper key={`increase-${item.category}`} className="trend-item trend-item-pro" radius="md" p="sm">
                           <Group justify="space-between" align="center" gap="md">
                           <Box>
                             <Text fw={700}>{formatCategoryName(item.category, t)}</Text>
                             <Text size="sm" c="dimmed">
-                              {categoryTrends.previous_month}: {formatMoney(item.previous_amount)} → {categoryTrends.current_month}: {formatMoney(item.current_amount)}
+                              {categoryTrends.previous_month}: {formatMoney(item.previous_amount)} to {categoryTrends.current_month}: {formatMoney(item.current_amount)}
                             </Text>
                           </Box>
                           <Text className="trend-positive" fw={800}>
@@ -1018,20 +1005,22 @@ function AnalyticsPage() {
                   </Stack>
                 </Paper>
 
-                <Paper className="trend-block" radius="lg" p="md">
+                <Paper className="trend-block trend-block-negative" radius="lg" p="md">
                   <Stack gap="sm">
                   <Title order={3} size="h4">{t("analytics.topDecreases")}</Title>
                   {topDecreaseItems.length === 0 ? (
-                    <Text className="trend-empty-text" size="sm">{t("analytics.noDecreases")}</Text>
+                    <Paper className="trend-empty-card" radius="md" p="sm">
+                      <Text size="sm">{t("analytics.noDecreases")}</Text>
+                    </Paper>
                   ) : (
                     <Stack gap="sm">
                       {topDecreaseItems.map((item) => (
-                        <Paper key={`decrease-${item.category}`} className="trend-item" radius="md" p="sm">
+                        <Paper key={`decrease-${item.category}`} className="trend-item trend-item-pro" radius="md" p="sm">
                           <Group justify="space-between" align="center" gap="md">
                           <Box>
                             <Text fw={700}>{formatCategoryName(item.category, t)}</Text>
                             <Text size="sm" c="dimmed">
-                              {categoryTrends.previous_month}: {formatMoney(item.previous_amount)} → {categoryTrends.current_month}: {formatMoney(item.current_amount)}
+                              {categoryTrends.previous_month}: {formatMoney(item.previous_amount)} to {categoryTrends.current_month}: {formatMoney(item.current_amount)}
                             </Text>
                           </Box>
                           <Text className="trend-negative" fw={800}>
@@ -1067,24 +1056,28 @@ function AnalyticsPage() {
                   <Text>{t("analytics.noInsights")}</Text>
                 </Paper>
               ) : (
-                <SimpleGrid cols={{ base: 1, md: 2 }} spacing="md">
-                  <Paper className="insights-block" radius="lg" p="md">
+                <SimpleGrid className="financial-brief-grid" cols={{ base: 1, md: 2 }} spacing="md">
+                  <Paper className="insights-block financial-brief-block" radius="lg" p="md">
                     <Stack gap="sm">
                       <Title order={3} size="h4">{t("analytics.observations")}</Title>
-                      <Stack component="ul" className="insights-list" gap="xs">
+                      <Stack className="insight-row-list" gap="xs">
                         {spendingInsightItems.map((item, index) => (
-                          <li key={`insight-${index}`}>{item}</li>
+                          <Paper key={`insight-${index}`} className="insight-row" radius="md" p="sm">
+                            <Text size="sm">{sentenceCaseText(item)}</Text>
+                          </Paper>
                         ))}
                       </Stack>
                     </Stack>
                   </Paper>
 
-                  <Paper className="insights-block" radius="lg" p="md">
+                  <Paper className="insights-block financial-brief-block" radius="lg" p="md">
                     <Stack gap="sm">
                       <Title order={3} size="h4">{t("analytics.recommendations")}</Title>
-                      <Stack component="ul" className="insights-list" gap="xs">
+                      <Stack className="insight-row-list" gap="xs">
                         {recommendationItems.map((item, index) => (
-                          <li key={`recommendation-${index}`}>{item}</li>
+                          <Paper key={`recommendation-${index}`} className="insight-row insight-row-action" radius="md" p="sm">
+                            <Text size="sm">{sentenceCaseText(item)}</Text>
+                          </Paper>
                         ))}
                       </Stack>
                     </Stack>
