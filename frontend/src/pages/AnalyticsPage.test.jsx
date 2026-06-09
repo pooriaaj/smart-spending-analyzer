@@ -205,7 +205,7 @@ describe('AnalyticsPage', () => {
     mockAnalyticsRequests()
   })
 
-  it('loads analytics summary, trends, insights, alerts, and account comparison data', async () => {
+  it('loads analytics summary, alerts, charts, and account comparison data', async () => {
     renderAnalyticsPage()
 
     await waitForAnalytics()
@@ -215,9 +215,8 @@ describe('AnalyticsPage', () => {
     expect(screen.getByText('Everyday')).toBeInTheDocument()
     expect(screen.getAllByText('Savings').length).toBeGreaterThan(0)
     expect(screen.getByText('Groceries jumped')).toBeInTheDocument()
-    expect(screen.getByText('Groceries increased this month.')).toBeInTheDocument()
-    expect(screen.getByText('Groceries are your largest flexible expense.')).toBeInTheDocument()
-    expect(screen.getByText('Review restaurant spending before the next budget reset.')).toBeInTheDocument()
+    expect(screen.getByText('Monthly Summary')).toBeInTheDocument()
+    expect(screen.getByText('Expense Categories by Amount')).toBeInTheDocument()
   })
 
   it('sends account, month, type, category, and preset date filters to analytics', async () => {

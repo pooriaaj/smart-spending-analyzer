@@ -6629,31 +6629,6 @@ textarea {
 
 /* ===== Targeted product polish: analytics signals and category intelligence ===== */
 
-.professional-trend-grid {
-  align-items: start;
-}
-
-.trend-summary-box-pro {
-  border: 1px solid #dbe5ef !important;
-  background: #f8fafc !important;
-}
-
-.trend-block-positive,
-.trend-block-negative,
-.financial-brief-block {
-  min-height: 0;
-}
-
-.trend-empty-card,
-.insight-row {
-  border: 1px solid #e5eaf1;
-  background: #ffffff;
-}
-
-.trend-item-pro {
-  background: #ffffff !important;
-}
-
 .alert-box-pro {
   border: 1px solid rgba(244, 63, 94, 0.22) !important;
   background:
@@ -6663,39 +6638,6 @@ textarea {
 
 .alert-title-text {
   margin-top: 8px;
-}
-
-.financial-brief-grid {
-  align-items: stretch;
-}
-
-.financial-brief-block {
-  background: #ffffff !important;
-}
-
-.insight-row-list {
-  margin: 0;
-  padding: 0;
-}
-
-.insight-row {
-  position: relative;
-  padding-left: 18px !important;
-}
-
-.insight-row::before {
-  content: "";
-  position: absolute;
-  left: 0;
-  top: 12px;
-  bottom: 12px;
-  width: 4px;
-  border-radius: 999px;
-  background: #0f766e;
-}
-
-.insight-row-action::before {
-  background: #1e3a8a;
 }
 
 .smart-category-card {
@@ -6724,7 +6666,7 @@ textarea {
 }
 
 .smart-category-status span,
-.smart-action-tile span {
+.smart-category-action-copy span {
   display: block;
   color: #0f766e;
   font-size: 12px;
@@ -6765,50 +6707,54 @@ textarea {
   background: #ffffff;
 }
 
-.smart-action-workbench {
+.smart-category-action-panel {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 14px;
-}
-
-.smart-action-tile {
-  display: flex;
-  min-height: 214px;
-  flex-direction: column;
-  justify-content: space-between;
-  gap: 14px;
+  grid-template-columns: minmax(240px, 0.8fr) minmax(0, 1.6fr);
+  gap: 18px;
+  align-items: stretch;
+  margin-top: 18px;
   padding: 18px;
   border: 1px solid #e5eaf1;
   border-radius: 18px;
   background: #ffffff;
 }
 
-.smart-action-tile-primary {
-  border-color: rgba(15, 118, 110, 0.24);
+.smart-category-action-copy {
+  padding: 16px;
+  border: 1px solid rgba(15, 118, 110, 0.18);
+  border-radius: 14px;
   background:
     linear-gradient(180deg, rgba(240, 253, 249, 0.88), #ffffff);
 }
 
-.smart-action-tile p {
+.smart-category-action-copy p {
   margin: 0;
+  margin-top: 10px;
   color: #64748b;
   line-height: 1.55;
 }
 
-.smart-action-tile-buttons {
+.smart-category-button-grid {
   display: grid;
-  gap: 10px;
+  grid-template-columns: repeat(2, minmax(220px, 1fr));
+  gap: 12px;
+  align-content: center;
 }
 
-.smart-action-tile .secondary-button,
-.smart-action-tile .smart-action-button,
-.smart-action-tile .smart-apply-button {
+.smart-category-button-grid .secondary-button,
+.smart-category-button-grid .smart-action-button,
+.smart-category-button-grid .smart-apply-button {
   width: 100%;
+  min-width: 0;
+  height: auto;
+  min-height: 48px;
+  white-space: normal;
+  line-height: 1.2;
 }
 
 @media (max-width: 1100px) {
-  .smart-action-workbench {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+  .smart-category-action-panel {
+    grid-template-columns: 1fr;
   }
 }
 
@@ -6822,20 +6768,12 @@ textarea {
     text-align: left;
   }
 
-  .smart-action-workbench {
+  .smart-category-button-grid {
     grid-template-columns: 1fr;
-  }
-
-  .smart-action-tile {
-    min-height: 0;
   }
 }
 
-:root[data-theme="dark"] .trend-summary-box-pro,
-:root[data-theme="dark"] .trend-empty-card,
-:root[data-theme="dark"] .insight-row,
-:root[data-theme="dark"] .financial-brief-block,
-:root[data-theme="dark"] .smart-action-tile,
+:root[data-theme="dark"] .smart-category-action-panel,
 :root[data-theme="dark"] .smart-category-card .learning-health-card,
 :root[data-theme="dark"] .smart-category-card .learning-event-row {
   border-color: rgba(148, 163, 184, 0.16) !important;
@@ -6850,7 +6788,7 @@ textarea {
 
 :root[data-theme="dark"] .smart-category-status,
 :root[data-theme="dark"] .smart-category-card .learning-health-panel,
-:root[data-theme="dark"] .smart-action-tile-primary {
+:root[data-theme="dark"] .smart-category-action-copy {
   border-color: rgba(45, 212, 191, 0.18);
   background: rgba(15, 23, 42, 0.72);
 }
