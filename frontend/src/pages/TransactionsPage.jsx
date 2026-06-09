@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import {
   Badge,
@@ -94,14 +94,6 @@ const buildPaginationItems = (currentPage, totalPages) => {
   return items;
 };
 
-const getLearningCandidateKey = (candidate) => {
-  const amountKey =
-    candidate?.representative_amount === null || candidate?.representative_amount === undefined
-      ? "all"
-      : Number(candidate.representative_amount).toFixed(2);
-  return `${candidate?.merchant_key || ""}:${candidate?.type || ""}:${amountKey}`;
-};
-
 const formatTransactionDate = (dateValue) => {
   const parsed = new Date(`${dateValue}T00:00:00`);
   if (Number.isNaN(parsed.getTime())) return dateValue;
@@ -147,20 +139,6 @@ function TransactionsPage() {
   const [freshStartMessage, setFreshStartMessage] = useState("");
   const [freshStartError, setFreshStartError] = useState("");
 
-  const [bulkSuggestions, setBulkSuggestions] = useState([]);
-  const [bulkLoading, setBulkLoading] = useState(false);
-  const [bulkApplying, setBulkApplying] = useState(false);
-  const [learningCandidates, setLearningCandidates] = useState([]);
-  const [learningSummary, setLearningSummary] = useState(null);
-  const [learningLoading, setLearningLoading] = useState(false);
-  const [learningApplyingKey, setLearningApplyingKey] = useState("");
-  const [learningCategoryEdits, setLearningCategoryEdits] = useState({});
-  const [normalizingCategories, setNormalizingCategories] = useState(false);
-  const [amountRepairCandidates, setAmountRepairCandidates] = useState([]);
-  const [amountRepairLoading, setAmountRepairLoading] = useState(false);
-  const [amountRepairApplying, setAmountRepairApplying] = useState(false);
-  const [bulkMessage, setBulkMessage] = useState("");
-
   const [editingId, setEditingId] = useState(null);
   const [editForm, setEditForm] = useState({
     amount: "",
@@ -173,20 +151,9 @@ function TransactionsPage() {
 
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const insightsRequestIdRef = useRef(0);
 
   const normalizedAccountId =
     selectedAccountId === ALL_ACCOUNTS_VALUE ? undefined : Number(selectedAccountId);
-
-  const getSuggestionStrength = (confidence) => {
-    if (confidence >= 0.95) {
-      return { label: t("transactions.learned"), className: "bulk-confidence-pill bulk-confidence-pill-memory" };
-    }
-    if (confidence >= 0.85) {
-      return { label: t("transactions.strongRule"), className: "bulk-confidence-pill bulk-confidence-pill-rule" };
-    }
-    return { label: t("transactions.review"), className: "bulk-confidence-pill bulk-confidence-pill-review" };
-  };
 
   useEffect(() => {
     setTypeFilter(searchParams.get("type") || "");
@@ -233,7 +200,6 @@ function TransactionsPage() {
       let transactionsResponse = await api.get("/transactions/page", {
         params: transactionParams,
       });
-      let insightsAccountId = normalizedAccountId;
 
       if (
         normalizedAccountId &&
@@ -249,7 +215,6 @@ function TransactionsPage() {
 
         if (Number(allTransactionsResponse.data?.scope_total || 0) > 0) {
           transactionsResponse = allTransactionsResponse;
-          insightsAccountId = undefined;
           persistSelectedAccountId(ALL_ACCOUNTS_VALUE);
           setSelectedAccountId(ALL_ACCOUNTS_VALUE);
           setScopeNotice(t("transactions.switchedAllAccountsNotice"));
@@ -275,43 +240,6 @@ function TransactionsPage() {
         setCurrentPage(Number(pagePayload.page));
       }
       setLoading(false);
-
-      const insightsRequestId = insightsRequestIdRef.current + 1;
-      insightsRequestIdRef.current = insightsRequestId;
-      setAmountRepairLoading(true);
-      setLearningLoading(true);
-      Promise.all([
-        api
-          .get("/transactions/amount-repairs/preview", {
-            params: {
-              account_id: insightsAccountId,
-            },
-          })
-          .catch(() => null),
-        api
-          .get("/transactions/categorize/learning-summary", {
-            params: {
-              account_id: insightsAccountId,
-            },
-          })
-          .catch(() => null),
-      ])
-        .then(([amountRepairsResponse, learningSummaryResponse]) => {
-          if (insightsRequestIdRef.current !== insightsRequestId) {
-            return;
-          }
-
-          setAmountRepairCandidates(amountRepairsResponse?.data?.candidates || []);
-          setLearningSummary(learningSummaryResponse?.data || null);
-        })
-        .finally(() => {
-          if (insightsRequestIdRef.current !== insightsRequestId) {
-            return;
-          }
-
-          setAmountRepairLoading(false);
-          setLearningLoading(false);
-        });
     } catch (error) {
       handleApiAuthError(error, navigate);
     } finally {
@@ -352,23 +280,6 @@ function TransactionsPage() {
     () => buildPaginationItems(activePage, totalPages),
     [activePage, totalPages]
   );
-  const learningLevel = learningSummary?.confidence_level || "empty";
-  const learningLevelLabel =
-    {
-      high: t("transactions.learningHealthHigh"),
-      medium: t("transactions.learningHealthMedium"),
-      low: t("transactions.learningHealthLow"),
-      empty: t("transactions.learningHealthEmpty"),
-    }[learningLevel] || t("transactions.learningHealthEmpty");
-  const formatLearningSource = (source) =>
-    ({
-      manual_create: t("transactions.learningSourceManualCreate"),
-      manual_edit: t("transactions.learningSourceManualEdit"),
-      import_review: t("transactions.learningSourceImportReview"),
-      learning_apply: t("transactions.learningSourceGroupApply"),
-    }[source] || t("transactions.learningSourceConfirmed"));
-  const smartReviewCount =
-    bulkSuggestions.length + learningCandidates.length + amountRepairCandidates.length;
 
   useEffect(() => {
     setCurrentPage(1);
@@ -445,203 +356,6 @@ function TransactionsPage() {
       await fetchTransactions();
     } catch (error) {
       handleApiAuthError(error, navigate);
-    }
-  };
-
-  const handleBulkAnalyze = async () => {
-    try {
-      setBulkLoading(true);
-      setBulkMessage("");
-      const response = await api.get("/transactions/categorize/bulk-preview", {
-        params: {
-          account_id: normalizedAccountId,
-        },
-      });
-      setBulkSuggestions(response.data.suggestions || []);
-    } catch (error) {
-      if (!handleApiAuthError(error, navigate)) {
-        setBulkMessage(t("transactions.bulkAnalyzeFailed"));
-      }
-    } finally {
-      setBulkLoading(false);
-    }
-  };
-
-  const handleBulkApply = async () => {
-    if (bulkSuggestions.length === 0) return;
-
-    try {
-      setBulkApplying(true);
-      setBulkMessage("");
-
-      const response = await api.post("/transactions/categorize/bulk-apply", {
-        transaction_ids: bulkSuggestions.map((item) => item.transaction_id),
-      });
-
-      setBulkMessage(
-        t("transactions.bulkApplySuccess", {
-          count: response.data.updated_count,
-          plural: response.data.updated_count === 1 ? "" : "s",
-        })
-      );
-      setBulkSuggestions([]);
-      await fetchTransactions();
-    } catch (error) {
-      if (!handleApiAuthError(error, navigate)) {
-        setBulkMessage(t("transactions.bulkApplyFailed"));
-      }
-    } finally {
-      setBulkApplying(false);
-    }
-  };
-
-  const handleFindLearningCandidates = async () => {
-    try {
-      setLearningLoading(true);
-      setBulkMessage("");
-      const response = await api.get("/transactions/categorize/learning-candidates", {
-        params: {
-          account_id: normalizedAccountId,
-        },
-      });
-      const candidates = response.data?.candidates || [];
-      setLearningCandidates(candidates);
-      setLearningCategoryEdits(
-        candidates.reduce((drafts, item) => {
-          drafts[getLearningCandidateKey(item)] = item.suggested_category || item.current_category || "";
-          return drafts;
-        }, {})
-      );
-      if (candidates.length === 0) {
-        setBulkMessage(t("transactions.noLearningCandidates"));
-      }
-    } catch (error) {
-      if (!handleApiAuthError(error, navigate)) {
-        setBulkMessage(t("transactions.learningAnalyzeFailed"));
-      }
-    } finally {
-      setLearningLoading(false);
-    }
-  };
-
-  const handleApplyLearningCandidate = async (candidate) => {
-    const candidateKey = getLearningCandidateKey(candidate);
-    const category = (learningCategoryEdits[candidateKey] || candidate.suggested_category || "").trim();
-    if (!category) return;
-
-    try {
-      setLearningApplyingKey(candidateKey);
-      setBulkMessage("");
-      const response = await api.post("/transactions/categorize/learning-apply", {
-        merchant_key: candidate.merchant_key,
-        type: candidate.type,
-        category,
-        account_id: normalizedAccountId || null,
-        representative_amount: candidate.representative_amount ?? null,
-      });
-
-      setBulkMessage(
-        t("transactions.learningApplySuccess", {
-          matched: response.data?.matched_count || 0,
-          updated: response.data?.updated_count || 0,
-          category: formatCategoryLabel(category, t),
-        })
-      );
-      setLearningCandidates((prev) =>
-        prev.filter((item) => getLearningCandidateKey(item) !== candidateKey)
-      );
-      setBulkSuggestions([]);
-      await fetchTransactions();
-    } catch (error) {
-      if (!handleApiAuthError(error, navigate)) {
-        setBulkMessage(t("transactions.learningApplyFailed"));
-      }
-    } finally {
-      setLearningApplyingKey("");
-    }
-  };
-
-  const handleNormalizeCategories = async () => {
-    try {
-      setNormalizingCategories(true);
-      setBulkMessage("");
-
-      const response = await api.post("/transactions/normalize-categories", null, {
-        params: {
-          account_id: normalizedAccountId,
-        },
-      });
-
-      const updatedCount = response.data?.updated_count || 0;
-      const memoryCreated = response.data?.memory_entries_created || 0;
-      const memoryUpdated = response.data?.memory_entries_updated || 0;
-
-      setBulkMessage(
-        t("transactions.normalizeSuccess", {
-          count: updatedCount,
-          categoryPlural: updatedCount === 1 ? "" : "s",
-          memoryCount: memoryCreated + memoryUpdated,
-          memoryPlural: memoryCreated + memoryUpdated === 1 ? "" : "s",
-        })
-      );
-      setBulkSuggestions([]);
-      await fetchTransactions();
-    } catch (error) {
-      if (!handleApiAuthError(error, navigate)) {
-        setBulkMessage(t("transactions.normalizeFailed"));
-      }
-    } finally {
-      setNormalizingCategories(false);
-    }
-  };
-
-  const handleFindAmountRepairs = async () => {
-    try {
-      setAmountRepairLoading(true);
-      setBulkMessage("");
-      const response = await api.get("/transactions/amount-repairs/preview", {
-        params: {
-          account_id: normalizedAccountId,
-        },
-      });
-      const candidates = response.data?.candidates || [];
-      setAmountRepairCandidates(candidates);
-      if (candidates.length === 0) {
-        setBulkMessage(t("transactions.amountRepairNone"));
-      }
-    } catch (error) {
-      if (!handleApiAuthError(error, navigate)) {
-        setBulkMessage(t("transactions.amountRepairFailed"));
-      }
-    } finally {
-      setAmountRepairLoading(false);
-    }
-  };
-
-  const handleApplyAmountRepairs = async () => {
-    if (amountRepairCandidates.length === 0) return;
-
-    try {
-      setAmountRepairApplying(true);
-      setBulkMessage("");
-      const response = await api.post("/transactions/amount-repairs/apply", {
-        transaction_ids: amountRepairCandidates.map((item) => item.transaction_id),
-        account_id: normalizedAccountId || null,
-      });
-      setBulkMessage(
-        t("transactions.amountRepairApplied", {
-          count: response.data?.updated_count || 0,
-          plural: (response.data?.updated_count || 0) === 1 ? "" : "s",
-        })
-      );
-      setAmountRepairCandidates([]);
-      await fetchTransactions();
-    } catch (error) {
-      if (!handleApiAuthError(error, navigate)) {
-        setBulkMessage(t("transactions.amountRepairApplyFailed"));
-      }
-    } finally {
-      setAmountRepairApplying(false);
     }
   };
 
@@ -815,339 +529,6 @@ function TransactionsPage() {
 
           {freshStartMessage && <div className="bulk-message-box">{freshStartMessage}</div>}
           {freshStartError && <p className="error-text">{freshStartError}</p>}
-        </div>
-
-        <div className="filter-card smart-category-card">
-          <div className="smart-category-header">
-            <div className="section-header">
-              <h2>{t("transactions.smartCategorization")}</h2>
-              <p>{t("transactions.smartCategorizationDetail")}</p>
-            </div>
-            <div className="smart-category-status">
-              <span>{t("transactions.reviewQueue")}</span>
-              <strong>{smartReviewCount}</strong>
-              <small>{t("transactions.reviewQueueDetail")}</small>
-            </div>
-          </div>
-
-          {learningSummary && (
-            <div className="learning-health-panel">
-              <div className="learning-health-head">
-                <div>
-                  <span className="learning-health-eyebrow">
-                    {t("transactions.learningHealthTitle")}
-                  </span>
-                  <h3>{learningLevelLabel}</h3>
-                  <p>
-                    {t("transactions.learningHealthDetail")}
-                  </p>
-                </div>
-                <span className={`learning-health-pill learning-health-${learningLevel}`}>
-                  {Math.round(Number(learningSummary.confidence_score || 0) * 100)}%
-                </span>
-              </div>
-
-              <div className="learning-health-grid">
-                <div className="learning-health-card">
-                  <span>{t("transactions.learningTracked")}</span>
-                  <strong>{learningSummary.transaction_count}</strong>
-                </div>
-                <div className="learning-health-card">
-                  <span>{t("transactions.learningNeedsReview")}</span>
-                  <strong>{learningSummary.uncategorized_count}</strong>
-                  <small>
-                    {t("transactions.learningGroups", {
-                      count: learningSummary.learning_candidate_count,
-                    })}
-                  </small>
-                </div>
-                <div className="learning-health-card">
-                  <span>{t("transactions.learningPersonalMemory")}</span>
-                  <strong>{learningSummary.merchant_profile_count}</strong>
-                  <small>
-                    {t("transactions.learningKeywordRules", {
-                      count: learningSummary.personal_memory_count,
-                    })}
-                  </small>
-                </div>
-                <div className="learning-health-card">
-                  <span>{t("transactions.learningEvents")}</span>
-                  <strong>{learningSummary.learning_event_count}</strong>
-                  <small>{t("transactions.learningEventsDetail")}</small>
-                </div>
-                <div className="learning-health-card">
-                  <span>{t("transactions.learningCommunity")}</span>
-                  <strong>
-                    {learningSummary.community_learning_enabled
-                      ? t("transactions.learningOn")
-                      : t("transactions.learningOff")}
-                  </strong>
-                  <small>
-                    {t("transactions.learningCommunityPatterns", {
-                      count: learningSummary.community_pattern_count,
-                    })}
-                  </small>
-                </div>
-              </div>
-
-              {(learningSummary.recent_learning_events || []).length > 0 && (
-                <div className="learning-events-list">
-                  <h4>{t("transactions.recentLessons")}</h4>
-                  {learningSummary.recent_learning_events.map((event, index) => (
-                    <div
-                      key={`${event.merchant_key}-${event.created_at}-${index}`}
-                      className="learning-event-row"
-                    >
-                      <div>
-                        <strong>{event.display_name}</strong>
-                        <span>
-                          {formatCategoryLabel(event.category, t)}{" - "}
-                          {formatLearningSource(event.signal_source)}
-                        </span>
-                      </div>
-                      <span className="learning-event-count">
-                        {t("transactions.learningAffected", {
-                          count: event.affected_count,
-                        })}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
-
-          <div className="smart-category-action-panel">
-            <div className="smart-category-action-copy">
-              <span>{t("transactions.reviewUncategorizedTitle")}</span>
-              <p>{t("transactions.reviewUncategorizedDetail")}</p>
-            </div>
-            <div className="smart-category-button-grid">
-              <button
-                type="button"
-                className="smart-action-button"
-                onClick={handleBulkAnalyze}
-                disabled={bulkLoading}
-              >
-                {bulkLoading ? t("transactions.analyzing") : t("transactions.analyzeUncategorized")}
-              </button>
-              <button
-                type="button"
-                className="smart-apply-button"
-                onClick={handleBulkApply}
-                disabled={bulkApplying || bulkSuggestions.length === 0}
-              >
-                {bulkApplying ? t("transactions.applying") : t("transactions.applySuggestedCategories")}
-              </button>
-              <button
-                type="button"
-                className="secondary-button"
-                onClick={handleFindLearningCandidates}
-                disabled={learningLoading}
-              >
-                {learningLoading
-                  ? t("transactions.findingLearningGroups")
-                  : t("transactions.findLearningGroups")}
-              </button>
-              <button
-                type="button"
-                className="secondary-button"
-                onClick={handleNormalizeCategories}
-                disabled={normalizingCategories}
-              >
-                {normalizingCategories
-                  ? t("transactions.normalizing")
-                  : t("transactions.normalizeExistingCategories")}
-              </button>
-              <button
-                type="button"
-                className="secondary-button"
-                onClick={handleFindAmountRepairs}
-                disabled={amountRepairLoading}
-              >
-                {amountRepairLoading
-                  ? t("transactions.checkingAmounts")
-                  : t("transactions.findSuspiciousAmounts")}
-              </button>
-              <button
-                type="button"
-                className="smart-apply-button"
-                onClick={handleApplyAmountRepairs}
-                disabled={amountRepairApplying || amountRepairCandidates.length === 0}
-              >
-                {amountRepairApplying
-                  ? t("transactions.repairingAmounts")
-                  : t("transactions.applyAmountRepairs")}
-              </button>
-            </div>
-          </div>
-
-          {bulkMessage && <div className="bulk-message-box">{bulkMessage}</div>}
-
-          {learningCandidates.length > 0 && (
-            <div className="bulk-suggestions-list">
-              {learningCandidates.map((item) => {
-                const candidateKey = getLearningCandidateKey(item);
-                const draftCategory =
-                  learningCategoryEdits[candidateKey] ?? item.suggested_category ?? item.current_category ?? "";
-
-                return (
-                  <div key={candidateKey} className="bulk-suggestion-card">
-                    <div className="bulk-suggestion-top">
-                      <div>
-                        <h3>{item.display_name}</h3>
-                        <p>
-                          {t("transactions.learningGroupSummary", {
-                            count: item.transaction_count,
-                            plural: item.transaction_count === 1 ? "" : "s",
-                            total: Number(item.total_amount || 0).toFixed(2),
-                          })}
-                        </p>
-                      </div>
-                      <div className="bulk-suggestion-badges">
-                        <span className="bulk-confidence-pill bulk-confidence-pill-review">
-                          {t("transactions.teachMemory")}
-                        </span>
-                        <span className="bulk-confidence-pill">
-                          {Math.round(Number(item.confidence || 0) * 100)}%
-                        </span>
-                      </div>
-                    </div>
-
-                    <p className="bulk-suggestion-meta">
-                      {t("common.current")}:{" "}
-                      <strong>{formatCategoryLabel(item.current_category, t)}</strong>{" "}
-                      {"->"} {t("common.suggested")}:{" "}
-                      <strong>{formatCategoryLabel(item.suggested_category, t)}</strong>
-                    </p>
-                    {item.representative_amount !== null && item.representative_amount !== undefined && (
-                      <p className="bulk-suggestion-meta">
-                        {t("transactions.amountSensitiveGroup", {
-                          min: Number(item.amount_min || 0).toFixed(2),
-                          max: Number(item.amount_max || 0).toFixed(2),
-                        })}
-                      </p>
-                    )}
-                    <p className="bulk-suggestion-meta">{item.reason}</p>
-                    {item.example_descriptions?.length > 0 && (
-                      <p className="bulk-suggestion-meta">
-                        {t("transactions.examples")}: {item.example_descriptions.join(" | ")}
-                      </p>
-                    )}
-
-                    <div className="filter-bar compact-filter-bar">
-                      <div>
-                        <label>{t("transactions.correctCategory")}</label>
-                        <input
-                          type="text"
-                          value={draftCategory}
-                          onChange={(event) =>
-                            setLearningCategoryEdits((prev) => ({
-                              ...prev,
-                              [candidateKey]: event.target.value,
-                            }))
-                          }
-                          placeholder={t("transactions.correctCategoryPlaceholder")}
-                        />
-                      </div>
-                      <button
-                        type="button"
-                        className="smart-apply-button"
-                        onClick={() => handleApplyLearningCandidate(item)}
-                        disabled={learningApplyingKey === candidateKey || !draftCategory.trim()}
-                      >
-                        {learningApplyingKey === candidateKey
-                          ? t("transactions.teaching")
-                          : t("transactions.applyToSimilar")}
-                      </button>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-
-          {amountRepairCandidates.length > 0 && (
-            <div className="bulk-suggestions-list">
-              {amountRepairCandidates.map((item) => (
-                <div key={item.transaction_id} className="bulk-suggestion-card">
-                  <div className="bulk-suggestion-top">
-                    <div>
-                      <h3>{item.description}</h3>
-                      <p>
-                        {t("transactions.amountRepairChange", {
-                          current: Number(item.current_amount || 0).toFixed(2),
-                          suggested: Number(item.suggested_amount || 0).toFixed(2),
-                        })}
-                      </p>
-                    </div>
-                    <div className="bulk-suggestion-badges">
-                      <span className="bulk-confidence-pill bulk-confidence-pill-review">
-                        {t("transactions.review")}
-                      </span>
-                      <span className="bulk-confidence-pill">
-                        {Math.round(Number(item.confidence || 0) * 100)}%
-                      </span>
-                    </div>
-                  </div>
-                  <p className="bulk-suggestion-meta">{item.reason}</p>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {bulkSuggestions.length > 0 && (
-            <div className="bulk-suggestions-list">
-              {bulkSuggestions.map((item) => {
-                const suggestionStrength = getSuggestionStrength(item.confidence);
-
-                return (
-                  <div key={item.transaction_id} className="bulk-suggestion-card">
-                    <div className="bulk-suggestion-top">
-                      <div>
-                        <h3>{item.description}</h3>
-                        <p>
-                          {t("common.current")}: <strong>{formatCategoryLabel(item.current_category, t)}</strong> {"->"} {t("common.suggested")}: <strong>{formatCategoryLabel(item.suggested_category, t)}</strong>
-                        </p>
-                      </div>
-
-                      <div className="bulk-suggestion-badges">
-                        <span className={suggestionStrength.className}>
-                          {suggestionStrength.label}
-                        </span>
-                        <span className="bulk-confidence-pill">
-                          {Math.round(item.confidence * 100)}%
-                        </span>
-                      </div>
-                    </div>
-
-                    <p className="bulk-suggestion-meta">
-                      {t("common.type")}:{" "}
-                      {item.type === "income" ? t("common.income") : t("common.expense")}
-                    </p>
-                    {item.matched_keyword && (
-                      <p className="bulk-suggestion-meta">
-                        {t("transactions.matchedKeyword")}: <strong>{item.matched_keyword}</strong>
-                      </p>
-                    )}
-                    <p className="bulk-suggestion-meta">
-                      {t("transactions.suggestionReasonGeneric")}
-                    </p>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-
-          {!bulkLoading &&
-            learningCandidates.length === 0 &&
-            bulkSuggestions.length === 0 &&
-            amountRepairCandidates.length === 0 &&
-            !bulkMessage && (
-            <div className="empty-state">
-              <p>{t("transactions.noBulkSuggestions")}</p>
-            </div>
-          )}
         </div>
 
         <Card className="filter-card transaction-filter-card" radius="xl" p={{ base: "md", md: "lg" }}>
