@@ -329,6 +329,11 @@ class CsrfOriginMiddleware(BaseHTTPMiddleware):
             return await call_next(request)
 
         origin = (request.headers.get("origin") or "").rstrip("/")
+        if not origin:
+            referer = (request.headers.get("referer") or "").rstrip("/")
+            if referer:
+                parsed = urlparse(referer)
+                origin = f"{parsed.scheme}://{parsed.netloc}".rstrip("/")
         if origin and origin not in self.allowed_origins:
             return JSONResponse(
                 status_code=status.HTTP_403_FORBIDDEN,

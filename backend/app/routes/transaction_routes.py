@@ -855,6 +855,14 @@ def confirm_preview_import(
             imported += 1
         except Exception:
             invalid_rows_skipped += 1
+            logger.warning(
+                "Skipping import row due to processing error user_id=%s account_id=%s date=%s desc=%s",
+                current_user.id,
+                payload.account_id,
+                getattr(row, "date", "?"),
+                (getattr(row, "description", "") or "")[:80],
+                exc_info=True,
+            )
 
     db.commit()
 

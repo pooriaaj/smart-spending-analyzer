@@ -817,7 +817,7 @@ def normalize_year_token(year_text: str | None, fallback_year: int) -> int:
 
     year = int(normalized)
     if len(normalized) == 2:
-        return 2000 + year
+        return (2000 + year) if year <= 30 else (1900 + year)
     return year
 
 
@@ -1973,6 +1973,12 @@ def parse_rbc_statement_preview(
     if not preview_rows:
         raise ValueError(empty_result_message or DEFAULT_NO_TRANSACTIONS_ERROR)
 
+    total_rows = len(preview_rows)
+    if total_rows > 200:
+        notes.append(
+            f"This statement contains {total_rows} rows. Only the first 200 are shown in the preview."
+            " Consider splitting large statements into multiple files."
+        )
     return {
         "preview_rows": preview_rows[:200],
         "notes": notes,
@@ -2117,6 +2123,12 @@ def parse_pdf_statement_preview(
     if not preview_rows:
         raise ValueError(no_transaction_rows_error)
 
+    total_rows = len(preview_rows)
+    if total_rows > 200:
+        notes.append(
+            f"This statement contains {total_rows} rows. Only the first 200 are shown in the preview."
+            " Consider splitting large statements into multiple files."
+        )
     return {
         "preview_rows": preview_rows[:200],
         "notes": notes,
