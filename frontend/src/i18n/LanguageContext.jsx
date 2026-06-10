@@ -1451,6 +1451,11 @@ const translations = {
       updateFailed: "Failed to update transaction.",
       createFailed: "Failed to create transaction.",
     },
+    notFound: {
+      title: "Page not found",
+      detail: "The page you are looking for does not exist or has been moved.",
+      goHome: "Go to Overview",
+    },
   },
   fr: {
     common: {
@@ -2884,6 +2889,11 @@ const translations = {
       suggestFailed: "Impossible de suggérer une catégorie.",
       updateFailed: "Impossible de mettre à jour la transaction.",
       createFailed: "Impossible de créer la transaction.",
+    },
+    notFound: {
+      title: "Page introuvable",
+      detail: "La page que vous recherchez n'existe pas ou a été déplacée.",
+      goHome: "Aller à l'aperçu",
     },
   },
 };

@@ -11,7 +11,11 @@ class ErrorBoundary extends React.Component {
   }
 
   componentDidCatch(error, errorInfo) {
-    console.error("Frontend render error", error, errorInfo);
+    // Intentional: error boundaries must be class components and cannot use hooks.
+    // Log render errors so they appear in production log aggregators.
+    if (typeof window !== "undefined" && window.__reportError) {
+      window.__reportError(error, errorInfo);
+    }
   }
 
   handleGoHome = () => {
@@ -32,7 +36,7 @@ class ErrorBoundary extends React.Component {
                 <div className="auth-card-header">
                   <p className="auth-card-kicker">Smart Spending Analyzer</p>
                   <h2>Something went wrong.</h2>
-                  <p>Please refresh the page or go back to login.</p>
+                  <p>Please refresh the page or return to login.</p>
                 </div>
 
                 <div className="auth-form">
@@ -40,7 +44,7 @@ class ErrorBoundary extends React.Component {
                     Refresh page
                   </button>
                   <button type="button" className="secondary-button" onClick={this.handleGoHome}>
-                    Go back to login
+                    Return to login
                   </button>
                 </div>
               </div>

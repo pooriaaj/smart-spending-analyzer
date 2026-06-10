@@ -27,6 +27,7 @@ const ForgotPasswordPage = lazy(() => import("./pages/ForgotPasswordPage"));
 const ResetPasswordPage = lazy(() => import("./pages/ResetPasswordPage"));
 const ImportPage = lazy(() => import("./pages/ImportPage"));
 const BudgetsPage = lazy(() => import("./pages/BudgetsPage"));
+const NotFoundPage = lazy(() => import("./pages/NotFoundPage"));
 
 const APP_NAV_ITEMS = [
   { labelKey: "common.analytics", path: "/analytics", matchPaths: ["/analytics", "/dashboard"] },
@@ -257,6 +258,7 @@ function AppRoutes() {
           <Route path="/money-map" element={<ProtectedRoute><Navigate to="/analytics" replace /></ProtectedRoute>} />
           <Route path="/budgets" element={protectedPage(<BudgetsPage />)} />
           <Route path="/simulator" element={<ProtectedRoute><Navigate to="/budgets" replace /></ProtectedRoute>} />
+          <Route path="*" element={<NotFoundPage />} />
         </Routes>
       </Suspense>
     </BrowserRouter>

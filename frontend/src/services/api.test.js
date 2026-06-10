@@ -34,6 +34,7 @@ describe('api service', () => {
     expect(axiosMocks.create).toHaveBeenCalledWith({
       baseURL: 'https://api.example.test',
       withCredentials: true,
+      timeout: 30000,
     })
   })
 
@@ -69,6 +70,7 @@ describe('api service', () => {
     expect(axiosMocks.create).toHaveBeenCalledWith({
       baseURL: 'http://localhost:8000',
       withCredentials: true,
+      timeout: 30000,
     })
   })
 
