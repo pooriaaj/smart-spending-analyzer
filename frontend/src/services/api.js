@@ -40,6 +40,7 @@ const baseURL = resolveApiBaseURL();
 const api = axios.create({
   baseURL,
   withCredentials: true,
+  timeout: 30000,
 });
 
 export function handleApiAuthError(error, navigate) {
