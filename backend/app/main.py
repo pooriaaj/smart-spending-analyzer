@@ -35,10 +35,40 @@ from app.services.transaction_service import rebuild_community_merchant_profile_
 
 load_dotenv()
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
-)
+
+class _StructuredFormatter(logging.Formatter):
+    """JSON log formatter for production — makes logs parseable by aggregators."""
+
+    def format(self, record: logging.LogRecord) -> str:
+        import json
+
+        entry: dict = {
+            "time": self.formatTime(record, "%Y-%m-%dT%H:%M:%S"),
+            "level": record.levelname,
+            "name": record.name,
+            "message": record.getMessage(),
+        }
+        if record.exc_info:
+            entry["exception"] = self.formatException(record.exc_info)
+        if hasattr(record, "request_id"):
+            entry["request_id"] = record.request_id
+        return json.dumps(entry)
+
+
+def _configure_logging() -> None:
+    is_production = os.getenv("ENVIRONMENT", "development").lower() == "production"
+    if is_production:
+        handler = logging.StreamHandler()
+        handler.setFormatter(_StructuredFormatter())
+        logging.basicConfig(level=logging.INFO, handlers=[handler], force=True)
+    else:
+        logging.basicConfig(
+            level=logging.INFO,
+            format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
+        )
+
+
+_configure_logging()
 
 logger = logging.getLogger(__name__)
 
