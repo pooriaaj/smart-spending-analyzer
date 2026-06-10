@@ -123,6 +123,11 @@ function AuthenticatedLayout({ children, theme, onThemeToggle }) {
     item.matchPaths.some((path) => location.pathname === path)
   );
 
+  useEffect(() => {
+    const pageLabel = activeItem ? t(activeItem.labelKey) : t("common.dashboard");
+    document.title = `${pageLabel} — ${t("common.appName")}`;
+  }, [activeItem, t]);
+
   return (
     <AppShell
       className="app-shell"

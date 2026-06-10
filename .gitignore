@@ -29,6 +29,7 @@ pnpm-debug.log*
 # Build / dist
 dist/
 build/
+coverage/
 .coverage
 htmlcov/
 .pytest_cache/
@@ -61,3 +62,4 @@ local-backups/
 
 # Misc
 *.sqlite3
+*.db
