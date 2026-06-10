@@ -8,13 +8,13 @@ This page summarizes the current backend and frontend phase state. Keep it factu
 
 | Phase | Status | Current State | Next Work |
 | --- | --- | --- | --- |
-| Core API and auth | Stable MVP | FastAPI routes, SQLAlchemy services, JWT HttpOnly cookie auth, password reset, CORS, CSRF origin checks, trusted host middleware, body limits, rate limiting, and sanitized errors exist. JSON structured logging added (auto-enabled in production via ENVIRONMENT env var). | Keep auth/security changes narrow and test-driven. |
+| Core API and auth | Stable MVP | FastAPI routes, SQLAlchemy services, JWT HttpOnly cookie auth, password reset, CORS, CSRF origin checks (with Referer header fallback), trusted host middleware, body limits, rate limiting, and sanitized errors exist. JSON structured logging added (auto-enabled in production via ENVIRONMENT env var). | Keep auth/security changes narrow and test-driven. |
 | Database migrations | Started | Alembic baseline exists for fresh databases. Runtime `create_all` and startup maintenance still exist. | Practice local/staging migrations before any production migration. |
 | Backup and restore | Documented | `docs/BACKUP_RESTORE.md` documents safe backup/restore basics. | Perform a real test backup/restore drill on non-production data. |
-| Import pipeline | Active hardening | CSV, PDF, batch statement import, duplicate reconciliation, category learning, OCR fallback, and import preview review exist. | Keep adding regression tests for every real failed file shape. |
-| Analytics performance | Improved | Dashboard response now reuses aggregates and avoids deep quality scans on normal page load. | Add query timing/log review if large-history accounts still feel slow. |
-| Monitoring and smoke tests | Improved | Health endpoints, a no-secret public smoke script, a production smoke workflow, and Render backend deploy scoping exist. Render/Vercel logs remain the primary free observability tools. Dockerfile now runs as non-root user (appuser) with HEALTHCHECK. | Add recurring review of request IDs, import failures, deploy events, and smoke results. |
-| Privacy/data lifecycle | Documented and partially implemented | Data export, account deletion tests, privacy docs, and retention draft exist. | Review public privacy language before broader beta use. |
+| Import pipeline | Improved | CSV, PDF, batch statement import, duplicate reconciliation, category learning, OCR fallback, and import preview review exist. Batch import now isolates per-file errors so one bad file does not kill the entire batch. PDF parser covers 24 bank profiles: 11 Canadian banks (RBC, RBC Visa, TD, CIBC, Scotiabank, Tangerine, Simplii, Desjardins, National Bank, BMO English, BMO French, Laurentian, ATB) and 11 US banks (Chase, BofA, Wells Fargo, Capital One, Citibank, US Bank, TD Bank US, Amex, Discover, PNC, Navy Federal), plus a generic fallback. "beginning balance" and "ending balance" added to global balance markers for US-format statements. Silent 200-row truncation replaced with a user-visible warning note. | Add regression tests for every real failed file shape. |
+| Analytics performance | Improved | Dashboard response now reuses aggregates. Account stats endpoint replaced 2N per-account loop with 2 batch GROUP BY queries. Simulation parameters now have validated bounds (±100,000). | Add query timing/log review if large-history accounts still feel slow. |
+| Monitoring and smoke tests | Improved | Health endpoints, a no-secret public smoke script, a production smoke workflow, and Render backend deploy scoping exist. Render/Vercel logs remain the primary free observability tools. Dockerfile now runs as non-root user (appuser) with HEALTHCHECK. CI now includes Gitleaks secrets scan on every push and PR. | Add recurring review of request IDs, import failures, deploy events, and smoke results. |
+| Privacy/data lifecycle | Documented and partially implemented | Data export, account deletion tests, privacy docs, and retention draft exist. Community learning confirmation thresholds raised to 3 owners and 5 confirmations. | Review public privacy language before broader beta use. |
 
 ## Frontend Phases
 
@@ -22,11 +22,19 @@ This page summarizes the current backend and frontend phase state. Keep it factu
 | --- | --- | --- | --- |
 | UI redesign | Mostly complete | Mantine-based professional dashboard/navigation/forms across the core app. Skeleton loading states (PageSkeleton) replace plain text loaders. Per-page document titles added. | Continue small polish only when tied to usability or bugs. |
 | Auth UX | Improved | Login/register/forgot/reset pages redesigned and covered by tests. Deployed API calls use a first-party `/api` proxy for mobile cookie reliability. | Test phone login after every auth/deploy change. |
-| Overview/analytics | Active performance watch | Overview is the combined dashboard/analytics page. Vite bundle splitting: AnalyticsPage chunk dropped from 411 kB to 22 kB; charts isolated in vendor-charts for browser caching. | Add frontend timing diagnostics if backend improvements are not enough. |
-| Transactions | Improved | Table/card layouts, mobile behavior, and paginated loading are improved. 404 Not Found route added for invalid URLs. | Keep helper endpoints cheap for large accounts. |
-| Import UX | Active hardening | Account gate, statement preview, duplicate review, category review, confirm flow, sanitized console diagnostics, and on-page safe diagnostics copy exist. | Add tests for every real failed file shape and verify typical statement sizes after deploys. |
+| Overview/analytics | Active performance watch | Overview is the combined dashboard/analytics page. Vite bundle splitting: AnalyticsPage chunk dropped from 411 kB to 22 kB; charts isolated in vendor-charts for browser caching. All five analytics filters (month, date range, type, category) now persist to and restore from URL query params for shareable links. | Add frontend timing diagnostics if backend improvements are not enough. |
+| Transactions | Improved | Table/card layouts, mobile behavior, and paginated loading are improved. 404 Not Found route added for invalid URLs. Fresh-start confirmation now shows a live count of transactions that would be deleted before the user confirms. | Keep helper endpoints cheap for large accounts. |
+| Import UX | Active hardening | Account gate, statement preview, duplicate review, category review, confirm flow, sanitized console diagnostics, and on-page safe diagnostics copy exist. Import row processing errors are now logged with context instead of being silently swallowed. | Add tests for every real failed file shape and verify typical statement sizes after deploys. |
 | Frontend tests | Improved | Vitest and Testing Library cover auth, protected routes, import, analytics, transactions, budgets, assistant, profile, and utilities. Coverage reporting enabled (52% statements baseline). CI now runs lint + coverage + build. | Add more import edge cases and at least one browser-level smoke path later. |
-| Error visibility | Improved | Error boundary, API error helpers, request IDs, sanitized upload console logs, user-copyable import diagnostics, and global Axios interceptor for network/timeout/5xx notifications via Mantine toast. | Consider a free/low-cost error reporting service only after privacy review. |
+| Error visibility | Improved | Error boundary, API error helpers, request IDs, sanitized upload console logs, user-copyable import diagnostics, and global Axios interceptor for network/timeout/5xx/429 notifications via Mantine toast. 429 rate-limit errors now show a distinct orange toast with a "wait a moment" message. | Consider a free/low-cost error reporting service only after privacy review. |
+
+## Legal / IP
+
+| Item | Status |
+| --- | --- |
+| License | `LICENSE` file at repo root — proprietary, all rights reserved, Mohammadreza Alijani |
+| Secrets scanning | Gitleaks scans every push and PR via GitHub Actions |
+| PyMuPDF / pypdf | Both confirmed present in `backend/requirements.txt` (PyMuPDF==1.27.2.3, pypdf==6.11.0) |
 
 ## Release Rule
 

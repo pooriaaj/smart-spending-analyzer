@@ -44,23 +44,23 @@ Note: PyMuPDF (fitz) is listed in `backend/requirements.txt` as `PyMuPDF==1.27.2
 - `backend/app/main.py`: FastAPI app, middleware registration, routers, health endpoints, startup maintenance.
 - `backend/app/database.py`: SQLAlchemy engine/session setup from `DATABASE_URL`.
 - `backend/app/models.py`: SQLAlchemy models for users, accounts, transactions, category memory, assistant data, merchant lookup cache, budgets, and saved scenarios.
-- `backend/app/schemas.py`: request/response schemas and validation.
+- `backend/app/schemas.py`: request/response schemas and validation. Scenario and simulation parameters have validated bounds (±100,000 income/expense, ±1,000,000 event amount).
 - `backend/app/auth.py`: password hashing, JWT creation/decoding, auth cookie helpers.
-- `backend/app/security.py`: CORS helpers, trusted host helpers, CSRF Origin middleware, body size middleware, security headers, rate limiting, import validation helpers, redaction helpers.
+- `backend/app/security.py`: CORS helpers, trusted host helpers, CSRF Origin middleware (with Referer header fallback when Origin is absent), body size middleware, security headers, rate limiting, import validation helpers, redaction helpers.
 - `backend/app/dependencies.py`: shared request dependencies such as current user and database session.
-- `backend/app/routes/`: route layer for auth, users, accounts, budgets, transactions/imports, analytics, and assistant.
-- `backend/app/services/`: business logic for analytics, transactions, imports, budgets, assistant, OCR, email, merchant enrichment, database maintenance, and related helpers.
-- `backend/tests/`: backend regression tests for routes, imports, analytics, budgets, security hardening, PDF parsing, users, and database maintenance.
+- `backend/app/routes/`: route layer for auth, users, accounts, budgets, transactions/imports, analytics, and assistant. `transaction_routes.py` includes `GET /transactions/fresh-start/count` for showing deletion counts before fresh-start confirmation.
+- `backend/app/services/`: business logic for analytics, transactions, imports, budgets, assistant, OCR, email, merchant enrichment, database maintenance, and related helpers. `account_service.py` uses batch GROUP BY queries for account stats (no N+1 loop). `unified_import_service.py` isolates per-file errors in batch imports. `transaction_service.py` community learning thresholds: 3 owners, 5 confirmations. `pdf_statement_service.py` covers 24 bank profiles (13 Canadian + 11 US) plus generic fallback.
+- `backend/tests/`: backend regression tests for routes, imports, analytics, budgets, security hardening, PDF parsing (46 tests including all 14 new North American bank profiles), users, and database maintenance.
 
 ## 5. Current Frontend Structure
 
 - `frontend/src/App.jsx`: React Router setup, protected routes, lazy-loaded pages, auth gate based on `/users/me`.
 - `frontend/src/main.jsx`: React root and `ErrorBoundary`.
 - `frontend/src/services/api.js`: Axios client using `VITE_API_BASE_URL` and `withCredentials: true`.
-- `frontend/src/pages/`: login, register, forgot/reset password, transactions, analytics, assistant, profile, import, budgets, and legacy/redirected pages.
+- `frontend/src/pages/`: login, register, forgot/reset password, transactions, analytics, assistant, profile, import, budgets, and legacy/redirected pages. `AnalyticsPage.jsx` persists all five filters to URL query params. `TransactionsPage.jsx` shows live fresh-start deletion count before confirmation.
 - `frontend/src/components/`: shared controls and form components.
-- `frontend/src/utils/`: display and error helpers.
-- `frontend/src/i18n/`: language context.
+- `frontend/src/utils/`: display and error helpers. `setupApiInterceptors.js` shows a 429 orange toast in addition to 5xx toasts.
+- `frontend/src/i18n/`: language context. Legal footer uses owner legal name (Mohammadreza Alijani).
 - Authenticated and public auth pages show a short copyright/trademark footer notice.
 - Frontend tests now use Vitest, jsdom, and Testing Library for focused component/service/unit coverage, including API auth handling, protected-route auth gates, account selector/account-scope behavior, dashboard summary/recent-filter/manual-add behavior, transaction ledger filter/edit/delete behavior, analytics summary/filter/drilldown behavior, import account-gate/table-review/confirm behavior, assistant status/history/scoped-question behavior, budget summary/suggestion/save/delete behavior, transaction form create/edit/category suggestion behavior, profile export/update/password/learning/delete-guard behavior, login/register success and failure behavior, and forgot/reset password flows.
 
@@ -102,9 +102,11 @@ Known limitation: the in-process rate limiter is fine for a small single-instanc
   - frontend npm install,
   - frontend npm audit,
   - frontend tests,
-  - frontend build.
+  - frontend build,
+  - Gitleaks secrets scan (added 2026-06-10).
 - Frontend currently has build, lint, test, and watch-test scripts.
 - Current frontend suite has focused Vitest coverage for API auth handling, protected route gates, account selector/account-scope behavior, dashboard summary/recent-filter/manual-add behavior, transaction ledger filter/edit/delete behavior, analytics summary/filter/drilldown behavior, import account-gate/table-review/confirm behavior, assistant status/history/scoped-question behavior, budget summary/suggestion/save/delete behavior, login, registration, forgot/reset password, transaction form create/edit/category suggestion behavior, profile export/update/password/learning/delete-guard behavior, password visibility, and error helpers.
+- Backend PDF parsing test suite covers 46 tests including detection markers for all 24 named bank profiles and parse/format tests for RBC, RBC Visa, TD, CIBC, Tangerine, Desjardins, National Bank, BMO French, BMO English, Chase, and generic layouts.
 - End-to-end tests are not present yet.
 
 ## 9. Known Risks And Missing Company-Readiness Pieces

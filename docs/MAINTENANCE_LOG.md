@@ -2,6 +2,87 @@
 
 Use this file for safe, non-secret maintenance summaries. Do not record real user data, real secrets, database URLs, access tokens, reset links, private provider logs, or raw exports here.
 
+## 2026-06-10 Hardening, Bank Coverage Expansion, and Security Pass
+
+Scope: multi-area improvement pass covering legal/IP, security, performance, UX, error handling, import pipeline reliability, and North American bank statement coverage.
+
+Starting commit: clean main branch.
+Ending commits: `1bfebd0` (bank profiles), `ce2f032` (tests + doc fix).
+
+### Changes Made
+
+**Legal and IP**
+- Created `LICENSE` file at repo root with proprietary all-rights-reserved terms, Mohammadreza Alijani.
+- Added Gitleaks secrets-scan job to `security-ci.yml` (runs on every push and PR).
+
+**Security**
+- `security.py`: tightened CSRF middleware to fall back to `Referer` header when `Origin` is absent — prevents CSRF bypass from same-origin non-browser clients that omit Origin.
+
+**Backend — Performance**
+- `account_service.py`: replaced per-account N+1 loop (2 queries × N accounts) with 2 batch GROUP BY SQL queries for account stats.
+
+**Backend — Correctness**
+- `pdf_statement_service.py`: fixed 2-digit year pivot (≤30 → 2000s, >30 → 1900s).
+- `pdf_statement_service.py`: silent 200-row truncation replaced with a user-visible note in the preview response.
+- `transaction_routes.py`: added logging with context to the bare `except Exception` in `confirm_preview_import` so silent import failures surface in logs.
+
+**Backend — Import Reliability**
+- `unified_import_service.py`: added per-file try/except in batch import loop. One bad file is now logged and skipped with a note; other files continue.
+
+**Backend — New Endpoints**
+- `transaction_routes.py`: added `GET /transactions/fresh-start/count` — returns the count of transactions that would be deleted by fresh-start, supporting safe confirmation UX.
+
+**Backend — Validation Bounds**
+- `schemas.py` and `analytics_routes.py`: simulation income/expense adjustments bounded at ±100,000; event amounts bounded at ±1,000,000.
+
+**Backend — Community Learning**
+- `transaction_service.py`: raised community learning thresholds from 2 owners/2 confirmations to 3 owners/5 confirmations to reduce noise in shared categorization.
+
+**Backend — Bank Statement Coverage**
+- `pdf_statement_service.py`: added 14 new `StatementProfile` entries: BMO English, Laurentian Bank, ATB Financial, Chase, Bank of America, Wells Fargo, Capital One, Citibank, US Bank, TD Bank US, American Express, Discover, PNC, Navy Federal.
+- Added `"beginning balance"`, `"ending balance"`, and `"daily ending balance"` to `GENERIC_BALANCE_MARKERS` — these are standard US bank balance-line labels that were previously missing.
+- Total named profiles now: 24 (13 Canadian + 11 US) plus generic fallback.
+
+**Frontend — UX**
+- `AnalyticsPage.jsx`: all five analytics filters (month, date range start/end, type, category) now persist to and restore from URL query params for shareable/bookmarkable filter state.
+- `TransactionsPage.jsx`: fresh-start confirmation now fetches and displays a live count of transactions that would be deleted, shown in red, before the user confirms.
+- `setupApiInterceptors.js`: 429 rate-limit responses now show a distinct orange Mantine toast ("Too many requests, wait a moment").
+- `LanguageContext.jsx`: legal footer updated to Mohammadreza Alijani; added `freshStartCountNote` and `freshStartCountLoading` i18n keys in EN and FR.
+
+**Tests**
+- Added 3 new backend tests to `test_pdf_statement_service.py` (46 total, all passing):
+  - Detection marker subtest covering all 14 new bank profiles.
+  - BMO English parse test: debit/credit/balance column format, Opening/Closing Balance line filtering.
+  - Chase parse test: Beginning Balance/Ending Balance lines filtered, income/expense correctly detected.
+
+**Docs**
+- `CODEX_CONTEXT.md`: updated sections 4, 5, 8, 9 to reflect all changes; fixed stale note claiming PyMuPDF was missing (it is present and pinned in requirements.txt).
+- `PHASE_STATUS.md`: updated all backend and frontend phases; added Legal/IP table.
+- `IMPORT_COMPATIBILITY.md`: full rewrite to reflect 24 bank profiles, amount formats, balance line filtering, and extended test coverage list.
+
+### Safety Boundaries
+
+- No `.env` values were read or printed.
+- No production settings were changed.
+- No database migrations were run.
+- No production user data was exported or accessed.
+- No auth, model, or API contract changes were made without describing the risk first.
+
+### Verification
+
+- Python syntax check on `pdf_statement_service.py`: passed.
+- Backend PDF tests: 46 tests, all passed.
+- All new tests written before commit.
+
+### Not Done In This Pass
+
+- Full frontend lint/test/build rerun not performed (no frontend build-breaking changes; deferred to next session or CI run).
+- Manual browser QA with a live test account not performed.
+- Production smoke check not performed.
+- Staging environment not deployed.
+
+---
+
 ## 2026-05-28 Budget Page Test Expansion
 
 Scope: added focused frontend tests for budget summary display, suggested budgets, budget moves, loading a suggestion into the form, saving a budget, and deleting an existing budget.
