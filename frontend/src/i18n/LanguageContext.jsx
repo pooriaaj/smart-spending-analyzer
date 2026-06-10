@@ -20,7 +20,7 @@ const translations = {
   en: {
     common: {
       appName: "Smart Spending Analyzer",
-      legalFooter: "© 2026 Pooria. Smart Spending Analyzer™ / Zero2Asset™. All rights reserved.",
+      legalFooter: "© 2026 Mohammadreza Alijani. Smart Spending Analyzer™ / Zero2Asset™. All rights reserved.",
       assistant: "Assistant",
       backToDashboard: "Back to Overview",
       dashboard: "Overview",
@@ -1460,7 +1460,7 @@ const translations = {
   fr: {
     common: {
       appName: "Analyseur intelligent des dépenses",
-      legalFooter: "© 2026 Pooria. Smart Spending Analyzer™ / Zero2Asset™. Tous droits réservés.",
+      legalFooter: "© 2026 Mohammadreza Alijani. Smart Spending Analyzer™ / Zero2Asset™. Tous droits réservés.",
       assistant: "Assistant",
       backToDashboard: "Retour a l'apercu",
       dashboard: "Apercu",
