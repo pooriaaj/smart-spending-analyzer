@@ -294,8 +294,8 @@ def get_category_trends_route(
 @router.get("/future-simulator", response_model=FutureSimulationResponse)
 def get_future_simulator_route(
     months: int = Query(default=6, ge=1, le=12),
-    income_adjustment: float = Query(default=0.0),
-    expense_adjustment: float = Query(default=0.0),
+    income_adjustment: float = Query(default=0.0, ge=-100_000, le=100_000),
+    expense_adjustment: float = Query(default=0.0, ge=-100_000, le=100_000),
     target_balance: float | None = Query(default=None, gt=0),
     event_month_offset: int | None = Query(default=None, ge=1, le=12),
     event_amount: float = Query(default=0.0),

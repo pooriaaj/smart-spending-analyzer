@@ -322,14 +322,14 @@ function InsightCard({ label, value, detail, tone = "neutral" }) {
 
 function AnalyticsPage() {
   const { t } = useLanguage();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [dashboardData, setDashboardData] = useState(null);
   const [transactions, setTransactions] = useState([]);
   const [selectedAccountId, setSelectedAccountId] = useState(getSelectedAccountId());
   const [selectedMonth, setSelectedMonth] = useState(() => searchParams.get("month") || "");
-  const [startDate, setStartDate] = useState("");
-  const [endDate, setEndDate] = useState("");
-  const [selectedType, setSelectedType] = useState("");
+  const [startDate, setStartDate] = useState(() => searchParams.get("start") || "");
+  const [endDate, setEndDate] = useState(() => searchParams.get("end") || "");
+  const [selectedType, setSelectedType] = useState(() => searchParams.get("type") || "");
   const [selectedCategory, setSelectedCategory] = useState(() => {
     const urlCategory = searchParams.get("category") || "";
     return urlCategory ? formatCategoryName(urlCategory, t) : "";
@@ -418,6 +418,21 @@ function AnalyticsPage() {
       active = false;
     };
   }, [navigate, normalizedAccountId, selectedMonth, startDate, endDate, selectedType, selectedCategory]);
+
+  useEffect(() => {
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        if (selectedMonth) next.set("month", selectedMonth); else next.delete("month");
+        if (startDate) next.set("start", startDate); else next.delete("start");
+        if (endDate) next.set("end", endDate); else next.delete("end");
+        if (selectedType) next.set("type", selectedType); else next.delete("type");
+        if (selectedCategory) next.set("category", selectedCategory); else next.delete("category");
+        return next;
+      },
+      { replace: true }
+    );
+  }, [selectedMonth, startDate, endDate, selectedType, selectedCategory, setSearchParams]);
 
   useEffect(() => {
     const section = searchParams.get("section");

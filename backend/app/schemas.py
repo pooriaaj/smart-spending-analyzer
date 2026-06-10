@@ -269,11 +269,11 @@ class BudgetBulkUpsertResponse(BaseModel):
 class SavedScenarioBase(BaseModel):
     name: str = Field(min_length=1, max_length=100)
     months: int = Field(default=6, ge=1, le=12)
-    income_adjustment: float = 0.0
-    expense_adjustment: float = 0.0
+    income_adjustment: float = Field(default=0.0, ge=-100_000, le=100_000)
+    expense_adjustment: float = Field(default=0.0, ge=-100_000, le=100_000)
     target_balance: float | None = Field(default=None, gt=0)
     event_month_offset: int | None = Field(default=None, ge=1, le=12)
-    event_amount: float | None = None
+    event_amount: float | None = Field(default=None, ge=-1_000_000, le=1_000_000)
     event_label: str | None = Field(default=None, max_length=80)
     account_id: int | None = None
 
