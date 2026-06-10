@@ -28,7 +28,7 @@ Smart Spending Analyzer is a full-stack personal finance web app. It helps users
 - Migrations: Alembic config and an initial schema baseline now exist under `backend/alembic/`; production migrations are not automatic and are not approved by default.
 - CI/security: GitHub Actions with backend tests, pip-audit, bandit, frontend npm audit, frontend tests, and frontend build.
 
-Observed note: the README mentions PyMuPDF for rendering scanned PDFs before OCR, and `pdf_statement_service.py` imports `fitz` dynamically, but `backend/requirements.txt` did not list PyMuPDF during this inspection. Verify this before relying on rendered scanned-PDF OCR in production.
+Note: PyMuPDF (fitz) is listed in `backend/requirements.txt` as `PyMuPDF==1.27.2.3` and pypdf is listed as `pypdf==6.11.0`. Both PDF libraries are present and pinned.
 
 ## 3. Current Deployment Structure
 
@@ -121,7 +121,7 @@ Known limitation: the in-process rate limiter is fine for a small single-instanc
 - `docs/PRIVACY_DATA.md`, `docs/PRIVACY_NOTICE_DRAFT.md`, and `docs/RETENTION.md` document the current privacy/data lifecycle, draft public-facing privacy language, and draft retention targets. Self-serve JSON data export exists for the authenticated current user with password confirmation. Backend tests cover account deletion cleanup, export scoping, and sensitive field exclusion for core user-owned rows.
 - Runtime schema maintenance should be replaced by controlled migrations before many real users depend on production data.
 - Production migrations should still wait for an actual fresh backup and restore verification for the target database.
-- Optional scanned-PDF rendering should be verified because PyMuPDF was not listed in `backend/requirements.txt` during this inspection.
+- PyMuPDF and pypdf are both confirmed present in `backend/requirements.txt`; scanned-PDF OCR rendering is available in the Docker deploy.
 
 ## 10. Safe Rules For Future Codex Sessions
 

@@ -191,6 +191,28 @@ class PdfStatementServiceHelpersTest(unittest.TestCase):
             with self.subTest(expected_profile=expected_profile):
                 self.assertEqual(service.detect_statement_profile(text).profile_id, expected_profile)
 
+    def test_detect_statement_profile_identifies_new_north_american_banks(self) -> None:
+        examples = {
+            "bmo": "Bank of Montreal\nPersonal Chequing Account Statement",
+            "laurentian": "Banque Laurentienne\nReleve de compte",
+            "atb": "ATB Financial\nAccount Statement",
+            "chase": "JPMorgan Chase Bank\nChecking Account",
+            "bofa": "Bank of America\nAccount Statement",
+            "wells_fargo": "Wells Fargo Bank\nChecking Account",
+            "capital_one": "Capital One\nCredit Card Statement",
+            "citibank": "Citibank\nAccount Statement",
+            "us_bank": "U.S. Bank National Association\nChecking Account",
+            "td_bank_us": "America's Most Convenient Bank\nAccount Statement",
+            "amex": "American Express\nCredit Card Statement",
+            "discover": "Discover Bank\nAccount Statement",
+            "pnc": "PNC Bank\nAccount Statement",
+            "navy_federal": "Navy Federal Credit Union\nAccount Statement",
+        }
+
+        for expected_profile, text in examples.items():
+            with self.subTest(expected_profile=expected_profile):
+                self.assertEqual(service.detect_statement_profile(text).profile_id, expected_profile)
+
     def test_strip_secondary_leading_date_removes_posted_date_prefix(self) -> None:
         stripped = service.strip_secondary_leading_date(
             "Jan 03 PAYROLL DEPOSIT $1,500.00",
@@ -1154,6 +1176,84 @@ Please check this account statement
                     owner_id=123,
                     file_bytes=b"fake-pdf",
                 )
+
+    def test_parse_pdf_statement_preview_supports_bmo_english_format(self) -> None:
+        text = """
+Bank of Montreal
+Personal Chequing Account
+Statement period 12/28/2024 - 01/10/2025
+Date Description Withdrawals ($) Deposits ($) Balance ($)
+Opening Balance $200.00
+Jan 02 PAYROLL 0.00 1,500.00 1,700.00
+Jan 03 GROCERY STORE 45.10 0.00 1,654.90
+Closing Balance $1,654.90
+        """.strip()
+
+        with (
+            patch.object(
+                service,
+                "extract_pdf_text_result",
+                return_value=self.extraction_result(text),
+            ),
+            patch.object(service, "categorize_transaction_details", side_effect=self.categorize),
+        ):
+            result = service.parse_pdf_statement_preview(
+                db=self.db,
+                owner_id=123,
+                file_bytes=b"fake-pdf",
+            )
+
+        self.assertEqual(
+            result["notes"][0],
+            "Detected bank profile: BMO (Bank of Montreal). Using running-balance checks to infer income vs expense direction.",
+        )
+        preview_rows = result["preview_rows"]
+        self.assertEqual(len(preview_rows), 2)
+        self.assertEqual(preview_rows[0].date, "2025-01-02")
+        self.assertEqual(preview_rows[0].type, "income")
+        self.assertEqual(preview_rows[0].amount, 1500.00)
+        self.assertEqual(preview_rows[1].description, "GROCERY STORE")
+        self.assertEqual(preview_rows[1].type, "expense")
+        self.assertEqual(preview_rows[1].amount, 45.10)
+
+    def test_parse_pdf_statement_preview_filters_us_bank_beginning_ending_balance_lines(self) -> None:
+        text = """
+JPMorgan Chase Bank
+Checking Account
+Statement period 12/28/2024 - 01/10/2025
+Beginning Balance $1,200.00
+Jan 02 DIRECT DEPOSIT 0.00 1,500.00 2,700.00
+Jan 03 WALMART 45.67 0.00 2,654.33
+Ending Balance $2,654.33
+Total Deposits and Additions $1,500.00
+        """.strip()
+
+        with (
+            patch.object(
+                service,
+                "extract_pdf_text_result",
+                return_value=self.extraction_result(text),
+            ),
+            patch.object(service, "categorize_transaction_details", side_effect=self.categorize),
+        ):
+            result = service.parse_pdf_statement_preview(
+                db=self.db,
+                owner_id=123,
+                file_bytes=b"fake-pdf",
+            )
+
+        self.assertEqual(
+            result["notes"][0],
+            "Detected bank profile: Chase Bank. Using running-balance checks to infer income vs expense direction.",
+        )
+        preview_rows = result["preview_rows"]
+        self.assertEqual(len(preview_rows), 2)
+        self.assertEqual(preview_rows[0].date, "2025-01-02")
+        self.assertEqual(preview_rows[0].type, "income")
+        self.assertEqual(preview_rows[0].amount, 1500.00)
+        self.assertEqual(preview_rows[1].description, "WALMART")
+        self.assertEqual(preview_rows[1].type, "expense")
+        self.assertEqual(preview_rows[1].amount, 45.67)
 
 
 if __name__ == "__main__":
