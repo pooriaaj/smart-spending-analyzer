@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import logging
 from datetime import date
 from pathlib import Path
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 from sqlalchemy.orm import Session
 
@@ -332,11 +335,21 @@ def process_smart_import_batch(
         processed_count += 1
 
         if detected_type == "csv_statement":
-            result = parse_csv_statement_preview(
-                db=db,
-                owner_id=owner_id,
-                file_bytes=file_bytes,
-            )
+            try:
+                result = parse_csv_statement_preview(
+                    db=db,
+                    owner_id=owner_id,
+                    file_bytes=file_bytes,
+                )
+            except Exception as exc:
+                logger.warning(
+                    "Batch import: CSV parse failed owner_id=%s filename=%s",
+                    owner_id,
+                    filename,
+                    exc_info=True,
+                )
+                notes.append(f"{filename}: could not be parsed — {exc}. This file was skipped.")
+                continue
             file_invalid = result.get("invalid_rows_skipped", 0)
             invalid_rows_skipped += file_invalid
             file_invalid_details = [
@@ -354,11 +367,21 @@ def process_smart_import_batch(
             continue
 
         if detected_type == "pdf_statement":
-            result = parse_pdf_statement_preview(
-                db=db,
-                owner_id=owner_id,
-                file_bytes=file_bytes,
-            )
+            try:
+                result = parse_pdf_statement_preview(
+                    db=db,
+                    owner_id=owner_id,
+                    file_bytes=file_bytes,
+                )
+            except Exception as exc:
+                logger.warning(
+                    "Batch import: PDF parse failed owner_id=%s filename=%s",
+                    owner_id,
+                    filename,
+                    exc_info=True,
+                )
+                notes.append(f"{filename}: could not be parsed — {exc}. This file was skipped.")
+                continue
             file_rows = result.get("preview_rows", [])
             preview_rows.extend(add_file_context_to_preview_rows(file_rows, filename, detected_type))
             notes.append(
