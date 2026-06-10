@@ -447,6 +447,34 @@ def delete_transaction(
     return {"message": "Transaction deleted successfully"}
 
 
+@router.get("/fresh-start/count")
+def count_fresh_start_transactions(
+    account_id: int | None = Query(default=None),
+    keep_from: date | None = Query(default=None),
+    delete_all: bool = Query(default=False),
+    entry_source: TransactionEntrySource | None = Query(default=None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    require_owned_account(db, current_user, account_id, allow_all=True)
+
+    query = db.query(Transaction).filter(Transaction.owner_id == current_user.id)
+    if account_id is not None:
+        query = query.filter(Transaction.account_id == account_id)
+    if entry_source is not None:
+        query = query.filter(Transaction.entry_source == entry_source)
+
+    if not delete_all:
+        if keep_from is None:
+            raise HTTPException(
+                status_code=400,
+                detail="Provide keep_from or set delete_all=true.",
+            )
+        query = query.filter(Transaction.date < keep_from)
+
+    return {"count": query.count()}
+
+
 @router.post("/fresh-start", response_model=FreshStartResponse)
 def fresh_start_transactions(
     payload: FreshStartRequest,

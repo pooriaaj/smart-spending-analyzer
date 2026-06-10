@@ -30,6 +30,13 @@ export function setupApiInterceptors() {
           color: "orange",
           autoClose: 6000,
         });
+      } else if (error.response.status === 429) {
+        notifications.show({
+          title: "Too many requests",
+          message: "You've sent too many requests. Wait a moment before trying again.",
+          color: "orange",
+          autoClose: 8000,
+        });
       } else if (error.response.status >= 500) {
         notifications.show({
           title: "Server error",
