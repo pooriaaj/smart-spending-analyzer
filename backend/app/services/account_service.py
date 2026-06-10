@@ -1,9 +1,16 @@
 from __future__ import annotations
 
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from app.models import Account, User
-from app.services.analytics_service import get_summary, get_top_expense_category
+from app.models import Account, Transaction, User
+from app.services.analytics_service import (
+    canonical_analytics_category,
+    cashflow_neutral_filter,
+    expense_amount_expression,
+    income_amount_expression,
+    transaction_amount_magnitude_expression,
+)
 
 
 DEFAULT_ACCOUNT_NAME = "Main Account"
@@ -49,11 +56,56 @@ def get_user_accounts(db: Session, user_id: int) -> list[Account]:
 
 def get_user_accounts_with_stats(db: Session, user_id: int) -> list[dict]:
     accounts = get_user_accounts(db, user_id)
-    result: list[dict] = []
+    if not accounts:
+        return []
 
+    account_ids = [a.id for a in accounts]
+
+    summary_rows = (
+        db.query(
+            Transaction.account_id,
+            func.coalesce(func.sum(income_amount_expression()), 0.0).label("total_income"),
+            func.coalesce(func.sum(expense_amount_expression()), 0.0).label("total_expenses"),
+        )
+        .filter(
+            Transaction.owner_id == user_id,
+            Transaction.account_id.in_(account_ids),
+            ~cashflow_neutral_filter(),
+        )
+        .group_by(Transaction.account_id)
+        .all()
+    )
+    summaries = {row.account_id: row for row in summary_rows}
+
+    category_rows = (
+        db.query(
+            Transaction.account_id,
+            Transaction.category,
+            func.sum(transaction_amount_magnitude_expression()).label("total"),
+        )
+        .filter(
+            Transaction.owner_id == user_id,
+            Transaction.type == "expense",
+            Transaction.account_id.in_(account_ids),
+            ~cashflow_neutral_filter(),
+        )
+        .group_by(Transaction.account_id, Transaction.category)
+        .all()
+    )
+    top_categories: dict[int, tuple[str, float]] = {}
+    for row in category_rows:
+        canon = canonical_analytics_category(row.category)
+        amount = float(row.total or 0.0)
+        current = top_categories.get(row.account_id)
+        if current is None or amount > current[1]:
+            top_categories[row.account_id] = (canon, amount)
+
+    result: list[dict] = []
     for account in accounts:
-        summary = get_summary(db, user_id, account_id=account.id)
-        top_category = get_top_expense_category(db, user_id, account_id=account.id)
+        summary = summaries.get(account.id)
+        top = top_categories.get(account.id)
+        total_income = float(summary.total_income) if summary else 0.0
+        total_expenses = float(summary.total_expenses) if summary else 0.0
         result.append(
             {
                 "id": account.id,
@@ -61,11 +113,11 @@ def get_user_accounts_with_stats(db: Session, user_id: int) -> list[dict]:
                 "type": account.type,
                 "owner_id": account.owner_id,
                 "is_active": account.is_active,
-                "total_income": float(summary["total_income"]),
-                "total_expenses": float(summary["total_expenses"]),
-                "balance": float(summary["balance"]),
-                "top_category": top_category["category"] if top_category else None,
-                "top_category_amount": float(top_category["total"]) if top_category else 0.0,
+                "total_income": total_income,
+                "total_expenses": total_expenses,
+                "balance": total_income - total_expenses,
+                "top_category": top[0] if top else None,
+                "top_category_amount": top[1] if top else 0.0,
             }
         )
 
