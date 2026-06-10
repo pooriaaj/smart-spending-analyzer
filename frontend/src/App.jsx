@@ -13,6 +13,7 @@ import {
 } from "@mantine/core";
 import { useDisclosure } from "@mantine/hooks";
 import ThemeToggle from "./components/ThemeToggle";
+import PageSkeleton from "./components/PageSkeleton";
 import { LanguageProvider, useLanguage } from "./i18n/LanguageContext";
 import api from "./services/api";
 
@@ -64,18 +65,7 @@ function ProtectedRoute({ children }) {
 }
 
 function RouteLoader() {
-  const { t } = useLanguage();
-
-  return (
-    <div className="page-container dashboard-page">
-      <div className="dashboard-wrapper">
-        <div className="status-card">
-          <h2>{t("common.loadingPage")}</h2>
-          <p>{t("common.loadingPageDetail")}</p>
-        </div>
-      </div>
-    </div>
-  );
+  return <PageSkeleton />;
 }
 
 function PublicHomeRoute() {
