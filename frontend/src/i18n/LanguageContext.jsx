@@ -423,6 +423,8 @@ const translations = {
       addToday: "Add Today's Transaction",
       noTransactions: "No transactions found in this account view yet.",
       freshStartDeleteNote: "Everything before this date in the selected account view will be deleted.",
+      freshStartCountNote: "This will delete {count} transaction(s).",
+      freshStartCountLoading: "Counting transactions to delete…",
       confirmation: "Confirmation",
       typeStartFresh: "Type \"START FRESH\"",
       freshStartCarefulNote:
@@ -1863,6 +1865,8 @@ const translations = {
       addToday: "Ajouter la transaction du jour",
       noTransactions: "Aucune transaction trouvée dans cette vue de compte.",
       freshStartDeleteNote: "Tout ce qui précède cette date dans la vue de compte sélectionnée sera supprimé.",
+      freshStartCountNote: "Cela supprimera {count} transaction(s).",
+      freshStartCountLoading: "Comptage des transactions à supprimer…",
       confirmation: "Confirmation",
       typeStartFresh: "Tapez \"START FRESH\"",
       freshStartCarefulNote:

@@ -138,6 +138,8 @@ function TransactionsPage() {
   const [freshStartLoading, setFreshStartLoading] = useState(false);
   const [freshStartMessage, setFreshStartMessage] = useState("");
   const [freshStartError, setFreshStartError] = useState("");
+  const [freshStartCount, setFreshStartCount] = useState(null);
+  const [freshStartCountLoading, setFreshStartCountLoading] = useState(false);
 
   const [editingId, setEditingId] = useState(null);
   const [editForm, setEditForm] = useState({
@@ -171,6 +173,22 @@ function TransactionsPage() {
 
     return () => window.clearTimeout(timeoutId);
   }, [searchFilter]);
+
+  useEffect(() => {
+    if (!freshStartDate) {
+      setFreshStartCount(null);
+      return;
+    }
+    let active = true;
+    setFreshStartCountLoading(true);
+    api
+      .get("/transactions/fresh-start/count", {
+        params: { keep_from: freshStartDate, account_id: normalizedAccountId ?? undefined },
+      })
+      .then((res) => { if (active) { setFreshStartCount(res.data.count); setFreshStartCountLoading(false); } })
+      .catch(() => { if (active) { setFreshStartCount(null); setFreshStartCountLoading(false); } });
+    return () => { active = false; };
+  }, [freshStartDate, normalizedAccountId]);
 
   const fetchTransactions = useCallback(async () => {
     try {
@@ -492,6 +510,14 @@ function TransactionsPage() {
               <p className="budget-inline-note">
                 {t("transactions.freshStartDeleteNote")}
               </p>
+              {freshStartCountLoading && (
+                <p className="budget-inline-note">{t("transactions.freshStartCountLoading")}</p>
+              )}
+              {!freshStartCountLoading && freshStartCount !== null && (
+                <p className="budget-inline-note" style={{ color: freshStartCount > 0 ? "var(--mantine-color-red-6)" : undefined }}>
+                  {t("transactions.freshStartCountNote").replace("{count}", freshStartCount)}
+                </p>
+              )}
             </div>
 
             <div>
