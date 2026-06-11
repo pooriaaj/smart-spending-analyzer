@@ -295,6 +295,15 @@ PAYMENT_PROCESSOR_PREFIX_REPLACEMENTS: tuple[tuple[str, str], ...] = (
     (r"(?i)^\s*tst(?:\s*[*#:_./\\-]\s*|\s+)", ""),
     (r"(?i)^\s*clv(?:\s*[*#:_./\\-]\s*|\s+)", ""),
     (r"(?i)^\s*sp(?:\s*[*#:_./\\-]\s*|\s+)", ""),
+    # Stripe: "STRIPE* MERCHANTNAME"
+    (r"(?i)^\s*stripe\s*[*#:_./\\-]?\s*", ""),
+    # Shopify passthrough label
+    (r"(?i)^\s*shopify\s*[*#:_./\\-]?\s*", ""),
+    # Apple Pay / Google Pay passthrough labels
+    (r"(?i)^\s*apple\s+pay\s+", ""),
+    (r"(?i)^\s*google\s+pay\s+", ""),
+    # Venmo passthrough label
+    (r"(?i)^\s*venmo\s*[*#:_./\\-]?\s*", "Venmo "),
 )
 
 

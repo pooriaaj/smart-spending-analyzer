@@ -239,6 +239,40 @@ class PdfStatementServiceHelpersTest(unittest.TestCase):
             "ATM deposit",
         )
 
+    def test_clean_statement_description_removes_us_bank_transaction_type_prefixes(self) -> None:
+        self.assertEqual(
+            service.clean_statement_description("CHECKCARD 0402 WALMART SUPERCENTER"),
+            "WALMART SUPERCENTER",
+        )
+        self.assertEqual(
+            service.clean_statement_description("PURCHASE AUTHORIZED ON 04/02 STARBUCKS #1234"),
+            "STARBUCKS #1234",
+        )
+        self.assertEqual(
+            service.clean_statement_description("RECURRING PURCHASE AUTHORIZED ON 04/15 NETFLIX.COM"),
+            "NETFLIX.COM",
+        )
+        self.assertEqual(
+            service.clean_statement_description("POS DEBIT 04/02 TARGET STORE"),
+            "TARGET STORE",
+        )
+        self.assertEqual(
+            service.clean_statement_description("ACH DEPOSIT EMPLOYER PAYROLL"),
+            "EMPLOYER PAYROLL",
+        )
+        self.assertEqual(
+            service.clean_statement_description("ACH DEBIT ELECTRIC UTILITY CO"),
+            "ELECTRIC UTILITY CO",
+        )
+        self.assertEqual(
+            service.clean_statement_description("ZELLE PAYMENT TO JOHN SMITH"),
+            "Zelle JOHN SMITH",
+        )
+        self.assertEqual(
+            service.clean_statement_description("MOBILE DEPOSIT CHECK"),
+            "Mobile deposit CHECK",
+        )
+
 
 class PdfStatementServicePreviewParsingTest(unittest.TestCase):
     def setUp(self) -> None:

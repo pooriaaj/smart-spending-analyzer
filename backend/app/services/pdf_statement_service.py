@@ -1342,6 +1342,7 @@ def clean_statement_description(value: str) -> str:
     cleaned = clean_description_line(value)
 
     replacements = (
+        # \u2500\u2500 Canadian bank prefixes \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
         (
             r"(?i)^contactless\s+interac\s+purchase\s*-\s*\d+\s+",
             "",
@@ -1386,6 +1387,28 @@ def clean_statement_description(value: str) -> str:
             r"(?i)^paiem(?:ent)?\s+periodiq(?:ue)?\s*",
             "Periodic payment ",
         ),
+        # \u2500\u2500 US bank transaction type prefixes \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+        # Chase: "CHECKCARD 0402 WALMART" \u2192 "WALMART"
+        (r"(?i)^check\s*card\s+\d{4}\s+", ""),
+        # WF / BofA: "PURCHASE AUTHORIZED ON 04/02 STARBUCKS" \u2192 "STARBUCKS"
+        (r"(?i)^recurring\s+purchase\s+authorized\s+on\s+\d{2}/\d{2}(?:/\d{2,4})?\s+", ""),
+        (r"(?i)^purchase\s+authorized\s+on\s+\d{2}/\d{2}(?:/\d{2,4})?\s+", ""),
+        # Generic POS / debit card prefix with date
+        (r"(?i)^pos\s+(?:debit|purchase)\s+\d{2}/\d{2}(?:/\d{2,4})?\s+", ""),
+        (r"(?i)^debit\s+card\s+purchase\s+\d{2}/\d{2}(?:/\d{2,4})?\s+", ""),
+        (r"(?i)^debit\s+purchase\s+-\s*visa\s+\d{2}/\d{2}(?:/\d{2,4})?\s+", ""),
+        # ACH transfers \u2014 strip type prefix and keep payee name
+        (r"(?i)^ach\s+(?:deposit|credit|electronic\s+credit)\s+", ""),
+        (r"(?i)^ach\s+(?:debit|withdrawal|electronic\s+debit)\s+", ""),
+        # Wire and direct transfers
+        (r"(?i)^wire\s+transfer\s+(?:credit|debit)?\s*", "Wire transfer "),
+        (r"(?i)^direct\s+debit\s+payment\s+", ""),
+        (r"(?i)^electronic\s+funds\s+transfer\s+", ""),
+        # Misc US bank noise at line start
+        (r"(?i)^ext(?:ernal)?\s+transfer\s+", "Transfer "),
+        (r"(?i)^internet\s+transfer\s+", "Transfer "),
+        (r"(?i)^mobile\s+deposit\s+", "Mobile deposit "),
+        (r"(?i)^zelle\s+(?:payment\s+)?(?:to|from)\s+", "Zelle "),
     )
 
     for pattern, replacement in replacements:
