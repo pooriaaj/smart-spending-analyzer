@@ -141,6 +141,8 @@ function TransactionsPage() {
   const [freshStartCount, setFreshStartCount] = useState(null);
   const [freshStartCountLoading, setFreshStartCountLoading] = useState(false);
 
+  const [exportLoading, setExportLoading] = useState(false);
+
   const [editingId, setEditingId] = useState(null);
   const [editForm, setEditForm] = useState({
     amount: "",
@@ -324,6 +326,41 @@ function TransactionsPage() {
     setDebouncedSearchFilter("");
     setAmountRangeFilter("");
     setCurrentPage(1);
+  };
+
+  const handleExportCsv = async () => {
+    if (exportLoading) return;
+    setExportLoading(true);
+    try {
+      const selectedAmountRange = AMOUNT_RANGE_OPTIONS.find(
+        (option) => option.value === amountRangeFilter
+      );
+      const response = await api.get("/transactions/export.csv", {
+        params: {
+          account_id: normalizedAccountId,
+          type: typeFilter || undefined,
+          month: monthFilter || undefined,
+          category: categoryFilter || undefined,
+          description: debouncedSearchFilter || undefined,
+          amount_min: selectedAmountRange?.min,
+          amount_max: selectedAmountRange?.max,
+          amount_min_exclusive: selectedAmountRange?.minExclusive || undefined,
+        },
+        responseType: "blob",
+      });
+      const url = URL.createObjectURL(new Blob([response.data], { type: "text/csv" }));
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = "transactions.csv";
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      handleApiAuthError(error, navigate);
+    } finally {
+      setExportLoading(false);
+    }
   };
 
   const handleDelete = async (transactionId) => {
@@ -634,15 +671,27 @@ function TransactionsPage() {
                 </Text>
               )}
 
-              {(typeFilter ||
-                monthFilter ||
-                categoryFilter ||
-                amountRangeFilter ||
-                searchFilter) && (
-                <Button type="button" variant="outline" color="gray" radius="md" onClick={clearFilters}>
-                  {t("common.clearFilters")}
+              <Group gap="sm" ml="auto">
+                {(typeFilter ||
+                  monthFilter ||
+                  categoryFilter ||
+                  amountRangeFilter ||
+                  searchFilter) && (
+                  <Button type="button" variant="outline" color="gray" radius="md" onClick={clearFilters}>
+                    {t("common.clearFilters")}
+                  </Button>
+                )}
+                <Button
+                  type="button"
+                  variant="light"
+                  color="teal"
+                  radius="md"
+                  loading={exportLoading}
+                  onClick={handleExportCsv}
+                >
+                  {exportLoading ? t("transactions.exportCsvLoading") : t("transactions.exportCsv")}
                 </Button>
-              )}
+              </Group>
             </Group>
           </Stack>
         </Card>

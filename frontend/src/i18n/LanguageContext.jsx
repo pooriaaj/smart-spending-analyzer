@@ -508,6 +508,8 @@ const translations = {
       freshStartFailed: "Failed to clean old history.",
       matchingDescription: " matching \"{term}\"",
       transactionPages: "Transaction pages",
+      exportCsv: "Download CSV",
+      exportCsvLoading: "Preparing…",
     },
     analytics: {
       howTitle: "How to read Analytics",
@@ -1950,6 +1952,8 @@ const translations = {
       freshStartFailed: "Impossible de nettoyer l'ancien historique.",
       matchingDescription: " correspondant à \"{term}\"",
       transactionPages: "Pages des transactions",
+      exportCsv: "Télécharger CSV",
+      exportCsvLoading: "Préparation…",
     },
     analytics: {
       howTitle: "Comment lire les analyses",

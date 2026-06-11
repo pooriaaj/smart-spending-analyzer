@@ -1,13 +1,15 @@
 from __future__ import annotations
 
+import csv
+import io
 import logging
 from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import get_args
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile
-from fastapi.responses import JSONResponse
-from sqlalchemy.orm import Session
+from fastapi.responses import JSONResponse, StreamingResponse
+from sqlalchemy.orm import Session, joinedload
 
 from app.dependencies import get_current_user, get_db
 from app.models import Transaction, User
@@ -53,8 +55,10 @@ from app.services.transaction_service import (
     apply_category_to_merchant_learning_group,
     apply_bulk_categories,
     apply_likely_duplicate_cleanup,
+    apply_transaction_filters,
     build_duplicate_key,
     build_statement_match_key,
+    build_transaction_scope_query,
     categorize_transaction,
     categorize_transaction_details,
     find_likely_statement_match,
@@ -239,6 +243,68 @@ def get_transactions_page(
         raise HTTPException(status_code=400, detail=str(exc))
 
     return TransactionListResponse(**result)
+
+
+EXPORT_ROW_LIMIT = 5000
+
+
+@router.get("/export.csv")
+def export_transactions_csv(
+    account_id: int | None = Query(default=None),
+    transaction_type: str | None = Query(default=None, alias="type"),
+    month: str | None = Query(default=None),
+    category: str | None = Query(default=None),
+    description: str | None = Query(default=None),
+    amount_min: float | None = Query(default=None),
+    amount_max: float | None = Query(default=None),
+    amount_min_exclusive: bool = Query(default=False),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    require_owned_account(db, current_user, account_id, allow_all=True)
+
+    if transaction_type is not None and transaction_type not in {"income", "expense"}:
+        raise HTTPException(status_code=400, detail="Transaction type must be income or expense")
+
+    scope_query = build_transaction_scope_query(db, current_user.id, account_id=account_id)
+    filtered_query = apply_transaction_filters(
+        scope_query,
+        transaction_type=transaction_type,
+        month=month,
+        category=category,
+        description=description,
+        amount_min=amount_min,
+        amount_max=amount_max,
+        amount_min_exclusive=amount_min_exclusive,
+    )
+    rows = (
+        filtered_query.options(joinedload(Transaction.account))
+        .order_by(Transaction.date.desc(), Transaction.id.desc())
+        .limit(EXPORT_ROW_LIMIT)
+        .all()
+    )
+
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(["Date", "Description", "Category", "Type", "Amount", "Account"])
+    for row in rows:
+        account_name = (row.account.name if row.account else None) or ""
+        writer.writerow([
+            str(row.date) if row.date else "",
+            row.description or "",
+            row.category or "",
+            row.type or "",
+            f"{float(row.amount):.2f}" if row.amount is not None else "",
+            account_name,
+        ])
+
+    csv_bytes = output.getvalue().encode("utf-8-sig")
+
+    return StreamingResponse(
+        iter([csv_bytes]),
+        media_type="text/csv",
+        headers={"Content-Disposition": "attachment; filename=transactions.csv"},
+    )
 
 
 @router.get("/sources/summary", response_model=TransactionSourceSummaryResponse)
