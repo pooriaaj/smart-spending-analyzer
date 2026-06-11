@@ -2,6 +2,44 @@
 
 Use this file for safe, non-secret maintenance summaries. Do not record real user data, real secrets, database URLs, access tokens, reset links, private provider logs, or raw exports here.
 
+## 2026-06-11 Test Fixes and Filtered CSV Export
+
+Scope: fixed 9 failing backend tests and added a filtered transaction CSV export feature.
+
+Starting commit: `7da67b5`
+Ending commit: `ec9b5c2`
+
+### Changes Made
+
+**Backend — Test Fixes**
+- `tests/test_analytics_routes.py`: wrapped 5 assistant route tests with `patch("app.services.assistant_service.generate_llm_assistant_response", return_value=None)` so they test the rule-based fallback path regardless of whether `OPENAI_API_KEY` is set in the environment.
+- `tests/test_import_routes.py`: added third community user and raised all `confirmation_count` values to 5 in `test_import_file_uses_anonymized_community_merchant_learning`, `test_import_file_requires_review_for_conflicting_community_learning`, and `test_rebuild_community_learning_cache_refreshes_only_safe_consensus` — aligns tests with the raised community learning thresholds (3 owners / 5 confirmations).
+- `tests/test_user_routes.py`: same fix applied to `test_enabling_community_learning_rebuilds_allowed_consensus`.
+
+**Backend — New Endpoint**
+- `transaction_routes.py`: added `GET /transactions/export.csv` — accepts the same filter params as `/transactions/page` (account, type, month, category, description, amount range), resolves account names via `joinedload`, and streams a UTF-8 BOM CSV capped at 5,000 rows with columns: Date, Description, Category, Type, Amount, Account.
+
+**Frontend — UX**
+- `TransactionsPage.jsx`: added "Download CSV" button in the transaction filter toolbar. The button calls the export endpoint with all active filters and triggers a browser file download. Shows a loading state while the request is in flight.
+- `LanguageContext.jsx`: added `exportCsv` and `exportCsvLoading` i18n keys in both English and French.
+
+### Safety Boundaries
+
+- No `.env` values were read or printed.
+- No production settings were changed.
+- No database migrations were run.
+- No production user data was exported.
+- No auth, model, or API contract changes were made.
+
+### Verification
+
+- Backend: 308 tests, 41 subtests — all passed.
+- Frontend lint: clean (no errors, no warnings).
+- Frontend build: clean.
+- Frontend tests: 20 files, 65 tests — all passed.
+
+---
+
 ## 2026-06-10 Hardening, Bank Coverage Expansion, and Security Pass
 
 Scope: multi-area improvement pass covering legal/IP, security, performance, UX, error handling, import pipeline reliability, and North American bank statement coverage.

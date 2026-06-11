@@ -1,6 +1,6 @@
 # Smart Spending Analyzer Phase Status
 
-Last updated: 2026-06-10.
+Last updated: 2026-06-11.
 
 This page summarizes the current backend and frontend phase state. Keep it factual and free of secret values.
 
@@ -23,7 +23,7 @@ This page summarizes the current backend and frontend phase state. Keep it factu
 | UI redesign | Mostly complete | Mantine-based professional dashboard/navigation/forms across the core app. Skeleton loading states (PageSkeleton) replace plain text loaders. Per-page document titles added. | Continue small polish only when tied to usability or bugs. |
 | Auth UX | Improved | Login/register/forgot/reset pages redesigned and covered by tests. Deployed API calls use a first-party `/api` proxy for mobile cookie reliability. | Test phone login after every auth/deploy change. |
 | Overview/analytics | Active performance watch | Overview is the combined dashboard/analytics page. Vite bundle splitting: AnalyticsPage chunk dropped from 411 kB to 22 kB; charts isolated in vendor-charts for browser caching. All five analytics filters (month, date range, type, category) now persist to and restore from URL query params for shareable links. | Add frontend timing diagnostics if backend improvements are not enough. |
-| Transactions | Improved | Table/card layouts, mobile behavior, and paginated loading are improved. 404 Not Found route added for invalid URLs. Fresh-start confirmation now shows a live count of transactions that would be deleted before the user confirms. | Keep helper endpoints cheap for large accounts. |
+| Transactions | Improved | Table/card layouts, mobile behavior, and paginated loading are improved. 404 Not Found route added for invalid URLs. Fresh-start confirmation now shows a live count of transactions that would be deleted before the user confirms. Filtered CSV export (Download CSV button) added — exports up to 5,000 rows respecting all active filters. | Keep helper endpoints cheap for large accounts. |
 | Import UX | Active hardening | Account gate, statement preview, duplicate review, category review, confirm flow, sanitized console diagnostics, and on-page safe diagnostics copy exist. Import row processing errors are now logged with context instead of being silently swallowed. | Add tests for every real failed file shape and verify typical statement sizes after deploys. |
 | Frontend tests | Improved | Vitest and Testing Library cover auth, protected routes, import, analytics, transactions, budgets, assistant, profile, and utilities. Coverage reporting enabled (52% statements baseline). CI now runs lint + coverage + build. | Add more import edge cases and at least one browser-level smoke path later. |
 | Error visibility | Improved | Error boundary, API error helpers, request IDs, sanitized upload console logs, user-copyable import diagnostics, and global Axios interceptor for network/timeout/5xx/429 notifications via Mantine toast. 429 rate-limit errors now show a distinct orange toast with a "wait a moment" message. | Consider a free/low-cost error reporting service only after privacy review. |
