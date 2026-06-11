@@ -1188,7 +1188,8 @@ class SmartImportRouteTest(unittest.TestCase):
         with self.session_local() as session:
             first_user = User(email="community-one@example.com", password_hash="hashed")
             second_user = User(email="community-two@example.com", password_hash="hashed")
-            session.add_all([first_user, second_user])
+            third_user = User(email="community-three@example.com", password_hash="hashed")
+            session.add_all([first_user, second_user, third_user])
             session.flush()
             session.add_all(
                 [
@@ -1198,7 +1199,7 @@ class SmartImportRouteTest(unittest.TestCase):
                         category="clothing",
                         transaction_type="expense",
                         confidence=0.97,
-                        confirmation_count=3,
+                        confirmation_count=5,
                         last_amount=44.0,
                         owner_id=first_user.id,
                     ),
@@ -1208,9 +1209,19 @@ class SmartImportRouteTest(unittest.TestCase):
                         category="clothing",
                         transaction_type="expense",
                         confidence=0.94,
-                        confirmation_count=2,
+                        confirmation_count=5,
                         last_amount=45.0,
                         owner_id=second_user.id,
+                    ),
+                    MerchantCategoryProfile(
+                        merchant_key="narcos",
+                        display_name="Narcos",
+                        category="clothing",
+                        transaction_type="expense",
+                        confidence=0.94,
+                        confirmation_count=5,
+                        last_amount=46.0,
+                        owner_id=third_user.id,
                     ),
                 ]
             )
@@ -1350,7 +1361,7 @@ class SmartImportRouteTest(unittest.TestCase):
                         category="entertainment",
                         transaction_type="expense",
                         confidence=0.97,
-                        confirmation_count=3,
+                        confirmation_count=5,
                         last_amount=18.0,
                         owner_id=first_user.id,
                     ),
@@ -1360,7 +1371,7 @@ class SmartImportRouteTest(unittest.TestCase):
                         category="entertainment",
                         transaction_type="expense",
                         confidence=0.94,
-                        confirmation_count=2,
+                        confirmation_count=5,
                         last_amount=19.0,
                         owner_id=second_user.id,
                     ),
@@ -1370,7 +1381,7 @@ class SmartImportRouteTest(unittest.TestCase):
                         category="entertainment",
                         transaction_type="expense",
                         confidence=0.94,
-                        confirmation_count=2,
+                        confirmation_count=5,
                         last_amount=18.0,
                         owner_id=third_user.id,
                     ),
@@ -1380,7 +1391,7 @@ class SmartImportRouteTest(unittest.TestCase):
                         category="subscriptions",
                         transaction_type="expense",
                         confidence=0.94,
-                        confirmation_count=2,
+                        confirmation_count=5,
                         last_amount=18.0,
                         owner_id=fourth_user.id,
                     ),
@@ -1532,8 +1543,9 @@ class SmartImportRouteTest(unittest.TestCase):
         with self.session_local() as session:
             first_user = User(email="rebuild-one@example.com", password_hash="hashed")
             second_user = User(email="rebuild-two@example.com", password_hash="hashed")
+            third_user = User(email="rebuild-three@example.com", password_hash="hashed")
             disabled_user = User(email="rebuild-disabled@example.com", password_hash="hashed")
-            session.add_all([first_user, second_user, disabled_user])
+            session.add_all([first_user, second_user, third_user, disabled_user])
             session.flush()
             session.add(
                 UserLearningPreference(
@@ -1549,7 +1561,7 @@ class SmartImportRouteTest(unittest.TestCase):
                         category="entertainment",
                         transaction_type="expense",
                         confidence=0.97,
-                        confirmation_count=3,
+                        confirmation_count=5,
                         last_amount=18.0,
                         owner_id=first_user.id,
                     ),
@@ -1559,9 +1571,19 @@ class SmartImportRouteTest(unittest.TestCase):
                         category="entertainment",
                         transaction_type="expense",
                         confidence=0.97,
-                        confirmation_count=3,
+                        confirmation_count=5,
                         last_amount=19.0,
                         owner_id=second_user.id,
+                    ),
+                    MerchantCategoryProfile(
+                        merchant_key="glimmerbox",
+                        display_name="Glimmerbox",
+                        category="entertainment",
+                        transaction_type="expense",
+                        confidence=0.97,
+                        confirmation_count=5,
+                        last_amount=17.0,
+                        owner_id=third_user.id,
                     ),
                     MerchantCategoryProfile(
                         merchant_key="glimmerbox",
@@ -1569,7 +1591,7 @@ class SmartImportRouteTest(unittest.TestCase):
                         category="shopping",
                         transaction_type="expense",
                         confidence=0.97,
-                        confirmation_count=3,
+                        confirmation_count=5,
                         last_amount=20.0,
                         owner_id=disabled_user.id,
                     ),
@@ -1579,7 +1601,7 @@ class SmartImportRouteTest(unittest.TestCase):
                         category="smoking",
                         transaction_type="expense",
                         confidence=0.97,
-                        confirmation_count=3,
+                        confirmation_count=5,
                         last_amount=10.99,
                         owner_id=first_user.id,
                     ),
@@ -1589,7 +1611,7 @@ class SmartImportRouteTest(unittest.TestCase):
                         category="groceries",
                         transaction_type="expense",
                         confidence=0.97,
-                        confirmation_count=3,
+                        confirmation_count=5,
                         last_amount=38.0,
                         owner_id=second_user.id,
                     ),
@@ -1599,7 +1621,7 @@ class SmartImportRouteTest(unittest.TestCase):
                         category="income",
                         transaction_type="income",
                         confidence=0.97,
-                        confirmation_count=3,
+                        confirmation_count=5,
                         last_amount=900.0,
                         owner_id=first_user.id,
                     ),

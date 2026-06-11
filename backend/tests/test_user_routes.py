@@ -190,7 +190,8 @@ class UserRouteTest(unittest.TestCase):
     def test_enabling_community_learning_rebuilds_allowed_consensus(self) -> None:
         with self.session_local() as session:
             other_user = User(email="learning-peer-rebuild@example.com", password_hash="hashed")
-            session.add(other_user)
+            third_user = User(email="learning-peer-rebuild-three@example.com", password_hash="hashed")
+            session.add_all([other_user, third_user])
             session.flush()
             session.add(
                 UserLearningPreference(
@@ -206,7 +207,7 @@ class UserRouteTest(unittest.TestCase):
                         category="entertainment",
                         transaction_type="expense",
                         confidence=0.97,
-                        confirmation_count=3,
+                        confirmation_count=5,
                         last_amount=18.0,
                         owner_id=self.user_id,
                     ),
@@ -216,9 +217,19 @@ class UserRouteTest(unittest.TestCase):
                         category="entertainment",
                         transaction_type="expense",
                         confidence=0.97,
-                        confirmation_count=3,
+                        confirmation_count=5,
                         last_amount=19.0,
                         owner_id=other_user.id,
+                    ),
+                    MerchantCategoryProfile(
+                        merchant_key="glimmerbox",
+                        display_name="Glimmerbox",
+                        category="entertainment",
+                        transaction_type="expense",
+                        confidence=0.97,
+                        confirmation_count=5,
+                        last_amount=17.0,
+                        owner_id=third_user.id,
                     ),
                 ]
             )

@@ -2394,15 +2394,19 @@ class AnalyticsRouteTest(unittest.TestCase):
     def test_assistant_can_compare_accounts_in_all_accounts_scope(self) -> None:
         self.seed_transactions()
 
-        response = self.client.post(
-            "/assistant/response",
-            json={
-                "question": "Which account is driving my spending?",
-                "history": [],
-                "mode": "balanced",
-                "account_id": None,
-            },
-        )
+        with patch(
+            "app.services.assistant_service.generate_llm_assistant_response",
+            return_value=None,
+        ):
+            response = self.client.post(
+                "/assistant/response",
+                json={
+                    "question": "Which account is driving my spending?",
+                    "history": [],
+                    "mode": "balanced",
+                    "account_id": None,
+                },
+            )
 
         self.assertEqual(response.status_code, 200, response.text)
         payload = response.json()
@@ -2414,15 +2418,19 @@ class AnalyticsRouteTest(unittest.TestCase):
     def test_assistant_account_comparison_requires_all_accounts_scope(self) -> None:
         self.seed_transactions()
 
-        response = self.client.post(
-            "/assistant/response",
-            json={
-                "question": "Compare my accounts",
-                "history": [],
-                "mode": "balanced",
-                "account_id": self.chequing_account_id,
-            },
-        )
+        with patch(
+            "app.services.assistant_service.generate_llm_assistant_response",
+            return_value=None,
+        ):
+            response = self.client.post(
+                "/assistant/response",
+                json={
+                    "question": "Compare my accounts",
+                    "history": [],
+                    "mode": "balanced",
+                    "account_id": self.chequing_account_id,
+                },
+            )
 
         self.assertEqual(response.status_code, 200, response.text)
         payload = response.json()
@@ -3133,15 +3141,19 @@ class AnalyticsRouteTest(unittest.TestCase):
             )
             session.commit()
 
-        response = self.client.post(
-            "/assistant/response",
-            json={
-                "question": "Which subscriptions should I review first?",
-                "history": [],
-                "mode": "balanced",
-                "account_id": self.chequing_account_id,
-            },
-        )
+        with patch(
+            "app.services.assistant_service.generate_llm_assistant_response",
+            return_value=None,
+        ):
+            response = self.client.post(
+                "/assistant/response",
+                json={
+                    "question": "Which subscriptions should I review first?",
+                    "history": [],
+                    "mode": "balanced",
+                    "account_id": self.chequing_account_id,
+                },
+            )
 
         self.assertEqual(response.status_code, 200, response.text)
         payload = response.json()
@@ -3393,15 +3405,19 @@ class AnalyticsRouteTest(unittest.TestCase):
             )
             session.commit()
 
-        response = self.client.post(
-            "/assistant/response",
-            json={
-                "question": "What happens if I cancel my biggest subscription?",
-                "history": [],
-                "mode": "balanced",
-                "account_id": self.chequing_account_id,
-            },
-        )
+        with patch(
+            "app.services.assistant_service.generate_llm_assistant_response",
+            return_value=None,
+        ):
+            response = self.client.post(
+                "/assistant/response",
+                json={
+                    "question": "What happens if I cancel my biggest subscription?",
+                    "history": [],
+                    "mode": "balanced",
+                    "account_id": self.chequing_account_id,
+                },
+            )
 
         self.assertEqual(response.status_code, 200, response.text)
         payload = response.json()
@@ -3447,15 +3463,19 @@ class AnalyticsRouteTest(unittest.TestCase):
             )
             session.commit()
 
-        response = self.client.post(
-            "/assistant/response",
-            json={
-                "question": "What happens if I cancel my biggest subscription?",
-                "history": [],
-                "mode": "balanced",
-                "account_id": self.chequing_account_id,
-            },
-        )
+        with patch(
+            "app.services.assistant_service.generate_llm_assistant_response",
+            return_value=None,
+        ):
+            response = self.client.post(
+                "/assistant/response",
+                json={
+                    "question": "What happens if I cancel my biggest subscription?",
+                    "history": [],
+                    "mode": "balanced",
+                    "account_id": self.chequing_account_id,
+                },
+            )
 
         self.assertEqual(response.status_code, 200, response.text)
         payload = response.json()
