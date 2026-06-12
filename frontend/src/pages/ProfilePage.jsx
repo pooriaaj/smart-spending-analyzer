@@ -16,6 +16,8 @@ import {
   Stack,
   Switch,
   Tabs,
+  Text,
+  Title,
 } from "@mantine/core";
 import api, { handleApiAuthError } from "../services/api";
 import PasswordField from "../components/PasswordField";
@@ -253,10 +255,10 @@ function ProfilePage() {
               <Tabs.Panel value="account">
                 <Stack gap="xl">
                   <div>
-                    <div className="section-header">
-                      <h2>{t("profile.infoTitle")}</h2>
-                      <p>{t("profile.infoDetail")}</p>
-                    </div>
+                    <Box className="section-header" mb="sm">
+                      <Title order={2} size="h3">{t("profile.infoTitle")}</Title>
+                      <Text size="sm" c="dimmed">{t("profile.infoDetail")}</Text>
+                    </Box>
                     <form className="transaction-form" onSubmit={handleUpdateProfile}>
                       <input
                         type="email"
@@ -274,10 +276,10 @@ function ProfilePage() {
                   <Divider />
 
                   <div>
-                    <div className="section-header">
-                      <h2>{t("profile.changePassword")}</h2>
-                      <p>{t("profile.changePasswordDetail")}</p>
-                    </div>
+                    <Box className="section-header" mb="sm">
+                      <Title order={2} size="h3">{t("profile.changePassword")}</Title>
+                      <Text size="sm" c="dimmed">{t("profile.changePasswordDetail")}</Text>
+                    </Box>
                     <form className="auth-form" onSubmit={handleChangePassword}>
                       <PasswordField
                         label={t("profile.currentPassword")}
@@ -308,10 +310,10 @@ function ProfilePage() {
                   <Divider />
 
                   <div>
-                    <div className="section-header">
-                      <h2>{t("profile.dataExportTitle")}</h2>
-                      <p>{t("profile.dataExportDetail")}</p>
-                    </div>
+                    <Box className="section-header" mb="sm">
+                      <Title order={2} size="h3">{t("profile.dataExportTitle")}</Title>
+                      <Text size="sm" c="dimmed">{t("profile.dataExportDetail")}</Text>
+                    </Box>
                     <form className="auth-form" onSubmit={handleExportData}>
                       <PasswordField
                         label={t("profile.exportPassword")}
@@ -339,10 +341,10 @@ function ProfilePage() {
 
               {/* ── Privacy Tab ── */}
               <Tabs.Panel value="privacy">
-                <div className="section-header">
-                  <h2>{t("profile.learningPrivacyTitle")}</h2>
-                  <p>{t("profile.learningPrivacyDetail")}</p>
-                </div>
+                <Box className="section-header" mb="md">
+                  <Title order={2} size="h3">{t("profile.learningPrivacyTitle")}</Title>
+                  <Text size="sm" c="dimmed">{t("profile.learningPrivacyDetail")}</Text>
+                </Box>
 
                 <div className="learning-privacy-grid">
                   <div className="learning-privacy-item">
@@ -385,10 +387,10 @@ function ProfilePage() {
 
               {/* ── Plans Tab ── */}
               <Tabs.Panel value="plans">
-                <div className="section-header">
-                  <h2>{t("profile.premiumPlans")}</h2>
-                  <p>{t("profile.premiumPlansDetail")}</p>
-                </div>
+                <Box className="section-header" mb="md">
+                  <Title order={2} size="h3">{t("profile.premiumPlans")}</Title>
+                  <Text size="sm" c="dimmed">{t("profile.premiumPlansDetail")}</Text>
+                </Box>
                 <div className="pricing-grid">
                   <div className="pricing-card">
                     <span className="pricing-kicker">{t("profile.free")}</span>
@@ -414,10 +416,10 @@ function ProfilePage() {
 
               {/* ── Danger Zone Tab ── */}
               <Tabs.Panel value="danger">
-                <div className="section-header">
-                  <h2>{t("profile.dangerZone")}</h2>
-                  <p>{t("profile.dangerZoneDetail")}</p>
-                </div>
+                <Box className="section-header" mb="md">
+                  <Title order={2} size="h3">{t("profile.dangerZone")}</Title>
+                  <Text size="sm" c="dimmed">{t("profile.dangerZoneDetail")}</Text>
+                </Box>
 
                 <form className="auth-form" onSubmit={handleDeleteAccount}>
                   <PasswordField
