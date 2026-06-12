@@ -328,7 +328,7 @@ const buildSafeUploadDiagnosticsText = (diagnostics) => {
   }
 
   return [
-    "Smart Spending Analyzer import diagnostics",
+    "Zero2Asset import diagnostics",
     `Upload path: ${diagnostics.uploadPath || "unknown"}`,
     `HTTP status: ${diagnostics.status || "unknown"}`,
     `Request ID: ${diagnostics.requestId || "unknown"}`,

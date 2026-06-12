@@ -68,7 +68,7 @@ function RouteLoader() {
   return <PageSkeleton />;
 }
 
-function PublicHomeRoute() {
+function PublicHomeRoute({ theme, onThemeToggle }) {
   const [authState, setAuthState] = useState("checking");
 
   useEffect(() => {
@@ -89,7 +89,9 @@ function PublicHomeRoute() {
   }, []);
 
   if (authState === "checking") return <RouteLoader />;
-  return authState === "authenticated" ? <Navigate to="/analytics" replace /> : <LoginPage />;
+  return authState === "authenticated"
+    ? <Navigate to="/analytics" replace />
+    : <LoginPage theme={theme} onThemeToggle={onThemeToggle} />;
 }
 
 function AuthenticatedLayout({ children, theme, onThemeToggle }) {
@@ -238,7 +240,7 @@ function AppRoutes() {
     <BrowserRouter>
       <Suspense fallback={<RouteLoader />}>
         <Routes>
-          <Route path="/" element={<PublicHomeRoute />} />
+          <Route path="/" element={<PublicHomeRoute theme={theme} onThemeToggle={toggleTheme} />} />
           <Route path="/register" element={<RegisterPage />} />
           <Route path="/forgot-password" element={<ForgotPasswordPage />} />
           <Route path="/reset-password" element={<ResetPasswordPage />} />

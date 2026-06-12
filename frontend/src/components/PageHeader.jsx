@@ -2,7 +2,7 @@ import { useLanguage } from "../i18n/LanguageContext";
 
 function PageHeader({
   icon = "$",
-  eyebrow = "Smart Spending Analyzer",
+  eyebrow,
   eyebrowKey,
   title,
   titleKey,
@@ -15,9 +15,7 @@ function PageHeader({
   const resolvedSubtitle = subtitleKey ? t(subtitleKey) : subtitle;
   const resolvedEyebrow = eyebrowKey
     ? t(eyebrowKey)
-    : eyebrow === "Smart Spending Analyzer"
-    ? t("common.appName")
-    : eyebrow;
+    : (eyebrow ?? t("common.appName"));
 
   return (
     <div className="dashboard-hero app-page-header">

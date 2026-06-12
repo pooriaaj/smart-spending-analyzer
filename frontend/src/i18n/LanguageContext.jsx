@@ -19,8 +19,8 @@ export const SUPPORTED_LANGUAGES = {
 const translations = {
   en: {
     common: {
-      appName: "Smart Spending Analyzer",
-      legalFooter: "© 2026 Mohammadreza Alijani. Smart Spending Analyzer™ / Zero2Asset™. All rights reserved.",
+      appName: "Zero2Asset",
+      legalFooter: "© 2026 Mohammadreza Alijani. Zero2Asset™. All rights reserved.",
       assistant: "Assistant",
       backToDashboard: "Back to Overview",
       dashboard: "Overview",
@@ -177,24 +177,24 @@ const translations = {
       registrationFailed: "Registration failed. Email may already be in use.",
       forgotFailed: "Failed to send reset instructions.",
       resetFailed: "Failed to reset password.",
-      heroTitle: "Understand your money with a cleaner, smarter workflow.",
+      heroTitle: "Know exactly where your money goes.",
       heroDescription:
-        "Write daily transactions, reconcile bank statements at month-end, and let the app learn your categories, recurring habits, and future money outlook.",
+        "Track daily spending, import bank statements, and let Zero2Asset learn your habits automatically.",
       monthEndTitle: "Month-end reconciliation",
-      monthEndDetail: "Compare what you wrote daily against your real bank statement.",
-      categoryMemoryTitle: "Learned category memory",
+      monthEndDetail: "Compare daily notes against your bank statement to catch every gap.",
+      categoryMemoryTitle: "Smart categorization",
       categoryMemoryDetail:
-        "Teach the app your personal naming habits instead of accepting generic guesses.",
-      premiumTitle: "Premium planning cockpit",
+        "Categories that learn from your corrections — not generic labels.",
+      premiumTitle: "Future simulator",
       premiumDetail:
-        "Advanced forecasts, larger statement batches, saved scenarios, and guided spending plans.",
-      premiumPreview: "Premium preview",
+        "Run what-if scenarios: cut expenses, add income, and see how your balance changes month by month.",
+      premiumPreview: "Future simulator",
       premiumPreviewDetail:
-        "Unlock deeper 3 and 6 month analysis, bigger import batches, simulator portfolios, and smarter recurring-charge decisions when plans launch.",
-      startFree: "Start free, upgrade later",
+        "Adjust income and expense targets, add one-time events, and see a projected balance curve up to 24 months ahead.",
+      startFree: "Get started — it's free",
       welcomeBack: "Welcome back",
-      login: "Login",
-      loginDetail: "Sign in to access your dashboard, analytics, and assistant.",
+      login: "Sign in",
+      loginDetail: "Sign in to your account",
       email: "Email",
       emailPlaceholder: "Enter your email",
       password: "Password",
@@ -202,9 +202,9 @@ const translations = {
       forgotPassword: "Forgot password?",
       noAccount: "Don't have an account?",
       createOne: "Create one",
-      registerHeroTitle: "Build a better view of your spending from day one.",
+      registerHeroTitle: "One account. All your finances in one place.",
       registerHeroDetail:
-        "Create your account to import transactions, explore analytics, and use intelligent guidance designed around your financial behavior.",
+        "Import statements, track patterns, and plan your financial future — starting today.",
       simpleOnboarding: "Simple onboarding",
       simpleOnboardingDetail: "Start with manual entries or import your existing records.",
       actionableAnalytics: "Actionable analytics",
@@ -1350,7 +1350,7 @@ const translations = {
       newPasswordPlaceholder: "Enter your new password",
       learningPrivacyTitle: "Learning & Privacy",
       learningPrivacyDetail:
-        "Control how Smart Spending Analyzer learns from your confirmed categories.",
+        "Control how Zero2Asset learns from your confirmed categories.",
       personalLearningTitle: "Personal learning",
       personalLearningStatus: "Always on for your account",
       personalLearningDetail:
@@ -1463,8 +1463,8 @@ const translations = {
   },
   fr: {
     common: {
-      appName: "Analyseur intelligent des dépenses",
-      legalFooter: "© 2026 Mohammadreza Alijani. Smart Spending Analyzer™ / Zero2Asset™. Tous droits réservés.",
+      appName: "Zero2Asset",
+      legalFooter: "© 2026 Mohammadreza Alijani. Zero2Asset™. Tous droits réservés.",
       assistant: "Assistant",
       backToDashboard: "Retour a l'apercu",
       dashboard: "Apercu",
@@ -1621,24 +1621,24 @@ const translations = {
       registrationFailed: "Inscription échouée. Ce courriel est peut-être déjà utilisé.",
       forgotFailed: "Impossible d'envoyer les instructions de réinitialisation.",
       resetFailed: "Impossible de réinitialiser le mot de passe.",
-      heroTitle: "Comprenez votre argent avec un flux plus clair et plus intelligent.",
+      heroTitle: "Sachez exactement où va votre argent.",
       heroDescription:
-        "Notez vos transactions quotidiennes, rapprochez vos relevés bancaires à la fin du mois et laissez l'application apprendre vos catégories, vos habitudes récurrentes et votre projection financière.",
+        "Suivez les dépenses, importez des relevés et laissez Zero2Asset apprendre vos habitudes automatiquement.",
       monthEndTitle: "Rapprochement de fin de mois",
-      monthEndDetail: "Comparez ce que vous avez noté chaque jour avec votre vrai relevé bancaire.",
-      categoryMemoryTitle: "Mémoire de catégories",
+      monthEndDetail: "Comparez vos notes quotidiennes avec votre relevé bancaire pour ne rien manquer.",
+      categoryMemoryTitle: "Catégorisation intelligente",
       categoryMemoryDetail:
-        "Apprenez à l'application vos propres habitudes de nommage au lieu d'accepter des suppositions génériques.",
-      premiumTitle: "Poste de pilotage avancé",
+        "Des catégories qui apprennent de vos corrections — pas des étiquettes génériques.",
+      premiumTitle: "Simulateur financier",
       premiumDetail:
-        "Prévisions avancées, lots de relevés plus grands, scénarios sauvegardés et plans de dépenses guidés.",
-      premiumPreview: "Aperçu avancé",
+        "Lancez des scénarios hypothétiques : réduisez les dépenses, ajoutez des revenus et voyez comment votre solde évolue mois après mois.",
+      premiumPreview: "Simulateur financier",
       premiumPreviewDetail:
-        "Débloquez l'analyse sur 3 et 6 mois, de plus gros lots d'importation, des portefeuilles de scénarios et de meilleures décisions sur les charges récurrentes lorsque les forfaits seront lancés.",
-      startFree: "Commencer gratuitement, améliorer plus tard",
+        "Ajustez vos objectifs de revenus et de dépenses, ajoutez des événements ponctuels et visualisez votre solde projeté jusqu'à 24 mois.",
+      startFree: "Commencer — c'est gratuit",
       welcomeBack: "Bon retour",
       login: "Connexion",
-      loginDetail: "Connectez-vous pour accéder à votre tableau de bord, vos analyses et votre assistant.",
+      loginDetail: "Connectez-vous à votre compte",
       email: "Courriel",
       emailPlaceholder: "Entrez votre courriel",
       password: "Mot de passe",
@@ -1646,9 +1646,9 @@ const translations = {
       forgotPassword: "Mot de passe oublié?",
       noAccount: "Vous n'avez pas de compte?",
       createOne: "Créez-en un",
-      registerHeroTitle: "Construisez une meilleure vue de vos dépenses dès le premier jour.",
+      registerHeroTitle: "Un compte. Toutes vos finances au même endroit.",
       registerHeroDetail:
-        "Créez votre compte pour importer des transactions, explorer les analyses et utiliser des conseils intelligents adaptés à votre comportement financier.",
+        "Importez des relevés, suivez vos habitudes et planifiez votre avenir financier — dès aujourd'hui.",
       simpleOnboarding: "Démarrage simple",
       simpleOnboardingDetail: "Commencez avec des entrées manuelles ou importez vos relevés existants.",
       actionableAnalytics: "Analyses utiles",
@@ -2794,7 +2794,7 @@ const translations = {
       newPasswordPlaceholder: "Entrez votre nouveau mot de passe",
       learningPrivacyTitle: "Confidentialite et apprentissage",
       learningPrivacyDetail:
-        "Controlez comment Smart Spending Analyzer apprend de vos categories confirmees.",
+        "Contrôlez comment Zero2Asset apprend de vos catégories confirmées.",
       personalLearningTitle: "Apprentissage personnel",
       personalLearningStatus: "Toujours actif pour votre compte",
       personalLearningDetail:

@@ -2,9 +2,10 @@ import { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import api from "../services/api";
 import PasswordField from "../components/PasswordField";
+import ThemeToggle from "../components/ThemeToggle";
 import { useLanguage } from "../i18n/LanguageContext";
 
-function LoginPage() {
+function LoginPage({ theme, onThemeToggle }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -44,6 +45,11 @@ function LoginPage() {
 
   return (
     <div className="auth-shell auth-shell-login">
+      {onThemeToggle && (
+        <div className="auth-shell-theme-toggle">
+          <ThemeToggle theme={theme} onToggle={onThemeToggle} />
+        </div>
+      )}
       <div className="auth-layout">
         <div className="auth-showcase">
           <div className="auth-showcase-content">
@@ -90,9 +96,7 @@ function LoginPage() {
             </div>
 
             <div className="auth-premium-card">
-              <strong>{t("auth.premiumPreview")}</strong>
-              <p>{t("auth.premiumPreviewDetail")}</p>
-              <Link to="/register">{t("auth.startFree")}</Link>
+              <Link to="/register" className="auth-cta-link">{t("auth.startFree")}</Link>
             </div>
           </div>
         </div>

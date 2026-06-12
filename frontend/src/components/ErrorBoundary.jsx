@@ -34,7 +34,7 @@ class ErrorBoundary extends React.Component {
             <div className="auth-panel auth-panel-centered">
               <div className="auth-card">
                 <div className="auth-card-header">
-                  <p className="auth-card-kicker">Smart Spending Analyzer</p>
+                  <p className="auth-card-kicker">Zero2Asset</p>
                   <h2>Something went wrong.</h2>
                   <p>Please refresh the page or return to login.</p>
                 </div>
