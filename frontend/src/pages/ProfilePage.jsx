@@ -1,6 +1,22 @@
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { IconSettings } from "@tabler/icons-react";
+import {
+  IconSettings,
+  IconUser,
+  IconShield,
+  IconCrown,
+  IconTrash,
+} from "@tabler/icons-react";
+import {
+  Badge,
+  Box,
+  Card,
+  Divider,
+  Group,
+  Stack,
+  Switch,
+  Tabs,
+} from "@mantine/core";
 import api, { handleApiAuthError } from "../services/api";
 import PasswordField from "../components/PasswordField";
 import PageHeader from "../components/PageHeader";
@@ -215,218 +231,233 @@ function ProfilePage() {
           )}
         />
 
-        <div className="dashboard-card large-card">
-          <div className="section-header">
-            <h2>{t("profile.infoTitle")}</h2>
-            <p>{t("profile.infoDetail")}</p>
-          </div>
+        <Card className="profile-tabs-card" radius="xl" p={0}>
+          <Tabs defaultValue="account" color="teal" className="profile-tabs">
+            <Tabs.List className="profile-tabs-list">
+              <Tabs.Tab value="account" leftSection={<IconUser size={15} stroke={1.8} />}>
+                {t("profile.infoTitle")}
+              </Tabs.Tab>
+              <Tabs.Tab value="privacy" leftSection={<IconShield size={15} stroke={1.8} />}>
+                {t("profile.learningPrivacyTitle")}
+              </Tabs.Tab>
+              <Tabs.Tab value="plans" leftSection={<IconCrown size={15} stroke={1.8} />}>
+                {t("profile.premiumPlans")}
+              </Tabs.Tab>
+              <Tabs.Tab value="danger" leftSection={<IconTrash size={15} stroke={1.8} />}>
+                {t("profile.dangerZone")}
+              </Tabs.Tab>
+            </Tabs.List>
 
-          <form className="transaction-form" onSubmit={handleUpdateProfile}>
-            <input
-              type="email"
-              placeholder={t("profile.emailAddress")}
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-            />
+            <Box className="profile-tab-content">
+              {/* ── Account Tab ── */}
+              <Tabs.Panel value="account">
+                <Stack gap="xl">
+                  <div>
+                    <div className="section-header">
+                      <h2>{t("profile.infoTitle")}</h2>
+                      <p>{t("profile.infoDetail")}</p>
+                    </div>
+                    <form className="transaction-form" onSubmit={handleUpdateProfile}>
+                      <input
+                        type="email"
+                        placeholder={t("profile.emailAddress")}
+                        value={email}
+                        onChange={(e) => setEmail(e.target.value)}
+                        required
+                      />
+                      <button type="submit">{t("profile.saveProfile")}</button>
+                    </form>
+                    {profileMessage && <p className="success-text">{profileMessage}</p>}
+                    {profileError && <p className="error-text">{profileError}</p>}
+                  </div>
 
-            <button type="submit">{t("profile.saveProfile")}</button>
-          </form>
+                  <Divider />
 
-          {profileMessage && <p style={{ color: "green" }}>{profileMessage}</p>}
-          {profileError && <p className="error-text">{profileError}</p>}
-        </div>
+                  <div>
+                    <div className="section-header">
+                      <h2>{t("profile.changePassword")}</h2>
+                      <p>{t("profile.changePasswordDetail")}</p>
+                    </div>
+                    <form className="auth-form" onSubmit={handleChangePassword}>
+                      <PasswordField
+                        label={t("profile.currentPassword")}
+                        name="current-password"
+                        placeholder={t("profile.currentPasswordPlaceholder")}
+                        value={currentPassword}
+                        onChange={(e) => setCurrentPassword(e.target.value)}
+                        autoComplete="current-password"
+                        required
+                      />
+                      <PasswordField
+                        label={t("profile.newPassword")}
+                        name="new-password"
+                        placeholder={t("profile.newPasswordPlaceholder")}
+                        value={newPassword}
+                        onChange={(e) => setNewPassword(e.target.value)}
+                        autoComplete="new-password"
+                        required
+                      />
+                      <button type="submit" className="auth-submit-button">
+                        {t("profile.changePassword")}
+                      </button>
+                    </form>
+                    {passwordMessage && <p className="success-text">{passwordMessage}</p>}
+                    {passwordError && <p className="error-text">{passwordError}</p>}
+                  </div>
 
-        <div className="dashboard-card large-card learning-privacy-card">
-          <div className="section-header">
-            <h2>{t("profile.learningPrivacyTitle")}</h2>
-            <p>{t("profile.learningPrivacyDetail")}</p>
-          </div>
+                  <Divider />
 
-          <div className="learning-privacy-grid">
-            <div className="learning-privacy-item">
-              <span className="learning-privacy-kicker">
-                {t("profile.personalLearningTitle")}
-              </span>
-              <h3>{t("profile.personalLearningStatus")}</h3>
-              <p>{t("profile.personalLearningDetail")}</p>
-            </div>
+                  <div>
+                    <div className="section-header">
+                      <h2>{t("profile.dataExportTitle")}</h2>
+                      <p>{t("profile.dataExportDetail")}</p>
+                    </div>
+                    <form className="auth-form" onSubmit={handleExportData}>
+                      <PasswordField
+                        label={t("profile.exportPassword")}
+                        name="export-password"
+                        placeholder={t("profile.enterPassword")}
+                        value={exportPassword}
+                        onChange={(e) => setExportPassword(e.target.value)}
+                        autoComplete="current-password"
+                        required
+                      />
+                      <button
+                        type="submit"
+                        className="auth-submit-button"
+                        disabled={exporting}
+                      >
+                        {exporting ? t("profile.exportingData") : t("profile.exportData")}
+                      </button>
+                    </form>
+                    <p className="learning-privacy-note">{t("profile.exportPrivacyNote")}</p>
+                    {exportMessage && <p className="success-text">{exportMessage}</p>}
+                    {exportError && <p className="error-text">{exportError}</p>}
+                  </div>
+                </Stack>
+              </Tabs.Panel>
 
-            <div className="learning-privacy-item">
-              <span className="learning-privacy-kicker">
-                {t("profile.communityLearningTitle")}
-              </span>
-              <h3>
-                {communityLearningEnabled
-                  ? t("profile.communityLearningOn")
-                  : t("profile.communityLearningOff")}
-              </h3>
-              <p>{t("profile.communityLearningDetail")}</p>
-              <button
-                className={
-                  communityLearningEnabled ? "secondary-button" : "premium-header-button"
-                }
-                type="button"
-                onClick={handleToggleCommunityLearning}
-                disabled={learningSaving}
-              >
-                {learningSaving
-                  ? t("profile.savingLearning")
-                  : communityLearningEnabled
-                    ? t("profile.turnCommunityLearningOff")
-                    : t("profile.turnCommunityLearningOn")}
-              </button>
-            </div>
-          </div>
+              {/* ── Privacy Tab ── */}
+              <Tabs.Panel value="privacy">
+                <div className="section-header">
+                  <h2>{t("profile.learningPrivacyTitle")}</h2>
+                  <p>{t("profile.learningPrivacyDetail")}</p>
+                </div>
 
-          <p className="learning-privacy-note">
-            {t("profile.learningPrivacyNote")}
-          </p>
+                <div className="learning-privacy-grid">
+                  <div className="learning-privacy-item">
+                    <span className="learning-privacy-kicker">
+                      {t("profile.personalLearningTitle")}
+                    </span>
+                    <h3>{t("profile.personalLearningStatus")}</h3>
+                    <p>{t("profile.personalLearningDetail")}</p>
+                    <Badge color="teal" variant="light" size="md" mt={10}>
+                      Always Active
+                    </Badge>
+                  </div>
 
-          {learningMessage && <p style={{ color: "green" }}>{learningMessage}</p>}
-          {learningError && <p className="error-text">{learningError}</p>}
-        </div>
+                  <div className="learning-privacy-item">
+                    <Group justify="space-between" align="flex-start" mb={4}>
+                      <span className="learning-privacy-kicker">
+                        {t("profile.communityLearningTitle")}
+                      </span>
+                      <Switch
+                        checked={communityLearningEnabled}
+                        onChange={handleToggleCommunityLearning}
+                        disabled={learningSaving}
+                        color="teal"
+                        size="md"
+                      />
+                    </Group>
+                    <h3>
+                      {communityLearningEnabled
+                        ? t("profile.communityLearningOn")
+                        : t("profile.communityLearningOff")}
+                    </h3>
+                    <p>{t("profile.communityLearningDetail")}</p>
+                  </div>
+                </div>
 
-        <div className="dashboard-card large-card">
-          <div className="section-header">
-            <h2>{t("profile.changePassword")}</h2>
-            <p>{t("profile.changePasswordDetail")}</p>
-          </div>
+                <p className="learning-privacy-note">{t("profile.learningPrivacyNote")}</p>
+                {learningMessage && <p className="success-text">{learningMessage}</p>}
+                {learningError && <p className="error-text">{learningError}</p>}
+              </Tabs.Panel>
 
-          <form className="auth-form" onSubmit={handleChangePassword}>
-            <PasswordField
-              label={t("profile.currentPassword")}
-              name="current-password"
-              placeholder={t("profile.currentPasswordPlaceholder")}
-              value={currentPassword}
-              onChange={(e) => setCurrentPassword(e.target.value)}
-              autoComplete="current-password"
-              required
-            />
+              {/* ── Plans Tab ── */}
+              <Tabs.Panel value="plans">
+                <div className="section-header">
+                  <h2>{t("profile.premiumPlans")}</h2>
+                  <p>{t("profile.premiumPlansDetail")}</p>
+                </div>
+                <div className="pricing-grid">
+                  <div className="pricing-card">
+                    <span className="pricing-kicker">{t("profile.free")}</span>
+                    <h3>{t("profile.smartStarter")}</h3>
+                    <p className="pricing-price">$0</p>
+                    <p>{t("profile.freePlanDetail")}</p>
+                    <button className="secondary-button" type="button">
+                      {t("profile.currentPlan")}
+                    </button>
+                  </div>
 
-            <PasswordField
-              label={t("profile.newPassword")}
-              name="new-password"
-              placeholder={t("profile.newPasswordPlaceholder")}
-              value={newPassword}
-              onChange={(e) => setNewPassword(e.target.value)}
-              autoComplete="new-password"
-              required
-            />
+                  <div className="pricing-card pricing-card-featured">
+                    <span className="pricing-kicker">{t("common.premium")}</span>
+                    <h3>{t("profile.moneyOperator")}</h3>
+                    <p className="pricing-price">{t("profile.comingSoon")}</p>
+                    <p>{t("profile.premiumPlanDetail")}</p>
+                    <button className="premium-header-button" type="button">
+                      {t("profile.notifyMe")}
+                    </button>
+                  </div>
+                </div>
+              </Tabs.Panel>
 
-            <button type="submit" className="auth-submit-button">
-              {t("profile.changePassword")}
-            </button>
-          </form>
+              {/* ── Danger Zone Tab ── */}
+              <Tabs.Panel value="danger">
+                <div className="section-header">
+                  <h2>{t("profile.dangerZone")}</h2>
+                  <p>{t("profile.dangerZoneDetail")}</p>
+                </div>
 
-          {passwordMessage && <p style={{ color: "green" }}>{passwordMessage}</p>}
-          {passwordError && <p className="error-text">{passwordError}</p>}
-        </div>
+                <form className="auth-form" onSubmit={handleDeleteAccount}>
+                  <PasswordField
+                    label={t("profile.confirmPassword")}
+                    name="delete-password"
+                    placeholder={t("profile.enterPassword")}
+                    value={deletePassword}
+                    onChange={(e) => setDeletePassword(e.target.value)}
+                    autoComplete="current-password"
+                    required
+                  />
 
-        <div className="dashboard-card large-card">
-          <div className="section-header">
-            <h2>{t("profile.dataExportTitle")}</h2>
-            <p>{t("profile.dataExportDetail")}</p>
-          </div>
+                  <div className="auth-field">
+                    <label htmlFor="delete-confirm-text">
+                      {t("profile.typeDelete")}
+                    </label>
+                    <input
+                      id="delete-confirm-text"
+                      type="text"
+                      placeholder={t("profile.typeDeletePlaceholder")}
+                      value={deleteConfirmText}
+                      onChange={(e) => setDeleteConfirmText(e.target.value)}
+                      required
+                    />
+                  </div>
 
-          <form className="auth-form" onSubmit={handleExportData}>
-            <PasswordField
-              label={t("profile.exportPassword")}
-              name="export-password"
-              placeholder={t("profile.enterPassword")}
-              value={exportPassword}
-              onChange={(e) => setExportPassword(e.target.value)}
-              autoComplete="current-password"
-              required
-            />
+                  <button
+                    type="submit"
+                    className="delete-account-button"
+                    disabled={deleting}
+                  >
+                    {deleting ? t("profile.deletingAccount") : t("profile.deleteAccount")}
+                  </button>
+                </form>
 
-            <button
-              type="submit"
-              className="auth-submit-button"
-              disabled={exporting}
-            >
-              {exporting ? t("profile.exportingData") : t("profile.exportData")}
-            </button>
-          </form>
-
-          <p className="learning-privacy-note">
-            {t("profile.exportPrivacyNote")}
-          </p>
-          {exportMessage && <p style={{ color: "green" }}>{exportMessage}</p>}
-          {exportError && <p className="error-text">{exportError}</p>}
-        </div>
-
-        <div id="plans" className="dashboard-card large-card premium-plans-card">
-          <div className="section-header">
-            <h2>{t("profile.premiumPlans")}</h2>
-            <p>{t("profile.premiumPlansDetail")}</p>
-          </div>
-
-          <div className="pricing-grid">
-            <div className="pricing-card">
-              <span className="pricing-kicker">{t("profile.free")}</span>
-              <h3>{t("profile.smartStarter")}</h3>
-              <p className="pricing-price">$0</p>
-              <p>{t("profile.freePlanDetail")}</p>
-              <button className="secondary-button" type="button">
-                {t("profile.currentPlan")}
-              </button>
-            </div>
-
-            <div className="pricing-card pricing-card-featured">
-              <span className="pricing-kicker">{t("common.premium")}</span>
-              <h3>{t("profile.moneyOperator")}</h3>
-              <p className="pricing-price">{t("profile.comingSoon")}</p>
-              <p>{t("profile.premiumPlanDetail")}</p>
-              <button className="premium-header-button" type="button">
-                {t("profile.notifyMe")}
-              </button>
-            </div>
-          </div>
-        </div>
-
-        <div className="dashboard-card large-card danger-zone-card">
-          <div className="section-header">
-            <h2>{t("profile.dangerZone")}</h2>
-            <p>{t("profile.dangerZoneDetail")}</p>
-          </div>
-
-          <form className="auth-form" onSubmit={handleDeleteAccount}>
-            <PasswordField
-              label={t("profile.confirmPassword")}
-              name="delete-password"
-              placeholder={t("profile.enterPassword")}
-              value={deletePassword}
-              onChange={(e) => setDeletePassword(e.target.value)}
-              autoComplete="current-password"
-              required
-            />
-
-            <div className="auth-field">
-              <label htmlFor="delete-confirm-text">
-                {t("profile.typeDelete")}
-              </label>
-              <input
-                id="delete-confirm-text"
-                type="text"
-                placeholder={t("profile.typeDeletePlaceholder")}
-                value={deleteConfirmText}
-                onChange={(e) => setDeleteConfirmText(e.target.value)}
-                required
-              />
-            </div>
-
-            <button
-              type="submit"
-              className="delete-account-button"
-              disabled={deleting}
-            >
-              {deleting ? t("profile.deletingAccount") : t("profile.deleteAccount")}
-            </button>
-          </form>
-
-          {deleteError && <p className="error-text">{deleteError}</p>}
-        </div>
+                {deleteError && <p className="error-text">{deleteError}</p>}
+              </Tabs.Panel>
+            </Box>
+          </Tabs>
+        </Card>
       </div>
     </div>
   );

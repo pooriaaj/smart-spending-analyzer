@@ -9706,3 +9706,37 @@ button,
 :root[data-theme="dark"] .app-shell-main .account-balance-negative {
   color: #f87171;
 }
+
+/* ================================================================
+   PROFILE PAGE — Tabbed settings layout
+   ================================================================ */
+
+.profile-tabs-card {
+  overflow: hidden;
+}
+
+.profile-tabs-list {
+  padding: 0 20px;
+  border-bottom: 1px solid var(--border-light);
+  gap: 0;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+}
+
+.profile-tab-content {
+  padding: 28px 28px;
+}
+
+@media (max-width: 640px) {
+  .profile-tab-content {
+    padding: 20px 16px;
+  }
+}
+
+:root[data-theme="dark"] .app-shell-main .profile-tabs-list {
+  border-bottom-color: rgba(255, 255, 255, 0.08);
+}
+
+:root[data-theme="dark"] .app-shell-main .profile-tabs-card {
+  background: #2d2d2d;
+}
