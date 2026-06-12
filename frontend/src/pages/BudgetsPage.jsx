@@ -6,6 +6,7 @@ import {
   IconTrendingDown,
   IconWallet,
 } from "@tabler/icons-react";
+import { Box, Card, Stack, Text, Title } from "@mantine/core";
 import api, { handleApiAuthError } from "../services/api";
 import AccountSelector from "../components/AccountSelector";
 import PageHeader from "../components/PageHeader";
@@ -522,11 +523,12 @@ function BudgetsPage() {
           subtitleKey="headers.budgetsSubtitle"
         />
 
-        <div className="dashboard-card">
-          <div className="section-header">
-            <h2>{t("budgets.scopeTitle")}</h2>
-            <p>{scopeDescription}</p>
-          </div>
+        <Card className="filter-card" radius="xl" p={{ base: "md", md: "lg" }}>
+          <Stack gap="md">
+            <Box>
+              <Title order={2} size="h3">{t("budgets.scopeTitle")}</Title>
+              <Text size="sm" c="dimmed">{scopeDescription}</Text>
+            </Box>
 
           <div className="assistant-mode-row">
             <AccountSelector
@@ -573,7 +575,8 @@ function BudgetsPage() {
               </button>
             </div>
           </div>
-        </div>
+          </Stack>
+        </Card>
 
         {suggestedBudgets.length > 0 && (
           <div className="dashboard-card">
@@ -644,11 +647,12 @@ function BudgetsPage() {
           </div>
         )}
 
-        <div className="dashboard-card">
-          <div className="section-header">
-            <h2>{t("budgets.createOrUpdate")}</h2>
-            <p>{t("budgets.createOrUpdateDetail")}</p>
-          </div>
+        <Card className="filter-card" radius="xl" p={{ base: "md", md: "lg" }}>
+          <Stack gap="md">
+            <Box>
+              <Title order={2} size="h3">{t("budgets.createOrUpdate")}</Title>
+              <Text size="sm" c="dimmed">{t("budgets.createOrUpdateDetail")}</Text>
+            </Box>
 
           <form className="transaction-form budget-form" onSubmit={handleSaveBudget}>
             <div className="budget-form-field">
@@ -689,7 +693,8 @@ function BudgetsPage() {
 
           {message && <p className="success-text">{message}</p>}
           {error && <p className="error-text">{error}</p>}
-        </div>
+          </Stack>
+        </Card>
 
         <div className="summary-grid">
           <div className="summary-card income-card">
@@ -835,11 +840,12 @@ function BudgetsPage() {
           </div>
         )}
 
-        <div className="dashboard-card">
-          <div className="section-header">
-            <h2>{t("budgets.budgetTracking")}</h2>
-            <p>{t("budgets.budgetTrackingDetail")}</p>
-          </div>
+        <Card className="filter-card" radius="xl" p={{ base: "md", md: "lg" }}>
+          <Stack gap="md">
+            <Box>
+              <Title order={2} size="h3">{t("budgets.budgetTracking")}</Title>
+              <Text size="sm" c="dimmed">{t("budgets.budgetTrackingDetail")}</Text>
+            </Box>
 
           {loading ? (
             <div className="empty-state">
@@ -914,7 +920,8 @@ function BudgetsPage() {
               })}
             </div>
           )}
-        </div>
+          </Stack>
+        </Card>
       </div>
     </div>
   );
