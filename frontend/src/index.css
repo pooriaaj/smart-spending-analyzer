@@ -9867,3 +9867,45 @@ button,
 :root[data-theme="dark"] .auth-shell {
   background: #1a1a1a;
 }
+
+/* ================================================================
+   AUTH PAGES — Feature items and text colors in gray dark mode
+   ================================================================ */
+
+:root[data-theme="dark"] .auth-feature-item {
+  background: rgba(255, 255, 255, 0.05) !important;
+  border-color: rgba(255, 255, 255, 0.08) !important;
+}
+
+:root[data-theme="dark"] .auth-feature-item strong {
+  color: #f0f0f0;
+}
+
+:root[data-theme="dark"] .auth-description,
+:root[data-theme="dark"] .auth-card-header p,
+:root[data-theme="dark"] .auth-feature-item p,
+:root[data-theme="dark"] .auth-footer p {
+  color: #b0b0b0 !important;
+}
+
+:root[data-theme="dark"] .auth-card h2,
+:root[data-theme="dark"] .auth-card-kicker {
+  color: #f0f0f0;
+}
+
+:root[data-theme="dark"] .auth-showcase h1 {
+  color: #f0f0f0;
+}
+
+:root[data-theme="dark"] .auth-eyebrow {
+  color: #2dd4bf;
+}
+
+:root[data-theme="dark"] .auth-premium-card {
+  background: rgba(13, 148, 136, 0.14);
+  border-color: rgba(45, 212, 191, 0.2);
+}
+
+:root[data-theme="dark"] .auth-cta-link {
+  color: #2dd4bf;
+}
