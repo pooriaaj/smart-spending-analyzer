@@ -9909,3 +9909,16 @@ button,
 :root[data-theme="dark"] .auth-cta-link {
   color: #2dd4bf;
 }
+
+/* ================================================================
+   TRANSACTIONS TABLE — Gray dark mode background fix
+   ================================================================ */
+
+:root[data-theme="dark"] .app-shell-main .transactions-table {
+  background: #2d2d2d;
+  color: #e0e0e0;
+}
+
+:root[data-theme="dark"] .app-shell-main .transactions-table-wrapper {
+  border-color: rgba(255, 255, 255, 0.06);
+}
