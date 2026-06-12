@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { IconSparkles } from "@tabler/icons-react";
+import { Card } from "@mantine/core";
 import api, { handleApiAuthError } from "../services/api";
 import AccountSelector from "../components/AccountSelector";
 import PageHeader from "../components/PageHeader";
@@ -431,7 +432,7 @@ function AssistantPage() {
           subtitleKey="headers.assistantSubtitle"
         />
 
-        <div className="dashboard-card assistant-chat-shell">
+        <Card className="assistant-chat-shell" radius="xl" p={0}>
           <div className="assistant-chat-topbar">
             <div className="assistant-control-grid">
               <div className="assistant-mode-field">
@@ -552,7 +553,7 @@ function AssistantPage() {
           </div>
 
           {error && <p className="error-text">{error}</p>}
-        </div>
+        </Card>
       </div>
     </div>
   );

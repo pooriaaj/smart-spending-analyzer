@@ -6,7 +6,7 @@ import {
   IconTrendingDown,
   IconWallet,
 } from "@tabler/icons-react";
-import { Box, Card, Stack, Text, Title } from "@mantine/core";
+import { Box, Card, Group, Stack, Text, Title } from "@mantine/core";
 import api, { handleApiAuthError } from "../services/api";
 import AccountSelector from "../components/AccountSelector";
 import PageHeader from "../components/PageHeader";
@@ -582,22 +582,24 @@ function BudgetsPage() {
           <Card className="filter-card" radius="xl" p={{ base: "md", md: "lg" }}>
             <Stack gap="md">
               <Box className="section-header">
-                <div>
-                  <Title order={2} size="h3">{t("budgets.suggestedBudgets")}</Title>
-                  <Text size="sm" c="dimmed">{t("budgets.suggestedBudgetsDetail")}</Text>
-                </div>
-                <div className="budget-section-actions">
-                  <button
-                    type="button"
-                    className="secondary-button"
-                    onClick={handleApplyAllSuggestions}
-                    disabled={bulkApplyingKey === "suggestions"}
-                  >
-                    {bulkApplyingKey === "suggestions"
-                      ? t("transactions.applying")
-                      : t("budgets.applyAllSuggestions")}
-                  </button>
-                </div>
+                <Group justify="space-between" align="flex-start" wrap="nowrap">
+                  <div>
+                    <Title order={2} size="h3">{t("budgets.suggestedBudgets")}</Title>
+                    <Text size="sm" c="dimmed">{t("budgets.suggestedBudgetsDetail")}</Text>
+                  </div>
+                  <div className="budget-section-actions">
+                    <button
+                      type="button"
+                      className="secondary-button"
+                      onClick={handleApplyAllSuggestions}
+                      disabled={bulkApplyingKey === "suggestions"}
+                    >
+                      {bulkApplyingKey === "suggestions"
+                        ? t("transactions.applying")
+                        : t("budgets.applyAllSuggestions")}
+                    </button>
+                  </div>
+                </Group>
               </Box>
 
             <div className="budget-suggestion-grid">
@@ -770,25 +772,27 @@ function BudgetsPage() {
           <Card className="filter-card" radius="xl" p={{ base: "md", md: "lg" }}>
             <Stack gap="md">
               <Box className="section-header">
-                <div>
-                  <Title order={2} size="h3">{t("budgets.budgetMoves")}</Title>
-                  <Text size="sm" c="dimmed">{t("budgets.budgetMovesDetail")}</Text>
-                </div>
-                <div className="budget-section-actions">
-                  <button
-                    type="button"
-                    className="secondary-button"
-                    onClick={handleApplyAllInsightTargets}
-                    disabled={
-                      bulkApplyingKey === "insights" ||
-                      !budgetInsights.some((insight) => insight.recommended_amount != null)
-                    }
-                  >
-                    {bulkApplyingKey === "insights"
-                      ? t("transactions.applying")
-                      : t("budgets.applyAllTargets")}
-                  </button>
-                </div>
+                <Group justify="space-between" align="flex-start" wrap="nowrap">
+                  <div>
+                    <Title order={2} size="h3">{t("budgets.budgetMoves")}</Title>
+                    <Text size="sm" c="dimmed">{t("budgets.budgetMovesDetail")}</Text>
+                  </div>
+                  <div className="budget-section-actions">
+                    <button
+                      type="button"
+                      className="secondary-button"
+                      onClick={handleApplyAllInsightTargets}
+                      disabled={
+                        bulkApplyingKey === "insights" ||
+                        !budgetInsights.some((insight) => insight.recommended_amount != null)
+                      }
+                    >
+                      {bulkApplyingKey === "insights"
+                        ? t("transactions.applying")
+                        : t("budgets.applyAllTargets")}
+                    </button>
+                  </div>
+                </Group>
               </Box>
 
             <div className="budget-insight-list">
