@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { IconBuildingBank } from "@tabler/icons-react";
+import { Box, Card, NativeSelect, Stack, Text, TextInput, Title } from "@mantine/core";
 import api, { handleApiAuthError } from "../services/api";
 import PageHeader from "../components/PageHeader";
 import { setSelectedAccountId } from "../services/accountStorage";
@@ -187,40 +188,43 @@ function AccountsPage() {
           )}
         />
 
-        <div className="dashboard-card large-card">
-          <div className="section-header">
-            <h2>{t("accounts.createAccount")}</h2>
-            <p>{t("accounts.createAccountDetail")}</p>
-          </div>
+        <Card className="filter-card" radius="xl" p={{ base: "md", md: "lg" }}>
+          <Stack gap="md">
+            <Box>
+              <Title order={2} size="h3">{t("accounts.createAccount")}</Title>
+              <Text size="sm" c="dimmed">{t("accounts.createAccountDetail")}</Text>
+            </Box>
 
-          <form className="transaction-form" onSubmit={handleCreate}>
-            <input
-              type="text"
-              placeholder={t("accounts.accountName")}
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              required
-            />
+            <form className="transaction-form" onSubmit={handleCreate}>
+              <TextInput
+                placeholder={t("accounts.accountName")}
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                required
+              />
 
-            <select value={type} onChange={(e) => setType(e.target.value)}>
-              {ACCOUNT_TYPE_OPTIONS.map((accountType) => (
-                <option key={accountType} value={accountType}>
-                  {formatAccountType(accountType, t)}
-                </option>
-              ))}
-            </select>
+              <NativeSelect
+                value={type}
+                onChange={(e) => setType(e.target.value)}
+                data={ACCOUNT_TYPE_OPTIONS.map((accountType) => ({
+                  value: accountType,
+                  label: formatAccountType(accountType, t),
+                }))}
+              />
 
-            <button type="submit">{t("accounts.createAccount")}</button>
-          </form>
+              <button type="submit">{t("accounts.createAccount")}</button>
+            </form>
 
-          {error && <p className="error-text">{error}</p>}
-          {status && <p className="success-text">{status}</p>}
-        </div>
+            {error && <p className="error-text">{error}</p>}
+            {status && <p className="success-text">{status}</p>}
+          </Stack>
+        </Card>
 
-        <div className="dashboard-card">
-          <div className="section-header">
-            <h2>{t("accounts.yourAccounts")}</h2>
-          </div>
+        <Card className="filter-card" radius="xl" p={{ base: "md", md: "lg" }}>
+          <Stack gap="md">
+            <Box>
+              <Title order={2} size="h3">{t("accounts.yourAccounts")}</Title>
+            </Box>
 
           {visibleAccounts.length === 0 ? (
             <div className="empty-state"><p>{t("accounts.noAccounts")}</p></div>
@@ -344,7 +348,8 @@ function AccountsPage() {
               })}
             </div>
           )}
-        </div>
+          </Stack>
+        </Card>
       </div>
     </div>
   );
