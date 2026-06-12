@@ -7841,12 +7841,58 @@ button,
 .app-shell-main .balance-text,
 .app-shell-main .overview-stat-card-balance .overview-stat-value,
 .app-shell-main .balance-card strong {
-  color: #1d4ed8;
+  color: var(--fintech-teal);
 }
 
 .app-shell-main .overview-stat-marker {
   border-radius: 999px;
   opacity: 0.92;
+}
+
+/* Stat card colored top accent border */
+.app-shell-main .overview-stat-card-income { border-top: 3px solid var(--fintech-emerald); }
+.app-shell-main .overview-stat-card-expense { border-top: 3px solid var(--fintech-danger); }
+.app-shell-main .overview-stat-card-balance { border-top: 3px solid var(--fintech-teal); }
+.app-shell-main .overview-stat-card-category { border-top: 3px solid var(--purple); }
+
+/* Stat card icon badge */
+.overview-stat-icon-badge {
+  width: 38px;
+  height: 38px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.overview-stat-icon-badge-income {
+  background: rgba(5, 150, 105, 0.12);
+  color: var(--fintech-emerald);
+}
+.overview-stat-icon-badge-expense {
+  background: rgba(220, 38, 38, 0.12);
+  color: var(--fintech-danger);
+}
+.overview-stat-icon-badge-balance {
+  background: rgba(13, 148, 136, 0.12);
+  color: var(--fintech-teal);
+}
+.overview-stat-icon-badge-category {
+  background: rgba(124, 58, 237, 0.12);
+  color: var(--purple);
+}
+
+/* Sidebar nav logo icon badge */
+.app-shell-nav-logo {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  background: rgba(13, 148, 136, 0.12);
+  color: var(--fintech-teal);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
 }
 
 .app-shell-main .overview-chart-frame,

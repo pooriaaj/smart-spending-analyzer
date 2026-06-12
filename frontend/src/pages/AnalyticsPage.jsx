@@ -1,6 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import {
+  IconTag,
+  IconTrendingDown,
+  IconTrendingUp,
+  IconWallet,
+} from "@tabler/icons-react";
+import {
   Badge,
   Box,
   Button,
@@ -291,13 +297,17 @@ function buildSpendingPatternPulse(transactions, t) {
   };
 }
 
-function OverviewStatCard({ label, value, tone, helper }) {
+function OverviewStatCard({ label, value, tone, helper, icon: Icon }) {
   return (
     <Card className={`overview-stat-card overview-stat-card-${tone}`} radius="lg" p="lg">
       <Stack gap="md" h="100%" justify="space-between">
         <Group justify="space-between" align="flex-start" gap="sm">
           <Text className="overview-stat-label">{label}</Text>
-          <Box className="overview-stat-marker" aria-hidden="true" />
+          {Icon && (
+            <Box className={`overview-stat-icon-badge overview-stat-icon-badge-${tone}`} aria-hidden="true">
+              <Icon size={18} stroke={2} />
+            </Box>
+          )}
         </Group>
         <Box>
           <Text className="overview-stat-value">{value}</Text>
@@ -723,21 +733,25 @@ function AnalyticsPage() {
               tone="income"
               label={t("analytics.totalIncome")}
               value={formatMoney(summary.total_income)}
+              icon={IconTrendingUp}
             />
             <OverviewStatCard
               tone="expense"
               label={t("analytics.totalExpenses")}
               value={formatMoney(summary.total_expenses)}
+              icon={IconTrendingDown}
             />
             <OverviewStatCard
               tone="balance"
               label={t("common.balance")}
               value={formatMoney(summary.balance)}
+              icon={IconWallet}
             />
             <OverviewStatCard
               tone="category"
               label={t("analytics.topExpenseCategory")}
               value={topExpenseCategoryValue}
+              icon={IconTag}
             />
           </SimpleGrid>
 

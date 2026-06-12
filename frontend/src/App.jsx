@@ -5,6 +5,7 @@ import {
   Box,
   Burger,
   Button,
+  Divider,
   Group,
   NavLink,
   Stack,
@@ -12,6 +13,16 @@ import {
   Title,
 } from "@mantine/core";
 import { useDisclosure } from "@mantine/hooks";
+import {
+  IconBuildingBank,
+  IconChartPie,
+  IconCloudUpload,
+  IconLayoutDashboard,
+  IconReceipt2,
+  IconSettings,
+  IconSparkles,
+  IconTarget,
+} from "@tabler/icons-react";
 import ThemeToggle from "./components/ThemeToggle";
 import PageSkeleton from "./components/PageSkeleton";
 import { LanguageProvider, useLanguage } from "./i18n/LanguageContext";
@@ -31,13 +42,13 @@ const BudgetsPage = lazy(() => import("./pages/BudgetsPage"));
 const NotFoundPage = lazy(() => import("./pages/NotFoundPage"));
 
 const APP_NAV_ITEMS = [
-  { labelKey: "common.analytics", path: "/analytics", matchPaths: ["/analytics", "/dashboard"] },
-  { labelKey: "common.smartImport", path: "/import", matchPaths: ["/import"] },
-  { labelKey: "common.transactions", path: "/transactions", matchPaths: ["/transactions"] },
-  { labelKey: "common.budgets", path: "/budgets", matchPaths: ["/budgets", "/simulator"] },
-  { labelKey: "common.assistant", path: "/assistant", matchPaths: ["/assistant"] },
-  { labelKey: "common.accounts", path: "/accounts", matchPaths: ["/accounts"] },
-  { labelKey: "common.profileSettings", path: "/profile", matchPaths: ["/profile"] },
+  { labelKey: "common.analytics", path: "/analytics", matchPaths: ["/analytics", "/dashboard"], icon: IconLayoutDashboard },
+  { labelKey: "common.smartImport", path: "/import", matchPaths: ["/import"], icon: IconCloudUpload },
+  { labelKey: "common.transactions", path: "/transactions", matchPaths: ["/transactions"], icon: IconReceipt2 },
+  { labelKey: "common.budgets", path: "/budgets", matchPaths: ["/budgets", "/simulator"], icon: IconTarget },
+  { labelKey: "common.assistant", path: "/assistant", matchPaths: ["/assistant"], icon: IconSparkles },
+  { labelKey: "common.accounts", path: "/accounts", matchPaths: ["/accounts"], icon: IconBuildingBank },
+  { labelKey: "common.profileSettings", path: "/profile", matchPaths: ["/profile"], icon: IconSettings },
 ];
 
 function ProtectedRoute({ children }) {
@@ -142,7 +153,7 @@ function AuthenticatedLayout({ children, theme, onThemeToggle }) {
               aria-label={t("common.appMenu")}
             />
             <Box className="app-shell-logo" aria-hidden="true">
-              $
+              <IconChartPie size={22} stroke={1.5} />
             </Box>
             <Box className="app-shell-brand-copy">
               <Title order={2} size="h4">{t("common.appName")}</Title>
@@ -172,20 +183,28 @@ function AuthenticatedLayout({ children, theme, onThemeToggle }) {
       </AppShell.Header>
 
       <AppShell.Navbar className="app-shell-navbar" p="md">
-        <Stack h="100%" justify="space-between" gap="lg">
-          <Stack gap="lg">
+        <Stack h="100%" justify="space-between" gap={0}>
+          <Stack gap="md">
             <Box className="app-shell-nav-brand">
-              <Text className="app-shell-nav-kicker">{t("common.appName")}</Text>
+              <Group gap="xs" align="center" mb={4}>
+                <Box className="app-shell-nav-logo">
+                  <IconChartPie size={18} stroke={1.5} />
+                </Box>
+                <Text className="app-shell-nav-kicker">{t("common.appName")}</Text>
+              </Group>
               <Title order={2} size="h3">{t("common.dashboard")}</Title>
             </Box>
 
-            <Stack gap={6}>
+            <Divider />
+
+            <Stack gap={4}>
               {APP_NAV_ITEMS.map((item) => (
                 <NavLink
                   key={item.path}
                   className="app-shell-nav-link"
                   active={item.matchPaths.some((path) => location.pathname === path)}
                   label={t(item.labelKey)}
+                  leftSection={<item.icon size={17} stroke={1.6} />}
                   onClick={() => handleNavigate(item.path)}
                   variant="light"
                 />
@@ -193,11 +212,13 @@ function AuthenticatedLayout({ children, theme, onThemeToggle }) {
             </Stack>
           </Stack>
 
-          <Stack gap="sm">
+          <Stack gap="sm" mt="md">
+            <Divider />
             <Button
               type="button"
               radius="md"
               color="dark"
+              variant="subtle"
               fullWidth
               onClick={handleLogout}
             >
