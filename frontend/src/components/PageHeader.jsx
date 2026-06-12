@@ -17,11 +17,15 @@ function PageHeader({
     ? t(eyebrowKey)
     : (eyebrow ?? t("common.appName"));
 
+  const IconContent = typeof icon === "function"
+    ? (() => { const Icon = icon; return <Icon size={26} stroke={1.6} />; })()
+    : icon;
+
   return (
     <div className="dashboard-hero app-page-header">
       <div className="app-page-title-row">
         <div className="page-logo-mark" aria-hidden="true">
-          {icon}
+          {IconContent}
         </div>
 
         <div>

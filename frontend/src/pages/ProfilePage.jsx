@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { IconSettings } from "@tabler/icons-react";
 import api, { handleApiAuthError } from "../services/api";
 import PasswordField from "../components/PasswordField";
 import PageHeader from "../components/PageHeader";
@@ -203,7 +204,7 @@ function ProfilePage() {
     <div className="page-container dashboard-page">
       <div className="dashboard-wrapper">
         <PageHeader
-          icon="PR"
+          icon={IconSettings}
           eyebrowKey="profile.eyebrow"
           titleKey="profile.title"
           subtitleKey="profile.subtitle"

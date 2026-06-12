@@ -9603,3 +9603,66 @@ button,
   border-color: rgba(255, 255, 255, 0.10);
   color: #f0f0f0;
 }
+
+/* ================================================================
+   BUDGET KPI STAT CARDS — Progress bars and icon badges
+   ================================================================ */
+
+.budget-kpi-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.budget-kpi-icon {
+  width: 30px;
+  height: 30px;
+  border-radius: 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.budget-kpi-icon-income  { background: rgba(22, 163, 74, 0.12);  color: var(--fintech-emerald); }
+.budget-kpi-icon-expense { background: rgba(220, 38, 38, 0.12);  color: var(--fintech-danger);  }
+.budget-kpi-icon-balance { background: rgba(13, 148, 136, 0.12); color: var(--fintech-teal);    }
+.budget-kpi-icon-top     { background: rgba(124, 58, 237, 0.12); color: var(--purple);          }
+
+.budget-kpi-bottom {
+  display: flex;
+  flex-direction: column;
+}
+
+.budget-progress-track {
+  width: 100%;
+  height: 5px;
+  border-radius: 99px;
+  background: rgba(0, 0, 0, 0.07);
+  overflow: hidden;
+  margin-top: 10px;
+}
+
+.budget-progress-fill {
+  height: 100%;
+  border-radius: 99px;
+  transition: width 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.budget-progress-fill-expense { background: var(--fintech-danger); }
+.budget-progress-fill-balance { background: var(--fintech-teal);   }
+
+.budget-kpi-note {
+  display: block;
+  margin-top: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  color: var(--text-faint);
+  position: relative;
+  z-index: 1;
+}
+
+:root[data-theme="dark"] .app-shell-main .budget-progress-track {
+  background: rgba(255, 255, 255, 0.08);
+}

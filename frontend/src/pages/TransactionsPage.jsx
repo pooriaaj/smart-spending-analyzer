@@ -15,6 +15,7 @@ import {
   TextInput,
   Title,
 } from "@mantine/core";
+import { IconReceipt2 } from "@tabler/icons-react";
 import api, { handleApiAuthError } from "../services/api";
 import AccountSelector from "../components/AccountSelector";
 import PageHeader from "../components/PageHeader";
@@ -506,7 +507,7 @@ function TransactionsPage() {
     <div className="page-container dashboard-page">
       <div className="dashboard-wrapper">
         <PageHeader
-          icon="TX"
+          icon={IconReceipt2}
           titleKey="common.transactions"
           subtitleKey="headers.transactionsSubtitle"
           actions={(

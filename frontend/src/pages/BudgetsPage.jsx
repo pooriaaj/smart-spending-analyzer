@@ -1,5 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
+import {
+  IconAlertTriangle,
+  IconTarget,
+  IconTrendingDown,
+  IconWallet,
+} from "@tabler/icons-react";
 import api, { handleApiAuthError } from "../services/api";
 import AccountSelector from "../components/AccountSelector";
 import PageHeader from "../components/PageHeader";
@@ -266,6 +272,11 @@ function BudgetsPage() {
   };
 
   const budgetCards = budgetData?.budgets || [];
+
+  const spentPercent =
+    budgetSummary.total_budgeted > 0
+      ? (budgetSummary.total_spent / budgetSummary.total_budgeted) * 100
+      : 0;
   const budgetInsights = budgetData?.insights || [];
   const suggestedBudgets = budgetData?.suggestions || [];
   const previousMonth = useMemo(() => shiftMonthLabel(month, -1), [month]);
@@ -506,7 +517,7 @@ function BudgetsPage() {
     <div className="page-container dashboard-page">
       <div className="dashboard-wrapper">
         <PageHeader
-          icon="$"
+          icon={IconTarget}
           titleKey="common.budgets"
           subtitleKey="headers.budgetsSubtitle"
         />
@@ -682,22 +693,59 @@ function BudgetsPage() {
 
         <div className="summary-grid">
           <div className="summary-card income-card">
-            <span className="card-label">{t("dashboard.budgeted")}</span>
+            <div className="budget-kpi-header">
+              <span className="card-label">{t("dashboard.budgeted")}</span>
+              <span className="budget-kpi-icon budget-kpi-icon-income" aria-hidden="true">
+                <IconTarget size={15} stroke={2} />
+              </span>
+            </div>
             <p>${budgetSummary.total_budgeted.toFixed(2)}</p>
           </div>
 
           <div className="summary-card expense-card">
-            <span className="card-label">{t("dashboard.spent")}</span>
-            <p>${budgetSummary.total_spent.toFixed(2)}</p>
+            <div className="budget-kpi-header">
+              <span className="card-label">{t("dashboard.spent")}</span>
+              <span className="budget-kpi-icon budget-kpi-icon-expense" aria-hidden="true">
+                <IconTrendingDown size={15} stroke={2} />
+              </span>
+            </div>
+            <div className="budget-kpi-bottom">
+              <p>${budgetSummary.total_spent.toFixed(2)}</p>
+              <div className="budget-progress-track">
+                <div
+                  className="budget-progress-fill budget-progress-fill-expense"
+                  style={{ width: `${Math.min(100, spentPercent)}%` }}
+                />
+              </div>
+              <span className="budget-kpi-note">{t("budgets.used", { percent: spentPercent.toFixed(0) })}</span>
+            </div>
           </div>
 
           <div className="summary-card balance-card">
-            <span className="card-label">{t("dashboard.remaining")}</span>
-            <p>${budgetSummary.total_remaining.toFixed(2)}</p>
+            <div className="budget-kpi-header">
+              <span className="card-label">{t("dashboard.remaining")}</span>
+              <span className="budget-kpi-icon budget-kpi-icon-balance" aria-hidden="true">
+                <IconWallet size={15} stroke={2} />
+              </span>
+            </div>
+            <div className="budget-kpi-bottom">
+              <p>${budgetSummary.total_remaining.toFixed(2)}</p>
+              <div className="budget-progress-track">
+                <div
+                  className="budget-progress-fill budget-progress-fill-balance"
+                  style={{ width: `${Math.max(0, Math.min(100, 100 - spentPercent))}%` }}
+                />
+              </div>
+            </div>
           </div>
 
           <div className="summary-card top-card">
-            <span className="card-label">{t("dashboard.watchlist")}</span>
+            <div className="budget-kpi-header">
+              <span className="card-label">{t("dashboard.watchlist")}</span>
+              <span className="budget-kpi-icon budget-kpi-icon-top" aria-hidden="true">
+                <IconAlertTriangle size={15} stroke={2} />
+              </span>
+            </div>
             <p>
               {t("dashboard.overAtRisk", {
                 over: budgetSummary.over_budget_count,

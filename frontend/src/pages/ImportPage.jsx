@@ -1,5 +1,6 @@
 import { useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { IconCloudUpload } from "@tabler/icons-react";
 import api, { handleApiAuthError } from "../services/api";
 import AccountSelector from "../components/AccountSelector";
 import PageHeader from "../components/PageHeader";
@@ -891,7 +892,7 @@ function ImportPage() {
     <div className="page-container dashboard-page">
       <div className="dashboard-wrapper">
         <PageHeader
-          icon="UP"
+          icon={IconCloudUpload}
           titleKey="common.smartImport"
           subtitleKey="headers.importSubtitle"
         />
