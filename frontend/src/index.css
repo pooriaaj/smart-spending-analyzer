@@ -9740,3 +9740,15 @@ button,
 :root[data-theme="dark"] .app-shell-main .profile-tabs-card {
   background: #2d2d2d;
 }
+
+/* ================================================================
+   TRANSACTIONS PAGE — Fresh start danger card
+   ================================================================ */
+
+.transaction-fresh-start-card {
+  border-top: 3px solid var(--fintech-danger) !important;
+}
+
+:root[data-theme="dark"] .app-shell-main .transaction-fresh-start-card {
+  background: #2d2d2d;
+}

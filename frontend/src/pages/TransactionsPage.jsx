@@ -521,79 +521,16 @@ function TransactionsPage() {
           <TransactionForm onTransactionCreated={fetchTransactions} />
         </div>
 
-        <div className="filter-card">
-          <div className="section-header">
-            <h2>{t("dashboard.accountView")}</h2>
-            <p>{t("transactions.accountViewDetail")}</p>
-          </div>
-          <AccountSelector value={selectedAccountId} onChange={setSelectedAccountId} allowAll={true} />
-          {scopeNotice && <div className="bulk-message-box">{scopeNotice}</div>}
-        </div>
-
-        <div className="filter-card fresh-start-card">
-          <div className="section-header">
-            <h2>{t("transactions.freshStart")}</h2>
-            <p>{t("transactions.freshStartDetail")}</p>
-          </div>
-
-          <div className="fresh-start-grid">
-            <div>
-              <label htmlFor="fresh-start-date">{t("transactions.keepFrom")}</label>
-              <input
-                id="fresh-start-date"
-                type="date"
-                value={freshStartDate}
-                onChange={(event) => setFreshStartDate(event.target.value)}
-              />
-              <p className="budget-inline-note">
-                {t("transactions.freshStartDeleteNote")}
-              </p>
-              {freshStartCountLoading && (
-                <p className="budget-inline-note">{t("transactions.freshStartCountLoading")}</p>
-              )}
-              {!freshStartCountLoading && freshStartCount !== null && (
-                <p className="budget-inline-note" style={{ color: freshStartCount > 0 ? "var(--mantine-color-red-6)" : undefined }}>
-                  {t("transactions.freshStartCountNote").replace("{count}", freshStartCount)}
-                </p>
-              )}
-            </div>
-
-            <div>
-              <label htmlFor="fresh-start-confirm">{t("transactions.confirmation")}</label>
-              <input
-                id="fresh-start-confirm"
-                type="text"
-                value={freshStartConfirm}
-                onChange={(event) => setFreshStartConfirm(event.target.value)}
-                placeholder={t("transactions.typeStartFresh")}
-              />
-              <p className="budget-inline-note">
-                {t("transactions.freshStartCarefulNote")}
-              </p>
-            </div>
-          </div>
-
-          <div className="smart-actions-row">
-            <button
-              type="button"
-              className="delete-button"
-              onClick={handleFreshStart}
-              disabled={freshStartLoading || !freshStartDate}
-            >
-              {freshStartLoading ? t("transactions.cleaning") : t("transactions.deleteOldHistory")}
-            </button>
-            <button
-              type="button"
-              className="secondary-button"
-              onClick={() => navigate("/import")}
-            >
-              {t("transactions.reconcileThisMonth")}
-            </button>
-          </div>
-
-          {freshStartMessage && <div className="bulk-message-box">{freshStartMessage}</div>}
-          {freshStartError && <p className="error-text">{freshStartError}</p>}
-        </div>
+        <Card className="filter-card" radius="xl" p={{ base: "md", md: "lg" }}>
+          <Stack gap="md">
+            <Box>
+              <Title order={2} size="h3">{t("dashboard.accountView")}</Title>
+              <Text size="sm" c="dimmed">{t("transactions.accountViewDetail")}</Text>
+            </Box>
+            <AccountSelector value={selectedAccountId} onChange={setSelectedAccountId} allowAll={true} />
+            {scopeNotice && <div className="bulk-message-box">{scopeNotice}</div>}
+          </Stack>
+        </Card>
 
         <Card className="filter-card transaction-filter-card" radius="xl" p={{ base: "md", md: "lg" }}>
           <Stack gap="md">
@@ -903,6 +840,73 @@ function TransactionsPage() {
                 {renderTransactionPagination("transaction-pagination-bottom")}
               </Box>
             )}
+          </Stack>
+        </Card>
+
+        <Card className="transaction-fresh-start-card" radius="xl" p={{ base: "md", md: "lg" }}>
+          <Stack gap="md">
+            <Box>
+              <Title order={2} size="h3">{t("transactions.freshStart")}</Title>
+              <Text size="sm" c="dimmed">{t("transactions.freshStartDetail")}</Text>
+            </Box>
+
+            <div className="fresh-start-grid">
+              <div>
+                <label htmlFor="fresh-start-date">{t("transactions.keepFrom")}</label>
+                <input
+                  id="fresh-start-date"
+                  type="date"
+                  value={freshStartDate}
+                  onChange={(event) => setFreshStartDate(event.target.value)}
+                />
+                <p className="budget-inline-note">
+                  {t("transactions.freshStartDeleteNote")}
+                </p>
+                {freshStartCountLoading && (
+                  <p className="budget-inline-note">{t("transactions.freshStartCountLoading")}</p>
+                )}
+                {!freshStartCountLoading && freshStartCount !== null && (
+                  <p className="budget-inline-note" style={{ color: freshStartCount > 0 ? "var(--mantine-color-red-6)" : undefined }}>
+                    {t("transactions.freshStartCountNote").replace("{count}", freshStartCount)}
+                  </p>
+                )}
+              </div>
+
+              <div>
+                <label htmlFor="fresh-start-confirm">{t("transactions.confirmation")}</label>
+                <input
+                  id="fresh-start-confirm"
+                  type="text"
+                  value={freshStartConfirm}
+                  onChange={(event) => setFreshStartConfirm(event.target.value)}
+                  placeholder={t("transactions.typeStartFresh")}
+                />
+                <p className="budget-inline-note">
+                  {t("transactions.freshStartCarefulNote")}
+                </p>
+              </div>
+            </div>
+
+            <div className="smart-actions-row">
+              <button
+                type="button"
+                className="delete-button"
+                onClick={handleFreshStart}
+                disabled={freshStartLoading || !freshStartDate}
+              >
+                {freshStartLoading ? t("transactions.cleaning") : t("transactions.deleteOldHistory")}
+              </button>
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={() => navigate("/import")}
+              >
+                {t("transactions.reconcileThisMonth")}
+              </button>
+            </div>
+
+            {freshStartMessage && <div className="bulk-message-box">{freshStartMessage}</div>}
+            {freshStartError && <p className="error-text">{freshStartError}</p>}
           </Stack>
         </Card>
       </div>
