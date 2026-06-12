@@ -9666,3 +9666,30 @@ button,
 :root[data-theme="dark"] .app-shell-main .budget-progress-track {
   background: rgba(255, 255, 255, 0.08);
 }
+
+/* ================================================================
+   ACCOUNTS PAGE — Type accents and balance color coding
+   ================================================================ */
+
+.account-summary-item-income  { border-left: 3px solid var(--fintech-emerald); }
+.account-summary-item-expense { border-left: 3px solid var(--fintech-danger);  }
+.account-summary-item-balance { border-left: 3px solid var(--fintech-teal);    }
+.account-summary-item-category { border-left: 3px solid var(--purple);         }
+
+.account-balance-positive {
+  color: var(--fintech-emerald);
+  font-size: 17px;
+}
+
+.account-balance-negative {
+  color: var(--fintech-danger);
+  font-size: 17px;
+}
+
+:root[data-theme="dark"] .app-shell-main .account-balance-positive {
+  color: #4ade80;
+}
+
+:root[data-theme="dark"] .app-shell-main .account-balance-negative {
+  color: #f87171;
+}

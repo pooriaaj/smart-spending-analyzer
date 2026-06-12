@@ -1,11 +1,22 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { IconBuildingBank } from "@tabler/icons-react";
 import api, { handleApiAuthError } from "../services/api";
+import PageHeader from "../components/PageHeader";
 import { setSelectedAccountId } from "../services/accountStorage";
 import { useLanguage } from "../i18n/LanguageContext";
 import { getAccountsFromResponse } from "../utils/accountResponses";
 import { formatAccountName, formatAccountType, formatCategoryLabel } from "../utils/displayLabels";
 import { getApiErrorMessage } from "../utils/errorUtils";
+
+const ACCOUNT_TYPE_TONE = {
+  chequing: "income",
+  savings: "balance",
+  credit_card: "expense",
+  cash: "category",
+  business: "balance",
+  other: "category",
+};
 
 const ACCOUNT_TYPE_OPTIONS = [
   "chequing",
@@ -165,19 +176,16 @@ function AccountsPage() {
   return (
     <div className="page-container dashboard-page">
       <div className="dashboard-wrapper">
-        <div className="dashboard-hero">
-          <div>
-            <p className="eyebrow-text">{t("common.appName")}</p>
-            <h1>{t("common.accounts")}</h1>
-            <p className="hero-subtitle">{t("headers.accountsSubtitle")}</p>
-          </div>
-
-          <div className="header-actions">
+        <PageHeader
+          icon={IconBuildingBank}
+          titleKey="common.accounts"
+          subtitleKey="headers.accountsSubtitle"
+          actions={(
             <button className="secondary-button" onClick={() => navigate("/dashboard")}>
               {t("common.backToDashboard")}
             </button>
-          </div>
-        </div>
+          )}
+        />
 
         <div className="dashboard-card large-card">
           <div className="section-header">
@@ -218,8 +226,12 @@ function AccountsPage() {
             <div className="empty-state"><p>{t("accounts.noAccounts")}</p></div>
           ) : (
             <div className="account-summary-list">
-              {visibleAccounts.map((account) => (
-                <div key={account.id} className="account-summary-item">
+              {visibleAccounts.map((account) => {
+                const typeTone = ACCOUNT_TYPE_TONE[account.type] || "category";
+                const balance = Number(account.balance || 0);
+
+                return (
+                <div key={account.id} className={`account-summary-item account-summary-item-${typeTone}`}>
                   <div className="account-summary-top">
                     {editingAccounts[account.id] ? (
                       <div className="account-edit-form">
@@ -313,7 +325,9 @@ function AccountsPage() {
                     </div>
                     <div>
                       <span>{t("common.balance")}</span>
-                      <strong>${Number(account.balance || 0).toFixed(2)}</strong>
+                      <strong className={balance >= 0 ? "account-balance-positive" : "account-balance-negative"}>
+                        ${balance.toFixed(2)}
+                      </strong>
                     </div>
                   </div>
 
@@ -326,7 +340,8 @@ function AccountsPage() {
                       : t("accounts.noExpenseCategory")}
                   </p>
                 </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>
