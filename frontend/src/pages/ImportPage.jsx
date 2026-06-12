@@ -1,6 +1,7 @@
 import { useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { IconCloudUpload } from "@tabler/icons-react";
+import { Box, Card, Stack, Text, Title } from "@mantine/core";
 import api, { handleApiAuthError } from "../services/api";
 import AccountSelector from "../components/AccountSelector";
 import PageHeader from "../components/PageHeader";
@@ -897,20 +898,21 @@ function ImportPage() {
           subtitleKey="headers.importSubtitle"
         />
 
-        <div className="filter-card">
-          <div className="section-header">
-            <h2>{t("import.destination")}</h2>
-            <p>{t("import.destinationDetail")}</p>
-          </div>
-
-          <AccountSelector
-            value={selectedAccountId}
-            onChange={setSelectedAccountId}
-            allowAll={false}
-            label={t("common.targetAccount")}
-            persistSelection={false}
-          />
-        </div>
+        <Card className="filter-card" radius="xl" p={{ base: "md", md: "lg" }}>
+          <Stack gap="md">
+            <Box>
+              <Title order={2} size="h3">{t("import.destination")}</Title>
+              <Text size="sm" c="dimmed">{t("import.destinationDetail")}</Text>
+            </Box>
+            <AccountSelector
+              value={selectedAccountId}
+              onChange={setSelectedAccountId}
+              allowAll={false}
+              label={t("common.targetAccount")}
+              persistSelection={false}
+            />
+          </Stack>
+        </Card>
 
         <div className="dashboard-card large-card">
           <div className="section-header">
