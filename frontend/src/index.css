@@ -115,7 +115,7 @@ a {
   font-weight: 700;
   letter-spacing: 0.14em;
   text-transform: uppercase;
-  color: var(--blue);
+  color: var(--fintech-teal);
 }
 
 .dashboard-hero h1 {
@@ -167,8 +167,8 @@ a {
   letter-spacing: -0.03em;
   background:
     radial-gradient(circle at 28% 20%, rgba(255, 255, 255, 0.34), transparent 24%),
-    linear-gradient(135deg, #0f766e 0%, #2563eb 52%, #111827 100%);
-  box-shadow: 0 18px 36px rgba(13, 148, 136, 0.2);
+    linear-gradient(135deg, #0f766e 0%, #14b8a6 60%, #0d9488 100%);
+  box-shadow: 0 18px 36px rgba(13, 148, 136, 0.28);
 }
 
 .professional-header-actions {
@@ -313,6 +313,19 @@ a {
 
 .section-header {
   margin-bottom: 14px;
+  padding-left: 14px;
+  position: relative;
+}
+
+.section-header::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 3px;
+  bottom: 3px;
+  width: 3px;
+  border-radius: 2px;
+  background: var(--fintech-teal);
 }
 
 .filter-bar {

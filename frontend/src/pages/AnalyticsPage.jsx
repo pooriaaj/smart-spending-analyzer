@@ -88,7 +88,7 @@ const CASHFLOW_NEUTRAL_DESCRIPTION_MARKERS = [
   "virement interac",
   "virement en ligne",
 ];
-const CATEGORY_PIE_COLORS = ["#60a5fa", "#34d399", "#f87171", "#fbbf24", "#a78bfa"];
+const CATEGORY_PIE_COLORS = ["#14b8a6", "#4ade80", "#f87171", "#fbbf24", "#a78bfa"];
 
 function toArray(value) {
   return Array.isArray(value) ? value : [];
