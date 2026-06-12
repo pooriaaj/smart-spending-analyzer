@@ -9799,3 +9799,50 @@ button,
   background: #2d2d2d;
   border-color: rgba(255, 255, 255, 0.08);
 }
+
+/* ================================================================
+   ANALYTICS HERO — Subtle gradient to match page header style
+   ================================================================ */
+
+.overview-page-shell .overview-hero {
+  background: linear-gradient(135deg, #ffffff 0%, #f8fbfd 60%, #edf7f5 100%) !important;
+}
+
+:root[data-theme="dark"] .overview-page-shell .overview-hero {
+  background: linear-gradient(135deg, #2d2d2d 0%, #2a3030 60%, #252e2d 100%) !important;
+}
+
+/* ================================================================
+   SIDEBAR — Subtle gradient for premium feel
+   ================================================================ */
+
+.app-shell-navbar {
+  background: linear-gradient(180deg, #ffffff 0%, #f9fbfc 100%);
+}
+
+:root[data-theme="dark"] .app-shell-navbar {
+  background: linear-gradient(180deg, #262626 0%, #222222 100%);
+}
+
+/* ================================================================
+   NAV LINK ACTIVE STATE — stronger teal accent
+   ================================================================ */
+
+.app-shell-nav-link[data-active] {
+  background: rgba(15, 118, 110, 0.08) !important;
+  border-left: 3px solid var(--fintech-teal) !important;
+  border-radius: 0 12px 12px 0 !important;
+  padding-left: calc(var(--mantine-spacing-sm) - 3px) !important;
+}
+
+:root[data-theme="dark"] .app-shell-nav-link[data-active] {
+  background: rgba(45, 212, 191, 0.1) !important;
+}
+
+.app-shell-nav-link[data-active] .mantine-NavLink-label {
+  color: var(--fintech-teal) !important;
+}
+
+:root[data-theme="dark"] .app-shell-nav-link[data-active] .mantine-NavLink-label {
+  color: #2dd4bf !important;
+}
