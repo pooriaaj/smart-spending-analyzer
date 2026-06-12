@@ -1425,10 +1425,10 @@ function ImportPage() {
 
             {previewLearningGroups.length > 0 && (
               <div className="import-learning-panel">
-                <div className="section-header">
-                  <h3>{t("import.reviewSimilarGroupsTitle")}</h3>
-                  <p>{t("import.reviewSimilarGroupsDetail")}</p>
-                </div>
+                <Box className="section-header" mb="sm">
+                  <Title order={3} size="h4">{t("import.reviewSimilarGroupsTitle")}</Title>
+                  <Text size="sm" c="dimmed">{t("import.reviewSimilarGroupsDetail")}</Text>
+                </Box>
 
                 <div className="import-learning-grid">
                   {previewLearningGroups.map((group) => {
