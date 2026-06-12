@@ -579,25 +579,26 @@ function BudgetsPage() {
         </Card>
 
         {suggestedBudgets.length > 0 && (
-          <div className="dashboard-card">
-            <div className="section-header">
-              <div>
-                <h2>{t("budgets.suggestedBudgets")}</h2>
-                <p>{t("budgets.suggestedBudgetsDetail")}</p>
-              </div>
-              <div className="budget-section-actions">
-                <button
-                  type="button"
-                  className="secondary-button"
-                  onClick={handleApplyAllSuggestions}
-                  disabled={bulkApplyingKey === "suggestions"}
-                >
-                  {bulkApplyingKey === "suggestions"
-                    ? t("transactions.applying")
-                    : t("budgets.applyAllSuggestions")}
-                </button>
-              </div>
-            </div>
+          <Card className="filter-card" radius="xl" p={{ base: "md", md: "lg" }}>
+            <Stack gap="md">
+              <Box className="section-header">
+                <div>
+                  <Title order={2} size="h3">{t("budgets.suggestedBudgets")}</Title>
+                  <Text size="sm" c="dimmed">{t("budgets.suggestedBudgetsDetail")}</Text>
+                </div>
+                <div className="budget-section-actions">
+                  <button
+                    type="button"
+                    className="secondary-button"
+                    onClick={handleApplyAllSuggestions}
+                    disabled={bulkApplyingKey === "suggestions"}
+                  >
+                    {bulkApplyingKey === "suggestions"
+                      ? t("transactions.applying")
+                      : t("budgets.applyAllSuggestions")}
+                  </button>
+                </div>
+              </Box>
 
             <div className="budget-suggestion-grid">
               {suggestedBudgets.map((suggestion) => (
@@ -644,7 +645,8 @@ function BudgetsPage() {
                 </div>
               ))}
             </div>
-          </div>
+            </Stack>
+          </Card>
         )}
 
         <Card className="filter-card" radius="xl" p={{ base: "md", md: "lg" }}>
@@ -765,28 +767,29 @@ function BudgetsPage() {
         )}
 
         {budgetInsights.length > 0 && (
-          <div className="dashboard-card">
-            <div className="section-header">
-              <div>
-                <h2>{t("budgets.budgetMoves")}</h2>
-                <p>{t("budgets.budgetMovesDetail")}</p>
-              </div>
-              <div className="budget-section-actions">
-                <button
-                  type="button"
-                  className="secondary-button"
-                  onClick={handleApplyAllInsightTargets}
-                  disabled={
-                    bulkApplyingKey === "insights" ||
-                    !budgetInsights.some((insight) => insight.recommended_amount != null)
-                  }
-                >
-                  {bulkApplyingKey === "insights"
-                    ? t("transactions.applying")
-                    : t("budgets.applyAllTargets")}
-                </button>
-              </div>
-            </div>
+          <Card className="filter-card" radius="xl" p={{ base: "md", md: "lg" }}>
+            <Stack gap="md">
+              <Box className="section-header">
+                <div>
+                  <Title order={2} size="h3">{t("budgets.budgetMoves")}</Title>
+                  <Text size="sm" c="dimmed">{t("budgets.budgetMovesDetail")}</Text>
+                </div>
+                <div className="budget-section-actions">
+                  <button
+                    type="button"
+                    className="secondary-button"
+                    onClick={handleApplyAllInsightTargets}
+                    disabled={
+                      bulkApplyingKey === "insights" ||
+                      !budgetInsights.some((insight) => insight.recommended_amount != null)
+                    }
+                  >
+                    {bulkApplyingKey === "insights"
+                      ? t("transactions.applying")
+                      : t("budgets.applyAllTargets")}
+                  </button>
+                </div>
+              </Box>
 
             <div className="budget-insight-list">
               {budgetInsights.map((insight) => {
@@ -837,7 +840,8 @@ function BudgetsPage() {
                 );
               })}
             </div>
-          </div>
+            </Stack>
+          </Card>
         )}
 
         <Card className="filter-card" radius="xl" p={{ base: "md", md: "lg" }}>
