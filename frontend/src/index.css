@@ -9922,3 +9922,35 @@ button,
 :root[data-theme="dark"] .app-shell-main .transactions-table-wrapper {
   border-color: rgba(255, 255, 255, 0.06);
 }
+
+/* ================================================================
+   REMAINING NAVY DARK MODE OVERRIDES — budget-card, import chips
+   ================================================================ */
+
+:root[data-theme="dark"] .app-shell-main .budget-card {
+  background: #363636;
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+:root[data-theme="dark"] .app-shell-main .import-preview-stat-card {
+  background: #363636;
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+:root[data-theme="dark"] .app-shell-main .import-filter-chip {
+  background: #363636;
+  border-color: rgba(255, 255, 255, 0.10);
+  color: #c0c0c0;
+}
+
+:root[data-theme="dark"] .app-shell-main .account-edit-form input,
+:root[data-theme="dark"] .app-shell-main .account-edit-form select {
+  background: #383838;
+  border-color: rgba(255, 255, 255, 0.12);
+  color: #f0f0f0;
+}
+
+:root[data-theme="dark"] .app-shell-main .budget-pace-metrics,
+:root[data-theme="dark"] .app-shell-main .budget-projection-metrics {
+  color: #c0c0c0;
+}
