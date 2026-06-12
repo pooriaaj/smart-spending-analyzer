@@ -17,7 +17,7 @@ function PageHeader({
     ? t(eyebrowKey)
     : (eyebrow ?? t("common.appName"));
 
-  const IconContent = typeof icon === "function"
+  const IconContent = typeof icon !== "string"
     ? (() => { const Icon = icon; return <Icon size={26} stroke={1.6} />; })()
     : icon;
 
