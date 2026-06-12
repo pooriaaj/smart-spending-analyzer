@@ -914,11 +914,12 @@ function ImportPage() {
           </Stack>
         </Card>
 
-        <div className="dashboard-card large-card">
-          <div className="section-header">
-            <h2>{t("import.uploadFiles")}</h2>
-            <p>{t("import.uploadFilesDetail")}</p>
-          </div>
+        <Card className="filter-card" radius="xl" p={{ base: "md", md: "lg" }}>
+          <Stack gap="md">
+            <Box>
+              <Title order={2} size="h3">{t("import.uploadFiles")}</Title>
+              <Text size="sm" c="dimmed">{t("import.uploadFilesDetail")}</Text>
+            </Box>
 
           <div className="import-upload-card">
             <input
@@ -1099,14 +1100,16 @@ function ImportPage() {
               </div>
             )}
           </div>
-        </div>
+          </Stack>
+        </Card>
 
         {importResult?.status === "draft_review" && receiptDraft && (
-          <div className="dashboard-card large-card">
-            <div className="section-header">
-              <h2>{t("import.reviewReceiptDraft")}</h2>
-              <p>{t("import.reviewReceiptDraftDetail")}</p>
-            </div>
+          <Card className="filter-card" radius="xl" p={{ base: "md", md: "lg" }}>
+            <Stack gap="md">
+              <Box>
+                <Title order={2} size="h3">{t("import.reviewReceiptDraft")}</Title>
+                <Text size="sm" c="dimmed">{t("import.reviewReceiptDraftDetail")}</Text>
+              </Box>
 
             <div className="transaction-form">
               <input
@@ -1183,15 +1186,17 @@ function ImportPage() {
                 </ul>
               </div>
             )}
-          </div>
+            </Stack>
+          </Card>
         )}
 
         {importResult?.status === "table_review" && (
-          <div className="dashboard-card large-card">
-            <div className="section-header">
-              <h2>{t("import.reviewStatementRows")}</h2>
-              <p>{t("import.reviewStatementRowsDetail")}</p>
-            </div>
+          <Card className="filter-card" radius="xl" p={{ base: "md", md: "lg" }}>
+            <Stack gap="md">
+              <Box>
+                <Title order={2} size="h3">{t("import.reviewStatementRows")}</Title>
+                <Text size="sm" c="dimmed">{t("import.reviewStatementRowsDetail")}</Text>
+              </Box>
 
             <div className="import-preview-toolbar">
               <div className="import-preview-summary">
@@ -1694,7 +1699,8 @@ function ImportPage() {
                 </ul>
               </div>
             )}
-          </div>
+            </Stack>
+          </Card>
         )}
       </div>
     </div>
