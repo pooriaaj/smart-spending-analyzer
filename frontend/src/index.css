@@ -6427,9 +6427,7 @@ textarea {
 }
 
 :root[data-theme="dark"] .app-shell-main {
-  background:
-    linear-gradient(180deg, rgba(11, 18, 32, 0.96), rgba(15, 23, 42, 0.98)),
-    #0b1220;
+  background: #1a1a1a;
 }
 
 :root[data-theme="dark"] .app-shell-main .dashboard-hero,
@@ -6444,8 +6442,8 @@ textarea {
 :root[data-theme="dark"] .app-shell-main .transaction-filter-card,
 :root[data-theme="dark"] .app-shell-main .transaction-ledger-card,
 :root[data-theme="dark"] .app-shell-main .transaction-mobile-card {
-  border-color: rgba(148, 163, 184, 0.16);
-  background: rgba(15, 23, 42, 0.94);
+  border-color: rgba(255, 255, 255, 0.09);
+  background: #2d2d2d;
 }
 
 :root[data-theme="dark"] .app-shell-main h1,
@@ -6453,7 +6451,7 @@ textarea {
 :root[data-theme="dark"] .app-shell-main h3,
 :root[data-theme="dark"] .app-shell-main .mantine-Title-root,
 :root[data-theme="dark"] .app-shell-main .overview-stat-value {
-  color: #f8fafc;
+  color: #f0f0f0;
 }
 
 /* ===== Targeted product polish: analytics signals ===== */
@@ -7561,9 +7559,7 @@ textarea {
 }
 
 :root[data-theme="dark"] .app-shell-main {
-  background:
-    linear-gradient(180deg, rgba(11, 18, 32, 0.96), rgba(15, 23, 42, 0.98)),
-    #0b1220;
+  background: #1a1a1a;
 }
 
 :root[data-theme="dark"] .app-shell-main .dashboard-hero,
@@ -7578,8 +7574,8 @@ textarea {
 :root[data-theme="dark"] .app-shell-main .transaction-filter-card,
 :root[data-theme="dark"] .app-shell-main .transaction-ledger-card,
 :root[data-theme="dark"] .app-shell-main .transaction-mobile-card {
-  border-color: rgba(148, 163, 184, 0.16);
-  background: rgba(15, 23, 42, 0.94);
+  border-color: rgba(255, 255, 255, 0.09);
+  background: #2d2d2d;
 }
 
 :root[data-theme="dark"] .app-shell-main h1,
@@ -7587,7 +7583,7 @@ textarea {
 :root[data-theme="dark"] .app-shell-main h3,
 :root[data-theme="dark"] .app-shell-main .mantine-Title-root,
 :root[data-theme="dark"] .app-shell-main .overview-stat-value {
-  color: #f8fafc;
+  color: #f0f0f0;
 }
 
 /* Final UI polish: shared fintech SaaS finish. */
@@ -8269,15 +8265,13 @@ button,
 }
 
 :root[data-theme="dark"] .app-shell-main {
-  background:
-    linear-gradient(180deg, rgba(11, 18, 32, 0.96), rgba(15, 23, 42, 0.98)),
-    #0b1220;
+  background: #1a1a1a;
 }
 
 :root[data-theme="dark"] .app-shell-header,
 :root[data-theme="dark"] .app-shell-navbar {
-  border-color: rgba(148, 163, 184, 0.14);
-  background: rgba(15, 23, 42, 0.94);
+  border-color: rgba(255, 255, 255, 0.08);
+  background: #242424;
 }
 
 :root[data-theme="dark"] .app-shell-brand-copy h2,
@@ -8290,7 +8284,7 @@ button,
 :root[data-theme="dark"] .app-shell-main .overview-insight-value,
 :root[data-theme="dark"] .app-shell-main .overview-micro-value,
 :root[data-theme="dark"] .app-shell-main .summary-card strong {
-  color: #f8fafc;
+  color: #f0f0f0;
 }
 
 :root[data-theme="dark"] .app-shell-main .dashboard-hero,
@@ -8309,9 +8303,9 @@ button,
 :root[data-theme="dark"] .app-shell-main .receipt-draft-card,
 :root[data-theme="dark"] .auth-page .auth-card,
 :root[data-theme="dark"] .auth-shell .auth-card {
-  border-color: rgba(148, 163, 184, 0.16);
-  background: rgba(15, 23, 42, 0.94);
-  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.24);
+  border-color: rgba(255, 255, 255, 0.09);
+  background: #2d2d2d;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.3);
 }
 
 :root[data-theme="dark"] .app-shell-main .overview-chart-frame,
@@ -8334,8 +8328,8 @@ button,
 :root[data-theme="dark"] .app-shell-main .suggestion-box,
 :root[data-theme="dark"] .app-shell-main .assistant-answer-box,
 :root[data-theme="dark"] .app-shell-main .assistant-loading-message {
-  border-color: rgba(148, 163, 184, 0.16);
-  background: rgba(30, 41, 59, 0.72);
+  border-color: rgba(255, 255, 255, 0.08);
+  background: #363636;
 }
 
 :root[data-theme="dark"] .app-shell-main input:not([type="checkbox"]):not([type="radio"]),
@@ -8343,9 +8337,9 @@ button,
 :root[data-theme="dark"] .app-shell-main textarea,
 :root[data-theme="dark"] .app-shell-main .mantine-Input-input,
 :root[data-theme="dark"] .app-shell-main .assistant-input {
-  border-color: rgba(148, 163, 184, 0.2);
-  background-color: #111827;
-  color: #f8fafc;
+  border-color: rgba(255, 255, 255, 0.12);
+  background-color: #383838;
+  color: #f0f0f0;
 }
 
 :root[data-theme="dark"] .app-shell-main p,
@@ -8354,7 +8348,15 @@ button,
 :root[data-theme="dark"] .app-shell-main .mantine-Text-root[data-mantine-color="dimmed"],
 :root[data-theme="dark"] .app-shell-main .transactions-table td,
 :root[data-theme="dark"] .app-shell-main .overview-category-table td {
-  color: #cbd5e1;
+  color: #b0b0b0;
+}
+
+:root[data-theme="dark"] .app-shell-main .overview-category-link {
+  color: #2dd4bf;
+}
+
+:root[data-theme="dark"] .app-shell-main .overview-category-link:hover {
+  color: #5eead4;
 }
 
 :root[data-theme="dark"] .app-shell-main .secondary-button,
@@ -8362,9 +8364,9 @@ button,
 :root[data-theme="dark"] .app-shell-main .clear-filter-button,
 :root[data-theme="dark"] .app-shell-main .cancel-button,
 :root[data-theme="dark"] .app-shell-main .suggest-button {
-  border-color: rgba(148, 163, 184, 0.22);
-  background: rgba(15, 23, 42, 0.92);
-  color: #e2e8f0;
+  border-color: rgba(255, 255, 255, 0.12);
+  background: #363636;
+  color: #e0e0e0;
 }
 
 /* ===== Mantine Overview dashboard refresh ===== */
@@ -8773,13 +8775,13 @@ button,
 :root[data-theme="dark"] .app-shell,
 :root[data-theme="dark"] .app-shell-main,
 :root[data-theme="dark"] .app-shell-main .overview-page-shell {
-  background: #020617;
+  background: #1a1a1a;
 }
 
 :root[data-theme="dark"] .app-shell-header,
 :root[data-theme="dark"] .app-shell-navbar {
-  background: rgba(15, 23, 42, 0.96);
-  border-color: rgba(148, 163, 184, 0.14);
+  background: #242424;
+  border-color: rgba(255, 255, 255, 0.08);
 }
 
 :root[data-theme="dark"] .app-shell-brand-copy h2,
@@ -8792,7 +8794,7 @@ button,
 }
 
 :root[data-theme="dark"] .app-shell-nav-link:hover {
-  background: rgba(30, 41, 59, 0.84);
+  background: rgba(255, 255, 255, 0.06);
 }
 
 :root[data-theme="dark"] .app-shell-nav-link[data-active] {
@@ -9331,9 +9333,7 @@ button,
 }
 
 :root[data-theme="dark"] .app-shell-main {
-  background:
-    linear-gradient(180deg, rgba(11, 18, 32, 0.96), rgba(15, 23, 42, 0.98)),
-    #0b1220;
+  background: #1a1a1a;
 }
 
 :root[data-theme="dark"] .app-shell-main .dashboard-hero,
@@ -9348,8 +9348,8 @@ button,
 :root[data-theme="dark"] .app-shell-main .transaction-filter-card,
 :root[data-theme="dark"] .app-shell-main .transaction-ledger-card,
 :root[data-theme="dark"] .app-shell-main .transaction-mobile-card {
-  border-color: rgba(148, 163, 184, 0.16);
-  background: rgba(15, 23, 42, 0.94);
+  border-color: rgba(255, 255, 255, 0.09);
+  background: #2d2d2d;
 }
 
 :root[data-theme="dark"] .app-shell-main h1,
@@ -9357,5 +9357,5 @@ button,
 :root[data-theme="dark"] .app-shell-main h3,
 :root[data-theme="dark"] .app-shell-main .mantine-Title-root,
 :root[data-theme="dark"] .app-shell-main .overview-stat-value {
-  color: #f8fafc;
+  color: #f0f0f0;
 }

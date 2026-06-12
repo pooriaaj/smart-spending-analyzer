@@ -217,8 +217,8 @@ function AuthenticatedLayout({ children, theme, onThemeToggle }) {
             <Button
               type="button"
               radius="md"
-              color="dark"
-              variant="subtle"
+              color="gray"
+              variant="light"
               fullWidth
               onClick={handleLogout}
             >

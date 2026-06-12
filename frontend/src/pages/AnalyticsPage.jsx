@@ -469,13 +469,13 @@ function AnalyticsPage() {
     const isDark = themeMode === "dark";
 
     return {
-      text: isDark ? "#cbd5e1" : "#475569",
-      grid: isDark ? "rgba(148, 163, 184, 0.12)" : "rgba(15, 23, 42, 0.08)",
-      tooltipBg: isDark ? "rgba(15, 23, 42, 0.96)" : "rgba(255, 255, 255, 0.96)",
-      tooltipBorder: isDark ? "rgba(148, 163, 184, 0.16)" : "rgba(15, 23, 42, 0.08)",
+      text: isDark ? "#c0c0c0" : "#475569",
+      grid: isDark ? "rgba(255, 255, 255, 0.08)" : "rgba(15, 23, 42, 0.08)",
+      tooltipBg: isDark ? "#2d2d2d" : "rgba(255, 255, 255, 0.96)",
+      tooltipBorder: isDark ? "rgba(255, 255, 255, 0.12)" : "rgba(15, 23, 42, 0.08)",
       incomeBar: isDark ? "#4ade80" : "#16a34a",
       expenseBar: isDark ? "#f87171" : "#dc2626",
-      patternLine: isDark ? "#60a5fa" : "#2563eb",
+      patternLine: isDark ? "#2dd4bf" : "#0d9488",
       threeMonthLine: isDark ? "#fbbf24" : "#d97706",
       sixMonthLine: isDark ? "#a78bfa" : "#7c3aed",
     };
