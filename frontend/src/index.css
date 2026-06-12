@@ -9359,3 +9359,247 @@ button,
 :root[data-theme="dark"] .app-shell-main .overview-stat-value {
   color: #f0f0f0;
 }
+
+/* ================================================================
+   DARK MODE GRAY PALETTE — FINAL OVERRIDES
+   Replaces all remaining navy rgba(15,23,42,x) with gray palette.
+   Applied last to win over all earlier dark-mode blocks.
+   ================================================================ */
+
+/* --- Summary / budget stat cards --- */
+:root[data-theme="dark"] .app-shell-main .summary-card,
+:root[data-theme="dark"] .app-shell-main .income-card,
+:root[data-theme="dark"] .app-shell-main .expense-card,
+:root[data-theme="dark"] .app-shell-main .balance-card,
+:root[data-theme="dark"] .app-shell-main .top-card,
+:root[data-theme="dark"] .app-shell-main .analytics-summary-card {
+  background: #2d2d2d;
+  border-color: rgba(255, 255, 255, 0.08);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.28);
+}
+
+:root[data-theme="dark"] .app-shell-main .summary-card::before {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.04), transparent 55%);
+}
+
+:root[data-theme="dark"] .app-shell-main .income-card {
+  border-top-color: rgba(22, 163, 74, 0.55);
+}
+
+:root[data-theme="dark"] .app-shell-main .expense-card {
+  border-top-color: rgba(220, 38, 38, 0.55);
+}
+
+:root[data-theme="dark"] .app-shell-main .balance-card {
+  border-top-color: rgba(13, 148, 136, 0.55);
+}
+
+:root[data-theme="dark"] .app-shell-main .top-card {
+  border-top-color: rgba(124, 58, 237, 0.55);
+}
+
+:root[data-theme="dark"] .app-shell-main .balance-card .card-label {
+  background: rgba(13, 148, 136, 0.15);
+  color: #2dd4bf;
+}
+
+/* --- Accounts page --- */
+:root[data-theme="dark"] .app-shell-main .account-summary-item,
+:root[data-theme="dark"] .app-shell-main .account-comparison-item {
+  background: #363636;
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+:root[data-theme="dark"] .app-shell-main .account-comparison-leading {
+  border-color: rgba(45, 212, 191, 0.3);
+  box-shadow: 0 18px 36px rgba(13, 148, 136, 0.14);
+}
+
+:root[data-theme="dark"] .app-shell-main .account-comparison-badge {
+  background: rgba(13, 148, 136, 0.22);
+  color: #2dd4bf;
+}
+
+/* --- Budget page --- */
+:root[data-theme="dark"] .app-shell-main .budget-insight-item {
+  background: #363636;
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+:root[data-theme="dark"] .app-shell-main .budget-forecast-banner {
+  background: rgba(13, 148, 136, 0.12);
+  border-color: rgba(45, 212, 191, 0.18);
+}
+
+:root[data-theme="dark"] .app-shell-main .budget-suggestion-apply-button {
+  background: linear-gradient(135deg, #0d9488 0%, #14b8a6 100%);
+}
+
+/* --- Import page --- */
+:root[data-theme="dark"] .app-shell-main .import-learning-card {
+  background: #363636;
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+:root[data-theme="dark"] .app-shell-main .import-learning-panel {
+  background:
+    radial-gradient(circle at 12% 16%, rgba(45, 212, 191, 0.16), transparent 34%),
+    #2d2d2d;
+  border-color: rgba(45, 212, 191, 0.18);
+}
+
+:root[data-theme="dark"] .app-shell-main .import-learning-controls input {
+  background: #383838;
+  border-color: rgba(255, 255, 255, 0.12);
+  color: #f0f0f0;
+}
+
+:root[data-theme="dark"] .app-shell-main .learning-privacy-item {
+  background: #363636;
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+:root[data-theme="dark"] .app-shell-main .learning-privacy-note {
+  background: rgba(13, 148, 136, 0.12);
+  border-color: rgba(45, 212, 191, 0.2);
+  color: #99f6e4;
+}
+
+:root[data-theme="dark"] .app-shell-main .import-filter-chip-active {
+  background: rgba(13, 148, 136, 0.14);
+  border-color: rgba(45, 212, 191, 0.32);
+  color: #2dd4bf;
+  box-shadow: 0 8px 20px rgba(13, 148, 136, 0.12);
+}
+
+:root[data-theme="dark"] .app-shell-main .import-duplicate-box {
+  background: rgba(13, 148, 136, 0.12);
+  border-color: rgba(45, 212, 191, 0.22);
+  color: #2dd4bf;
+}
+
+/* --- Simulator cards --- */
+:root[data-theme="dark"] .app-shell-main .simulator-recurring-card,
+:root[data-theme="dark"] .app-shell-main .simulator-recurring-bundle,
+:root[data-theme="dark"] .app-shell-main .simulator-recommendation-card,
+:root[data-theme="dark"] .app-shell-main .simulator-recommendation-summary-card,
+:root[data-theme="dark"] .app-shell-main .simulator-recommendation-preview,
+:root[data-theme="dark"] .app-shell-main .simulator-checkpoint-card {
+  background: #363636;
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+:root[data-theme="dark"] .app-shell-main .simulator-preset-button {
+  background: #363636;
+  border-color: rgba(255, 255, 255, 0.08);
+  color: #e0e0e0;
+}
+
+/* --- Profile page: guide, pattern, recurring, pricing cards --- */
+:root[data-theme="dark"] .app-shell-main .feature-guide-item,
+:root[data-theme="dark"] .app-shell-main .pattern-metric-card,
+:root[data-theme="dark"] .app-shell-main .recurring-charge-card,
+:root[data-theme="dark"] .app-shell-main .pricing-card {
+  background: #363636;
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+:root[data-theme="dark"] .app-shell-main .product-guide-card {
+  background:
+    radial-gradient(circle at top left, rgba(45, 212, 191, 0.12), transparent 30%),
+    #363636;
+}
+
+/* --- Assistant page --- */
+:root[data-theme="dark"] .app-shell-main .assistant-chat-topbar,
+:root[data-theme="dark"] .app-shell-main .assistant-composer,
+:root[data-theme="dark"] .app-shell-main .assistant-chat-footer {
+  background: #242424;
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+:root[data-theme="dark"] .app-shell-main .assistant-thread {
+  background:
+    linear-gradient(180deg, rgba(40, 40, 40, 0.15), rgba(30, 30, 30, 0.08)),
+    radial-gradient(circle at bottom right, rgba(13, 148, 136, 0.12), transparent 35%);
+}
+
+:root[data-theme="dark"] .app-shell-main .assistant-message-assistant {
+  background: #2d2d2d;
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+:root[data-theme="dark"] .app-shell-main .assistant-preset-button,
+:root[data-theme="dark"] .app-shell-main .assistant-followup-button,
+:root[data-theme="dark"] .app-shell-main .assistant-action-button,
+:root[data-theme="dark"] .app-shell-main .assistant-analytics-link {
+  background: #363636;
+  color: #2dd4bf;
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+:root[data-theme="dark"] .app-shell-main .assistant-preset-button:hover,
+:root[data-theme="dark"] .app-shell-main .assistant-followup-button:hover,
+:root[data-theme="dark"] .app-shell-main .assistant-action-button:hover,
+:root[data-theme="dark"] .app-shell-main .assistant-analytics-link:hover {
+  background: rgba(13, 148, 136, 0.18);
+  border-color: rgba(45, 212, 191, 0.22);
+}
+
+:root[data-theme="dark"] .app-shell-main .assistant-message-scope,
+:root[data-theme="dark"] .app-shell-main .assistant-action-chip,
+:root[data-theme="dark"] .app-shell-main .assistant-followup-chip {
+  border-color: rgba(45, 212, 191, 0.22);
+  color: #2dd4bf;
+  background: rgba(13, 148, 136, 0.12);
+}
+
+:root[data-theme="dark"] .app-shell-main .assistant-message-link {
+  color: #2dd4bf;
+}
+
+:root[data-theme="dark"] .app-shell-main .assistant-mode-note {
+  background: #363636;
+  border-color: rgba(255, 255, 255, 0.08);
+  color: #b0b0b0;
+}
+
+/* --- Transactions table --- */
+:root[data-theme="dark"] .app-shell-main .transactions-table th {
+  background: #242424;
+  color: #909090;
+}
+
+:root[data-theme="dark"] .app-shell-main .transactions-table td,
+:root[data-theme="dark"] .app-shell-main .transactions-table th {
+  border-bottom-color: rgba(255, 255, 255, 0.06);
+}
+
+:root[data-theme="dark"] .app-shell-main .transactions-table tbody tr:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+/* --- Category drilldown hover --- */
+:root[data-theme="dark"] .app-shell-main .category-drilldown-item:hover {
+  background: linear-gradient(135deg, rgba(13, 148, 136, 0.16), rgba(45, 45, 45, 0.9));
+  border-color: rgba(45, 212, 191, 0.3);
+}
+
+/* --- Nav dropdown --- */
+:root[data-theme="dark"] .nav-dropdown {
+  background: #2d2d2d;
+  border-color: rgba(255, 255, 255, 0.10);
+  color: #f0f0f0;
+}
+
+/* --- Public nav strip (login page dark mode) --- */
+:root[data-theme="dark"] .public-nav-strip {
+  background: rgba(45, 45, 45, 0.8);
+  border-color: rgba(255, 255, 255, 0.10);
+}
+
+:root[data-theme="dark"] .public-nav-strip select {
+  background: #383838;
+  border-color: rgba(255, 255, 255, 0.10);
+  color: #f0f0f0;
+}
