@@ -36,7 +36,10 @@ from app.services.assistant_guard_service import (
 )
 from app.services.assistant_memory_service import build_assistant_learning_context
 from app.services.budget_metrics import build_budget_action_insights, get_default_budget_month
-from app.services.llm_service import generate_llm_assistant_response
+from app.services.llm_service import (
+    generate_llm_assistant_response,
+    generate_planning_narration,
+)
 from app.services.saved_scenario_service import list_saved_scenarios
 from app.services.transaction_service import (
     apply_category_to_merchant_learning_group,
@@ -2378,10 +2381,107 @@ def build_llm_response_payload(
         "suggested_followups": llm_result.get("suggested_followups", []),
         "suggested_actions": [*suggested_actions, *(extra_actions or [])][:4],
         "scope_label": scope_label,
+        "_llm": True,
     }
 
 
+# Planning-style questions are answered by deterministic handlers that compute the
+# real forecast, budget, and scenario numbers (and the precise simulator/budget action
+# buttons). When an LLM provider is active, we let it re-narrate those answers so they
+# speak to the user's specific situation, while keeping the deterministic numbers and
+# buttons as the source of truth.
+PLANNING_LLM_INTENTS = {
+    "future_balance",
+    "budget_status",
+    "savings_scenario",
+    "saved_scenario_list",
+    "saved_scenario_compare",
+}
+
+
+def narrate_planning_answer(
+    result: dict[str, Any],
+    *,
+    question: str,
+    conversation_context: str,
+    mode: str,
+) -> dict[str, Any] | None:
+    """Rewrite a deterministic planning answer with the LLM, grounded in its numbers.
+
+    Keeps the deterministic supporting points, action buttons, and scope label. Only
+    the natural-language answer (and follow-ups, if returned) are replaced. Returns
+    None when the LLM is unavailable or fails, so the caller keeps the original answer.
+    """
+    supporting_points = result.get("supporting_points") or []
+    fact_lines = [str(result.get("answer") or "").strip()]
+    fact_lines.extend(f"- {point}" for point in supporting_points if str(point).strip())
+    authoritative_facts = "\n".join(line for line in fact_lines if line).strip()
+    if not authoritative_facts:
+        return None
+
+    narration = generate_planning_narration(
+        question=question,
+        conversation_context=conversation_context,
+        authoritative_facts=authoritative_facts,
+        mode=mode,
+    )
+    if not narration or not str(narration.get("answer") or "").strip():
+        return None
+
+    enriched = dict(result)
+    enriched["answer"] = narration["answer"]
+    narrated_followups = narration.get("suggested_followups") or []
+    if narrated_followups:
+        enriched["suggested_followups"] = narrated_followups[:5]
+    return enriched
+
+
 def generate_assistant_response(
+    db: Session,
+    user_id: int,
+    question: str,
+    history: list[Any] | None = None,
+    mode: str = "balanced",
+    account_id: int | None = None,
+    scope_label: str = "All accounts combined",
+    llm_allowed: bool = True,
+) -> dict[str, Any]:
+    history = history or []
+    context_text = extract_recent_context(history)
+    if is_security_sensitive_assistant_request(question, context_text):
+        return build_assistant_security_refusal(scope_label)
+
+    result = _generate_assistant_response_impl(
+        db,
+        user_id,
+        question,
+        history,
+        mode,
+        account_id=account_id,
+        scope_label=scope_label,
+        llm_allowed=llm_allowed,
+    )
+
+    # `_llm` marks answers the deterministic path already generated with the LLM, so we
+    # never narrate (and double-bill) the same question.
+    already_llm_generated = result.pop("_llm", False)
+
+    if llm_allowed and not already_llm_generated:
+        base_intent = classify_question((question or "").strip().lower(), context_text)
+        if base_intent in PLANNING_LLM_INTENTS:
+            narrated = narrate_planning_answer(
+                result,
+                question=question,
+                conversation_context=context_text,
+                mode=mode,
+            )
+            if narrated is not None:
+                return narrated
+
+    return result
+
+
+def _generate_assistant_response_impl(
     db: Session,
     user_id: int,
     question: str,
@@ -3844,6 +3944,7 @@ def generate_assistant_response(
             "suggested_followups": followups,
             "suggested_actions": [*suggested_actions, *merchant_context_actions][:4],
             "scope_label": scope_label,
+            "_llm": True,
         }
 
     if intent == "education":
