@@ -326,12 +326,18 @@ function AssistantPage() {
       setError("");
       setQuestion("");
 
-      const response = await api.post("/assistant/response", {
-        question: finalQuestion,
-        history: buildHistoryPayload(messages, finalQuestion),
-        mode: assistantMode,
-        account_id: normalizedAccountId,
-      });
+      const response = await api.post(
+        "/assistant/response",
+        {
+          question: finalQuestion,
+          history: buildHistoryPayload(messages, finalQuestion),
+          mode: assistantMode,
+          account_id: normalizedAccountId,
+        },
+        // AI answers (especially planning questions routed to the LLM) take longer than
+        // a normal API call, so allow more time than the default 30s client timeout.
+        { timeout: 90000 },
+      );
 
       const assistantMessage = buildAssistantMessageFromResponse(response.data, t);
 

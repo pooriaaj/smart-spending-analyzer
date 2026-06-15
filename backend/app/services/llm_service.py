@@ -57,6 +57,10 @@ def _bounded_int_env(name: str, default: int, minimum: int, maximum: int) -> int
 LLM_TIMEOUT_SECONDS = _bounded_float_env("LLM_TIMEOUT_SECONDS", 20.0, 3.0, 120.0)
 LLM_MAX_RETRIES = _bounded_int_env("LLM_MAX_RETRIES", 1, 0, 5)
 LLM_MAX_OUTPUT_TOKENS = _bounded_int_env("LLM_MAX_OUTPUT_TOKENS", 700, 150, 2000)
+# Planning narration runs while the user waits in the chat, so it gets a single longer
+# attempt (no retry doubling) and then falls back to the deterministic answer. Keep this
+# comfortably under the frontend assistant request timeout.
+LLM_NARRATION_TIMEOUT_SECONDS = _bounded_float_env("LLM_NARRATION_TIMEOUT_SECONDS", 40.0, 5.0, 110.0)
 
 _openai_client: OpenAI | None = (
     OpenAI(api_key=OPENAI_API_KEY, timeout=LLM_TIMEOUT_SECONDS, max_retries=LLM_MAX_RETRIES)
@@ -686,10 +690,19 @@ def generate_planning_narration(
     active_provider = get_active_llm_provider()
     try:
         if active_provider == "local" and _local_client is not None:
-            return _call_model(_local_client, LOCAL_LLM_MODEL, prompt)
+            client, model_name = _local_client, LOCAL_LLM_MODEL
+        elif active_provider == "openai" and _openai_client is not None:
+            client, model_name = _openai_client, OPENAI_MODEL
+        else:
+            return None
 
-        if active_provider == "openai" and _openai_client is not None:
-            return _call_model(_openai_client, OPENAI_MODEL, prompt)
+        # One bounded attempt: a slow narration falls back to the deterministic answer
+        # instead of retrying and doubling the time the user waits in the chat.
+        bounded_client = client.with_options(
+            timeout=LLM_NARRATION_TIMEOUT_SECONDS,
+            max_retries=0,
+        )
+        return _call_model(bounded_client, model_name, prompt)
 
     except Exception as exc:
         logger.warning(
@@ -698,5 +711,3 @@ def generate_planning_narration(
             exc.__class__.__name__,
         )
         return None
-
-    return None
