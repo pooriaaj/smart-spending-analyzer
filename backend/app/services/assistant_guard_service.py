@@ -28,7 +28,6 @@ SECURITY_SENSITIVE_ASSISTANT_PHRASES = (
     "all users",
     "other users",
     "another user",
-    "another account",
     "different account id",
     "use another account id",
     "select * from users",
