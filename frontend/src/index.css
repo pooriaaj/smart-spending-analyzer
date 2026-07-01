@@ -9993,3 +9993,49 @@ button,
 :root[data-theme="dark"] .app-shell-main .budget-projection-metrics {
   color: #c0c0c0;
 }
+
+/* ================================================================
+   DARK MODE COLOR SYNC FIXES
+   1. Form/input labels were a hardcoded dark slate (#334155), so
+      they were dark-on-dark. Make them light.
+   2. The analytics "Spending Pattern Pulse" insight cards stayed
+      white while their value text was forced light -> give the
+      cards a dark surface so the numbers are readable.
+   3. Income/expense amounts used a dark green/red -> brighten them
+      so they read clearly (and consistently) on the dark rows.
+   ================================================================ */
+
+/* 1. Labels */
+:root[data-theme="dark"] .app-shell-main label,
+:root[data-theme="dark"] .app-shell-main .mantine-InputWrapper-label,
+:root[data-theme="dark"] .transaction-form-account-field label,
+:root[data-theme="dark"] .transaction-form-card .mantine-InputWrapper-label,
+:root[data-theme="dark"] .transaction-filter-card .mantine-InputWrapper-label,
+:root[data-theme="dark"] .overview-page-shell .mantine-InputWrapper-label {
+  color: #cbd5e1;
+}
+
+/* 2. Spending Pattern Pulse insight cards -> dark surface */
+:root[data-theme="dark"] .app-shell-main .overview-insight-card {
+  background: #262b36;
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+:root[data-theme="dark"] .app-shell-main .overview-insight-card-positive {
+  background: rgba(16, 185, 129, 0.12);
+  border-color: rgba(16, 185, 129, 0.3);
+}
+
+:root[data-theme="dark"] .app-shell-main .overview-insight-card-warning {
+  background: rgba(225, 29, 72, 0.12);
+  border-color: rgba(225, 29, 72, 0.3);
+}
+
+/* 3. Income green / expense red amounts -> brighter on dark rows */
+:root[data-theme="dark"] .app-shell-main .income-text {
+  color: #34d399;
+}
+
+:root[data-theme="dark"] .app-shell-main .expense-text {
+  color: #f87171;
+}
