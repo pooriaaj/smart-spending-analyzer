@@ -11,6 +11,7 @@ import {
   Stack,
   Text,
   Title,
+  useMantineColorScheme,
 } from "@mantine/core";
 import { useDisclosure } from "@mantine/hooks";
 import {
@@ -242,11 +243,15 @@ function AuthenticatedLayout({ children, theme, onThemeToggle }) {
 
 function AppRoutes() {
   const [theme, setTheme] = useState(localStorage.getItem("theme") || "light");
+  const { setColorScheme } = useMantineColorScheme();
 
   useEffect(() => {
     document.documentElement.setAttribute("data-theme", theme);
     localStorage.setItem("theme", theme);
-  }, [theme]);
+    // Keep Mantine's own color scheme in sync so its components (labels, inputs,
+    // selects, cards, badges) render their dark variants in dark mode.
+    setColorScheme(theme);
+  }, [theme, setColorScheme]);
 
   const toggleTheme = () => setTheme((prev) => (prev === "light" ? "dark" : "light"));
   const protectedPage = (page) => (

@@ -9478,6 +9478,45 @@ button,
   color: #99f6e4;
 }
 
+/* ============================================================
+   Dark mode unification (appended last to win the cascade)
+   ------------------------------------------------------------
+   1. Flip the shared navy text token so every custom (non-Mantine)
+      heading, label, and card label that reads `var(--fintech-navy)`
+      becomes light instead of dark-navy-on-dark.
+   2. Align the auth pages (login / register / forgot / reset) with
+      the dark theme so labels and inputs are readable.
+   ============================================================ */
+:root[data-theme="dark"] {
+  --fintech-navy: #e6edf7;
+  --fintech-navy-soft: #c3cfe0;
+}
+
+/* Auth page labels were a hardcoded navy -> make them light in dark mode */
+:root[data-theme="dark"] .auth-field label,
+:root[data-theme="dark"] .auth-form label {
+  color: #e6edf7;
+}
+
+/* Auth inputs were white boxes with navy text -> dark-theme them */
+:root[data-theme="dark"] .auth-form input,
+:root[data-theme="dark"] .auth-field input {
+  background: #2b333f;
+  border-color: rgba(255, 255, 255, 0.14);
+  color: #f0f0f0;
+}
+
+:root[data-theme="dark"] .auth-form input::placeholder,
+:root[data-theme="dark"] .auth-field input::placeholder {
+  color: #93a1b3;
+}
+
+:root[data-theme="dark"] .auth-form input:focus,
+:root[data-theme="dark"] .auth-field input:focus {
+  border-color: rgba(45, 212, 191, 0.55);
+  outline: none;
+}
+
 :root[data-theme="dark"] .app-shell-main .import-filter-chip-active {
   background: rgba(13, 148, 136, 0.14);
   border-color: rgba(45, 212, 191, 0.32);

@@ -15,6 +15,17 @@ if (!window.matchMedia) {
   })
 }
 
+// jsdom does not implement ResizeObserver, which Mantine dropdown components
+// (Autocomplete/Select ScrollArea) rely on. Provide a no-op polyfill.
+if (!window.ResizeObserver) {
+  window.ResizeObserver = class ResizeObserver {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  }
+  globalThis.ResizeObserver = window.ResizeObserver
+}
+
 afterEach(() => {
   cleanup()
 })

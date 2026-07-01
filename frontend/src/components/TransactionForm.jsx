@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import {
   Alert,
+  Autocomplete,
   Badge,
   Box,
   Button,
@@ -18,7 +19,12 @@ import AccountSelector from "./AccountSelector";
 import { getSelectedAccountId } from "../services/accountStorage";
 import { useLanguage } from "../i18n/LanguageContext";
 
-function TransactionForm({ onTransactionCreated, editingTransaction, onCancelEdit }) {
+function TransactionForm({
+  onTransactionCreated,
+  editingTransaction,
+  onCancelEdit,
+  categoryOptions = [],
+}) {
   const [accountId, setAccountId] = useState(getSelectedAccountId());
   const [amount, setAmount] = useState("");
   const [category, setCategory] = useState("");
@@ -141,7 +147,7 @@ function TransactionForm({ onTransactionCreated, editingTransaction, onCancelEdi
               {editingTransaction ? t("common.edit") : t("transactions.addToday")}
             </Text>
           </Box>
-          <Badge color={type === "income" ? "teal" : "rose"} variant="light" radius="sm">
+          <Badge color={type === "income" ? "teal" : "red"} variant="light" radius="sm">
             {type === "income" ? t("common.income") : t("common.expense")}
           </Badge>
         </Group>
@@ -167,22 +173,21 @@ function TransactionForm({ onTransactionCreated, editingTransaction, onCancelEdi
               required
             />
 
-            <TextInput
-              type="text"
+            <Autocomplete
               label={t("common.category")}
               placeholder={t("common.category")}
+              data={[...new Set((categoryOptions || []).filter(Boolean))]}
               value={category}
-              onChange={(e) => setCategory(e.target.value)}
+              onChange={setCategory}
               required
             />
 
             <TextInput
               type="text"
               label={t("common.description")}
-              placeholder={t("common.description")}
+              placeholder={t("common.descriptionOptional")}
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              required
             />
 
             <TextInput

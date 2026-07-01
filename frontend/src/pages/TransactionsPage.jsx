@@ -518,7 +518,10 @@ function TransactionsPage() {
         />
 
         <div id="add-transaction">
-          <TransactionForm onTransactionCreated={fetchTransactions} />
+          <TransactionForm
+            onTransactionCreated={fetchTransactions}
+            categoryOptions={availableCategories}
+          />
         </div>
 
         <Card className="filter-card" radius="xl" p={{ base: "md", md: "lg" }}>
@@ -720,7 +723,7 @@ function TransactionsPage() {
                                   ]}
                                 />
                               ) : (
-                                <Badge color={transaction.type === "income" ? "teal" : "rose"} variant="light" radius="sm">
+                                <Badge color={transaction.type === "income" ? "teal" : "red"} variant="light" radius="sm">
                                   {transaction.type === "income" ? t("common.income") : t("common.expense")}
                                 </Badge>
                               )}
@@ -813,7 +816,7 @@ function TransactionsPage() {
                         </Group>
 
                         <Group gap="xs">
-                          <Badge color={transaction.type === "income" ? "teal" : "rose"} variant="light" radius="sm">
+                          <Badge color={transaction.type === "income" ? "teal" : "red"} variant="light" radius="sm">
                             {transaction.type === "income" ? t("common.income") : t("common.expense")}
                           </Badge>
                           <Badge color="indigo" variant="light" radius="sm">

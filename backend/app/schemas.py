@@ -380,7 +380,8 @@ class FutureSimulationRecommendationsResponse(BaseModel):
 class TransactionBase(BaseModel):
     amount: float = Field(gt=0, le=1_000_000)
     category: str = Field(min_length=1, max_length=100)
-    description: str = Field(min_length=1, max_length=500)
+    # Description is optional; an empty string is allowed.
+    description: str = Field(default="", max_length=500)
     date: date
     type: TransactionType
     account_id: int

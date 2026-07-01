@@ -48,7 +48,7 @@ function renderTransactionForm(props = {}) {
 async function fillTransactionFields(user, container) {
   await user.type(screen.getByPlaceholderText('Amount'), '42.75')
   await user.type(screen.getByPlaceholderText('Category'), 'Groceries')
-  await user.type(screen.getByPlaceholderText('Description'), 'Market run')
+  await user.type(screen.getByPlaceholderText('Description (optional)'), 'Market run')
   await user.type(container.querySelector('input[type="date"]'), '2026-05-28')
 }
 
@@ -94,7 +94,7 @@ describe('TransactionForm', () => {
     const user = userEvent.setup()
     renderTransactionForm()
 
-    await user.type(screen.getByPlaceholderText('Description'), 'Starbucks coffee')
+    await user.type(screen.getByPlaceholderText('Description (optional)'), 'Starbucks coffee')
     await user.click(screen.getByRole('button', { name: 'Suggest Category' }))
 
     await waitFor(() => {
@@ -130,8 +130,8 @@ describe('TransactionForm', () => {
     await user.type(screen.getByPlaceholderText('Amount'), '25.00')
     await user.clear(screen.getByPlaceholderText('Category'))
     await user.type(screen.getByPlaceholderText('Category'), 'Transit')
-    await user.clear(screen.getByPlaceholderText('Description'))
-    await user.type(screen.getByPlaceholderText('Description'), 'Monthly metro pass')
+    await user.clear(screen.getByPlaceholderText('Description (optional)'))
+    await user.type(screen.getByPlaceholderText('Description (optional)'), 'Monthly metro pass')
     await user.clear(container.querySelector('input[type="date"]'))
     await user.type(container.querySelector('input[type="date"]'), '2026-05-02')
 

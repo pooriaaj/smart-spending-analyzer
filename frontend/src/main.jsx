@@ -18,9 +18,16 @@ const theme = createTheme({
   defaultRadius: 'md',
 })
 
+// Start Mantine in the same color scheme the app last used so its components
+// (input labels, selects, cards, badges) match the app theme with no flash.
+const storedTheme =
+  typeof localStorage !== 'undefined' && localStorage.getItem('theme') === 'dark'
+    ? 'dark'
+    : 'light'
+
 createRoot(document.getElementById('root')).render(
   <StrictMode>
-    <MantineProvider theme={theme} defaultColorScheme="light">
+    <MantineProvider theme={theme} defaultColorScheme={storedTheme}>
       <Notifications position="top-right" />
       <ErrorBoundary>
         <App />
