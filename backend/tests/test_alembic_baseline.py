@@ -66,6 +66,6 @@ def test_alembic_baseline_creates_current_schema(tmp_path, monkeypatch) -> None:
 
         with engine.connect() as connection:
             current_revision = connection.execute(text("SELECT version_num FROM alembic_version")).scalar_one()
-        assert current_revision == "20260528_0001"
+        assert current_revision == "20260701_0002"
     finally:
         engine.dispose()

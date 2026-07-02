@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from sqlalchemy import Boolean, Column, Date, DateTime, Float, ForeignKey, Index, Integer, String, Text, UniqueConstraint, func
+from sqlalchemy import Boolean, Column, Date, DateTime, Float, ForeignKey, Index, Integer, String, Text, UniqueConstraint, func, text
 from sqlalchemy.orm import relationship
 
 from app.database import Base
@@ -15,6 +15,9 @@ class User(Base):
     reset_token_hash = Column(String(255), nullable=True, index=True)
     reset_token_expires_at = Column(DateTime(timezone=True), nullable=True, index=True)
     password_changed_at = Column(DateTime(timezone=True), nullable=True)
+    # Premium tier flag. Free users get the rule-based assistant; premium users
+    # unlock the OpenAI-powered coach mode. Flip manually until billing exists.
+    is_premium = Column(Boolean, nullable=False, default=False, server_default=text("false"))
 
     accounts = relationship(
         "Account",

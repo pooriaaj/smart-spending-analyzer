@@ -68,6 +68,7 @@ def build_profile_response(db: Session, user: User) -> UserProfileResponse:
         community_learning_enabled=(
             True if preference is None else bool(preference.community_learning_enabled)
         ),
+        is_premium=bool(user.is_premium),
     )
 
 

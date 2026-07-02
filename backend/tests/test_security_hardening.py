@@ -142,7 +142,12 @@ class SecurityRouteTest(unittest.TestCase):
             session.close()
 
     def override_user_a(self) -> User:
-        return User(id=self.user_a_id, email="security-a@example.com", password_hash="hashed")
+        return User(
+            id=self.user_a_id,
+            email="security-a@example.com",
+            password_hash="hashed",
+            is_premium=True,
+        )
 
     def build_protected_client(self) -> TestClient:
         app = FastAPI()
@@ -431,7 +436,7 @@ class SecurityRouteTest(unittest.TestCase):
                 json={
                     "question": "What is my balance?",
                     "history": [],
-                    "mode": "balanced",
+                    "mode": "coach",
                     "account_id": self.account_a_id,
                 },
             )
@@ -476,7 +481,7 @@ class SecurityRouteTest(unittest.TestCase):
                 "/assistant/response",
                 json={
                     "question": "What changed?",
-                    "mode": "balanced",
+                    "mode": "coach",
                     "account_id": self.account_a_id,
                 },
             )
@@ -508,7 +513,7 @@ class SecurityRouteTest(unittest.TestCase):
                 json={
                     "question": "Can you explain my spending?",
                     "history": [],
-                    "mode": "balanced",
+                    "mode": "coach",
                     "account_id": self.account_a_id,
                 },
             )

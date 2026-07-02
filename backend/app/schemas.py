@@ -43,6 +43,7 @@ class UserProfileResponse(ORMBaseModel):
     id: int
     email: EmailStr
     community_learning_enabled: bool = True
+    is_premium: bool = False
 
 
 class UserProfileUpdate(BaseModel):
@@ -981,6 +982,8 @@ class AssistantStatusResponse(BaseModel):
     fallback_provider: Literal["rule_based"] = "rule_based"
     providers: list[AssistantProviderStatus]
     message: str
+    is_premium: bool = False
+    premium_mode: str = "coach"
     daily_limit: int | None = None
     daily_used: int = 0
     daily_remaining: int | None = None

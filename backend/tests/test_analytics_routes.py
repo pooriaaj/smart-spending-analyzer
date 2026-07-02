@@ -80,7 +80,12 @@ class AnalyticsRouteTest(unittest.TestCase):
                 session.close()
 
         def override_get_current_user() -> User:
-            return User(id=cls.user_id, email="analytics@example.com", password_hash="hashed")
+            return User(
+                id=cls.user_id,
+                email="analytics@example.com",
+                password_hash="hashed",
+                is_premium=True,
+            )
 
         app.dependency_overrides[get_db] = override_get_db
         app.dependency_overrides[get_current_user] = override_get_current_user
@@ -1178,7 +1183,7 @@ class AnalyticsRouteTest(unittest.TestCase):
                             "content": "You do not have any budgets set for 2026-04 in All accounts combined yet.",
                         },
                     ],
-                    "mode": "balanced",
+                    "mode": "coach",
                     "account_id": None,
                 },
             )
@@ -1227,7 +1232,7 @@ class AnalyticsRouteTest(unittest.TestCase):
                             "content": "You do not have any budgets set for 2026-04 in All accounts combined yet.",
                         },
                     ],
-                    "mode": "balanced",
+                    "mode": "coach",
                     "account_id": None,
                 },
             )
@@ -1250,7 +1255,7 @@ class AnalyticsRouteTest(unittest.TestCase):
                 json={
                     "question": "Can you send links for beginner cooking recipes?",
                     "history": [],
-                    "mode": "balanced",
+                    "mode": "coach",
                     "account_id": None,
                 },
             )
@@ -1273,7 +1278,7 @@ class AnalyticsRouteTest(unittest.TestCase):
                 json={
                     "question": "How can I save this pasta recipe?",
                     "history": [],
-                    "mode": "balanced",
+                    "mode": "coach",
                     "account_id": None,
                 },
             )
@@ -1303,7 +1308,7 @@ class AnalyticsRouteTest(unittest.TestCase):
                             "content": "Your balance is $500 and your top expense category is groceries.",
                         },
                     ],
-                    "mode": "balanced",
+                    "mode": "coach",
                     "account_id": self.chequing_account_id,
                 },
             )
@@ -1333,7 +1338,7 @@ class AnalyticsRouteTest(unittest.TestCase):
                             "content": "Your budgets are on track this month.",
                         },
                     ],
-                    "mode": "balanced",
+                    "mode": "coach",
                     "account_id": self.chequing_account_id,
                 },
             )
@@ -1369,7 +1374,7 @@ class AnalyticsRouteTest(unittest.TestCase):
                 json={
                     "question": "How do I cook pasta?",
                     "history": [],
-                    "mode": "balanced",
+                    "mode": "coach",
                     "account_id": self.chequing_account_id,
                 },
             )
@@ -3218,7 +3223,7 @@ class AnalyticsRouteTest(unittest.TestCase):
                 json={
                     "question": "What is THE UPS STORE? What am I paying for?",
                     "history": [],
-                    "mode": "balanced",
+                    "mode": "coach",
                     "account_id": self.chequing_account_id,
                 },
             )

@@ -236,6 +236,17 @@ function AssistantPage() {
     localStorage.setItem("assistantMode", assistantMode);
   }, [assistantMode]);
 
+  // Coach mode is premium-only; if a free user has it saved, fall back to balanced.
+  useEffect(() => {
+    if (
+      providerStatus &&
+      !providerStatus.is_premium &&
+      assistantMode === (providerStatus.premium_mode || "coach")
+    ) {
+      setAssistantMode("balanced");
+    }
+  }, [providerStatus, assistantMode]);
+
   useEffect(() => {
     const loadAssistantStatus = async () => {
       try {
@@ -399,30 +410,40 @@ function AssistantPage() {
     setQuestion(String(followup || ""));
   };
 
-  const activeProvider = providerStatus?.providers?.find((provider) => provider.active);
-  const providerLabel =
-    activeProvider?.label ||
-    (providerStatus?.active_provider === "openai"
+  const isPremium = Boolean(providerStatus?.is_premium);
+  const premiumMode = providerStatus?.premium_mode || "coach";
+  const providerConfigured =
+    providerStatus?.active_provider === "openai" ||
+    providerStatus?.active_provider === "local";
+  // The OpenAI engine only actually answers for premium users in coach mode.
+  const aiActive = isPremium && assistantMode === premiumMode && providerConfigured;
+  const effectiveProvider = aiActive ? providerStatus.active_provider : "rule_based";
+
+  const providerLabel = statusLoading
+    ? t("assistant.engineChecking")
+    : aiActive
+    ? effectiveProvider === "openai"
       ? t("assistant.providerOpenAI")
-      : providerStatus?.active_provider === "local"
-      ? t("assistant.providerLocal")
-      : t("assistant.providerRuleBased"));
+      : t("assistant.providerLocal")
+    : isPremium
+    ? t("assistant.ruleBasedActive")
+    : t("assistant.freePlan");
   const providerMessage = statusLoading
     ? t("assistant.engineChecking")
-    : providerStatus?.message || t("assistant.engineUnavailable");
+    : !isPremium
+    ? t("assistant.upgradeNudge")
+    : aiActive
+    ? providerStatus?.message || t("assistant.engineUnavailable")
+    : t("assistant.switchToCoach");
   const providerUsageMessage =
-    !statusLoading &&
-    providerStatus?.active_provider !== "rule_based" &&
-    providerStatus?.daily_limit != null
+    !statusLoading && aiActive && providerStatus?.daily_limit != null
       ? t("assistant.engineUsage", {
           remaining: providerStatus.daily_remaining,
           limit: providerStatus.daily_limit,
         })
       : "";
   const providerCharUsageMessage =
-    !statusLoading &&
-    providerStatus?.active_provider !== "rule_based" &&
-    providerStatus?.daily_char_limit != null
+    !statusLoading && aiActive && providerStatus?.daily_char_limit != null
       ? t("assistant.engineCharUsage", {
           remaining: providerStatus.daily_chars_remaining,
           limit: providerStatus.daily_char_limit,
@@ -450,7 +471,9 @@ function AssistantPage() {
                 >
                   <option value="balanced">{t("assistant.balanced")}</option>
                   <option value="strict">{t("assistant.strict")}</option>
-                  <option value="coach">{t("assistant.coach")}</option>
+                  <option value="coach" disabled={!isPremium}>
+                    {isPremium ? t("assistant.coach") : t("assistant.coachPremium")}
+                  </option>
                 </select>
               </div>
 
@@ -464,7 +487,7 @@ function AssistantPage() {
             <div className="assistant-status-row">
               <span
                 className={`assistant-provider-pill assistant-provider-${
-                  providerStatus?.active_provider || "unknown"
+                  statusLoading ? "unknown" : effectiveProvider
                 }`}
               >
                 {providerLabel}
@@ -472,6 +495,15 @@ function AssistantPage() {
               <span>{providerMessage}</span>
               {providerUsageMessage && <span>{providerUsageMessage}</span>}
               {providerCharUsageMessage && <span>{providerCharUsageMessage}</span>}
+              {!statusLoading && !isPremium && (
+                <button
+                  type="button"
+                  className="assistant-upgrade-chip"
+                  onClick={() => navigate("/profile")}
+                >
+                  {t("assistant.upgradeCta")}
+                </button>
+              )}
             </div>
           </div>
 

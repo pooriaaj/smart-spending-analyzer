@@ -10039,3 +10039,34 @@ button,
 :root[data-theme="dark"] .app-shell-main .expense-text {
   color: #f87171;
 }
+
+/* ================================================================
+   ASSISTANT — premium upgrade chip (free tier nudge)
+   ================================================================ */
+.assistant-upgrade-chip {
+  border: 1px solid var(--fintech-teal);
+  background: rgba(15, 118, 110, 0.08);
+  color: var(--fintech-teal);
+  border-radius: 999px;
+  padding: 4px 12px;
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.assistant-upgrade-chip:hover {
+  background: var(--fintech-teal);
+  color: #ffffff;
+}
+
+:root[data-theme="dark"] .app-shell-main .assistant-upgrade-chip {
+  border-color: rgba(45, 212, 191, 0.5);
+  background: rgba(13, 148, 136, 0.16);
+  color: #2dd4bf;
+}
+
+:root[data-theme="dark"] .app-shell-main .assistant-upgrade-chip:hover {
+  background: rgba(45, 212, 191, 0.28);
+  color: #eafffb;
+}

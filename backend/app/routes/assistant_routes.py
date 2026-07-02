@@ -67,6 +67,16 @@ def get_assistant_status_route(
 ) -> AssistantStatusResponse:
     status = get_llm_provider_status()
     status.update(get_assistant_usage_status(db, current_user.id))
+    status["is_premium"] = bool(current_user.is_premium)
+    status["premium_mode"] = "coach"
+    if not current_user.is_premium:
+        # The AI provider is a premium feature; present the free tier as
+        # rule-based regardless of what is configured on the server.
+        status["active_provider"] = "rule_based"
+        status["message"] = (
+            "Free plan: the assistant uses the fast rule-based engine. "
+            "Upgrade to unlock the AI coach."
+        )
     return status
 
 
@@ -222,8 +232,16 @@ def get_assistant_response_route(
         account_id=payload.account_id,
         limit=8,
     )
-    llm_allowed = True
-    if active_llm_provider is not None:
+
+    # The OpenAI-powered assistant is a premium feature and only runs in coach
+    # mode. Free users, and premium users in balanced/strict mode, get the safe
+    # rule-based assistant. `llm_provider_active` means an LLM could actually run
+    # for this request (premium + coach + a configured provider).
+    premium_llm_mode = bool(current_user.is_premium) and (payload.mode or "").lower() == "coach"
+    llm_provider_active = premium_llm_mode and active_llm_provider is not None
+
+    llm_allowed = premium_llm_mode
+    if llm_provider_active:
         estimated_request_chars = len(payload.question or "") + sum(
             len(assistant_history_item_content(item))
             for item in history
@@ -244,11 +262,13 @@ def get_assistant_response_route(
         scope_label=scope_label,
         llm_allowed=llm_allowed,
     )
-    if active_llm_provider is not None and not llm_allowed:
+    if llm_provider_active and not llm_allowed:
         response["supporting_points"] = [
             "Assistant daily safety limit reached, so this answer used the safe rule-based fallback.",
             *response.get("supporting_points", []),
         ][:5]
+
+    llm_used = llm_provider_active and llm_allowed
 
     try:
         save_assistant_exchange(
@@ -269,11 +289,12 @@ def get_assistant_response_route(
             question=payload.question,
             answer=response["answer"],
             metadata={
-                "active_provider": active_llm_provider or "rule_based",
+                "active_provider": active_llm_provider if llm_used else "rule_based",
                 "llm_allowed": llm_allowed,
+                "premium": bool(current_user.is_premium),
             },
         )
-        if active_llm_provider is not None and llm_allowed:
+        if llm_used:
             record_assistant_usage_event(
                 db,
                 current_user.id,
