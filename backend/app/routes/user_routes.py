@@ -25,6 +25,7 @@ from app.schemas import (
     UserProfileResponse,
     UserProfileUpdate,
 )
+from app.services.premium_service import is_premium_user
 from app.services.transaction_service import (
     merchant_profile_base_key,
     refresh_community_merchant_profile_cache,
@@ -68,7 +69,7 @@ def build_profile_response(db: Session, user: User) -> UserProfileResponse:
         community_learning_enabled=(
             True if preference is None else bool(preference.community_learning_enabled)
         ),
-        is_premium=bool(user.is_premium),
+        is_premium=is_premium_user(user),
     )
 
 

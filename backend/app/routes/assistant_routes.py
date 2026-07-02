@@ -41,6 +41,7 @@ from app.services.assistant_memory_service import (
     update_assistant_learning_example_quality,
 )
 from app.services.llm_service import get_active_llm_provider, get_llm_provider_status
+from app.services.premium_service import is_premium_user
 
 router = APIRouter(prefix="/assistant", tags=["Assistant"])
 logger = logging.getLogger(__name__)
@@ -67,9 +68,9 @@ def get_assistant_status_route(
 ) -> AssistantStatusResponse:
     status = get_llm_provider_status()
     status.update(get_assistant_usage_status(db, current_user.id))
-    status["is_premium"] = bool(current_user.is_premium)
+    status["is_premium"] = is_premium_user(current_user)
     status["premium_mode"] = "coach"
-    if not current_user.is_premium:
+    if not is_premium_user(current_user):
         # The AI provider is a premium feature; present the free tier as
         # rule-based regardless of what is configured on the server.
         status["active_provider"] = "rule_based"
@@ -237,7 +238,7 @@ def get_assistant_response_route(
     # mode. Free users, and premium users in balanced/strict mode, get the safe
     # rule-based assistant. `llm_provider_active` means an LLM could actually run
     # for this request (premium + coach + a configured provider).
-    premium_llm_mode = bool(current_user.is_premium) and (payload.mode or "").lower() == "coach"
+    premium_llm_mode = is_premium_user(current_user) and (payload.mode or "").lower() == "coach"
     llm_provider_active = premium_llm_mode and active_llm_provider is not None
 
     llm_allowed = premium_llm_mode
@@ -291,7 +292,7 @@ def get_assistant_response_route(
             metadata={
                 "active_provider": active_llm_provider if llm_used else "rule_based",
                 "llm_allowed": llm_allowed,
-                "premium": bool(current_user.is_premium),
+                "premium": is_premium_user(current_user),
             },
         )
         if llm_used:
