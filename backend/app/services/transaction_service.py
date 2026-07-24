@@ -99,6 +99,8 @@ HEADER_ALIASES = {
     "date": {"date", "transaction_date", "posted_date", "posting_date", "effective_date"},
     "description": {
         "description",
+        "description_1",
+        "description1",
         "details",
         "memo",
         "merchant",
@@ -107,7 +109,20 @@ HEADER_ALIASES = {
         "payee",
         "name",
     },
-    "amount": {"amount", "transaction_amount", "net_amount"},
+    # RBC-style exports split the merchant across "Description 1" / "Description 2".
+    "description_secondary": {"description_2", "description2"},
+    "amount": {
+        "amount",
+        "transaction_amount",
+        "net_amount",
+        # Statements with one money column per currency (RBC "CAD$" / "USD$").
+        "cad",
+        "usd",
+        "cad_amount",
+        "usd_amount",
+        "amount_cad",
+        "amount_usd",
+    },
     "debit": {"debit", "debits", "withdrawal", "withdrawals", "money_out", "outflow", "paid_out"},
     "credit": {"credit", "credits", "deposit", "deposits", "money_in", "inflow", "paid_in"},
     "type": {"type", "transaction_type"},
@@ -2352,6 +2367,19 @@ def resolve_header_mapping(fieldnames: list[str]) -> dict[str, str]:
                 mapping[canonical] = header
                 break
 
+    if mapping.get("description_secondary") == mapping.get("description"):
+        mapping.pop("description_secondary", None)
+
+    # A per-currency export only fills the column the transaction settled in, so keep
+    # the next money column as a fallback for rows where the first one is blank.
+    amount_headers = [
+        header
+        for header in fieldnames
+        if csv_header_base_name(header) in HEADER_ALIASES["amount"]
+    ]
+    if len(amount_headers) > 1:
+        mapping["amount_secondary"] = amount_headers[1]
+
     if not mapping.get("date") or not mapping.get("description"):
         raise ValueError("Statement must include at least date and description columns.")
 
@@ -2451,6 +2479,14 @@ def infer_type_and_amount(row: dict, header_mapping: dict[str, str]) -> tuple[st
     type_key = header_mapping.get("type")
 
     if amount_key:
+        secondary_amount_key = header_mapping.get("amount_secondary")
+        if (
+            secondary_amount_key
+            and not row.get(amount_key, "").strip()
+            and row.get(secondary_amount_key, "").strip()
+        ):
+            amount_key = secondary_amount_key
+
         amount = parse_amount(row.get(amount_key, "0"))
         if type_key and row.get(type_key):
             tx_type = normalize_type(row[type_key])
@@ -2488,6 +2524,13 @@ def normalize_description(value: str) -> str:
 def get_import_row_description_value(row: dict, header_mapping: dict[str, str]) -> str:
     description_key = header_mapping["description"]
     raw_description = row.get(description_key, "")
+
+    secondary_description_key = header_mapping.get("description_secondary")
+    if secondary_description_key:
+        secondary_description = row.get(secondary_description_key, "")
+        if secondary_description.strip():
+            raw_description = f"{raw_description.strip()} {secondary_description.strip()}".strip()
+
     if raw_description.strip():
         return raw_description
 
@@ -2502,8 +2545,10 @@ def csv_transaction_field_values(row: dict, header_mapping: dict[str, str]) -> l
     keys = [
         header_mapping.get("date"),
         header_mapping.get("description"),
+        header_mapping.get("description_secondary"),
         header_mapping.get("category"),
         header_mapping.get("amount"),
+        header_mapping.get("amount_secondary"),
         header_mapping.get("debit"),
         header_mapping.get("credit"),
         header_mapping.get("type"),
@@ -2533,6 +2578,7 @@ def is_structural_csv_row(row: dict, header_mapping: dict[str, str]) -> bool:
         row.get(key, "").strip()
         for key in (
             header_mapping.get("amount"),
+            header_mapping.get("amount_secondary"),
             header_mapping.get("debit"),
             header_mapping.get("credit"),
         )

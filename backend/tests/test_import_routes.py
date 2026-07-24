@@ -2225,6 +2225,42 @@ class SmartImportRouteTest(unittest.TestCase):
                     expected_rows,
                 )
 
+    def test_import_file_parses_rbc_visa_download_csv(self) -> None:
+        # Real RBC "download-transactions.csv" export: UTF-8 BOM, two description
+        # columns, and one money column per currency.
+        rbc_csv = (
+            "﻿Account Type,Account Number,Transaction Date,Cheque Number,"
+            "Description 1,Description 2,CAD$,USD$\n"
+            "Visa,4514011823966112,6/3/2026,,QUEENS HARBOUR TORONTO,,-53.34,\n"
+            "Visa,4514011823966112,6/13/2026,,PAYMENT - THANK YOU / PAI EMENT - MERCI,,380.0,\n"
+            "Visa,4514011823966112,6/14/2026,,PRESTO FARE/RXBPKJKNVR,TORONTO,-3.3,\n"
+            "Visa,4514011823966112,6/15/2026,,US BOOK STORE,,,-20.00\n"
+        ).encode("utf-8")
+
+        response = self.client.post(
+            "/transactions/import/file",
+            data={"account_id": str(self.account_id)},
+            files={"file": ("download-transactions.csv", rbc_csv, "text/csv")},
+        )
+
+        self.assertEqual(response.status_code, 200, response.text)
+        payload = response.json()
+        preview_rows = payload["preview_rows"]
+
+        self.assertEqual(payload["status"], "table_review")
+        self.assertEqual(payload["import_summary"]["invalid_rows_skipped"], 0)
+        self.assertEqual(
+            [(row["date"], row["amount"], row["type"]) for row in preview_rows],
+            [
+                ("2026-06-03", 53.34, "expense"),
+                ("2026-06-13", 380.0, "income"),
+                ("2026-06-14", 3.3, "expense"),
+                ("2026-06-15", 20.0, "expense"),
+            ],
+        )
+        # "Description 2" is appended to "Description 1" instead of being dropped.
+        self.assertEqual(preview_rows[2]["description"], "PRESTO FARE/RXBPKJKNVR TORONTO")
+
     def test_import_file_flags_fully_ambiguous_numeric_csv_dates_for_review(self) -> None:
         csv_text = (
             "Date,Description,Amount,Type\n"
