@@ -3827,6 +3827,8 @@ def apply_transaction_filters(
     *,
     transaction_type: str | None = None,
     month: str | None = None,
+    start_date: date | None = None,
+    end_date: date | None = None,
     category: str | None = None,
     entry_source: str | None = None,
     description: str | None = None,
@@ -3840,6 +3842,13 @@ def apply_transaction_filters(
     month_start, month_end = month_date_bounds(month)
     if month_start and month_end:
         query = query.filter(Transaction.date >= month_start, Transaction.date < month_end)
+
+    # Analytics filters by an arbitrary range, so the list has to speak the same
+    # language for a chart drill-down to show exactly the rows behind a total.
+    if start_date:
+        query = query.filter(Transaction.date >= start_date)
+    if end_date:
+        query = query.filter(Transaction.date <= end_date)
 
     if category:
         category_values = get_category_filter_values(category)
@@ -4593,6 +4602,8 @@ def get_transactions_page_for_user(
     account_id: int | None = None,
     transaction_type: str | None = None,
     month: str | None = None,
+    start_date: date | None = None,
+    end_date: date | None = None,
     category: str | None = None,
     entry_source: str | None = None,
     description: str | None = None,
@@ -4611,6 +4622,8 @@ def get_transactions_page_for_user(
         scope_query,
         transaction_type=transaction_type,
         month=month,
+        start_date=start_date,
+        end_date=end_date,
         category=category,
         entry_source=entry_source,
         description=description,

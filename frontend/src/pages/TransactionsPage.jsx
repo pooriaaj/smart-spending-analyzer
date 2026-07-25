@@ -127,6 +127,8 @@ function TransactionsPage() {
   const [typeFilter, setTypeFilter] = useState("");
   const [monthFilter, setMonthFilter] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("");
+  const [startDateFilter, setStartDateFilter] = useState("");
+  const [endDateFilter, setEndDateFilter] = useState("");
   const [searchFilter, setSearchFilter] = useState("");
   const [debouncedSearchFilter, setDebouncedSearchFilter] = useState("");
   const [amountRangeFilter, setAmountRangeFilter] = useState("");
@@ -141,6 +143,9 @@ function TransactionsPage() {
   const [freshStartError, setFreshStartError] = useState("");
   const [freshStartCount, setFreshStartCount] = useState(null);
   const [freshStartCountLoading, setFreshStartCountLoading] = useState(false);
+  const [mergeCategoriesLoading, setMergeCategoriesLoading] = useState(false);
+  const [mergeCategoriesMessage, setMergeCategoriesMessage] = useState("");
+  const [mergeCategoriesError, setMergeCategoriesError] = useState("");
 
   const [exportLoading, setExportLoading] = useState(false);
 
@@ -165,6 +170,8 @@ function TransactionsPage() {
     setMonthFilter(searchParams.get("month") || "");
     const categoryParam = searchParams.get("category") || "";
     setCategoryFilter(categoryParam);
+    setStartDateFilter(searchParams.get("start") || "");
+    setEndDateFilter(searchParams.get("end") || "");
     setSearchFilter(searchParams.get("description") || "");
     setAmountRangeFilter(searchParams.get("amountRange") || "");
   }, [searchParams]);
@@ -202,6 +209,8 @@ function TransactionsPage() {
         account_id: normalizedAccountId,
         type: typeFilter || undefined,
         month: monthFilter || undefined,
+        start: startDateFilter || undefined,
+        end: endDateFilter || undefined,
         category: categoryFilter || undefined,
         description: debouncedSearchFilter || undefined,
         amount_min: selectedAmountRange?.min,
@@ -213,6 +222,8 @@ function TransactionsPage() {
       const hasActiveFilters = Boolean(
         typeFilter ||
           monthFilter ||
+          startDateFilter ||
+          endDateFilter ||
           categoryFilter ||
           debouncedSearchFilter ||
           amountRangeFilter
@@ -271,9 +282,11 @@ function TransactionsPage() {
     categoryFilter,
     currentPage,
     debouncedSearchFilter,
+    endDateFilter,
     monthFilter,
     navigate,
     normalizedAccountId,
+    startDateFilter,
     t,
     typeFilter,
   ]);
@@ -323,10 +336,40 @@ function TransactionsPage() {
     setTypeFilter("");
     setMonthFilter("");
     setCategoryFilter("");
+    setStartDateFilter("");
+    setEndDateFilter("");
     setSearchFilter("");
     setDebouncedSearchFilter("");
     setAmountRangeFilter("");
     setCurrentPage(1);
+  };
+
+  const handleMergeSimilarCategories = async () => {
+    if (mergeCategoriesLoading) return;
+    setMergeCategoriesLoading(true);
+    setMergeCategoriesMessage("");
+    setMergeCategoriesError("");
+
+    try {
+      const response = await api.post("/transactions/merge-similar-categories");
+      const stats = response.data || {};
+      const updatedCount = Number(stats.transactions_updated || 0);
+
+      setMergeCategoriesMessage(
+        updatedCount > 0
+          ? t("transactions.mergeCategoriesDone", { count: updatedCount })
+          : t("transactions.mergeCategoriesNothing")
+      );
+
+      if (updatedCount > 0) {
+        await fetchTransactions();
+      }
+    } catch (error) {
+      handleApiAuthError(error, navigate);
+      setMergeCategoriesError(t("transactions.mergeCategoriesFailed"));
+    } finally {
+      setMergeCategoriesLoading(false);
+    }
   };
 
   const handleExportCsv = async () => {
@@ -341,6 +384,8 @@ function TransactionsPage() {
           account_id: normalizedAccountId,
           type: typeFilter || undefined,
           month: monthFilter || undefined,
+          start: startDateFilter || undefined,
+          end: endDateFilter || undefined,
           category: categoryFilter || undefined,
           description: debouncedSearchFilter || undefined,
           amount_min: selectedAmountRange?.min,
@@ -606,6 +651,15 @@ function TransactionsPage() {
             </SimpleGrid>
 
             <Group className="recurring-filter-actions" justify="space-between" gap="sm">
+              {(startDateFilter || endDateFilter) && (
+                <Text className="budget-inline-note recurring-filter-note" size="sm">
+                  {t("transactions.dateRangeFilterNote", {
+                    start: startDateFilter || "…",
+                    end: endDateFilter || "…",
+                  })}
+                </Text>
+              )}
+
               {searchFilter && (
                 <Text className="budget-inline-note recurring-filter-note" size="sm">
                   {t("transactions.descriptionFilterNote", { term: searchFilter })}
@@ -615,6 +669,8 @@ function TransactionsPage() {
               <Group gap="sm" ml="auto">
                 {(typeFilter ||
                   monthFilter ||
+                  startDateFilter ||
+                  endDateFilter ||
                   categoryFilter ||
                   amountRangeFilter ||
                   searchFilter) && (
@@ -843,6 +899,31 @@ function TransactionsPage() {
                 {renderTransactionPagination("transaction-pagination-bottom")}
               </Box>
             )}
+          </Stack>
+        </Card>
+
+        <Card className="dashboard-card" radius="xl" p={{ base: "md", md: "lg" }}>
+          <Stack gap="md">
+            <Box>
+              <Title order={2} size="h3">{t("transactions.mergeCategories")}</Title>
+              <Text size="sm" c="dimmed">{t("transactions.mergeCategoriesDetail")}</Text>
+            </Box>
+
+            <Group gap="sm">
+              <Button
+                type="button"
+                variant="light"
+                color="teal"
+                radius="md"
+                loading={mergeCategoriesLoading}
+                onClick={handleMergeSimilarCategories}
+              >
+                {t("transactions.mergeCategoriesAction")}
+              </Button>
+            </Group>
+
+            {mergeCategoriesMessage && <div className="bulk-message-box">{mergeCategoriesMessage}</div>}
+            {mergeCategoriesError && <p className="error-text">{mergeCategoriesError}</p>}
           </Stack>
         </Card>
 

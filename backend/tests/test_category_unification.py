@@ -367,6 +367,82 @@ class StoredCategoryUnificationTest(unittest.TestCase):
         self.assertEqual(response.json()["category"], "gorcery")
 
 
+class CategoryDrilldownTest(StoredCategoryUnificationTest):
+    """A chart total and the list behind it must cover the same transactions."""
+
+    def seed_grocery_history(self) -> None:
+        with self.session_local() as session:
+            session.add_all(
+                [
+                    Transaction(
+                        amount=amount,
+                        category="groceries",
+                        description=description,
+                        date=day,
+                        type="expense",
+                        owner_id=self.user_id,
+                        account_id=self.first_account_id,
+                    )
+                    for amount, description, day in (
+                        (40.17, "longos", date(2026, 6, 30)),
+                        (73.48, "food basics", date(2026, 6, 29)),
+                        (58.94, "older purchase", date(2026, 3, 2)),
+                        (65.03, "much older purchase", date(2026, 2, 18)),
+                    )
+                ]
+            )
+            session.commit()
+
+    def test_date_range_narrows_the_transaction_list(self) -> None:
+        self.seed_grocery_history()
+
+        response = self.client.get(
+            "/transactions/page",
+            params={"category": "groceries", "start": "2026-06-26", "end": "2026-07-25"},
+        )
+
+        self.assertEqual(response.status_code, 200, response.text)
+        payload = response.json()
+
+        self.assertEqual(payload["total"], 2)
+        self.assertEqual(
+            round(sum(item["amount"] for item in payload["items"]), 2),
+            113.65,
+        )
+
+    def test_list_without_a_range_still_returns_the_full_history(self) -> None:
+        self.seed_grocery_history()
+
+        response = self.client.get("/transactions/page", params={"category": "groceries"})
+
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(response.json()["total"], 4)
+
+    def test_reversed_date_range_is_rejected(self) -> None:
+        response = self.client.get(
+            "/transactions/page",
+            params={"start": "2026-07-25", "end": "2026-06-26"},
+        )
+
+        self.assertEqual(response.status_code, 400, response.text)
+
+    def test_merge_similar_categories_route_collapses_typo_variants(self) -> None:
+        # The exact shape reported from production: three grocery spellings.
+        self.add_transaction("groceries", self.first_account_id, "food basics")
+        self.add_transaction("groccery", self.first_account_id, "longos")
+        self.add_transaction("grocerry", self.second_account_id, "t&t")
+
+        response = self.client.post("/transactions/merge-similar-categories")
+
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(response.json()["transactions_updated"], 2)
+
+        with self.session_local() as session:
+            stored = {row[0] for row in session.query(Transaction.category).distinct().all()}
+
+        self.assertEqual(stored, {"groceries"})
+
+
 class LoginCategoryUnificationTest(unittest.TestCase):
     def setUp(self) -> None:
         self.engine = create_engine(

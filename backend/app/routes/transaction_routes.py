@@ -203,6 +203,8 @@ def get_transactions_page(
     account_id: int | None = Query(default=None),
     transaction_type: str | None = Query(default=None, alias="type"),
     month: str | None = Query(default=None),
+    start_date: date | None = Query(default=None, alias="start"),
+    end_date: date | None = Query(default=None, alias="end"),
     category: str | None = Query(default=None),
     entry_source: str | None = Query(default=None),
     description: str | None = Query(default=None),
@@ -224,6 +226,8 @@ def get_transactions_page(
         raise HTTPException(status_code=400, detail="Entry source filter is not supported")
     if amount_min is not None and amount_max is not None and amount_min >= amount_max:
         raise HTTPException(status_code=400, detail="Amount minimum must be lower than amount maximum")
+    if start_date and end_date and start_date > end_date:
+        raise HTTPException(status_code=400, detail="Start date must be on or before the end date")
 
     try:
         result = get_transactions_page_for_user(
@@ -232,6 +236,8 @@ def get_transactions_page(
             account_id=account_id,
             transaction_type=transaction_type,
             month=month,
+            start_date=start_date,
+            end_date=end_date,
             category=category,
             entry_source=entry_source,
             description=description,
@@ -255,6 +261,8 @@ def export_transactions_csv(
     account_id: int | None = Query(default=None),
     transaction_type: str | None = Query(default=None, alias="type"),
     month: str | None = Query(default=None),
+    start_date: date | None = Query(default=None, alias="start"),
+    end_date: date | None = Query(default=None, alias="end"),
     category: str | None = Query(default=None),
     description: str | None = Query(default=None),
     amount_min: float | None = Query(default=None),
@@ -267,12 +275,16 @@ def export_transactions_csv(
 
     if transaction_type is not None and transaction_type not in {"income", "expense"}:
         raise HTTPException(status_code=400, detail="Transaction type must be income or expense")
+    if start_date and end_date and start_date > end_date:
+        raise HTTPException(status_code=400, detail="Start date must be on or before the end date")
 
     scope_query = build_transaction_scope_query(db, current_user.id, account_id=account_id)
     filtered_query = apply_transaction_filters(
         scope_query,
         transaction_type=transaction_type,
         month=month,
+        start_date=start_date,
+        end_date=end_date,
         category=category,
         description=description,
         amount_min=amount_min,
@@ -590,6 +602,26 @@ def fresh_start_transactions(
         )
 
     return {"deleted_count": deleted_count, "message": message}
+
+
+@router.post("/merge-similar-categories")
+def merge_similar_categories_route(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Collapse near-duplicate category spellings across every account.
+
+    Narrower than /normalize-categories on purpose: this only rewrites category
+    labels, so it will never move a transaction into a different category based
+    on its description.
+    """
+
+    return unify_stored_categories_for_user(
+        db=db,
+        owner_id=current_user.id,
+        repair_typos=True,
+        merge_budget_duplicates=True,
+    )
 
 
 @router.post("/normalize-categories")

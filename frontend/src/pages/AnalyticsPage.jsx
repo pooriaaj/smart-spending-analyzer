@@ -561,7 +561,16 @@ function AnalyticsPage() {
 
   const handleCategoryDrilldown = (category) => {
     if (!category) return;
-    navigate(`/transactions?category=${encodeURIComponent(category)}`);
+
+    // Carry the filters the chart was showing, otherwise the list totals a
+    // different set of transactions than the amount that was clicked.
+    const drilldownParams = new URLSearchParams({ category });
+    if (selectedMonth) drilldownParams.set("month", selectedMonth);
+    if (startDate) drilldownParams.set("start", startDate);
+    if (endDate) drilldownParams.set("end", endDate);
+    if (selectedType) drilldownParams.set("type", selectedType);
+
+    navigate(`/transactions?${drilldownParams.toString()}`);
   };
 
   const customTooltipStyle = {

@@ -491,6 +491,14 @@ const translations = {
       onlyRecurringMatches: "Only Recurring Matches",
       recurringFilterNote: "Showing likely repeating money patterns{match}.",
       descriptionFilterNote: "Filtering descriptions for \"{term}\".",
+      dateRangeFilterNote: "Showing {start} to {end} only.",
+      mergeCategories: "Merge Similar Categories",
+      mergeCategoriesDetail:
+        "Collapse near-duplicate category names such as Grocery, Groccery and Groceries into one, across every account. Only the category label changes.",
+      mergeCategoriesAction: "Merge Similar Categories",
+      mergeCategoriesDone: "Merged similar categories. {count} transaction(s) relabeled.",
+      mergeCategoriesNothing: "Nothing to merge. Your categories are already consistent.",
+      mergeCategoriesFailed: "Could not merge categories. Please try again.",
       tableDetail:
         "Your daily written transactions and any missing statement rows you chose to import.",
       filtersHidingTransactions: "Transactions exist, but the current filters are hiding them.",
@@ -1944,6 +1952,14 @@ const translations = {
       onlyRecurringMatches: "Seulement les récurrences",
       recurringFilterNote: "Affichage des habitudes d'argent probablement récurrentes{match}.",
       descriptionFilterNote: "Filtrage des descriptions pour \"{term}\".",
+      dateRangeFilterNote: "Affichage du {start} au {end} seulement.",
+      mergeCategories: "Fusionner les catégories similaires",
+      mergeCategoriesDetail:
+        "Regroupez les noms de catégories presque identiques comme Épicerie, Epicerie et Épiceries en une seule, pour tous les comptes. Seul le libellé change.",
+      mergeCategoriesAction: "Fusionner les catégories similaires",
+      mergeCategoriesDone: "Catégories similaires fusionnées. {count} transaction(s) renommée(s).",
+      mergeCategoriesNothing: "Rien à fusionner. Vos catégories sont déjà cohérentes.",
+      mergeCategoriesFailed: "Impossible de fusionner les catégories. Veuillez réessayer.",
       tableDetail:
         "Vos transactions écrites au quotidien et les lignes de relevé manquantes que vous avez choisi d'importer.",
       filtersHidingTransactions: "Des transactions existent, mais les filtres actuels les masquent.",
