@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import csv
+import difflib
 import io
 import os
 import re
@@ -8,12 +9,14 @@ import unicodedata
 from collections import Counter
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
+from functools import lru_cache
 from typing import Iterable
 
 from sqlalchemy import and_, case, func, or_
 from sqlalchemy.orm import Session
 
 from app.models import (
+    BudgetPlan,
     CategoryLearningEvent,
     CategoryMemory,
     MerchantCategoryProfile,
@@ -369,6 +372,7 @@ CATEGORY_ALIASES = {
     "grocery": "groceries",
     "groceries": "groceries",
     "supermarket": "groceries",
+    "super market": "groceries",
     "transport": "transport",
     "transportation": "transport",
     "cafe": "cafe",
@@ -434,6 +438,13 @@ CATEGORY_ALIASES = {
     "subscription": "subscriptions",
 }
 CATEGORY_ALIASES.update(CATEGORY_ALIAS_EXPANSION)
+
+# Every spelling we can resolve with confidence. Typed typos are matched against
+# this list so "gorcery" still lands on the canonical "groceries".
+CATEGORY_TYPO_VOCABULARY = tuple(sorted(set(CATEGORY_ALIASES) | set(CATEGORY_ALIASES.values())))
+CATEGORY_TYPO_MIN_LENGTH = 4
+CATEGORY_TYPO_SIMILARITY_CUTOFF = 0.82
+CATEGORY_TYPO_MAX_CHANGED_CHARACTERS = 2
 
 CATEGORY_MEMORY_STOPWORDS = {
     "account",
@@ -885,6 +896,49 @@ def strip_statement_transaction_prefixes(value: str) -> str:
     return re.sub(r"\s+", " ", cleaned).strip(" -|")
 
 
+def changed_character_count(left: str, right: str) -> int:
+    """Count the characters that differ between two words.
+
+    Used as a cheap edit-distance stand-in so only genuine keystroke slips are
+    repaired, never a word that merely looks similar.
+    """
+
+    matcher = difflib.SequenceMatcher(a=left, b=right, autojunk=False)
+    return sum(
+        max(left_end - left_start, right_end - right_start)
+        for tag, left_start, left_end, right_start, right_end in matcher.get_opcodes()
+        if tag != "equal"
+    )
+
+
+def correct_category_typo(cleaned: str) -> str | None:
+    """Snap a near miss such as "gorcery" onto the closest known category.
+
+    Deliberately strict: short words, low-similarity matches and anything more
+    than a couple of characters off are left alone, so a real custom category
+    (for example "gym") is never rewritten.
+    """
+
+    if len(cleaned) < CATEGORY_TYPO_MIN_LENGTH:
+        return None
+
+    matches = difflib.get_close_matches(
+        cleaned,
+        CATEGORY_TYPO_VOCABULARY,
+        n=1,
+        cutoff=CATEGORY_TYPO_SIMILARITY_CUTOFF,
+    )
+    if not matches:
+        return None
+
+    closest = matches[0]
+    if changed_character_count(cleaned, closest) > CATEGORY_TYPO_MAX_CHANGED_CHARACTERS:
+        return None
+
+    return CATEGORY_ALIASES.get(closest, closest)
+
+
+@lru_cache(maxsize=4096)
 def normalize_category_name(value: str | None) -> str:
     if not value:
         return "other"
@@ -915,6 +969,19 @@ def normalize_category_name(value: str | None) -> str:
         return singular_map[cleaned]
 
     return cleaned
+
+
+@lru_cache(maxsize=4096)
+def normalize_typed_category_name(value: str | None) -> str:
+    """Canonicalize a category a person just typed, repairing obvious typos.
+
+    Only quick entry uses this. Everything else - editing, imports, historical
+    cleanup - stays on the deterministic alias mapping, so a guessed correction
+    can never be applied silently or in bulk.
+    """
+
+    normalized = normalize_category_name(value)
+    return correct_category_typo(normalized) or normalized
 
 
 def get_category_filter_values(category: str | None) -> set[str]:
@@ -4768,6 +4835,182 @@ def repair_category_learning_artifacts(db: Session, owner_id: int) -> dict[str, 
         "merchant_profiles_updated": updated_profiles,
         "learning_events_deleted": deleted_events,
         "learning_events_updated": updated_events,
+    }
+
+
+def get_owner_category_vocabulary(db: Session, owner_id: int) -> set[str]:
+    return {
+        normalize_category_name(row[0])
+        for row in db.query(Transaction.category).filter(Transaction.owner_id == owner_id).distinct().all()
+        if row[0]
+    }
+
+
+def resolve_typed_category_for_owner(db: Session, owner_id: int, category: str | None) -> str:
+    """Canonicalize a category typed during quick entry.
+
+    Repairs obvious typos, but never overrides a category the owner already
+    uses: once a custom name exists in their data it counts as intentional.
+    """
+
+    normalized = normalize_category_name(category)
+    if normalized in get_owner_category_vocabulary(db, owner_id):
+        return normalized
+
+    return normalize_typed_category_name(category)
+
+
+def build_category_rename_map(
+    values: Iterable[str | None],
+    repair_typos: bool = False,
+) -> dict[str, str]:
+    resolve = normalize_typed_category_name if repair_typos else normalize_category_name
+    renames: dict[str, str] = {}
+
+    for value in values:
+        if not value:
+            continue
+        canonical = resolve(value)
+        if canonical and value != canonical:
+            renames[value] = canonical
+
+    return renames
+
+
+def unify_stored_categories_for_user(
+    db: Session,
+    owner_id: int,
+    repair_typos: bool = False,
+    merge_budget_duplicates: bool = False,
+) -> dict[str, int]:
+    """Collapse legacy category spellings onto one canonical label per category.
+
+    Only the stored label changes. Nothing is re-categorized, so a row the user
+    filed under "Grocery" simply becomes "groceries" and keeps its own history.
+    Covers every account the user owns and is safe to call repeatedly: once the
+    stored labels are canonical it stops issuing writes.
+
+    Defaults are deliberately conservative so this can run unattended: spelling
+    is resolved through the deterministic alias table only, and no row is ever
+    deleted. ``repair_typos`` and ``merge_budget_duplicates`` turn on the two
+    judgement calls, and belong to an explicit user-triggered cleanup.
+    """
+
+    stats = {
+        "transactions_updated": 0,
+        "learning_rows_updated": 0,
+        "budget_plans_updated": 0,
+        "budget_plans_merged": 0,
+        "budget_plans_needing_merge": 0,
+    }
+
+    transaction_renames = build_category_rename_map(
+        (
+            row[0]
+            for row in db.query(Transaction.category)
+            .filter(Transaction.owner_id == owner_id)
+            .distinct()
+            .all()
+        ),
+        repair_typos=repair_typos,
+    )
+    for old_category, new_category in transaction_renames.items():
+        stats["transactions_updated"] += (
+            db.query(Transaction)
+            .filter(
+                Transaction.owner_id == owner_id,
+                Transaction.category == old_category,
+            )
+            .update({Transaction.category: new_category}, synchronize_session=False)
+        )
+
+    # Learned signals must move with the transactions, otherwise the next import
+    # re-applies the old spelling.
+    for model in (CategoryMemory, MerchantCategoryProfile, CategoryLearningEvent):
+        learning_renames = build_category_rename_map(
+            (
+                row[0]
+                for row in db.query(model.category)
+                .filter(model.owner_id == owner_id)
+                .distinct()
+                .all()
+            ),
+            repair_typos=repair_typos,
+        )
+        for old_category, new_category in learning_renames.items():
+            stats["learning_rows_updated"] += (
+                db.query(model)
+                .filter(model.owner_id == owner_id, model.category == old_category)
+                .update({model.category: new_category}, synchronize_session=False)
+            )
+
+    stats.update(
+        unify_budget_plan_categories_for_user(
+            db,
+            owner_id,
+            repair_typos=repair_typos,
+            merge_duplicates=merge_budget_duplicates,
+        )
+    )
+
+    if any(stats.values()):
+        db.commit()
+
+    return stats
+
+
+def unify_budget_plan_categories_for_user(
+    db: Session,
+    owner_id: int,
+    repair_typos: bool = False,
+    merge_duplicates: bool = False,
+) -> dict[str, int]:
+    """Canonicalize budget categories without ever losing a limit by default.
+
+    When two rows in the same month resolve to one category (for example
+    "grocery" and "groceries") the rename would collide. Those are left exactly
+    as they are and only counted, because deleting a budget the user typed is
+    not something that should happen unattended. ``merge_duplicates`` performs
+    the merge, keeping the larger limit so no budget silently shrinks.
+    """
+
+    resolve = normalize_typed_category_name if repair_typos else normalize_category_name
+    updated = 0
+    merged = 0
+    needing_merge = 0
+
+    plans_by_key: dict[tuple, list[BudgetPlan]] = {}
+    for plan in db.query(BudgetPlan).filter(BudgetPlan.owner_id == owner_id).all():
+        canonical = resolve(plan.category)
+        plans_by_key.setdefault((plan.account_id, plan.month, canonical), []).append(plan)
+
+    for (_, _, canonical), plans in plans_by_key.items():
+        if len(plans) > 1 and not merge_duplicates:
+            needing_merge += len(plans) - 1
+            continue
+
+        # Prefer the row that already uses the canonical spelling: that is what
+        # the current save path writes. Otherwise keep the newest row.
+        keeper = sorted(
+            plans,
+            key=lambda plan: (plan.category != canonical, -int(plan.id or 0)),
+        )[0]
+
+        for plan in plans:
+            if plan is keeper:
+                continue
+            keeper.amount = max(float(keeper.amount or 0.0), float(plan.amount or 0.0))
+            db.delete(plan)
+            merged += 1
+
+        if keeper.category != canonical:
+            keeper.category = canonical
+            updated += 1
+
+    return {
+        "budget_plans_updated": updated,
+        "budget_plans_merged": merged,
+        "budget_plans_needing_merge": needing_merge,
     }
 
 

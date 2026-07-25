@@ -81,6 +81,8 @@ from app.services.transaction_service import (
     record_category_learning_event,
     normalize_description,
     resolve_import_category_for_transaction,
+    resolve_typed_category_for_owner,
+    unify_stored_categories_for_user,
     apply_category_to_similar_transactions,
     apply_suspicious_amount_repairs,
     extract_merchant_fingerprint,
@@ -389,9 +391,17 @@ def create_transaction(
     validate_transaction_category(transaction.category)
     require_owned_account(db, current_user, transaction.account_id)
 
+    # Quick entry is the one place a typed typo is repaired, so a fast "gorcery"
+    # still lands on Groceries.
+    resolved_category = resolve_typed_category_for_owner(
+        db,
+        current_user.id,
+        transaction.category,
+    )
+
     new_transaction = Transaction(
         amount=transaction.amount,
-        category=normalize_category_name(transaction.category),
+        category=resolved_category,
         category_confidence=1.0,
         category_source="manual",
         category_reason="User entered this category manually.",
@@ -404,11 +414,13 @@ def create_transaction(
     )
 
     db.add(new_transaction)
+    # Matching rows and learned memory must get the repaired spelling too,
+    # otherwise the typo comes straight back on the next import.
     similar_updated_count = apply_category_to_similar_transactions(
         db=db,
         owner_id=current_user.id,
         description=transaction.description,
-        category=transaction.category,
+        category=resolved_category,
         tx_type=transaction.type,
         amount=transaction.amount,
         account_id=transaction.account_id,
@@ -424,7 +436,7 @@ def create_transaction(
         db=db,
         owner_id=current_user.id,
         description=transaction.description,
-        category=transaction.category,
+        category=resolved_category,
         tx_type=transaction.type,
         amount=transaction.amount,
         account_id=transaction.account_id,
@@ -454,7 +466,10 @@ def update_transaction(
     require_owned_account(db, current_user, updated_data.account_id)
 
     transaction.amount = updated_data.amount
-    transaction.category = normalize_category_name(updated_data.category)
+    # No typo repair on an edit: an edit is deliberate, so what the user typed
+    # wins. This is the escape hatch when quick entry guessed wrong.
+    edited_category = normalize_category_name(updated_data.category)
+    transaction.category = edited_category
     transaction.category_confidence = 1.0
     transaction.category_source = "manual_edit"
     transaction.category_reason = "User edited this category manually."
@@ -467,7 +482,7 @@ def update_transaction(
         db=db,
         owner_id=current_user.id,
         description=updated_data.description,
-        category=updated_data.category,
+        category=edited_category,
         tx_type=updated_data.type,
         amount=updated_data.amount,
         account_id=updated_data.account_id,
@@ -483,7 +498,7 @@ def update_transaction(
         db=db,
         owner_id=current_user.id,
         description=updated_data.description,
-        category=updated_data.category,
+        category=edited_category,
         tx_type=updated_data.type,
         amount=updated_data.amount,
         account_id=updated_data.account_id,
@@ -585,11 +600,23 @@ def normalize_categories_route(
 ):
     require_owned_account(db, current_user, account_id, allow_all=True)
 
-    return normalize_existing_categories_for_user(
+    result = normalize_existing_categories_for_user(
         db=db,
         owner_id=current_user.id,
         account_id=account_id,
     )
+
+    # This route is the explicit cleanup the user asks for, so it may finish with
+    # the two things the automatic login pass refuses to do unattended: repair
+    # typed typos in stored rows, and merge duplicate budget rows.
+    unified = unify_stored_categories_for_user(
+        db=db,
+        owner_id=current_user.id,
+        repair_typos=True,
+        merge_budget_duplicates=True,
+    )
+
+    return {**result, **unified}
 
 
 @router.get("/amount-repairs/preview", response_model=SuspiciousAmountRepairPreviewResponse)

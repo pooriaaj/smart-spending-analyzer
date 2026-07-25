@@ -10,6 +10,7 @@ from urllib.parse import quote
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy import func
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from app.auth import (
@@ -30,6 +31,7 @@ from app.schemas import (
 )
 from app.security import is_production
 from app.services.email_service import send_password_reset_email
+from app.services.transaction_service import unify_stored_categories_for_user
 
 router = APIRouter(prefix="/auth", tags=["Auth"])
 logger = logging.getLogger(__name__)
@@ -131,6 +133,25 @@ def register(user: UserCreate, response: Response, db: Session = Depends(get_db)
     return MessageResponse(message="Registered successfully")
 
 
+def unify_categories_after_login(db: Session, owner_id: int) -> None:
+    """Collapse legacy category spellings once per sign-in.
+
+    Every save path already stores canonical categories, so this only has work
+    to do for data written before that was true. It must never block a login,
+    so any failure is rolled back and logged instead of raised.
+    """
+
+    try:
+        stats = unify_stored_categories_for_user(db, owner_id)
+    except SQLAlchemyError:
+        db.rollback()
+        logger.exception("Category unification failed during login.")
+        return
+
+    if any(stats.values()):
+        logger.info("Unified legacy categories on login: %s", stats)
+
+
 @router.post("/login", response_model=MessageResponse)
 def login(
     response: Response,
@@ -147,6 +168,8 @@ def login(
 
     access_token = create_access_token({"sub": str(user.id)})
     set_access_token_cookie(response, access_token)
+
+    unify_categories_after_login(db, user.id)
 
     return MessageResponse(message="Logged in successfully")
 
