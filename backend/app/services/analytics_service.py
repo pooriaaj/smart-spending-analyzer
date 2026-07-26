@@ -18,8 +18,11 @@ from app.services.budget_metrics import (
 )
 from app.services.saved_scenario_service import list_saved_scenarios
 from app.services.transaction_service import (
+    get_category_filter_values,
     get_fast_transaction_quality_summary,
     get_transaction_data_quality_report,
+    normalize_category_name,
+    resolve_owner_category_filter_values,
 )
 
 
@@ -47,22 +50,6 @@ CASHFLOW_NEUTRAL_DESCRIPTION_MARKERS = (
     "virement interac",
     "virement en ligne",
 )
-
-ANALYTICS_CATEGORY_ALIASES = {
-    "cafe": {"cafe", "café", "coffee"},
-    "car maintenance": {"car maintenance", "car_maintenance"},
-    "debt": {"debt", "debt payment", "debt payments", "debt_payment", "debt_payments"},
-    "education": {"education", "school", "tuition"},
-    "groceries": {"grocery", "groceries"},
-    "healthcare": {"health", "healthcare"},
-    "other": {"other", "misc", "miscellaneous", "uncategorized", "unknown"},
-    "restaurant": {"restaurant", "restaurants"},
-    "smoking": {"smoking", "smokes", "weed", "cigarette", "cigarettes", "cigar", "cigars"},
-    "subscriptions": {"subscription", "subscriptions"},
-    "transfer": {"transfer", "transfers"},
-    "transport": {"transport", "transportation"},
-    "utilities": {"utility", "utilities"},
-}
 
 ESSENTIAL_RECURRING_CATEGORY_KEYWORDS = {
     "debt",
@@ -148,28 +135,36 @@ def normalized_category_expression():
     )
 
 
-def analytics_category_alias_match(value: str | None) -> tuple[str, set[str]]:
-    normalized = normalize_analytics_category(value)
-    if not normalized:
-        return "other", {"other"}
-
-    for canonical, aliases in ANALYTICS_CATEGORY_ALIASES.items():
-        normalized_aliases = {normalize_analytics_category(alias) for alias in aliases}
-        raw_aliases = {str(alias or "").strip().lower() for alias in aliases if str(alias or "").strip()}
-        if normalized == canonical or normalized in normalized_aliases:
-            return canonical, normalized_aliases | raw_aliases | {canonical}
-
-    return normalized, {normalized}
-
-
 def canonical_analytics_category(value: str | None) -> str:
-    canonical, _ = analytics_category_alias_match(value)
-    return canonical
+    """Which bucket a stored category belongs to.
+
+    Analytics used to keep its own alias table, which meant a chart could group
+    rows one way while the transaction list filtered them another. Both now go
+    through the single taxonomy in transaction_service.
+    """
+
+    return normalize_category_name(value)
 
 
 def get_analytics_category_variants(category: str | None) -> set[str]:
-    _, variants = analytics_category_alias_match(category)
-    return variants
+    return get_category_filter_values(category)
+
+
+def apply_owner_category_filter(query: Query, db: Session, user_id: int, category: str | None) -> Query:
+    """Restrict a query to the rows a chart would group under ``category``."""
+
+    if not category:
+        return query
+
+    category_values = resolve_owner_category_filter_values(db, user_id, category)
+    return query.filter(
+        or_(
+            Transaction.category.in_(tuple(category_values)),
+            func.lower(Transaction.category).in_(
+                tuple(value.lower() for value in category_values)
+            ),
+        )
+    )
 
 
 def is_cashflow_neutral_category(category: str | None) -> bool:
@@ -227,9 +222,7 @@ def build_filtered_query(
     if transaction_type:
         query = query.filter(Transaction.type == transaction_type)
     if category:
-        category_variants = get_analytics_category_variants(category)
-        if category_variants:
-            query = query.filter(normalized_category_expression().in_(tuple(category_variants)))
+        query = apply_owner_category_filter(query, db, user_id, category)
     if account_id is not None:
         query = query.filter(Transaction.account_id == account_id)
     if not include_cashflow_neutral and not is_cashflow_neutral_category(category):
@@ -429,10 +422,12 @@ def get_transactions_for_category(
     account_id: int | None = None,
     limit: int = 5,
 ) -> list[Transaction]:
-    category_variants = get_analytics_category_variants(category)
-    query = db.query(Transaction).filter(Transaction.owner_id == user_id)
-    if category_variants:
-        query = query.filter(normalized_category_expression().in_(tuple(category_variants)))
+    query = apply_owner_category_filter(
+        db.query(Transaction).filter(Transaction.owner_id == user_id),
+        db,
+        user_id,
+        category,
+    )
 
     if account_id is not None:
         query = query.filter(Transaction.account_id == account_id)

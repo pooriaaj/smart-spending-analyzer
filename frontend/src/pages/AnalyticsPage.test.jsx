@@ -266,14 +266,16 @@ describe('AnalyticsPage', () => {
     })
   })
 
-  it('navigates to transaction drilldown when a category is selected', async () => {
+  it('navigates to transaction drilldown using the stored category, not the visible label', async () => {
     const user = userEvent.setup()
     renderAnalyticsPage()
 
     await waitForAnalytics()
 
+    // The bar reads "Groceries" but the row is stored as "groceries". Sending
+    // the label would break as soon as it is translated.
     await user.click(screen.getAllByRole('button', { name: /Groceries/ })[0])
 
-    expect(mockNavigate).toHaveBeenCalledWith('/transactions?category=Groceries')
+    expect(mockNavigate).toHaveBeenCalledWith('/transactions?category=groceries')
   })
 })

@@ -386,6 +386,10 @@ CATEGORY_ALIASES = {
     "tobacco": "smoking",
     "weed": "smoking",
     "vape": "smoking",
+    "cigar": "smoking",
+    "cigars": "smoking",
+    "cigarette": "smoking",
+    "cigarettes": "smoking",
     "alcohol": "alcohol",
     "liquor": "alcohol",
     "beer": "alcohol",
@@ -419,12 +423,15 @@ CATEGORY_ALIASES = {
     "car maintenance": "car maintenance",
     "car_maintenance": "car maintenance",
     "health": "health",
+    "healthcare": "health",
     "medical": "health",
     "insurance": "insurance",
     "debt": "debt payments",
     "debt payment": "debt payments",
     "debt payments": "debt payments",
     "education": "education",
+    "school": "education",
+    "tuition": "education",
     "travel": "travel",
     "investment": "investment",
     "investments": "investment",
@@ -995,6 +1002,46 @@ def get_category_filter_values(category: str | None) -> set[str]:
             category_values.add(alias.strip().lower())
 
     return {value for value in category_values if value}
+
+
+def get_owner_stored_categories(db: Session, owner_id: int) -> list[str]:
+    return [
+        str(row[0])
+        for row in db.query(Transaction.category)
+        .filter(Transaction.owner_id == owner_id, Transaction.category.is_not(None))
+        .distinct()
+        .all()
+        if row[0]
+    ]
+
+
+def resolve_owner_category_filter_values(
+    db: Session,
+    owner_id: int,
+    category: str | None,
+) -> set[str]:
+    """Every stored spelling in this owner's data that means ``category``.
+
+    This is the one definition of category membership in the app. A chart groups
+    a row under ``normalize_category_name(row.category)``; this returns exactly
+    the stored values that land in that group, so a total and the list behind it
+    can never cover different rows. Because it reads the owner's actual values
+    rather than guessing from an alias list, it holds for custom categories and
+    legacy spellings too.
+
+    The canonical name is always included, so an unmatched category filters to
+    nothing instead of silently matching everything.
+    """
+
+    target = normalize_category_name(category)
+    matching_values = {
+        stored_category
+        for stored_category in get_owner_stored_categories(db, owner_id)
+        if normalize_category_name(stored_category) == target
+    }
+    matching_values.add(target)
+
+    return matching_values
 
 
 def is_usable_category_name(value: str | None) -> bool:
@@ -3825,6 +3872,8 @@ def build_transaction_scope_query(
 def apply_transaction_filters(
     query,
     *,
+    db: Session | None = None,
+    owner_id: int | None = None,
     transaction_type: str | None = None,
     month: str | None = None,
     start_date: date | None = None,
@@ -3851,8 +3900,21 @@ def apply_transaction_filters(
         query = query.filter(Transaction.date <= end_date)
 
     if category:
-        category_values = get_category_filter_values(category)
-        query = query.filter(func.lower(Transaction.category).in_(tuple(category_values)))
+        # Prefer the owner's actual stored spellings so this matches the chart
+        # grouping exactly; fall back to alias guessing when no owner is scoped.
+        category_values = (
+            resolve_owner_category_filter_values(db, owner_id, category)
+            if db is not None and owner_id is not None
+            else get_category_filter_values(category)
+        )
+        query = query.filter(
+            or_(
+                Transaction.category.in_(tuple(category_values)),
+                func.lower(Transaction.category).in_(
+                    tuple(value.lower() for value in category_values)
+                ),
+            )
+        )
 
     if entry_source:
         normalized_source = str(entry_source).strip().lower()
@@ -4620,6 +4682,8 @@ def get_transactions_page_for_user(
     scope_total = scope_query.count()
     filtered_query = apply_transaction_filters(
         scope_query,
+        db=db,
+        owner_id=owner_id,
         transaction_type=transaction_type,
         month=month,
         start_date=start_date,

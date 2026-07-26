@@ -121,13 +121,19 @@ function mergeCategoryBreakdown(items, t) {
 
   toArray(items).forEach((item) => {
     const displayCategory = formatCategoryName(item.category, t);
-    const currentTotal = mergedMap.get(displayCategory) || 0;
-    mergedMap.set(displayCategory, currentTotal + Number(item.total || 0));
+    const existing = mergedMap.get(displayCategory);
+    mergedMap.set(displayCategory, {
+      // Keep the category as the backend stores it. Drilling down on the
+      // translated label would search for the French name and find nothing.
+      filterCategory: existing?.filterCategory || item.category,
+      total: (existing?.total || 0) + Number(item.total || 0),
+    });
   });
 
   return Array.from(mergedMap.entries())
-    .map(([category, total]) => ({
+    .map(([category, { filterCategory, total }]) => ({
       category,
+      filterCategory,
       total: Number(total.toFixed(2)),
     }))
     .sort((a, b) => b.total - a.total);
@@ -559,7 +565,11 @@ function AnalyticsPage() {
       : "";
   };
 
-  const handleCategoryDrilldown = (category) => {
+  const handleCategoryDrilldown = (item) => {
+    // Always drill down on the stored category, never the translated label.
+    // Recharts hands back either the row itself or a wrapper around it.
+    const source = typeof item === "string" ? null : item?.payload || item;
+    const category = typeof item === "string" ? item : source?.filterCategory || source?.category;
     if (!category) return;
 
     // Carry the filters the chart was showing, otherwise the list totals a
@@ -1020,7 +1030,7 @@ function AnalyticsPage() {
                         paddingAngle={3}
                         labelLine={false}
                         label={({ payload }) => `${Number(payload?.sharePercent || 0).toFixed(0)}%`}
-                        onClick={(entry) => handleCategoryDrilldown(entry?.category)}
+                        onClick={(entry) => handleCategoryDrilldown(entry)}
                         cursor="pointer"
                       >
                         {topCategoryPieData.map((item) => (
@@ -1043,7 +1053,7 @@ function AnalyticsPage() {
                         key={`pie-legend-${item.category}`}
                         type="button"
                         className="analytics-top-pie-row"
-                        onClick={() => handleCategoryDrilldown(item.category)}
+                        onClick={() => handleCategoryDrilldown(item)}
                       >
                         <span style={{ backgroundColor: item.fill }} />
                         <strong>{formatCategoryName(item.category, t)}</strong>
@@ -1104,7 +1114,7 @@ function AnalyticsPage() {
                       fill: chartTheme.text,
                       fontSize: 12,
                     }}
-                    onClick={(entry) => handleCategoryDrilldown(entry?.category)}
+                    onClick={(entry) => handleCategoryDrilldown(entry)}
                     cursor="pointer"
                   />
                 </BarChart>
@@ -1147,7 +1157,7 @@ function AnalyticsPage() {
                             <button
                               type="button"
                               className="overview-category-link"
-                              onClick={() => handleCategoryDrilldown(item.category)}
+                              onClick={() => handleCategoryDrilldown(item)}
                             >
                               {formatCategoryName(item.category, t)}
                             </button>

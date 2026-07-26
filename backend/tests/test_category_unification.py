@@ -27,7 +27,9 @@ from app.models import (
 from app.routes import auth_routes
 from app.routes.transaction_routes import router as transaction_router
 from app.security import RequestIdMiddleware
+from app.services.analytics_service import canonical_analytics_category, get_category_breakdown
 from app.services.transaction_service import (
+    get_transactions_page_for_user,
     normalize_category_name,
     normalize_typed_category_name,
     unify_stored_categories_for_user,
@@ -441,6 +443,135 @@ class CategoryDrilldownTest(StoredCategoryUnificationTest):
             stored = {row[0] for row in session.query(Transaction.category).distinct().all()}
 
         self.assertEqual(stored, {"groceries"})
+
+
+class CategoryMembershipInvariantTest(StoredCategoryUnificationTest):
+    """The core guarantee: a chart bucket and its list always cover the same rows.
+
+    A total the user can click must never be built from a different set of
+    transactions than the list behind it. Rather than testing one category,
+    this asserts the property across the whole taxonomy plus custom names.
+    """
+
+    # Deliberately nasty: alias pairs that the two old tables disagreed on,
+    # casing and punctuation variants, plus custom names the app knows nothing
+    # about. Every one of these was a way to produce a wrong total.
+    STORED_SPELLINGS = [
+        "groceries",
+        "Grocery",
+        "supermarket",
+        "health",
+        "Healthcare",
+        "medical",
+        "debt",
+        "debt payments",
+        "Car-Maintenance",
+        "car_maintenance",
+        "transport",
+        "Transportation",
+        "restaurant",
+        "restaurants",
+        "utility",
+        "Utilities",
+        "coffee",
+        "Café",
+        "school",
+        "tuition",
+        "cigarettes",
+        "smoking",
+        "Uber Eats",
+        "Coffee Shops",
+        "Public Transportation",
+        "Emergency Fund",
+        "tfsa",
+        "pooria",
+    ]
+
+    def seed_every_spelling(self) -> None:
+        with self.session_local() as session:
+            session.add_all(
+                [
+                    Transaction(
+                        amount=10.0 + index,
+                        category=spelling,
+                        description=f"row {index}",
+                        date=date(2026, 6, 1),
+                        type="expense",
+                        owner_id=self.user_id,
+                        account_id=self.first_account_id,
+                    )
+                    for index, spelling in enumerate(self.STORED_SPELLINGS)
+                ]
+            )
+            session.commit()
+
+    def test_every_chart_bucket_matches_its_transaction_list(self) -> None:
+        self.seed_every_spelling()
+
+        with self.session_local() as session:
+            breakdown = get_category_breakdown(session, self.user_id, transaction_type="expense")
+            self.assertTrue(breakdown, "expected the chart to produce buckets")
+
+            for bucket in breakdown:
+                with self.subTest(category=bucket["category"]):
+                    listed = get_transactions_page_for_user(
+                        db=session,
+                        owner_id=self.user_id,
+                        category=bucket["category"],
+                        page_size=100,
+                    )
+                    listed_total = round(
+                        sum(abs(float(item.amount or 0.0)) for item in listed["items"]), 2
+                    )
+                    self.assertEqual(listed_total, bucket["total"])
+
+    def test_no_transaction_is_reachable_from_two_buckets(self) -> None:
+        self.seed_every_spelling()
+
+        with self.session_local() as session:
+            breakdown = get_category_breakdown(session, self.user_id, transaction_type="expense")
+
+            seen_ids: set[int] = set()
+            for bucket in breakdown:
+                listed = get_transactions_page_for_user(
+                    db=session,
+                    owner_id=self.user_id,
+                    category=bucket["category"],
+                    page_size=100,
+                )
+                ids = {int(item.id) for item in listed["items"]}
+                self.assertFalse(
+                    seen_ids & ids,
+                    f"{bucket['category']} shares transactions with an earlier bucket",
+                )
+                seen_ids |= ids
+
+            total_rows = session.query(Transaction).count()
+            self.assertEqual(len(seen_ids), total_rows)
+
+    def test_unknown_category_filters_to_nothing_rather_than_everything(self) -> None:
+        self.seed_every_spelling()
+
+        with self.session_local() as session:
+            listed = get_transactions_page_for_user(
+                db=session,
+                owner_id=self.user_id,
+                category="a category nobody uses",
+                page_size=100,
+            )
+
+        self.assertEqual(listed["total"], 0)
+
+    def test_analytics_and_transactions_agree_on_membership(self) -> None:
+        self.seed_every_spelling()
+
+        with self.session_local() as session:
+            for spelling in self.STORED_SPELLINGS:
+                with self.subTest(spelling=spelling):
+                    self.assertEqual(
+                        canonical_analytics_category(spelling),
+                        normalize_category_name(spelling),
+                    )
 
 
 class LoginCategoryUnificationTest(unittest.TestCase):

@@ -281,6 +281,8 @@ def export_transactions_csv(
     scope_query = build_transaction_scope_query(db, current_user.id, account_id=account_id)
     filtered_query = apply_transaction_filters(
         scope_query,
+        db=db,
+        owner_id=current_user.id,
         transaction_type=transaction_type,
         month=month,
         start_date=start_date,
