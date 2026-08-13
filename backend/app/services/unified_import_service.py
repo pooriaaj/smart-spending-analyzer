@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from collections import Counter
 from datetime import date
 from pathlib import Path
 from typing import Any
@@ -20,6 +21,7 @@ from app.services.transaction_service import (
     get_existing_duplicate_keys,
     get_existing_statement_match_map,
     parse_csv_statement_preview,
+    pick_statement_match_candidate,
 )
 
 
@@ -47,7 +49,8 @@ def annotate_preview_rows_for_duplicates(
     account_id: int,
     preview_rows: list[StatementPreviewRow],
 ) -> list[StatementPreviewRow]:
-    existing_keys = get_existing_duplicate_keys(db, owner_id, account_id=account_id)
+    # Copied so each stored transaction can only be claimed by one preview row.
+    remaining_duplicate_keys = Counter(get_existing_duplicate_keys(db, owner_id, account_id=account_id))
     existing_statement_matches = get_existing_statement_match_map(db, owner_id, account_id=account_id)
     seen_matched_transaction_ids: set[int] = set()
     seen_preview_duplicate_keys: set[tuple] = set()
@@ -90,13 +93,27 @@ def annotate_preview_rows_for_duplicates(
             continue
 
         reconciliation_status = "missing"
+        same_key_candidates = existing_statement_matches.get(statement_match_key, [])
 
-        if duplicate_key in existing_keys:
+        if remaining_duplicate_keys[duplicate_key] > 0:
+            remaining_duplicate_keys[duplicate_key] -= 1
             duplicate_reason = "Already written in this account."
-            matched_transaction = existing_statement_matches.get(statement_match_key)
-        elif statement_match_key in existing_statement_matches:
-            matched_transaction = existing_statement_matches[statement_match_key]
-            duplicate_reason = f"Already written as {matched_transaction.description}."
+            matched_transaction = pick_statement_match_candidate(
+                same_key_candidates,
+                row.description,
+                seen_matched_transaction_ids,
+            )
+        elif same_key_candidates:
+            # Same day, same amount, same direction. Only call it a match when the
+            # merchant agrees and that stored row has not already answered for an
+            # earlier preview row.
+            matched_transaction = pick_statement_match_candidate(
+                same_key_candidates,
+                row.description,
+                seen_matched_transaction_ids,
+            )
+            if matched_transaction:
+                duplicate_reason = f"Already written as {matched_transaction.description}."
         elif (
             duplicate_key in seen_preview_duplicate_keys
             or statement_match_key in seen_preview_statement_keys
@@ -111,6 +128,7 @@ def annotate_preview_rows_for_duplicates(
                 tx_date=tx_date,
                 amount=row.amount,
                 tx_type=row.type,
+                description=row.description,
             )
             if matched_transaction and matched_transaction.id not in seen_matched_transaction_ids:
                 duplicate_reason = describe_likely_statement_match(tx_date, matched_transaction)

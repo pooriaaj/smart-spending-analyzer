@@ -80,6 +80,15 @@ IMPORTED_TRANSACTION_SOURCES = {
     "receipt_import",
     "statement_import",
 }
+# Sources whose description was read off a bank statement or receipt rather than
+# typed by the user. Only these can be compared merchant-to-merchant during
+# reconciliation; "manual_import_review" is excluded because the user typed it.
+BANK_GENERATED_DESCRIPTION_SOURCES = {
+    "csv_import",
+    "pdf_import",
+    "receipt_import",
+    "statement_import",
+}
 
 
 def _bounded_int_env(name: str, default: int, minimum: int, maximum: int) -> int:
@@ -3525,7 +3534,19 @@ def build_statement_match_key(
     )
 
 
-def get_existing_duplicate_keys(db: Session, owner_id: int, account_id: int | None = None) -> set[tuple]:
+def get_existing_duplicate_keys(
+    db: Session,
+    owner_id: int,
+    account_id: int | None = None,
+) -> Counter[tuple]:
+    """How many stored transactions exist per exact duplicate key.
+
+    Counted rather than collected into a set: buying the same thing twice in one
+    day is normal, and a set reported both statement rows as already written while
+    only one was.  ``key in result`` still works for callers that only need
+    presence.
+    """
+
     query = db.query(Transaction).filter(Transaction.owner_id == owner_id)
 
     if account_id is not None:
@@ -3533,7 +3554,7 @@ def get_existing_duplicate_keys(db: Session, owner_id: int, account_id: int | No
 
     existing_transactions = query.all()
 
-    return {
+    return Counter(
         build_duplicate_key(
             owner_id=transaction.owner_id,
             account_id=transaction.account_id or 0,
@@ -3544,21 +3565,81 @@ def get_existing_duplicate_keys(db: Session, owner_id: int, account_id: int | No
             category=transaction.category,
         )
         for transaction in existing_transactions
-    }
+    )
+
+
+@lru_cache(maxsize=4096)
+def statement_merchant_base_key(description: str | None) -> str:
+    """The merchant token a statement line boils down to, or "" if unknowable."""
+
+    fingerprint = extract_merchant_fingerprint(str(description or ""))
+    if not fingerprint:
+        return ""
+    return merchant_profile_base_key(fingerprint[0]).strip().lower()
+
+
+def statement_descriptions_conflict(
+    statement_description: str | None,
+    stored_transaction: Transaction,
+) -> bool:
+    """True when a statement row clearly names a different merchant than a stored row.
+
+    Only applied when the stored description also came from a bank statement or a
+    receipt. Reconciliation exists so a hand-written "Morning latte" can match a
+    statement's "TIM HORTONS", so a user's own wording must never block a match.
+    Two machine-read descriptions are different: if those name different merchants,
+    a shared date and amount is a coincidence, not a duplicate.
+    """
+
+    if str(stored_transaction.entry_source or "") not in BANK_GENERATED_DESCRIPTION_SOURCES:
+        return False
+
+    statement_key = statement_merchant_base_key(statement_description)
+    stored_key = statement_merchant_base_key(stored_transaction.description)
+    if not statement_key or not stored_key:
+        return False
+    return statement_key != stored_key
+
+
+def pick_statement_match_candidate(
+    candidates: list[Transaction],
+    description: str | None,
+    used_transaction_ids: set[int],
+) -> Transaction | None:
+    """Pick the stored transaction a statement row should reconcile against.
+
+    Each stored transaction can only answer for one statement row, otherwise two
+    identical-amount rows on the same day both report as already written and one
+    real transaction is silently dropped.
+    """
+
+    for transaction in candidates:
+        if transaction.id in used_transaction_ids:
+            continue
+        if statement_descriptions_conflict(description, transaction):
+            continue
+        return transaction
+    return None
 
 
 def get_existing_statement_match_map(
     db: Session,
     owner_id: int,
     account_id: int | None = None,
-) -> dict[tuple, Transaction]:
+) -> dict[tuple, list[Transaction]]:
+    """Stored transactions grouped by date + amount + type.
+
+    Every transaction sharing a key is kept. Collapsing them to one hid genuine
+    repeat purchases behind a single "already written" match.
+    """
+
     query = db.query(Transaction).filter(Transaction.owner_id == owner_id)
 
     if account_id is not None:
         query = query.filter(Transaction.account_id == account_id)
 
-    existing_transactions = query.all()
-    match_map: dict[tuple, Transaction] = {}
+    existing_transactions = query.order_by(Transaction.id.asc()).all()
+    match_map: dict[tuple, list[Transaction]] = {}
     for transaction in existing_transactions:
         if transaction.account_id is None:
             continue
@@ -3569,7 +3650,7 @@ def get_existing_statement_match_map(
             amount=transaction.amount,
             tx_type=transaction.type,
         )
-        match_map.setdefault(key, transaction)
+        match_map.setdefault(key, []).append(transaction)
 
     return match_map
 
@@ -3581,12 +3662,17 @@ def find_likely_statement_match(
     tx_date: date,
     amount: float,
     tx_type: str,
+    description: str | None = None,
 ) -> Transaction | None:
     """Find one safe near-date match for month-end statement reconciliation.
 
     Bank posted dates often drift 1-3 days from the day a user manually wrote a
     transaction. We only auto-match when there is exactly one same-account,
     same-type, same-amount candidate in the nearby date window.
+
+    When ``description`` is given, candidates naming a different merchant are
+    dropped first. Without that, a repeated small amount such as a $3.30 transit
+    fare matches whatever else happened to cost $3.30 that week.
     """
 
     window_start = tx_date - timedelta(days=STATEMENT_RECONCILIATION_DATE_WINDOW_DAYS)
@@ -3612,6 +3698,13 @@ def find_likely_statement_match(
         if abs(round(abs(float(transaction.amount)), 2) - target_amount)
         <= STATEMENT_RECONCILIATION_AMOUNT_TOLERANCE
     ]
+
+    if description is not None:
+        amount_matches = [
+            transaction
+            for transaction in amount_matches
+            if not statement_descriptions_conflict(description, transaction)
+        ]
 
     if len(amount_matches) != 1:
         return None

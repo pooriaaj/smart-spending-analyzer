@@ -611,7 +611,11 @@ function AnalyticsPage() {
     total_income: 0,
     total_expenses: 0,
     balance: 0,
+    transfer_income: 0,
+    transfer_expenses: 0,
   };
+  const transferIncome = Number(summary.transfer_income || 0);
+  const transferExpenses = Number(summary.transfer_expenses || 0);
   const monthlySummary = toArray(dashboardData?.monthly_summary);
   const overspendingAlerts = dashboardData?.overspending_alerts;
   const overspendingAlertItems = toArray(overspendingAlerts?.alerts);
@@ -752,12 +756,22 @@ function AnalyticsPage() {
               tone="income"
               label={t("analytics.totalIncome")}
               value={formatMoney(summary.total_income)}
+              helper={
+                transferIncome > 0
+                  ? t("analytics.transferIncomeHelper", { amount: formatMoney(transferIncome) })
+                  : undefined
+              }
               icon={IconTrendingUp}
             />
             <OverviewStatCard
               tone="expense"
               label={t("analytics.totalExpenses")}
               value={formatMoney(summary.total_expenses)}
+              helper={
+                transferExpenses > 0
+                  ? t("analytics.transferExpenseHelper", { amount: formatMoney(transferExpenses) })
+                  : undefined
+              }
               icon={IconTrendingDown}
             />
             <OverviewStatCard

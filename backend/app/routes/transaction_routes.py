@@ -80,6 +80,7 @@ from app.services.transaction_service import (
     normalize_existing_categories_for_user,
     record_category_learning_event,
     normalize_description,
+    pick_statement_match_candidate,
     resolve_import_category_for_transaction,
     resolve_typed_category_for_owner,
     unify_stored_categories_for_user,
@@ -952,10 +953,20 @@ def confirm_preview_import(
                 tx_type=row.type,
             )
 
-            if (
-                duplicate_key in existing_keys
-                or statement_match_key in existing_statement_matches
-            ):
+            if existing_keys[duplicate_key] > 0:
+                existing_keys[duplicate_key] -= 1
+                duplicates_skipped += 1
+                continue
+
+            # Same date, amount and direction is only a duplicate when the merchant
+            # agrees, and each stored transaction can only absorb one imported row.
+            same_key_match = pick_statement_match_candidate(
+                existing_statement_matches.get(statement_match_key, []),
+                description,
+                seen_matched_transaction_ids,
+            )
+            if same_key_match:
+                seen_matched_transaction_ids.add(same_key_match.id)
                 duplicates_skipped += 1
                 continue
 
@@ -966,6 +977,7 @@ def confirm_preview_import(
                 tx_date=tx_date,
                 amount=row_amount,
                 tx_type=row.type,
+                description=description,
             )
             if likely_match and likely_match.id not in seen_matched_transaction_ids:
                 seen_matched_transaction_ids.add(likely_match.id)

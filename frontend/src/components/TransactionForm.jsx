@@ -18,6 +18,15 @@ import api from "../services/api";
 import AccountSelector from "./AccountSelector";
 import { getSelectedAccountId } from "../services/accountStorage";
 import { useLanguage } from "../i18n/LanguageContext";
+import { getApiErrorMessage } from "../utils/errorUtils";
+
+// The stored account scope can be the "all" sentinel, and the selector reports an
+// empty value until the account list loads. Neither is a real account id, so both
+// have to be rejected before we build the payload.
+function toAccountId(value) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+}
 
 function TransactionForm({
   onTransactionCreated,
@@ -32,6 +41,7 @@ function TransactionForm({
   const [date, setDate] = useState("");
   const [type, setType] = useState("expense");
   const [error, setError] = useState("");
+  const [savedMessage, setSavedMessage] = useState("");
   const [suggestion, setSuggestion] = useState(null);
   const [suggestionLoading, setSuggestionLoading] = useState(false);
   const { t } = useLanguage();
@@ -54,6 +64,7 @@ function TransactionForm({
 
     setSuggestion(null);
     setError("");
+    setSavedMessage("");
   }, [editingTransaction]);
 
   const resetForm = () => {
@@ -95,26 +106,40 @@ function TransactionForm({
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
+    setSavedMessage("");
+
+    const resolvedAccountId = toAccountId(accountId);
+    if (!resolvedAccountId) {
+      setError(t("transactionForm.accountRequired"));
+      return;
+    }
+
+    const resolvedAmount = parseFloat(amount);
+    if (!Number.isFinite(resolvedAmount) || resolvedAmount <= 0) {
+      setError(t("transactionForm.amountRequired"));
+      return;
+    }
 
     try {
-      if (!accountId) {
-        setError(t("transactionForm.accountRequired"));
-        return;
-      }
-
       const payload = {
-        amount: parseFloat(amount),
+        amount: resolvedAmount,
         category,
         description,
         date,
         type,
-        account_id: Number(accountId),
+        account_id: resolvedAccountId,
       };
 
       if (editingTransaction) {
         await api.put(`/transactions/${editingTransaction.id}`, payload);
       } else {
         await api.post("/transactions/", payload);
+        setSavedMessage(
+          t(type === "income" ? "transactionForm.savedIncome" : "transactionForm.savedExpense", {
+            amount: resolvedAmount.toFixed(2),
+            date,
+          })
+        );
       }
 
       resetForm();
@@ -126,11 +151,15 @@ function TransactionForm({
       if (editingTransaction && onCancelEdit) {
         onCancelEdit();
       }
-    } catch {
+    } catch (submitError) {
+      // Show what the server actually rejected instead of a generic message.
       setError(
-        editingTransaction
-          ? t("transactionForm.updateFailed")
-          : t("transactionForm.createFailed")
+        getApiErrorMessage(
+          submitError,
+          editingTransaction
+            ? t("transactionForm.updateFailed")
+            : t("transactionForm.createFailed")
+        )
       );
     }
   };
@@ -160,6 +189,7 @@ function TransactionForm({
                 onChange={setAccountId}
                 allowAll={false}
                 label={t("common.targetAccount")}
+                persistSelection={false}
               />
             </Box>
 
@@ -252,6 +282,15 @@ function TransactionForm({
               {suggestion.matched_keyword && (
                 <Text size="sm">{t("transactionForm.matchedKeyword")}: {suggestion.matched_keyword}</Text>
               )}
+            </Stack>
+          </Alert>
+        )}
+
+        {savedMessage && (
+          <Alert color="teal" radius="lg" variant="light">
+            <Stack gap={4}>
+              <Text fw={700}>{savedMessage}</Text>
+              <Text size="sm">{t("transactionForm.savedHint")}</Text>
             </Stack>
           </Alert>
         )}

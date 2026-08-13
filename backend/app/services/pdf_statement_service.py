@@ -1543,6 +1543,14 @@ def is_income_description(description: str) -> bool:
         "interac recu",
         "virement interac recu",
         "recu",
+        # A cancelled outgoing e-Transfer returns the money, so the bank posts it
+        # in the deposits column. Without these it falls through to the expense
+        # default and the deposit is counted as spending.
+        "e-transfer cancel",
+        "etransfer cancel",
+        "transfer cancel",
+        "virement annule",
+        "annulation de virement",
     ]
 
     return any(marker in lowered for marker in income_markers)

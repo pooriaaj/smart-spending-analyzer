@@ -265,10 +265,40 @@ def get_summary(
     total_income = float(totals.total_income or 0.0)
     total_expenses = float(totals.total_expenses or 0.0)
 
+    # The figures above deliberately leave out money moving between the user's own
+    # accounts (e-Transfers, ATM deposits, card payments). Report what was left out
+    # so the page can explain a small income number instead of just showing it.
+    transfer_income = 0.0
+    transfer_expenses = 0.0
+    if not is_cashflow_neutral_category(category):
+        transfer_totals = (
+            build_filtered_query(
+                db,
+                user_id,
+                month=month,
+                start_date=start_date,
+                end_date=end_date,
+                transaction_type=transaction_type,
+                category=category,
+                account_id=account_id,
+                include_cashflow_neutral=True,
+            )
+            .filter(cashflow_neutral_filter())
+            .with_entities(
+                func.coalesce(func.sum(income_amount_expression()), 0.0).label("total_income"),
+                func.coalesce(func.sum(expense_amount_expression()), 0.0).label("total_expenses"),
+            )
+            .one()
+        )
+        transfer_income = float(transfer_totals.total_income or 0.0)
+        transfer_expenses = float(transfer_totals.total_expenses or 0.0)
+
     return {
         "total_income": total_income,
         "total_expenses": total_expenses,
         "balance": total_income - total_expenses,
+        "transfer_income": transfer_income,
+        "transfer_expenses": transfer_expenses,
     }
 
 

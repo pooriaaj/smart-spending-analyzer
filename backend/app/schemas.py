@@ -555,6 +555,10 @@ class AnalyticsSummary(BaseModel):
     total_income: float
     total_expenses: float
     balance: float
+    # Money moved between the user's own accounts. Excluded from the totals above
+    # and reported separately so the UI can explain the difference.
+    transfer_income: float = 0.0
+    transfer_expenses: float = 0.0
 
 
 class CategoryBreakdownItem(BaseModel):

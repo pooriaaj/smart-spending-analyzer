@@ -2822,6 +2822,95 @@ class SmartImportRouteTest(unittest.TestCase):
         self.assertEqual(confirm_response.json()["imported"], 0)
         self.assertEqual(confirm_response.json()["duplicates_skipped"], 1)
 
+    def test_statement_row_does_not_match_imported_row_from_another_merchant(self) -> None:
+        """A previously imported row only absorbs a statement row for the same merchant.
+
+        RBC statements repeat small amounts constantly ($3.30 transit, $10.99
+        groceries). Matching on date + amount + type alone reported unrelated rows
+        as already written, so genuinely missing rows could never be imported.
+        """
+
+        with self.session_local() as session:
+            session.add(
+                Transaction(
+                    amount=3.30,
+                    category="groceries",
+                    description="ORANGE MART",
+                    date=date(2025, 1, 5),
+                    type="expense",
+                    entry_source="pdf_import",
+                    owner_id=self.user_id,
+                    account_id=self.account_id,
+                )
+            )
+            session.commit()
+
+        pdf_bytes = build_text_pdf(
+            [
+                "Account Statement",
+                "From January 1, 2025 to January 31, 2025",
+                "05 Jan TIM HORTONS $3.30",
+            ]
+        )
+
+        response = self.client.post(
+            "/transactions/import/file",
+            data={"account_id": str(self.account_id)},
+            files={"file": ("merchant-check.pdf", pdf_bytes, "application/pdf")},
+        )
+
+        self.assertEqual(response.status_code, 200, response.text)
+        preview_row = response.json()["preview_rows"][0]
+        self.assertFalse(preview_row["is_duplicate"])
+        self.assertEqual(preview_row["reconciliation_status"], "missing")
+
+        confirm_response = self.client.post(
+            "/transactions/import/confirm-preview",
+            json={"account_id": self.account_id, "rows": [preview_row]},
+        )
+        self.assertEqual(confirm_response.status_code, 200, confirm_response.text)
+        self.assertEqual(confirm_response.json()["imported"], 1)
+
+    def test_one_stored_transaction_only_absorbs_one_statement_row(self) -> None:
+        """Two identical purchases on one day must not collapse into a single match."""
+
+        with self.session_local() as session:
+            session.add(
+                Transaction(
+                    amount=10.99,
+                    category="groceries",
+                    description="ORANGE MART",
+                    date=date(2025, 1, 5),
+                    type="expense",
+                    entry_source="pdf_import",
+                    owner_id=self.user_id,
+                    account_id=self.account_id,
+                )
+            )
+            session.commit()
+
+        pdf_bytes = build_text_pdf(
+            [
+                "Account Statement",
+                "From January 1, 2025 to January 31, 2025",
+                "05 Jan ORANGE MART $10.99",
+                "05 Jan ORANGE MART $10.99",
+            ]
+        )
+
+        response = self.client.post(
+            "/transactions/import/file",
+            data={"account_id": str(self.account_id)},
+            files={"file": ("repeat-check.pdf", pdf_bytes, "application/pdf")},
+        )
+
+        self.assertEqual(response.status_code, 200, response.text)
+        preview_rows = response.json()["preview_rows"]
+        self.assertEqual(len(preview_rows), 2)
+        statuses = [row["reconciliation_status"] for row in preview_rows]
+        self.assertEqual(statuses.count("matched"), 1)
+        self.assertEqual(statuses.count("missing"), 1)
+
     def test_statement_reconciliation_likely_matches_nearby_manual_transaction(self) -> None:
         with self.session_local() as session:
             session.add(
