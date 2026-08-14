@@ -4939,6 +4939,211 @@ class SmartImportRouteTest(unittest.TestCase):
         self.assertEqual(len(preview_rows), 1)
         self.assertEqual(preview_rows[0]["date"], "2025-01-03")
 
+    def _add_transfer_row(self, description: str, amount: float, tx_type: str) -> int:
+        with self.session_local() as session:
+            transaction = Transaction(
+                amount=amount,
+                category="transfer",
+                description=description,
+                date=date(2026, 3, 14),
+                type=tx_type,
+                owner_id=self.user_id,
+                account_id=self.account_id,
+            )
+            session.add(transaction)
+            session.commit()
+            return transaction.id
+
+    def test_cashflow_review_lists_only_transfers_needing_an_answer(self) -> None:
+        sent_id = self._add_transfer_row("e-Transfer sent Ali 4K2P", 75.00, "expense")
+        self._add_transfer_row("PAYMENT - THANK YOU / PAIEMENT - MERCI", 200.00, "income")
+
+        response = self.client.get("/transactions/cashflow-review")
+        self.assertEqual(response.status_code, 200, response.text)
+        payload = response.json()
+
+        # The card payment is settled by rule, so only the e-Transfer is raised.
+        self.assertEqual(payload["total"], 1)
+        self.assertEqual([item["id"] for item in payload["items"]], [sent_id])
+        self.assertIsNone(payload["items"][0]["cashflow_role"])
+        self.assertAlmostEqual(payload["pending_expense_amount"], 75.00, places=2)
+
+    def test_cashflow_role_round_trip(self) -> None:
+        sent_id = self._add_transfer_row("e-Transfer sent Sara 9QT1", 120.00, "expense")
+
+        applied = self.client.post(
+            "/transactions/cashflow-role",
+            json={"transaction_ids": [sent_id], "role": "income"},
+        )
+        self.assertEqual(applied.status_code, 200, applied.text)
+        self.assertEqual(applied.json()["updated_count"], 1)
+
+        # Answered rows leave the pile but stay reachable for a change of mind.
+        self.assertEqual(self.client.get("/transactions/cashflow-review").json()["total"], 0)
+        answered = self.client.get(
+            "/transactions/cashflow-review", params={"include_answered": True}
+        ).json()
+        self.assertEqual(answered["items"][0]["cashflow_role"], "income")
+
+        cleared = self.client.post(
+            "/transactions/cashflow-role",
+            json={"transaction_ids": [sent_id], "role": None},
+        )
+        self.assertEqual(cleared.status_code, 200, cleared.text)
+        self.assertEqual(self.client.get("/transactions/cashflow-review").json()["total"], 1)
+
+    def test_cashflow_role_rejects_an_unknown_role(self) -> None:
+        sent_id = self._add_transfer_row("e-Transfer sent Reza 7WZ0", 40.00, "expense")
+
+        response = self.client.post(
+            "/transactions/cashflow-role",
+            json={"transaction_ids": [sent_id], "role": "savings"},
+        )
+        self.assertEqual(response.status_code, 422, response.text)
+
+    def test_one_answer_settles_every_transfer_from_the_same_person(self) -> None:
+        """Asking about the same counterparty twice is what makes a tool feel dumb."""
+
+        first_id = self._add_transfer_row("e-Transfer sent MAHTAALIJANI CAmGNFb7", 100.00, "expense")
+        self._add_transfer_row("e-Transfer sent MAHTAALIJANI CA3Y5xH5", 200.00, "expense")
+        self._add_transfer_row("e-Transfer sent SOMEONEELSE X9Q2", 50.00, "expense")
+
+        applied = self.client.post(
+            "/transactions/cashflow-role",
+            json={"transaction_ids": [first_id], "role": "expense"},
+        )
+        self.assertEqual(applied.status_code, 200, applied.text)
+        payload = applied.json()
+        self.assertEqual(payload["updated_count"], 1)
+        # The second Mahtaalijani row, not the unrelated counterparty.
+        self.assertEqual(payload["similar_updated_count"], 1)
+
+        remaining = self.client.get("/transactions/cashflow-review").json()
+        self.assertEqual(remaining["total"], 1)
+        self.assertIn("SOMEONEELSE", remaining["items"][0]["description"])
+
+    def test_a_later_transfer_from_a_known_person_is_not_asked_about_again(self) -> None:
+        """The whole point of remembering: the next statement should be quiet."""
+
+        first_id = self._add_transfer_row("e-Transfer sent MAHTAALIJANI CAmGNFb7", 100.00, "expense")
+        self.client.post(
+            "/transactions/cashflow-role",
+            json={"transaction_ids": [first_id], "role": "expense"},
+        )
+
+        created = self.client.post(
+            "/transactions/",
+            json={
+                "amount": 175.00,
+                "category": "transfer",
+                "description": "e-Transfer sent MAHTAALIJANI NEWREF77",
+                "date": "2026-04-02",
+                "type": "expense",
+                "account_id": self.account_id,
+            },
+        )
+        self.assertEqual(created.status_code, 200, created.text)
+        self.assertEqual(created.json()["cashflow_role"], "expense")
+        self.assertEqual(self.client.get("/transactions/cashflow-review").json()["total"], 0)
+
+    def test_clearing_an_answer_forgets_the_person_too(self) -> None:
+        """Otherwise the row returns to the pile and is instantly re-answered."""
+
+        transfer_id = self._add_transfer_row("e-Transfer sent MAHTAALIJANI CAmGNFb7", 100.00, "expense")
+        self.client.post(
+            "/transactions/cashflow-role",
+            json={"transaction_ids": [transfer_id], "role": "expense"},
+        )
+        self.client.post(
+            "/transactions/cashflow-role",
+            json={"transaction_ids": [transfer_id], "role": None},
+        )
+
+        created = self.client.post(
+            "/transactions/",
+            json={
+                "amount": 175.00,
+                "category": "transfer",
+                "description": "e-Transfer sent MAHTAALIJANI NEWREF77",
+                "date": "2026-04-02",
+                "type": "expense",
+                "account_id": self.account_id,
+            },
+        )
+        self.assertEqual(created.status_code, 200, created.text)
+        self.assertIsNone(created.json()["cashflow_role"])
+
+    def test_apply_to_similar_can_be_declined(self) -> None:
+        first_id = self._add_transfer_row("e-Transfer sent MAHTAALIJANI CAmGNFb7", 100.00, "expense")
+        self._add_transfer_row("e-Transfer sent MAHTAALIJANI CA3Y5xH5", 200.00, "expense")
+
+        applied = self.client.post(
+            "/transactions/cashflow-role",
+            json={
+                "transaction_ids": [first_id],
+                "role": "expense",
+                "apply_to_similar": False,
+            },
+        )
+        self.assertEqual(applied.status_code, 200, applied.text)
+        self.assertEqual(applied.json()["similar_updated_count"], 0)
+        self.assertEqual(self.client.get("/transactions/cashflow-review").json()["total"], 1)
+
+    def test_an_earlier_deliberate_answer_is_not_overwritten(self) -> None:
+        """A blanket answer must not undo a choice the owner already made."""
+
+        odd_one_out = self._add_transfer_row("e-Transfer sent MAHTAALIJANI ONEOFF", 500.00, "expense")
+        self.client.post(
+            "/transactions/cashflow-role",
+            json={"transaction_ids": [odd_one_out], "role": "neutral"},
+        )
+
+        later_id = self._add_transfer_row("e-Transfer sent MAHTAALIJANI CA3Y5xH5", 200.00, "expense")
+        self.client.post(
+            "/transactions/cashflow-role",
+            json={"transaction_ids": [later_id], "role": "expense"},
+        )
+
+        answered = self.client.get(
+            "/transactions/cashflow-review", params={"include_answered": True}
+        ).json()
+        roles = {item["id"]: item["cashflow_role"] for item in answered["items"]}
+        self.assertEqual(roles[odd_one_out], "neutral")
+        self.assertEqual(roles[later_id], "expense")
+
+    def test_review_items_name_the_counterparty_and_group_size(self) -> None:
+        self._add_transfer_row("e-Transfer sent MAHTAALIJANI CAmGNFb7", 100.00, "expense")
+        self._add_transfer_row("e-Transfer sent MAHTAALIJANI CA3Y5xH5", 200.00, "expense")
+
+        items = self.client.get("/transactions/cashflow-review").json()["items"]
+        self.assertEqual(len(items), 2)
+        for item in items:
+            self.assertEqual(item["counterparty"], "Mahtaalijani")
+            self.assertEqual(item["similar_pending_count"], 2)
+
+    def test_cashflow_role_cannot_touch_another_owners_row(self) -> None:
+        with self.session_local() as session:
+            stranger = User(email="stranger-cashflow@example.com", password_hash="hashed")
+            session.add(stranger)
+            session.flush()
+            foreign_transaction = Transaction(
+                amount=60.00,
+                category="transfer",
+                description="e-Transfer sent someone else",
+                date=date(2026, 3, 14),
+                type="expense",
+                owner_id=stranger.id,
+            )
+            session.add(foreign_transaction)
+            session.commit()
+            foreign_id = foreign_transaction.id
+
+        response = self.client.post(
+            "/transactions/cashflow-role",
+            json={"transaction_ids": [foreign_id], "role": "expense"},
+        )
+        self.assertEqual(response.status_code, 404, response.text)
+
 
 if __name__ == "__main__":
     unittest.main()

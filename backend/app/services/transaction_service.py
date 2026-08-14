@@ -34,6 +34,7 @@ from app.services.category_taxonomy import (
     strip_location_and_bank_noise_tokens,
     strip_payment_processor_prefixes,
 )
+from app.services.cashflow_rules import is_ambiguous_transfer, recall_role_for_merchant
 from app.services.import_quality_service import suggest_reference_code_amount_values
 from app.services.merchant_enrichment_service import enrich_merchant_category
 from app.schemas import StatementPreviewRow
@@ -1209,6 +1210,49 @@ def is_valid_merchant_learning_key(merchant_key: str | None) -> bool:
     if all(token.isdigit() or token in MERCHANT_PROFILE_STOPWORDS for token in tokens):
         return False
     return any(len(token) >= 3 and not token.isdigit() for token in tokens)
+
+
+def counterparty_fingerprint(description: str | None) -> tuple[str, str] | None:
+    """Who the money moved to or from, ignoring the bank's boilerplate.
+
+    "e-Transfer sent MAHTAALIJANI CAmGNFb7" and "INTERAC e-Transfer Mahtaalijani"
+    are the same person. The merchant fingerprint already strips transfer wording
+    and reference codes, so reuse it rather than inventing a second idea of who a
+    counterparty is.
+    """
+
+    fingerprint = extract_merchant_fingerprint(description or "")
+    if not fingerprint or not is_valid_merchant_learning_key(fingerprint[0]):
+        return None
+    return fingerprint
+
+
+def recall_learned_cashflow_role(
+    db: Session,
+    owner_id: int,
+    description: str | None,
+    tx_type: str | None,
+    category: str | None = None,
+) -> str | None:
+    """The role a new row should start with, from what the owner taught us before.
+
+    Only transfers consult memory. A grocery run is already unambiguous, and a
+    stored answer must never quietly turn one into something else.
+    """
+
+    try:
+        if not is_ambiguous_transfer(description, category):
+            return None
+
+        fingerprint = counterparty_fingerprint(description)
+        if not fingerprint:
+            return None
+
+        return recall_role_for_merchant(db, owner_id, fingerprint[0], tx_type)
+    except Exception as exc:
+        # A learning lookup must never fail an import.
+        logger.warning("Cashflow role recall skipped: %s", exc)
+        return None
 
 
 def normalize_amount_for_learning(amount: float | None) -> float | None:
@@ -3809,6 +3853,13 @@ def import_transactions_from_csv(
                     description=description,
                     date=tx_date,
                     type=tx_type,
+                    cashflow_role=recall_learned_cashflow_role(
+                        db=db,
+                        owner_id=owner_id,
+                        description=description,
+                        tx_type=tx_type,
+                        category=category,
+                    ),
                     entry_source="csv_import",
                     import_file_type="csv_statement",
                     imported_at=datetime.now(timezone.utc),

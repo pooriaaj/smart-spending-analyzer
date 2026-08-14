@@ -9,6 +9,9 @@ from app.security import validate_password_strength
 
 
 TransactionType = Literal["income", "expense"]
+# What the owner says a movement really was. "neutral" means it was neither earned
+# nor spent, such as money shifted between their own accounts or a debt repaid.
+CashflowRole = Literal["income", "expense", "neutral"]
 AssistantMode = Literal["balanced", "strict", "coach"]
 AccountType = Literal["chequing", "savings", "credit_card", "cash", "business", "other"]
 ImportDetectedType = Literal["csv_statement", "receipt_image", "pdf_statement"]
@@ -402,6 +405,7 @@ class TransactionResponse(ORMBaseModel):
     description: str
     date: date
     type: TransactionType
+    cashflow_role: CashflowRole | None = None
     entry_source: str = "manual"
     import_file_name: str | None = None
     import_file_type: str | None = None
@@ -419,6 +423,46 @@ class TransactionListResponse(BaseModel):
     total_pages: int = 1
     available_months: list[str] = Field(default_factory=list)
     available_categories: list[str] = Field(default_factory=list)
+
+
+class CashflowReviewItem(ORMBaseModel):
+    id: int
+    amount: float
+    category: str
+    description: str
+    date: date
+    type: TransactionType
+    cashflow_role: CashflowRole | None = None
+    account_id: int | None = None
+    # Who the money moved to or from, with the bank's reference codes stripped.
+    counterparty: str | None = None
+    # How many unanswered transfers share that counterparty, this row included.
+    similar_pending_count: int = 0
+
+
+class CashflowReviewResponse(BaseModel):
+    """Transfers the app refuses to guess about, waiting on the owner."""
+
+    items: list[CashflowReviewItem] = Field(default_factory=list)
+    total: int = 0
+    pending_income_amount: float = 0.0
+    pending_expense_amount: float = 0.0
+
+
+class CashflowRoleApplyRequest(BaseModel):
+    transaction_ids: list[int] = Field(min_length=1, max_length=500)
+    # None clears the answer and hands the row back to the automatic rules.
+    role: CashflowRole | None = None
+    # Settle every other unanswered transfer with the same counterparty too.
+    apply_to_similar: bool = True
+
+
+class CashflowRoleApplyResponse(BaseModel):
+    updated_count: int = 0
+    similar_updated_count: int = 0
+    counterparties: list[str] = Field(default_factory=list)
+    role: CashflowRole | None = None
+    message: str = ""
 
 
 class TransactionSourceSummaryItem(BaseModel):
@@ -555,10 +599,12 @@ class AnalyticsSummary(BaseModel):
     total_income: float
     total_expenses: float
     balance: float
-    # Money moved between the user's own accounts. Excluded from the totals above
+    # Money that was only moved, not earned or spent. Excluded from the totals above
     # and reported separately so the UI can explain the difference.
     transfer_income: float = 0.0
     transfer_expenses: float = 0.0
+    # Transfers held out of the totals only because nobody has said what they were.
+    pending_review_count: int = 0
 
 
 class CategoryBreakdownItem(BaseModel):

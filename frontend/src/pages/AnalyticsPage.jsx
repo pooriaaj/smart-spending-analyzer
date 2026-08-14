@@ -25,6 +25,7 @@ import {
 } from "@mantine/core";
 import api, { handleApiAuthError } from "../services/api";
 import AccountSelector from "../components/AccountSelector";
+import CashflowReviewModal from "../components/CashflowReviewModal";
 import { ALL_ACCOUNTS_VALUE, getSelectedAccountId } from "../services/accountStorage";
 import { useLanguage } from "../i18n/LanguageContext";
 import { formatAccountName, formatAccountType, formatCategoryLabel } from "../utils/displayLabels";
@@ -72,14 +73,28 @@ const CATEGORY_ALIASES = {
   "car maintenance": "Car Maintenance",
 };
 
-const CASHFLOW_NEUTRAL_CATEGORIES = new Set(["transfer", "transfers", "refund", "refunds"]);
+// Mirrors the backend rules in analytics_service.py. Money that was only moved is
+// neither earned nor spent, and a transfer the owner has not classified is left
+// out rather than guessed at.
+const CASHFLOW_NEUTRAL_CATEGORIES = new Set([
+  "transfer",
+  "transfers",
+  "refund",
+  "refunds",
+  "credit card payment",
+  "credit card payments",
+]);
 const CASHFLOW_NEUTRAL_DESCRIPTION_MARKERS = [
-  "e-transfer received",
-  "e-transfer sent",
+  "e-transfer",
+  "etransfer",
   "interac received",
   "interac sent",
   "online transfer",
   "online banking transfer",
+  "transfer to deposit account",
+  "transfer from",
+  "transfer to",
+  "credit card payment",
   "payment - thank you",
   "payment thank you",
   "paiement - merci",
@@ -87,6 +102,7 @@ const CASHFLOW_NEUTRAL_DESCRIPTION_MARKERS = [
   "atm deposit",
   "virement interac",
   "virement en ligne",
+  "virement annule",
 ];
 const CATEGORY_PIE_COLORS = ["#14b8a6", "#4ade80", "#f87171", "#fbbf24", "#a78bfa"];
 
@@ -189,6 +205,29 @@ const buildRecentMonthKeys = (monthCount) => {
   return monthKeys;
 };
 
+const getCashflowRole = (transaction) =>
+  String(transaction.cashflow_role || "").trim().toLowerCase();
+
+// What a row counts as. The owner's own answer wins over any rule.
+const getEffectiveDirection = (transaction) => {
+  const role = getCashflowRole(transaction);
+  if (role === "income" || role === "expense") return role;
+  return String(transaction.type || "").trim().toLowerCase();
+};
+
+const isCashflowNeutral = (transaction) => {
+  const role = getCashflowRole(transaction);
+  if (role === "income" || role === "expense") return false;
+  if (role === "neutral") return true;
+
+  return (
+    CASHFLOW_NEUTRAL_CATEGORIES.has(String(transaction.category || "").trim().toLowerCase()) ||
+    CASHFLOW_NEUTRAL_DESCRIPTION_MARKERS.some((marker) =>
+      String(transaction.description || "").toLowerCase().includes(marker)
+    )
+  );
+};
+
 const getExpenseTransactions = (transactions) =>
   toArray(transactions)
     .map((transaction) => ({
@@ -198,13 +237,10 @@ const getExpenseTransactions = (transactions) =>
     }))
     .filter(
       (transaction) =>
-        transaction.type === "expense" &&
+        getEffectiveDirection(transaction) === "expense" &&
         transaction.amount > 0 &&
         transaction.parsedDate &&
-        !CASHFLOW_NEUTRAL_CATEGORIES.has(String(transaction.category || "").trim().toLowerCase()) &&
-        !CASHFLOW_NEUTRAL_DESCRIPTION_MARKERS.some((marker) =>
-          String(transaction.description || "").toLowerCase().includes(marker)
-        )
+        !isCashflowNeutral(transaction)
     );
 
 const sumExpensesBetween = (transactions, startDate, endDate) =>
@@ -351,6 +387,9 @@ function AnalyticsPage() {
     return urlCategory ? formatCategoryName(urlCategory, t) : "";
   });
   const [loading, setLoading] = useState(true);
+  const [cashflowReviewOpened, setCashflowReviewOpened] = useState(false);
+  // Bumped after the owner classifies a transfer, so the totals reload with it.
+  const [cashflowAnswerCount, setCashflowAnswerCount] = useState(0);
   const [themeMode, setThemeMode] = useState(
     document.documentElement.getAttribute("data-theme") || "light"
   );
@@ -433,7 +472,16 @@ function AnalyticsPage() {
     return () => {
       active = false;
     };
-  }, [navigate, normalizedAccountId, selectedMonth, startDate, endDate, selectedType, selectedCategory]);
+  }, [
+    navigate,
+    normalizedAccountId,
+    selectedMonth,
+    startDate,
+    endDate,
+    selectedType,
+    selectedCategory,
+    cashflowAnswerCount,
+  ]);
 
   useEffect(() => {
     setSearchParams(
@@ -613,9 +661,11 @@ function AnalyticsPage() {
     balance: 0,
     transfer_income: 0,
     transfer_expenses: 0,
+    pending_review_count: 0,
   };
   const transferIncome = Number(summary.transfer_income || 0);
   const transferExpenses = Number(summary.transfer_expenses || 0);
+  const pendingReviewCount = Number(summary.pending_review_count || 0);
   const monthlySummary = toArray(dashboardData?.monthly_summary);
   const overspendingAlerts = dashboardData?.overspending_alerts;
   const overspendingAlertItems = toArray(overspendingAlerts?.alerts);
@@ -750,6 +800,33 @@ function AnalyticsPage() {
               </Group>
             </Stack>
           </Card>
+
+          {pendingReviewCount > 0 && (
+            <Card className="dashboard-card overview-section-card" radius="xl" p={{ base: "md", md: "lg" }}>
+              <Group justify="space-between" align="center" gap="md">
+                <Box>
+                  <Title order={2} size="h4">{t("analytics.cashflowReviewTitle")}</Title>
+                  <Text size="sm" c="dimmed">
+                    {t("analytics.cashflowReviewDetail", { count: pendingReviewCount })}
+                  </Text>
+                </Box>
+                <Button
+                  color="teal"
+                  radius="md"
+                  onClick={() => setCashflowReviewOpened(true)}
+                >
+                  {t("analytics.cashflowReviewAction")}
+                </Button>
+              </Group>
+            </Card>
+          )}
+
+          <CashflowReviewModal
+            opened={cashflowReviewOpened}
+            onClose={() => setCashflowReviewOpened(false)}
+            accountId={selectedAccountId}
+            onAnswered={() => setCashflowAnswerCount((count) => count + 1)}
+          />
 
           <SimpleGrid cols={{ base: 1, sm: 2, lg: 4 }} spacing="md">
             <OverviewStatCard

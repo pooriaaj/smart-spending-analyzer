@@ -9,6 +9,35 @@ from sqlalchemy import and_, case, func, or_
 from sqlalchemy.orm import Query, Session
 
 from app.models import Account, BudgetPlan, Transaction
+# Re-exported deliberately: account_service and budget_service reach for these
+# through analytics_service, and the rules themselves live in one place now.
+from app.services.cashflow_rules import (  # noqa: F401
+    AMBIGUOUS_TRANSFER_CATEGORIES,
+    AMBIGUOUS_TRANSFER_DESCRIPTION_MARKERS,
+    CASHFLOW_NEUTRAL_CATEGORIES,
+    CASHFLOW_NEUTRAL_DESCRIPTION_MARKERS,
+    CASHFLOW_ROLE_EXPENSE,
+    CASHFLOW_ROLE_INCOME,
+    CASHFLOW_ROLE_NEUTRAL,
+    CASHFLOW_ROLES,
+    DIRECTIONAL_CASHFLOW_ROLES,
+    INTERNAL_MOVEMENT_CATEGORIES,
+    INTERNAL_MOVEMENT_DESCRIPTION_MARKERS,
+    ambiguous_transfer_filter,
+    cashflow_neutral_filter,
+    effective_direction_expression,
+    expense_amount_expression,
+    income_amount_expression,
+    internal_movement_filter,
+    is_ambiguous_transfer,
+    is_cashflow_neutral_category,
+    is_internal_movement,
+    normalize_cashflow_category,
+    normalized_category_expression,
+    owner_cashflow_role_expression,
+    pending_cashflow_review_filter,
+    transaction_amount_magnitude_expression,
+)
 from app.services.budget_metrics import (
     build_budget_action_insights,
     build_budget_pace_context,
@@ -25,54 +54,6 @@ from app.services.transaction_service import (
     resolve_owner_category_filter_values,
 )
 
-
-CASHFLOW_NEUTRAL_CATEGORIES = {
-    "transfer",
-    "transfers",
-    "refund",
-    "refunds",
-    "credit card payment",
-    "credit card payments",
-}
-# Money that only moved between the user's own accounts: chequing to credit card,
-# card payments, ATM deposits. Never income and never spending, because whatever
-# the money is eventually spent on is already counted on the receiving account.
-SELF_TRANSFER_DESCRIPTION_MARKERS = (
-    "online transfer",
-    "online banking transfer",
-    "transfer to deposit account",
-    "credit card payment",
-    "payment - thank you",
-    "payment thank you",
-    "paiement - merci",
-    "payback with points",
-    "atm deposit",
-    "virement en ligne",
-)
-# Person-to-person transfers received. Left neutral: an incoming e-Transfer is
-# usually money being routed rather than earned.
-RECEIVED_TRANSFER_DESCRIPTION_MARKERS = (
-    "e-transfer received",
-    "interac received",
-    "virement interac recu",
-)
-# Money that genuinely left the household even though the bank files it under
-# "transfer". Sending an e-Transfer to another person is real spending, so it must
-# beat the category-level neutral rule below. Cancellations reverse a send and so
-# have to come back the other way, otherwise a cancelled transfer is charged twice.
-PERSON_TRANSFER_DESCRIPTION_MARKERS = (
-    "e-transfer sent",
-    "etransfer sent",
-    "interac sent",
-    "virement interac envoye",
-    "e-transfer cancel",
-    "etransfer cancel",
-    "transfer cancel",
-    "virement annule",
-)
-CASHFLOW_NEUTRAL_DESCRIPTION_MARKERS = (
-    SELF_TRANSFER_DESCRIPTION_MARKERS + RECEIVED_TRANSFER_DESCRIPTION_MARKERS
-)
 
 ESSENTIAL_RECURRING_CATEGORY_KEYWORDS = {
     "debt",
@@ -137,25 +118,9 @@ def month_bucket_expression(db: Session):
     return func.to_char(Transaction.date, "YYYY-MM")
 
 
-def normalize_analytics_category(value: str | None) -> str:
-    cleaned = str(value or "").strip().lower().replace("&", "and")
-    cleaned = (
-        unicodedata.normalize("NFD", cleaned)
-        .encode("ascii", "ignore")
-        .decode("ascii")
-    )
-    cleaned = re.sub(r"[_\-]+", " ", cleaned)
-    return re.sub(r"\s+", " ", cleaned)
-
-
-def normalized_category_expression():
-    return func.lower(
-        func.replace(
-            func.replace(func.coalesce(Transaction.category, ""), "_", " "),
-            "-",
-            " ",
-        )
-    )
+# Kept as an alias so existing analytics callers read naturally. The rule itself
+# lives in cashflow_rules, where import and categorisation can reach it too.
+normalize_analytics_category = normalize_cashflow_category
 
 
 def canonical_analytics_category(value: str | None) -> str:
@@ -190,49 +155,6 @@ def apply_owner_category_filter(query: Query, db: Session, user_id: int, categor
     )
 
 
-def is_cashflow_neutral_category(category: str | None) -> bool:
-    return normalize_analytics_category(category) in CASHFLOW_NEUTRAL_CATEGORIES
-
-
-def cashflow_neutral_filter():
-    """Rows that only shuffled money between the user's own accounts.
-
-    The bank files a card payment and an e-Transfer to a family member under the
-    same "transfer" category, but only the first is neutral: paying the card just
-    moves money to where the real purchases are already counted, while sending
-    money to another person is money genuinely gone. So a person-to-person
-    description overrides the category rule rather than being swallowed by it.
-    """
-
-    normalized_category = normalized_category_expression()
-    normalized_description = func.lower(func.coalesce(Transaction.description, ""))
-
-    def description_matches(markers):
-        return or_(
-            *[normalized_description.like(f"%{marker}%") for marker in markers]
-        )
-
-    return and_(
-        or_(
-            description_matches(CASHFLOW_NEUTRAL_DESCRIPTION_MARKERS),
-            normalized_category.in_(tuple(CASHFLOW_NEUTRAL_CATEGORIES)),
-        ),
-        ~description_matches(PERSON_TRANSFER_DESCRIPTION_MARKERS),
-    )
-
-
-def transaction_amount_magnitude_expression():
-    return func.abs(func.coalesce(Transaction.amount, 0.0))
-
-
-def income_amount_expression():
-    return case((Transaction.type == "income", transaction_amount_magnitude_expression()), else_=0.0)
-
-
-def expense_amount_expression():
-    return case((Transaction.type == "expense", transaction_amount_magnitude_expression()), else_=0.0)
-
-
 def build_filtered_query(
     db: Session,
     user_id: int,
@@ -257,7 +179,7 @@ def build_filtered_query(
     if parsed_end:
         query = query.filter(Transaction.date <= parsed_end)
     if transaction_type:
-        query = query.filter(Transaction.type == transaction_type)
+        query = query.filter(effective_direction_expression() == transaction_type.lower())
     if category:
         query = apply_owner_category_filter(query, db, user_id, category)
     if account_id is not None:
@@ -302,33 +224,39 @@ def get_summary(
     total_income = float(totals.total_income or 0.0)
     total_expenses = float(totals.total_expenses or 0.0)
 
-    # The figures above deliberately leave out money moving between the user's own
-    # accounts (e-Transfers, ATM deposits, card payments). Report what was left out
-    # so the page can explain a small income number instead of just showing it.
+    # The figures above deliberately leave out money that was only moved: card
+    # payments, refunds, and transfers the owner has not classified yet. Report what
+    # was left out so the page can explain a small income number instead of just
+    # showing it, and count the rows that are waiting on an answer.
     transfer_income = 0.0
     transfer_expenses = 0.0
+    pending_review_count = 0
     if not is_cashflow_neutral_category(category):
-        transfer_totals = (
-            build_filtered_query(
-                db,
-                user_id,
-                month=month,
-                start_date=start_date,
-                end_date=end_date,
-                transaction_type=transaction_type,
-                category=category,
-                account_id=account_id,
-                include_cashflow_neutral=True,
-            )
-            .filter(cashflow_neutral_filter())
-            .with_entities(
-                func.coalesce(func.sum(income_amount_expression()), 0.0).label("total_income"),
-                func.coalesce(func.sum(expense_amount_expression()), 0.0).label("total_expenses"),
-            )
-            .one()
-        )
+        neutral_query = build_filtered_query(
+            db,
+            user_id,
+            month=month,
+            start_date=start_date,
+            end_date=end_date,
+            transaction_type=transaction_type,
+            category=category,
+            account_id=account_id,
+            include_cashflow_neutral=True,
+        ).filter(cashflow_neutral_filter())
+
+        transfer_totals = neutral_query.with_entities(
+            func.coalesce(func.sum(income_amount_expression()), 0.0).label("total_income"),
+            func.coalesce(func.sum(expense_amount_expression()), 0.0).label("total_expenses"),
+        ).one()
         transfer_income = float(transfer_totals.total_income or 0.0)
         transfer_expenses = float(transfer_totals.total_expenses or 0.0)
+
+        pending_review_count = int(
+            neutral_query.filter(pending_cashflow_review_filter())
+            .with_entities(func.count(Transaction.id))
+            .scalar()
+            or 0
+        )
 
     return {
         "total_income": total_income,
@@ -336,6 +264,7 @@ def get_summary(
         "balance": total_income - total_expenses,
         "transfer_income": transfer_income,
         "transfer_expenses": transfer_expenses,
+        "pending_review_count": pending_review_count,
     }
 
 
@@ -375,7 +304,7 @@ def get_category_breakdown(
         transaction_type=transaction_type,
         category=category,
         account_id=account_id,
-    ).filter(Transaction.type == "expense")
+    ).filter(effective_direction_expression() == CASHFLOW_ROLE_EXPENSE)
 
     expense_total_expression = func.coalesce(func.sum(transaction_amount_magnitude_expression()), 0.0)
     rows = (
@@ -590,7 +519,7 @@ def get_account_comparison_snapshot(
         .filter(
             Transaction.owner_id == user_id,
             Transaction.account_id.in_(account_ids),
-            Transaction.type == "expense",
+            effective_direction_expression() == CASHFLOW_ROLE_EXPENSE,
             ~cashflow_neutral_filter(),
         )
         .group_by(Transaction.account_id, Transaction.category)
@@ -1149,7 +1078,7 @@ def build_simulation_reduction_plan(
             func.coalesce(func.sum(transaction_amount_magnitude_expression()), 0.0).label("total"),
         ).filter(
             Transaction.owner_id == user_id,
-            Transaction.type == "expense",
+            effective_direction_expression() == CASHFLOW_ROLE_EXPENSE,
             month_expr.in_(recent_month_labels),
             ~cashflow_neutral_filter(),
         )

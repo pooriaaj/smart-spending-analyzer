@@ -19,6 +19,9 @@ from app.schemas import (
     BulkCategoryApplyResponse,
     BulkCategorySuggestionItem,
     BulkCategorySuggestionResponse,
+    CashflowReviewResponse,
+    CashflowRoleApplyRequest,
+    CashflowRoleApplyResponse,
     CategoryLearningApplyRequest,
     CategoryLearningApplyResponse,
     CategoryLearningCandidateItem,
@@ -48,6 +51,11 @@ from app.schemas import (
     TransactionSourceSummaryResponse,
 )
 from app.services.account_service import ensure_default_account
+from app.services.cashflow_role_service import (
+    list_transfers_awaiting_decision,
+    resolve_imported_cashflow_role,
+    set_cashflow_role,
+)
 from app.security import ensure_batch_file_count, ensure_batch_payload_size, read_validated_import_upload
 from app.services.import_quality_service import suggest_reference_code_amount_values
 from app.services.seed_service import seed_realistic_transactions
@@ -375,6 +383,74 @@ def get_transaction_review_queue_route(
     )
 
 
+@router.get("/cashflow-review", response_model=CashflowReviewResponse)
+def get_cashflow_review_route(
+    account_id: int | None = Query(default=None),
+    include_answered: bool = Query(default=False),
+    limit: int = Query(default=50, ge=1, le=200),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Transfers the app will not classify by itself, waiting on the owner."""
+
+    ensure_default_account(db, current_user)
+    require_owned_account(db, current_user, account_id, allow_all=True)
+
+    return CashflowReviewResponse(
+        **list_transfers_awaiting_decision(
+            db=db,
+            owner_id=current_user.id,
+            account_id=account_id,
+            include_answered=include_answered,
+            limit=limit,
+        )
+    )
+
+
+@router.post("/cashflow-role", response_model=CashflowRoleApplyResponse)
+def apply_cashflow_role_route(
+    payload: CashflowRoleApplyRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Record whether these rows were really earned, really spent, or neither.
+
+    The answer is remembered against the counterparty, so the same person is not
+    put up for review again on the next statement.
+    """
+
+    try:
+        result = set_cashflow_role(
+            db=db,
+            owner_id=current_user.id,
+            transaction_ids=payload.transaction_ids,
+            role=payload.role,
+            apply_to_similar=payload.apply_to_similar,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    updated_count = result["updated_count"]
+    if not updated_count:
+        raise HTTPException(status_code=404, detail="No matching transactions were found")
+
+    similar_updated_count = result["similar_updated_count"]
+    if payload.role is None:
+        message = f"Cleared the cash flow choice on {updated_count} transaction(s)."
+    else:
+        message = f"Saved {updated_count} transaction(s) as {payload.role}."
+        if similar_updated_count:
+            message += f" Applied the same answer to {similar_updated_count} similar transfer(s)."
+
+    return CashflowRoleApplyResponse(
+        updated_count=updated_count,
+        similar_updated_count=similar_updated_count,
+        counterparties=result["counterparties"],
+        role=payload.role,
+        message=message,
+    )
+
+
 @router.get("/import/history", response_model=TransactionImportHistoryResponse)
 def get_import_history(
     account_id: int | None = Query(default=None),
@@ -423,6 +499,13 @@ def create_transaction(
         description=transaction.description,
         date=transaction.date,
         type=transaction.type,
+        cashflow_role=resolve_imported_cashflow_role(
+            db=db,
+            owner_id=current_user.id,
+            description=transaction.description,
+            tx_type=transaction.type,
+            category=resolved_category,
+        ),
         entry_source="manual",
         owner_id=current_user.id,
         account_id=transaction.account_id,
@@ -1000,6 +1083,13 @@ def confirm_preview_import(
                 description=description,
                 date=tx_date,
                 type=row.type,
+                cashflow_role=resolve_imported_cashflow_role(
+                    db=db,
+                    owner_id=current_user.id,
+                    description=description,
+                    tx_type=row.type,
+                    category=normalized_category,
+                ),
                 entry_source=entry_source_for_preview_row(row),
                 import_file_name=row.source_file_name,
                 import_file_type=row.source_file_type,

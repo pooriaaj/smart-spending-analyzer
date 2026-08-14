@@ -6,7 +6,7 @@ from collections.abc import Iterable
 from sqlalchemy import text
 from sqlalchemy.engine import Engine
 
-from app.models import AssistantLearningExample
+from app.models import AssistantLearningExample, CashflowRoleMemory
 
 logger = logging.getLogger(__name__)
 
@@ -25,6 +25,7 @@ POSTGRES_COMPATIBILITY_STATEMENTS = (
     "ALTER TABLE transactions ADD COLUMN IF NOT EXISTS import_file_name VARCHAR(255)",
     "ALTER TABLE transactions ADD COLUMN IF NOT EXISTS import_file_type VARCHAR(40)",
     "ALTER TABLE transactions ADD COLUMN IF NOT EXISTS imported_at TIMESTAMP WITH TIME ZONE",
+    "ALTER TABLE transactions ADD COLUMN IF NOT EXISTS cashflow_role VARCHAR(20)",
     "ALTER TABLE merchant_category_profiles ADD COLUMN IF NOT EXISTS confidence DOUBLE PRECISION DEFAULT 0.9",
     "ALTER TABLE merchant_category_profiles ADD COLUMN IF NOT EXISTS confirmation_count INTEGER DEFAULT 1",
     "ALTER TABLE merchant_category_profiles ADD COLUMN IF NOT EXISTS last_amount DOUBLE PRECISION",
@@ -60,6 +61,10 @@ RUNTIME_INDEX_STATEMENTS = (
     """
     CREATE INDEX IF NOT EXISTS ix_transactions_runtime_owner_account_date_id
     ON transactions (owner_id, account_id, date DESC, id DESC)
+    """,
+    """
+    CREATE INDEX IF NOT EXISTS ix_transactions_runtime_owner_cashflow_role_date_id
+    ON transactions (owner_id, cashflow_role, date DESC, id DESC)
     """,
     """
     CREATE INDEX IF NOT EXISTS ix_transactions_runtime_owner_account_type_date_id
@@ -140,6 +145,11 @@ def ensure_runtime_database_shape(engine: Engine) -> None:
         AssistantLearningExample.__table__.create(bind=engine, checkfirst=True)
     except Exception as exc:
         logger.warning("Assistant learning table maintenance skipped: %s", exc)
+
+    try:
+        CashflowRoleMemory.__table__.create(bind=engine, checkfirst=True)
+    except Exception as exc:
+        logger.warning("Cashflow role memory table maintenance skipped: %s", exc)
 
     for statement in _statements_for_dialect(dialect_name):
         try:

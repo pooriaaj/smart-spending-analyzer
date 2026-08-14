@@ -54,6 +54,13 @@ class User(Base):
         passive_deletes=True,
     )
 
+    cashflow_role_memories = relationship(
+        "CashflowRoleMemory",
+        back_populates="owner",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
+
     learning_preference = relationship(
         "UserLearningPreference",
         back_populates="owner",
@@ -151,6 +158,11 @@ class Transaction(Base):
     description = Column(String(500), nullable=False)
     date = Column(Date, nullable=False, index=True)
     type = Column(String(20), nullable=False, index=True)
+    # What the money movement really was, when the owner has told us. A bank files
+    # a paycheque, a card payment and an e-Transfer to a friend under headings that
+    # do not say which of them is earned, spent, or just moved between the owner's
+    # own accounts. NULL means undecided, and the automatic rules apply.
+    cashflow_role = Column(String(20), nullable=True, index=True)
     entry_source = Column(String(40), nullable=False, default="manual", index=True)
     import_file_name = Column(String(255), nullable=True)
     import_file_type = Column(String(40), nullable=True)
@@ -240,6 +252,41 @@ class MerchantCategoryProfile(Base):
         Index("ix_merchant_profiles_owner_key", "owner_id", "merchant_key"),
         Index("ix_merchant_profiles_key_type_owner", "merchant_key", "transaction_type", "owner_id"),
         Index("ix_merchant_profiles_owner_type_key", "owner_id", "transaction_type", "merchant_key"),
+    )
+
+
+class CashflowRoleMemory(Base):
+    """What the owner decided a counterparty's transfers really are.
+
+    Asking twice about the same person is the difference between a tool that
+    learns and a form. Once the owner says an e-Transfer to a landlord is rent,
+    every later transfer to that landlord is classified without asking again.
+    Keyed by direction as well, because money going to someone and money coming
+    back from them are rarely the same kind of movement.
+    """
+
+    __tablename__ = "cashflow_role_memories"
+
+    id = Column(Integer, primary_key=True, index=True)
+    merchant_key = Column(String(160), nullable=False)
+    display_name = Column(String(160), nullable=False)
+    transaction_type = Column(String(20), nullable=False, index=True)
+    role = Column(String(20), nullable=False)
+    confirmation_count = Column(Integer, nullable=False, default=1)
+    owner_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now())
+
+    owner = relationship("User", back_populates="cashflow_role_memories")
+
+    __table_args__ = (
+        UniqueConstraint(
+            "owner_id",
+            "merchant_key",
+            "transaction_type",
+            name="uq_cashflow_role_memory_owner_key_type",
+        ),
+        Index("ix_cashflow_role_memories_owner_key", "owner_id", "merchant_key"),
     )
 
 

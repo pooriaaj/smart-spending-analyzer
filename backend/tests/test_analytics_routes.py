@@ -24,6 +24,10 @@ from app.models import (
 )
 from app.routes.analytics_routes import router as analytics_router
 from app.routes.assistant_routes import router as assistant_router
+from app.services.cashflow_role_service import (
+    list_transfers_awaiting_decision,
+    set_cashflow_role,
+)
 
 
 class FixedBudgetDate(date):
@@ -181,12 +185,8 @@ class AnalyticsRouteTest(unittest.TestCase):
             )
             session.commit()
 
-    def test_card_payments_are_neutral_but_person_transfers_are_spending(self) -> None:
-        """Paying your own card is not spending; sending money to a person is.
-
-        The bank files both under "transfer". Only the card payment is neutral,
-        because whatever that money buys is already counted on the card account.
-        """
+    def _seed_transfer_month(self) -> None:
+        """A month holding every kind of movement a statement mixes together."""
 
         with self.session_local() as session:
             for description, amount, tx_type in [
@@ -194,6 +194,7 @@ class AnalyticsRouteTest(unittest.TestCase):
                 ("Online Banking transfer - 8249", 281.00, "expense"),
                 ("PAYMENT - THANK YOU / PAIEMENT - MERCI", 281.00, "income"),
                 ("e-Transfer sent mahta NH3EA2", 104.00, "expense"),
+                ("e-Transfer received rent share", 600.00, "income"),
                 ("LOBLAWS #1019", 10.15, "expense"),
             ]:
                 session.add(
@@ -210,28 +211,90 @@ class AnalyticsRouteTest(unittest.TestCase):
                 )
             session.commit()
 
+    def _pending_transfer_id(self, description_fragment: str) -> int:
+        """Find a row on the review pile. This app mounts only analytics routes."""
+
+        with self.session_local() as session:
+            pending = list_transfers_awaiting_decision(db=session, owner_id=self.user_id)
+
+        for item in pending["items"]:
+            if description_fragment.lower() in item["description"].lower():
+                return item["id"]
+        self.fail(f"No transfer awaiting a decision matched {description_fragment!r}")
+
+    def _answer_transfer(self, transaction_id: int, role: str) -> None:
+        with self.session_local() as session:
+            result = set_cashflow_role(
+                db=session,
+                owner_id=self.user_id,
+                transaction_ids=[transaction_id],
+                role=role,
+            )
+        self.assertEqual(result["updated_count"], 1)
+
+    def test_person_to_person_transfers_wait_for_the_owner(self) -> None:
+        """The app must not decide what a transfer meant.
+
+        A card payment is neutral for everyone, because whatever that money buys is
+        already counted on the card account. An e-Transfer is not: sent, it may be
+        rent or a loan to a sibling; received, it may be a paycheque or the owner's
+        own savings arriving. Those are held out of the totals and raised instead.
+        """
+
+        self._seed_transfer_month()
+
         response = self.client.get("/analytics/summary", params={"month": "2026-05"})
         self.assertEqual(response.status_code, 200, response.text)
         payload = response.json()
 
-        # Payroll only. The card payment arriving back is not earnings.
+        # Payroll only. Neither the card payment nor the incoming e-Transfer is
+        # assumed to be earnings.
         self.assertAlmostEqual(payload["total_income"], 357.30, places=2)
-        # Groceries plus the transfer to a person. Not the card payment.
-        self.assertAlmostEqual(payload["total_expenses"], 114.15, places=2)
-        self.assertAlmostEqual(payload["transfer_expenses"], 281.00, places=2)
+        # Groceries only. The outgoing e-Transfer is no longer assumed to be spending.
+        self.assertAlmostEqual(payload["total_expenses"], 10.15, places=2)
+        # The two e-Transfers, and only those, need an answer.
+        self.assertEqual(payload["pending_review_count"], 2)
 
-    def test_cancelled_person_transfer_offsets_the_send(self) -> None:
-        """A cancelled e-Transfer returns the money, so it must not be charged."""
+    def test_owner_decision_overrides_the_transfer_default(self) -> None:
+        """Once the owner says what a transfer was, the totals follow their answer."""
+
+        self._seed_transfer_month()
+        sent_id = self._pending_transfer_id("e-Transfer sent mahta")
+        received_id = self._pending_transfer_id("e-Transfer received")
+
+        self._answer_transfer(sent_id, "expense")
+        self._answer_transfer(received_id, "income")
+
+        payload = self.client.get("/analytics/summary", params={"month": "2026-05"}).json()
+        self.assertAlmostEqual(payload["total_income"], 957.30, places=2)
+        self.assertAlmostEqual(payload["total_expenses"], 114.15, places=2)
+        self.assertEqual(payload["pending_review_count"], 0)
+
+    def test_owner_can_mark_a_transfer_as_neither(self) -> None:
+        """Money the owner moved between their own accounts stays out of both totals."""
+
+        self._seed_transfer_month()
+        sent_id = self._pending_transfer_id("e-Transfer sent mahta")
+
+        self._answer_transfer(sent_id, "neutral")
+
+        payload = self.client.get("/analytics/summary", params={"month": "2026-05"}).json()
+        self.assertAlmostEqual(payload["total_expenses"], 10.15, places=2)
+        # Answered, so it no longer sits on the review pile.
+        self.assertEqual(payload["pending_review_count"], 1)
+
+    def test_cancelled_transfer_is_settled_without_asking(self) -> None:
+        """A cancelled e-Transfer is the bank handing the money back. Nothing to decide."""
 
         with self.session_local() as session:
             for description, amount, tx_type in [
-                ("e-Transfer sent shanely C2Y3V2", 50.00, "expense"),
                 ("e-Transfer cancel shanely C2Y3V2", 50.00, "income"),
+                ("LOBLAWS #1019", 10.15, "expense"),
             ]:
                 session.add(
                     Transaction(
                         amount=amount,
-                        category="transfer",
+                        category="transfer" if "transfer" in description.lower() else "groceries",
                         description=description,
                         date=date(2026, 4, 30),
                         type=tx_type,
@@ -241,12 +304,10 @@ class AnalyticsRouteTest(unittest.TestCase):
                 )
             session.commit()
 
-        response = self.client.get("/analytics/summary", params={"month": "2026-04"})
-        self.assertEqual(response.status_code, 200, response.text)
-        payload = response.json()
-        self.assertAlmostEqual(
-            payload["total_expenses"] - payload["total_income"], 0.0, places=2
-        )
+        payload = self.client.get("/analytics/summary", params={"month": "2026-04"}).json()
+        self.assertAlmostEqual(payload["total_income"], 0.0, places=2)
+        self.assertAlmostEqual(payload["total_expenses"], 10.15, places=2)
+        self.assertEqual(payload["pending_review_count"], 0)
 
     def test_dashboard_respects_account_scope(self) -> None:
         self.seed_transactions()
