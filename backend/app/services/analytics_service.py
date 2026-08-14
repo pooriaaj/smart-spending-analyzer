@@ -5,7 +5,7 @@ import re
 import unicodedata
 from typing import Any
 
-from sqlalchemy import case, func, or_
+from sqlalchemy import and_, case, func, or_
 from sqlalchemy.orm import Query, Session
 
 from app.models import Account, BudgetPlan, Transaction
@@ -34,21 +34,44 @@ CASHFLOW_NEUTRAL_CATEGORIES = {
     "credit card payment",
     "credit card payments",
 }
-CASHFLOW_NEUTRAL_DESCRIPTION_MARKERS = (
-    "e-transfer received",
-    "e-transfer sent",
-    "interac received",
-    "interac sent",
+# Money that only moved between the user's own accounts: chequing to credit card,
+# card payments, ATM deposits. Never income and never spending, because whatever
+# the money is eventually spent on is already counted on the receiving account.
+SELF_TRANSFER_DESCRIPTION_MARKERS = (
     "online transfer",
     "online banking transfer",
     "transfer to deposit account",
+    "credit card payment",
     "payment - thank you",
     "payment thank you",
     "paiement - merci",
     "payback with points",
     "atm deposit",
-    "virement interac",
     "virement en ligne",
+)
+# Person-to-person transfers received. Left neutral: an incoming e-Transfer is
+# usually money being routed rather than earned.
+RECEIVED_TRANSFER_DESCRIPTION_MARKERS = (
+    "e-transfer received",
+    "interac received",
+    "virement interac recu",
+)
+# Money that genuinely left the household even though the bank files it under
+# "transfer". Sending an e-Transfer to another person is real spending, so it must
+# beat the category-level neutral rule below. Cancellations reverse a send and so
+# have to come back the other way, otherwise a cancelled transfer is charged twice.
+PERSON_TRANSFER_DESCRIPTION_MARKERS = (
+    "e-transfer sent",
+    "etransfer sent",
+    "interac sent",
+    "virement interac envoye",
+    "e-transfer cancel",
+    "etransfer cancel",
+    "transfer cancel",
+    "virement annule",
+)
+CASHFLOW_NEUTRAL_DESCRIPTION_MARKERS = (
+    SELF_TRANSFER_DESCRIPTION_MARKERS + RECEIVED_TRANSFER_DESCRIPTION_MARKERS
 )
 
 ESSENTIAL_RECURRING_CATEGORY_KEYWORDS = {
@@ -172,15 +195,29 @@ def is_cashflow_neutral_category(category: str | None) -> bool:
 
 
 def cashflow_neutral_filter():
+    """Rows that only shuffled money between the user's own accounts.
+
+    The bank files a card payment and an e-Transfer to a family member under the
+    same "transfer" category, but only the first is neutral: paying the card just
+    moves money to where the real purchases are already counted, while sending
+    money to another person is money genuinely gone. So a person-to-person
+    description overrides the category rule rather than being swallowed by it.
+    """
+
     normalized_category = normalized_category_expression()
     normalized_description = func.lower(func.coalesce(Transaction.description, ""))
-    description_filters = [
-        normalized_description.like(f"%{marker}%")
-        for marker in CASHFLOW_NEUTRAL_DESCRIPTION_MARKERS
-    ]
-    return or_(
-        normalized_category.in_(tuple(CASHFLOW_NEUTRAL_CATEGORIES)),
-        *description_filters,
+
+    def description_matches(markers):
+        return or_(
+            *[normalized_description.like(f"%{marker}%") for marker in markers]
+        )
+
+    return and_(
+        or_(
+            description_matches(CASHFLOW_NEUTRAL_DESCRIPTION_MARKERS),
+            normalized_category.in_(tuple(CASHFLOW_NEUTRAL_CATEGORIES)),
+        ),
+        ~description_matches(PERSON_TRANSFER_DESCRIPTION_MARKERS),
     )
 
 
